@@ -4,5 +4,10 @@ import tailwind from '@astrojs/tailwind';
 
 export default defineConfig({
   site: 'https://bryantleft.com',
-  integrations: [sitemap(), tailwind()],
+  integrations: [
+    sitemap(),
+    tailwind({
+      applyBaseStyles: false,
+    })
+  ],
 });
