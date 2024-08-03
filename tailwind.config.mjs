@@ -4,6 +4,10 @@ import defaultTheme from "tailwindcss/defaultTheme";
 export default {
 	content: ["./src/**/*.{astro,svelte,ts}"],
 	theme: {
+		colors: {
+			black: "#111111",
+			white: "#cccccc",
+		},
 		fontFamily: {
 			krypton: ["MonaspaceKryptonVariable", ...defaultTheme.fontFamily.mono],
 		},
