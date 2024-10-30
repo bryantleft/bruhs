@@ -1,0 +1,34 @@
+{
+	"private": true,
+	"sideEffects": false,
+	"type": "module",
+	"scripts": {
+		"build": "remix vite:build",
+		"check": "tsc && biome check --write",
+		"dev": "remix vite:dev",
+		"start": "remix-serve ./build/server/index.js"
+	},
+	"dependencies": {
+		"@remix-run/node": "^2.13.1",
+		"@remix-run/react": "^2.13.1",
+		"@remix-run/serve": "^2.13.1",
+		"isbot": "5.1.17",
+		"react": "^18.2.0",
+		"react-dom": "^18.2.0",
+		"vite-tsconfig-paths": "5.0.1"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "1.9.4",
+		"@remix-run/dev": "^2.13.1",
+		"@types/react": "^18.2.20",
+		"@types/react-dom": "^18.2.7",
+		"autoprefixer": "^10.4.19",
+		"postcss": "^8.4.38",
+		"tailwindcss": "^3.4.4",
+		"typescript": "^5.1.6",
+		"vite": "^5.1.0"
+	},
+	"engines": {
+		"node": ">=20.0.0"
+	}
+}
