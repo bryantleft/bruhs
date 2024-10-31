@@ -73,13 +73,15 @@ export default function Bruh() {
 				height="60"
 				viewBox="0 0 600 600"
 				className="overflow-visible"
+				aria-label="Bruh that follows mouse movement"
+				role="img"
 			>
 				{/* Face */}
 				<circle cx="300" cy="300" r="300" className="fill-royal-yellow" />
 
 				{/* Eyes */}
-				{[198, 401].map((cx, index) => (
-					<g key={index} transform={`translate(${x} ${y})`}>
+				{[198, 401].map((cx) => (
+					<g key={`eye-${cx}`} transform={`translate(${x} ${y})`}>
 						<ellipse
 							cx={cx}
 							cy="218"
