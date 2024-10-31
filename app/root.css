@@ -1,3 +1,48 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@font-face {
+	font-family: "MonaspaceArgonVariable";
+	font-stretch: 100% 125%;
+	font-style: normal;
+	font-weight: 200 800;
+	src: url("/fonts/MonaspaceArgonVariable.woff2") format("woff2"),
+		url("/fonts/MonaspaceArgonVariable.woff") format("woff");
+}
+
+@font-face {
+	font-family: "MonaspaceKryptonVariable";
+	font-stretch: 100% 125%;
+	font-style: normal;
+	font-weight: 200 800;
+	src: url("/fonts/MonaspaceKryptonVariable.woff2") format("woff2"),
+		url("/fonts/MonaspaceKryptonVariable.woff") format("woff");
+}
+
+@font-face {
+	font-family: "MonaspaceNeonVariable";
+	font-stretch: 100% 125%;
+	font-style: normal;
+	font-weight: 200 800;
+	src: url("/fonts/MonaspaceNeonVariable.woff2") format("woff2"),
+		url("/fonts/MonaspaceNeonVariable.woff") format("woff");
+}
+
+@font-face {
+	font-family: "MonaspaceRadonVariable";
+	font-stretch: 100% 125%;
+	font-style: normal;
+	font-weight: 200 800;
+	src: url("/fonts/MonaspaceRadonVariable.woff2") format("woff2"),
+		url("/fonts/MonaspaceRadonVariable.woff") format("woff");
+}
+
+@font-face {
+	font-family: "MonaspaceXenonVariable";
+	font-stretch: 100% 125%;
+	font-style: normal;
+	font-weight: 200 800;
+	src: url("/fonts/MonaspaceXenonVariable.woff2") format("woff2"),
+		url("/fonts/MonaspaceXenonVariable.woff") format("woff");
+}
