@@ -1,3 +1,5 @@
+import Bruh from "@/components/bruh";
+import Input from "@/components/input";
 import type { MetaFunction } from "@remix-run/node";
 
 export const meta: MetaFunction = () => {
@@ -6,8 +8,13 @@ export const meta: MetaFunction = () => {
 
 export default function Index() {
 	return (
-		<div>
-			<h1 className="text-red-500 text-3xl">Index</h1>
+		<div className="h-full flex flex-col bg-[#1d1d1d]">
+			<div className="flex-[4] flex justify-center items-center">
+				<Bruh />
+			</div>
+			<div className="flex-[1] flex justify-center items-center">
+				<Input />
+			</div>
 		</div>
 	);
 }
