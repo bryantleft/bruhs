@@ -27,7 +27,7 @@ export default function Bruh({ width = 60, height = 60 }: BruhProps) {
 		<div
 			onMouseDown={handleClick}
 			className={cn(
-				"absolute cursor-pointer rounded-full transition-all duration-1000 ease-in-out",
+				"fixed cursor-pointer rounded-full transition-all duration-1000 ease-in-out",
 				isCentered
 					? "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
 					: "top-4 left-4 translate-x-0 translate-y-0",
