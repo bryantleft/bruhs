@@ -10,7 +10,7 @@ export default function App() {
 				<Meta />
 				<Links />
 			</head>
-			<body className="h-full overscroll-none font-neon">
+			<body className="h-full bg-platinum-950 overscroll-none font-neon">
 				<Outlet />
 				<Scripts />
 			</body>
