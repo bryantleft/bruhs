@@ -1,25 +1,25 @@
-import { useInitialStore, useMessageStore } from "@/lib/stores";
+import { useBruhStore, useInitialStore, useMessageStore } from "@/lib/stores";
 import { useEffect, useRef, useState } from "react";
 
 export const useBruh = (width: number, height: number) => {
+	const { centered, setCentered } = useBruhStore();
 	const { messageHistory } = useMessageStore();
 	const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 	const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 });
-	const [isCentered, setIsCentered] = useState(true);
 	const [isBlinking, setIsBlinking] = useState(false);
 	const [isHovered, setIsHovered] = useState(false);
 	const animationFrameRef = useRef<number>();
 
 	useEffect(() => {
-		setIsCentered(messageHistory.length < 2);
-	}, [messageHistory]);
+		setCentered(messageHistory.length < 2);
+	}, [messageHistory, setCentered]);
 
 	useEffect(() => {
 		const handleMouseMove = (e: MouseEvent) => {
-			const x = isCentered
+			const x = centered
 				? (e.clientX / window.innerWidth) * 100
 				: e.clientX + 16;
-			const y = isCentered
+			const y = centered
 				? (e.clientY / window.innerHeight) * 100
 				: e.clientY + 16;
 
@@ -28,7 +28,7 @@ export const useBruh = (width: number, height: number) => {
 
 		window.addEventListener("mousemove", handleMouseMove);
 		return () => window.removeEventListener("mousemove", handleMouseMove);
-	}, [isCentered]);
+	}, [centered]);
 
 	useEffect(() => {
 		const blinkInterval = setInterval(() => {
@@ -91,19 +91,21 @@ export const useBruh = (width: number, height: number) => {
 	return {
 		x,
 		y,
-		isCentered,
+		isCentered: centered,
 		isBlinking,
 		isHovered,
-		setIsCentered,
+		setIsCentered: setCentered,
 		setIsBlinking,
 		setIsHovered,
 	};
 };
 
-export const useExternalNavigation = (link: string) => {
+export const useExternalNavigation = () => {
+	const { setCentered } = useBruhStore();
 	const { setVisible } = useInitialStore();
 
-	const navigate = () => {
+	const navigate = (link: string) => {
+		setCentered(true);
 		setVisible(false);
 		setTimeout(() => {
 			window.location.href = link;
@@ -113,12 +115,22 @@ export const useExternalNavigation = (link: string) => {
 	return { navigate };
 };
 
-export const useInitialLoad = () => {
+export const useInitialScreenLoad = () => {
 	const { visible, setVisible } = useInitialStore();
 
 	useEffect(() => {
 		setVisible(true);
 	}, [setVisible]);
 
-	return { visible };
+	return { visible, setVisible };
+};
+
+export const useInitialLoad = () => {
+	const [isVisible, setIsVisible] = useState<boolean>(false);
+
+	useEffect(() => {
+		setIsVisible(true);
+	}, []);
+
+	return { isVisible, setIsVisible };
 };

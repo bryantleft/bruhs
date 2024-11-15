@@ -14,6 +14,16 @@ export const useInitialStore = create<InitialStore>((set) => ({
 	setVisible: (visible) => set({ visible }),
 }));
 
+type BruhStore = {
+	centered: boolean;
+	setCentered: (centered: boolean) => void;
+};
+
+export const useBruhStore = create<BruhStore>((set) => ({
+	centered: true,
+	setCentered: (centered) => set({ centered }),
+}));
+
 type LLMStore = {
 	keys: Keys | null;
 	model: Model;
@@ -52,14 +62,24 @@ export const useLLMStore = create<LLMStore>()(
 
 type MessageStore = {
 	messageHistory: Message[];
+	lastMessage: Message;
+	generating: boolean;
 	addMessageHistory: (message: Message) => void;
+	clearMessageHistory: () => void;
+	setLastMessage: (message: Message) => void;
+	setGenerating: (generating: boolean) => void;
 };
 
 export const useMessageStore = create<MessageStore>((set) => ({
 	messageHistory: defaultMessages,
+	lastMessage: defaultMessages[0],
+	generating: false,
 	addMessageHistory: (message) => {
 		set(({ messageHistory }) => ({
 			messageHistory: [...messageHistory, message],
 		}));
 	},
+	clearMessageHistory: () => set({ messageHistory: defaultMessages }),
+	setLastMessage: (message) => set({ lastMessage: message }),
+	setGenerating: (generating) => set({ generating }),
 }));

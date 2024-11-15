@@ -1,4 +1,4 @@
-import Select from "@/components/select";
+import Select from "@/components/chat/select";
 import { useLLMStore } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { type ChangeEvent, useEffect, useState } from "react";
@@ -75,7 +75,9 @@ export default function Settings() {
 						onMouseDown={handleAddKey}
 						className={cn(
 							"flex rounded-lg p-[5px] transition-colors duration-300",
-							canAddKey() ? "cursor-pointer bg-amethyst" : "cursor-not-allowed",
+							canAddKey()
+								? "cursor-pointer bg-amethyst-700 hover:bg-amethyst-600"
+								: "cursor-not-allowed",
 							initialKey && "bg-amethyst",
 						)}
 						disabled={!canAddKey()}
@@ -87,12 +89,10 @@ export default function Settings() {
 					className={cn(
 						"absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10",
 						"transition-all duration-300",
-						initialKey
-							? "opacity-100 scale-100"
-							: "opacity-0 scale-95 pointer-events-none",
+						initialKey ? "opacity-100" : "opacity-0 pointer-events-none",
 					)}
 				>
-					<div className="flex rounded-lg bg-amethyst p-[5px] cursor-not-allowed">
+					<div className="flex rounded-lg bg-amethyst-700 p-[5px] cursor-not-allowed">
 						<span className="iconify lucide--lock text-onyx-300 w-3 h-3" />
 					</div>
 				</div>
@@ -106,9 +106,9 @@ export default function Settings() {
 					<button
 						type="button"
 						onMouseDown={handleRemoveKey}
-						className="flex rounded-lg p-[5px] cursor-pointer group"
+						className="flex rounded-lg p-[5px] cursor-pointer *:hover:text-ruby-700"
 					>
-						<span className="iconify lucide--trash text-platinum-400 transition-colors duration-300 hover:text-ruby w-3 h-3" />
+						<span className="iconify lucide--trash text-platinum-400 transition-colors duration-300 w-3 h-3" />
 					</button>
 				</div>
 			</div>

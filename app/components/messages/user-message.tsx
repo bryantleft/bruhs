@@ -1,3 +1,4 @@
+import { useInitialLoad } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 
@@ -6,11 +7,7 @@ type UserMessageProps = {
 };
 
 export default function UserMessage({ content }: UserMessageProps) {
-	const [isVisible, setIsVisible] = useState(false);
-
-	useEffect(() => {
-		setIsVisible(true);
-	}, []);
+	const { isVisible } = useInitialLoad();
 
 	return (
 		<div
@@ -20,7 +17,9 @@ export default function UserMessage({ content }: UserMessageProps) {
 				isVisible ? "opacity-100" : "opacity-0",
 			)}
 		>
-			<span className="text-sm text-onyx-200">{content}</span>
+			<span className="text-sm text-onyx-200 whitespace-pre-line">
+				{content}
+			</span>
 		</div>
 	);
 }

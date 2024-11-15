@@ -1,7 +1,7 @@
-import { TokenBlock } from "@/components/blocks";
+import { TokenBlock } from "@/components/messages/blocks";
 import { cn, copyToClipboard, randomKey } from "@/lib/utils";
 import { marked } from "marked";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 type BruhMessageProps = {
 	content: string;
@@ -38,7 +38,7 @@ export default function BruhMessage({
 				width={20}
 				height={20}
 			/>
-			{tokens.map((token, position) => {
+			{tokens.map((token) => {
 				return <TokenBlock key={randomKey()} token={token} />;
 			})}
 			<div

@@ -7,25 +7,15 @@ type BruhProps = {
 };
 
 export default function Bruh({ width = 60, height = 60 }: BruhProps) {
-	const {
-		x,
-		y,
-		isCentered,
-		isBlinking,
-		isHovered,
-		setIsCentered,
-		setIsHovered,
-	} = useBruh(width, height);
-	const { navigate } = useExternalNavigation("https://bnle.me");
-
-	const handleClick = () => {
-		setIsCentered(true);
-		navigate();
-	};
+	const { x, y, isCentered, isBlinking, isHovered, setIsHovered } = useBruh(
+		width,
+		height,
+	);
+	const { navigate } = useExternalNavigation();
 
 	return (
 		<div
-			onMouseDown={handleClick}
+			onMouseDown={() => navigate("https://bnle.me")}
 			className={cn(
 				"fixed cursor-pointer rounded-full transition-all duration-1000 ease-in-out",
 				isCentered
@@ -34,7 +24,7 @@ export default function Bruh({ width = 60, height = 60 }: BruhProps) {
 			)}
 		>
 			<div
-				className="relative transition-all duration-300 hover:scale-110"
+				className="relative transition-transform duration-300 hover:scale-110"
 				onMouseEnter={() => setIsHovered(true)}
 				onMouseLeave={() => setIsHovered(false)}
 			>

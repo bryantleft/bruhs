@@ -1,0 +1,16 @@
+import {useMessageStore} from '@/lib/stores';
+import BruhMessage from '@/components/messages/bruh-message';
+
+export default function LastMessage() {
+  const { lastMessage, generating } = useMessageStore();
+
+  if (lastMessage.role !== "assistant" || !generating) return <></>;
+
+  return (
+    <BruhMessage
+      key={lastMessage.id}
+      content={lastMessage.content}
+      last={true}
+    />
+  );
+}

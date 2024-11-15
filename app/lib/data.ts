@@ -33,12 +33,24 @@ const systemMessage: Message = {
 
 export const defaultMessages = [systemMessage];
 
-export function modelLogo(provider: Provider): string {
+type LogoConfig = {
+	type?: "icon" | "logo" | "symbol";
+	theme?: "light" | "dark";
+};
+
+export function modelLogo(company: string, config?: LogoConfig): string {
 	const width = 400;
 	const height = 400;
+	const size = `w/${width}/h/${height}`;
+
+	const type = config && config.type !== "icon" ? `/${config.type}` : "";
+	const theme = config && config.theme === "light" ? "/theme/light" : "";
 	const clientId = "1id8ORhCPHW7oJZ3_xl";
 
-	return `https://cdn.brandfetch.io/${provider}.com/w/${width}/h/${height}?c=${clientId}`;
+	const domain = `${company}.com`;
+	const path = `${size}${theme}${type}?c=${clientId}`;
+
+	return `https://cdn.brandfetch.io/${domain}/${path}`;
 }
 
 // TODO: make own icon set :(
