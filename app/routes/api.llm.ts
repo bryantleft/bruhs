@@ -2,7 +2,7 @@ import { Provider } from "@/lib/types";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { ActionFunctionArgs } from "@remix-run/node";
-import { streamText } from "ai";
+import { APICallError, streamText } from "ai";
 import { z } from "zod";
 
 const StreamChatSchema = z.object({
@@ -37,7 +37,9 @@ export async function action({ request }: ActionFunctionArgs) {
 		const data = StreamChatSchema.parse(body);
 		const client = llm(data.provider, data.model, data.key);
 
-		if (!client) throw new Error(`Must have api key for ${data.provider}`);
+		if (!client) {
+			throw new Error(`Must populate an API key for ${data.provider}`);
+		}
 
 		const stream = await streamText({
 			model: client,
@@ -46,9 +48,22 @@ export async function action({ request }: ActionFunctionArgs) {
 
 		return stream.toDataStreamResponse();
 	} catch (error) {
-		if (error instanceof z.ZodError) {
-			throw new Error(`Invalid request data: ${error.message}`);
+		if (error instanceof APICallError) {
+			// biome-ignore lint/suspicious/noExplicitAny: APICallError data unknown
+			return new Response(JSON.stringify({ ...(error?.data as any)?.error }), {
+				status: error.statusCode,
+				headers: { "Content-Type": "application/json" },
+			});
 		}
-		throw error;
+
+		return new Response(
+			JSON.stringify({
+				message: error instanceof Error ? error.message : "Unknown error",
+			}),
+			{
+				status: 500,
+				headers: { "Content-Type": "application/json" },
+			},
+		);
 	}
 }

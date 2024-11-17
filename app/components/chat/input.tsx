@@ -1,7 +1,8 @@
 import { defaultMessages } from "@/lib/data";
 import { useLLMStore, useMessageStore } from "@/lib/stores";
+import type { APIError, Message } from "@/lib/types";
 import { cn, randomKey } from "@/lib/utils";
-import { type Message, useChat } from "ai/react";
+import { useChat } from "ai/react";
 import {
 	type ChangeEvent,
 	type FormEvent,
@@ -19,6 +20,7 @@ export default function Input() {
 		lastMessage,
 		generating,
 		addMessageHistory,
+		addError,
 		setLastMessage,
 		setGenerating,
 	} = useMessageStore();
@@ -28,17 +30,24 @@ export default function Input() {
 	const { messages, isLoading, append, stop } = useChat({
 		api: "/api/llm",
 		body: {
-			key: keys ? keys[model.provider] : null,
+			key: keys?.[model.provider] ? keys[model.provider] : null,
 			model: model.id,
 			provider: model.provider,
 		},
 		initialMessages: defaultMessages,
 		onError: (error) => {
-			console.error(error);
+			const errorMessage: APIError = JSON.parse(error.message);
+
+			if (errorMessage.code === "invalid_api_key") {
+				addError("Must populate a valid API key");
+			} else {
+				addError(errorMessage.message);
+			}
 		},
 		onFinish: (message) => {
 			addMessageHistory(message);
 		},
+		keepLastMessageOnError: true,
 		experimental_throttle: 50,
 	});
 
@@ -94,6 +103,7 @@ export default function Input() {
 	function handleStop() {
 		stop();
 		addMessageHistory(lastMessage);
+		addError("Stopped");
 	}
 
 	return (

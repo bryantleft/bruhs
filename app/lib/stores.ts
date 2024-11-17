@@ -1,6 +1,5 @@
 import { defaultMessages, defaultModel } from "@/lib/data";
-import type { Keys, Model, Provider } from "@/lib/types";
-import type { Message } from "ai/react";
+import type { Keys, Message, Model, Provider } from "@/lib/types";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -63,23 +62,40 @@ export const useLLMStore = create<LLMStore>()(
 type MessageStore = {
 	messageHistory: Message[];
 	lastMessage: Message;
+	selectedMessage: Message | null;
 	generating: boolean;
 	addMessageHistory: (message: Message) => void;
+	addError: (error: string) => void;
 	clearMessageHistory: () => void;
 	setLastMessage: (message: Message) => void;
+	setSelectedMessage: (message: Message | null) => void;
 	setGenerating: (generating: boolean) => void;
 };
 
 export const useMessageStore = create<MessageStore>((set) => ({
 	messageHistory: defaultMessages,
 	lastMessage: defaultMessages[0],
+	selectedMessage: null,
 	generating: false,
 	addMessageHistory: (message) => {
 		set(({ messageHistory }) => ({
 			messageHistory: [...messageHistory, message],
 		}));
 	},
+	addError: (error) => {
+		set(({ messageHistory }) => {
+			if (!messageHistory.length) return { messageHistory };
+
+			return {
+				messageHistory: [
+					...messageHistory.slice(0, -1),
+					{ ...messageHistory[messageHistory.length - 1], error },
+				],
+			};
+		});
+	},
 	clearMessageHistory: () => set({ messageHistory: defaultMessages }),
 	setLastMessage: (message) => set({ lastMessage: message }),
+	setSelectedMessage: (message) => set({ selectedMessage: message }),
 	setGenerating: (generating) => set({ generating }),
 }));

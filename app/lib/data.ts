@@ -1,5 +1,4 @@
-import { type Model, Provider } from "@/lib/types";
-import type { Message } from "ai/react";
+import { type Message, type Model, Provider } from "@/lib/types";
 
 // TODO: add more
 export const models: Model[] = [

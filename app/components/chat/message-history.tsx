@@ -1,14 +1,16 @@
+import LastMessage from "@/components/chat/last-message";
 import BruhMessage from "@/components/messages/bruh-message";
 import UserMessage from "@/components/messages/user-message";
 import { useMessageStore } from "@/lib/stores";
-import React, { useState, useEffect } from "react";
+import { copyToClipboard } from "@/lib/utils";
+import React, { useEffect } from "react";
 
 export default function MessageHistory() {
-	const { messageHistory } = useMessageStore();
-	const [selectedMessageId, setSelectedMessageId] = useState<string>("");
+	const { messageHistory, selectedMessage, setSelectedMessage } =
+		useMessageStore();
 
 	useEffect(() => {
-		const handleKeyPress = (event: KeyboardEvent) => {
+		const handleKeyPress = async (event: KeyboardEvent) => {
 			const activeElement = document.activeElement;
 
 			if (activeElement) {
@@ -18,50 +20,59 @@ export default function MessageHistory() {
 					activeElement.tagName === "SELECT";
 
 				if (isInputFocused) {
+					setSelectedMessage(null);
 					return;
 				}
+			}
+
+			if (event.key === "Escape") {
+				event.preventDefault();
+				setSelectedMessage(null);
 			}
 
 			if (event.key === "j" || event.key === "k") {
 				event.preventDefault();
 
-				setSelectedMessageId((currentId) => {
-					if (currentId === "") {
-						const newIndex = event.key === "k" ? messageHistory.length - 1 : 1;
-						return messageHistory[newIndex].id;
-					}
+				if (!selectedMessage) {
+					const newIndex = event.key === "k" ? messageHistory.length - 1 : 1;
+					setSelectedMessage(messageHistory[newIndex]);
+					return;
+				}
 
-					const currentIndex = messageHistory.findIndex(
-						(msg) => msg.id === currentId,
-					);
-					const newIndex =
-						event.key === "k"
-							? Math.max(1, currentIndex - 1)
-							: Math.min(messageHistory.length - 1, currentIndex + 1);
+				const currentIndex = messageHistory.findIndex(
+					(msg) => msg.id === selectedMessage.id,
+				);
+				console.log(currentIndex);
+				const newIndex =
+					event.key === "k"
+						? Math.max(1, currentIndex - 1)
+						: Math.min(messageHistory.length - 1, currentIndex + 1);
 
-					return messageHistory[newIndex].id;
-				});
+				setSelectedMessage(messageHistory[newIndex]);
+				return;
 			}
 
-			if (event.key === "Escape") {
-				setSelectedMessageId("");
+			if (event.key === "c" && (event.ctrlKey || event.metaKey)) {
+				if (!selectedMessage) return;
+
+				await copyToClipboard(selectedMessage?.content);
 			}
 		};
 
 		window.addEventListener("keydown", handleKeyPress);
 		return () => window.removeEventListener("keydown", handleKeyPress);
-	}, [messageHistory]);
+	}, [messageHistory, selectedMessage, setSelectedMessage]);
 
 	return (
 		<>
 			{messageHistory.map((message) => {
-				const isSelected = message.id === selectedMessageId;
+				const isSelected = message.id === selectedMessage?.id;
 
 				if (message.role === "assistant") {
 					return (
 						<BruhMessage
 							key={message.id}
-							content={message.content}
+							message={message}
 							selected={isSelected}
 						/>
 					);
@@ -69,12 +80,18 @@ export default function MessageHistory() {
 
 				if (message.role === "user") {
 					return (
-						<UserMessage content={message.content} selected={isSelected} />
+						<UserMessage
+							key={message.id}
+							message={message}
+							selected={isSelected}
+						/>
 					);
 				}
 
 				return null;
 			})}
+
+			<LastMessage />
 		</>
 	);
 }
