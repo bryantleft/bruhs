@@ -28,7 +28,7 @@ export default function Index() {
 				<Chat />
 				<button
 					type="button"
-					className="fixed top-4 right-4 group transition-transform duration-300 hover:scale-105"
+					className="fixed top-4 right-4 group transition-transform duration-300 hover:scale-105 focus:outline-none"
 					onMouseDown={() => clearMessageHistory()}
 				>
 					<span className="iconify lucide--eraser text-platinum-400 group-hover:text-ruby-700 w-6 h-6" />

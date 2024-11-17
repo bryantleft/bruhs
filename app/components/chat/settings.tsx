@@ -106,7 +106,7 @@ export default function Settings() {
 					<button
 						type="button"
 						onMouseDown={handleRemoveKey}
-						className="flex rounded-lg p-[5px] cursor-pointer *:hover:text-ruby-700"
+						className="flex rounded-lg p-[5px] cursor-pointer *:hover:text-ruby-700 focus:outline-none"
 					>
 						<span className="iconify lucide--trash text-platinum-400 transition-colors duration-300 w-3 h-3" />
 					</button>

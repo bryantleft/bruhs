@@ -5,12 +5,12 @@ import { useState } from "react";
 
 type BruhMessageProps = {
 	content: string;
-	last?: boolean;
+	selected?: boolean;
 };
 
 export default function BruhMessage({
 	content,
-	last = false,
+	selected = false,
 }: BruhMessageProps) {
 	const [isChecked, setIsChecked] = useState<boolean>(false);
 	const tokens = marked.lexer(content);
@@ -26,9 +26,8 @@ export default function BruhMessage({
 				"relative group flex flex-col gap-y-2 rounded-xl",
 				"bg-platinum-900 p-3 border-[0.5px]",
 				"transition-all duration-300 ease-in-out",
-				isChecked
-					? "shadow-[0_0px_10px_rgba(0,0,0,0.25)] shadow-amethyst-900 border-amethyst-400"
-					: "border-platinum-800 hover:border-platinum-700",
+				"border-platinum-800 hover:border-platinum-700",
+				selected && "ring-2 ring-amethyst"
 			)}
 		>
 			<img

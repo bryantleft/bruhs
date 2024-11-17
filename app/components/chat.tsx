@@ -1,7 +1,7 @@
 import Input from "@/components/chat/input";
+import LastMessage from "@/components/chat/last-message";
+import MessageHistory from "@/components/chat/message-history";
 import Settings from "@/components/chat/settings";
-import MessageHistory from '@/components/chat/message-history';
-import LastMessage from '@/components/chat/last-message';
 import { cn } from "@/lib/utils";
 
 export default function Chat() {

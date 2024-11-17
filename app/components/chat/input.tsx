@@ -15,8 +15,13 @@ import {
 
 export default function Input() {
 	const { model, keys } = useLLMStore();
-	const { lastMessage, generating, addMessageHistory, setLastMessage, setGenerating } =
-		useMessageStore();
+	const {
+		lastMessage,
+		generating,
+		addMessageHistory,
+		setLastMessage,
+		setGenerating,
+	} = useMessageStore();
 	const [input, setInput] = useState("");
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -112,7 +117,7 @@ export default function Input() {
 						"focus:outline-none",
 						"overflow-y-auto",
 					)}
-					placeholder="Talk to Bruh..."
+					placeholder="Bruhhhh..."
 					onKeyDown={handleKeyDown}
 				/>
 				{input.trim().length > 0 && (
@@ -137,14 +142,11 @@ export default function Input() {
 							className={cn(
 								"relative flex items-center justify-center rounded-lg",
 								"bg-amethyst-700 hover:bg-amethyst-600 p-[5px]",
-								"transition-colors duration-200"
+								"transition-colors duration-200",
 							)}
 						>
-							<span className="iconify lucide--loader-circle animate-spin text-onyx-300 w-4 h-4"/>
-							<span
-								className="iconify lucide--dot text-onyx-300/60 w-2 h-2 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-							/>
-
+							<span className="iconify lucide--loader-circle animate-spin text-onyx-300 w-4 h-4" />
+							<span className="iconify lucide--dot text-onyx-300/60 w-2 h-2 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
 						</button>
 					</div>
 				)}

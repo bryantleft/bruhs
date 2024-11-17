@@ -211,10 +211,7 @@ type ListItemBlockProps = {
 function ListItemBlock({ tokens, number }: ListItemBlockProps) {
 	return (
 		<li key={randomKey()}>
-			{number && (
-				<span className="text-sm text-amethyst-400 pr-1">{number}.</span>
-			)}
-			{!number && <span className="text-sm text-amethyst-400 pr-1">-</span>}
+
 			{tokens.map((token) => {
 				return <TokenBlock key={randomKey()} token={token} />;
 			})}
@@ -242,7 +239,7 @@ type ListBlockProps = {
 function ListBlock({ items, ordered, start }: ListBlockProps) {
 	if (ordered) {
 		return (
-			<ol key={randomKey()}>
+			<ol key={randomKey()} className="list-decimal text-amethyst-400 text-sm pl-7">
 				{items.map((item, position) => {
 					const number = position === 0 ? start : position + 1;
 					return (
@@ -258,7 +255,7 @@ function ListBlock({ items, ordered, start }: ListBlockProps) {
 	}
 
 	return (
-		<ul key={randomKey()}>
+		<ul key={randomKey()} className="list-disc text-amethyst-400 text-sm pl-3">
 			{items.map((item) => {
 				return <ListItemBlock key={randomKey()} tokens={item.tokens} />;
 			})}
@@ -274,7 +271,7 @@ function HeadingBlock({ text }: HeadingBlockProps) {
 	return (
 		<h3
 			key={randomKey()}
-			className="bg-onyx border-[0.5px] border-platinum-800 drop-shadow-lg text-platinum-300 px-3 py-1"
+			className="bg-onyx rounded-t-lg border-[0.5px] border-platinum-800 drop-shadow-lg text-platinum-300 px-3 py-1"
 		>
 			{text}
 		</h3>
