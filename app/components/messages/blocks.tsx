@@ -211,7 +211,6 @@ type ListItemBlockProps = {
 function ListItemBlock({ tokens, number }: ListItemBlockProps) {
 	return (
 		<li key={randomKey()}>
-
 			{tokens.map((token) => {
 				return <TokenBlock key={randomKey()} token={token} />;
 			})}
@@ -239,7 +238,10 @@ type ListBlockProps = {
 function ListBlock({ items, ordered, start }: ListBlockProps) {
 	if (ordered) {
 		return (
-			<ol key={randomKey()} className="list-decimal text-amethyst-400 text-sm pl-7">
+			<ol
+				key={randomKey()}
+				className="list-decimal text-amethyst-400 text-sm pl-7"
+			>
 				{items.map((item, position) => {
 					const number = position === 0 ? start : position + 1;
 					return (

@@ -50,6 +50,7 @@ export default function Input() {
 		setLastMessage(messages[messages.length - 1]);
 	}, [messages, setLastMessage]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: input can change textarea height
 	useEffect(() => {
 		const textarea = textareaRef.current;
 		if (textarea) {

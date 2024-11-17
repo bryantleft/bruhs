@@ -27,7 +27,7 @@ export default function BruhMessage({
 				"bg-platinum-900 p-3 border-[0.5px]",
 				"transition-all duration-300 ease-in-out",
 				"border-platinum-800 hover:border-platinum-700",
-				selected && "ring-2 ring-amethyst"
+				selected && "ring-2 ring-amethyst",
 			)}
 		>
 			<img

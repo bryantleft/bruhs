@@ -6,10 +6,5 @@ export default function LastMessage() {
 
 	if (lastMessage.role !== "assistant" || !generating) return <></>;
 
-	return (
-		<BruhMessage
-			key={lastMessage.id}
-			content={lastMessage.content}
-		/>
-	);
+	return <BruhMessage key={lastMessage.id} content={lastMessage.content} />;
 }
