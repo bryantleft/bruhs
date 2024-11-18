@@ -11,6 +11,7 @@
 	"dependencies": {
 		"@ai-sdk/anthropic": "0.0.56",
 		"@ai-sdk/openai": "0.0.71",
+		"@radix-ui/react-tooltip": "1.1.4",
 		"@remix-run/cloudflare-pages": "2.13.1",
 		"@remix-run/node": "^2.13.1",
 		"@remix-run/react": "^2.13.1",

@@ -7,7 +7,7 @@ import React, { useEffect } from "react";
 import { toast } from "sonner";
 
 export default function MessageHistory() {
-	const { messageHistory, selectedMessage, setSelectedMessage } =
+	const { messageHistory, selectedMessage, setSelectedMessage, deleteMessage } =
 		useMessageStore();
 
 	useEffect(() => {
@@ -52,13 +52,39 @@ export default function MessageHistory() {
 				return;
 			}
 
-			if (event.key === "c" && (event.ctrlKey || event.metaKey)) {
-				if (!selectedMessage) return;
+			if (!selectedMessage) return;
 
-				await copyToClipboard(selectedMessage?.content);
+			if (event.key === "c" && (event.ctrlKey || event.metaKey)) {
+				await copyToClipboard(selectedMessage.content);
 				toast.custom(() => (
-					<span className="text-platinum-400">
-						Message <span className="text-amethyst-500">copied</span>
+					<span className="text-platinum-400 text-sm">
+						Message <span className="text-emerald-500">copied</span>
+					</span>
+				));
+			}
+
+			if (event.key === "d") {
+				const currentIndex = messageHistory.findIndex(
+					(msg) => msg.id === selectedMessage.id,
+				);
+				deleteMessage(selectedMessage.id);
+
+				const newMessageHistory = messageHistory.filter(
+					(msg) => msg.id !== selectedMessage.id,
+				);
+
+				let newIndex: number;
+				if (currentIndex >= newMessageHistory.length) {
+					newIndex = Math.max(1, newMessageHistory.length - 1);
+				} else {
+					newIndex = Math.max(1, currentIndex);
+				}
+
+				setSelectedMessage(newMessageHistory[newIndex]);
+
+				toast.custom(() => (
+					<span className="text-platinum-400 text-sm">
+						Message <span className="text-ruby-500">deleted</span>
 					</span>
 				));
 			}
@@ -66,7 +92,7 @@ export default function MessageHistory() {
 
 		window.addEventListener("keydown", handleKeyPress);
 		return () => window.removeEventListener("keydown", handleKeyPress);
-	}, [messageHistory, selectedMessage, setSelectedMessage]);
+	}, [messageHistory, selectedMessage, deleteMessage, setSelectedMessage]);
 
 	return (
 		<>

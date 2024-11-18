@@ -3,31 +3,27 @@ import { useLLMStore, useMessageStore } from "@/lib/stores";
 import type { APIError, Message } from "@/lib/types";
 import { cn, randomKey } from "@/lib/utils";
 import { useChat } from "ai/react";
-import {
-	type ChangeEvent,
-	type FormEvent,
-	type KeyboardEvent,
-	useEffect,
-	useRef,
-	useState,
-} from "react";
-
-// TODO: add ui for errors and stop
+import type React from "react";
+import { type ChangeEvent, type FormEvent, useEffect, useRef } from "react";
 
 export default function Input() {
 	const { model, keys } = useLLMStore();
 	const {
+		input,
+		messageHistory,
 		lastMessage,
 		generating,
-		addMessageHistory,
+		deleting,
+		setInput,
+		addMessage,
 		addError,
 		setLastMessage,
 		setGenerating,
+		setDeleting,
 	} = useMessageStore();
-	const [input, setInput] = useState("");
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-	const { messages, isLoading, append, stop } = useChat({
+	const { messages, isLoading, setMessages, append, stop } = useChat({
 		api: "/api/llm",
 		body: {
 			key: keys?.[model.provider] ? keys[model.provider] : null,
@@ -47,15 +43,38 @@ export default function Input() {
 			}
 		},
 		onFinish: (message) => {
-			addMessageHistory(message);
+			addMessage(message);
 		},
 		keepLastMessageOnError: true,
 		experimental_throttle: 50,
 	});
 
 	useEffect(() => {
+		function handleKeyPress(e: KeyboardEvent) {
+			if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+				e.preventDefault();
+				textareaRef.current?.focus();
+			}
+
+			if (e.key === "Escape") {
+				textareaRef.current?.blur();
+			}
+		}
+
+		window.addEventListener("keydown", handleKeyPress);
+		return () => window.removeEventListener("keydown", handleKeyPress);
+	}, []);
+
+	useEffect(() => {
 		setGenerating(isLoading);
 	}, [isLoading, setGenerating]);
+
+	useEffect(() => {
+		if (deleting) {
+			setMessages(messageHistory);
+			setDeleting(false);
+		}
+	}, [deleting, messageHistory, setMessages, setDeleting]);
 
 	useEffect(() => {
 		setLastMessage(messages[messages.length - 1]);
@@ -84,13 +103,13 @@ export default function Input() {
 			role: "user",
 			content: input,
 		};
-		addMessageHistory(userMessage);
+		addMessage(userMessage);
 
 		setInput("");
 		await append(userMessage);
 	}
 
-	async function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+	async function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
 		if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault();
 			await handleSendMessage();
@@ -104,7 +123,7 @@ export default function Input() {
 
 	function handleStop() {
 		stop();
-		addMessageHistory(lastMessage);
+		addMessage(lastMessage);
 		addError("Stopped");
 	}
 

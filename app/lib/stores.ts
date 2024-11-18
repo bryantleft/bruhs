@@ -69,26 +69,42 @@ export const useLLMStore = create<LLMStore>()(
 );
 
 type MessageStore = {
+	input: string;
 	messageHistory: Message[];
 	lastMessage: Message;
 	selectedMessage: Message | null;
 	generating: boolean;
-	addMessageHistory: (message: Message) => void;
+	deleting: boolean;
+	setInput: (input: string) => void;
+	addMessage: (message: Message) => void;
+	deleteMessage: (messagedId: string) => void;
 	addError: (error: string) => void;
 	clearMessageHistory: () => void;
 	setLastMessage: (message: Message) => void;
 	setSelectedMessage: (message: Message | null) => void;
 	setGenerating: (generating: boolean) => void;
+	setDeleting: (deleting: boolean) => void;
 };
 
 export const useMessageStore = create<MessageStore>((set) => ({
+	input: "",
 	messageHistory: defaultMessages,
 	lastMessage: defaultMessages[0],
 	selectedMessage: null,
 	generating: false,
-	addMessageHistory: (message) => {
+	deleting: false,
+	setInput: (input) => set({ input }),
+	addMessage: (message) => {
 		set(({ messageHistory }) => ({
 			messageHistory: [...messageHistory, message],
+		}));
+	},
+	deleteMessage: (messageId) => {
+		set(({ messageHistory }) => ({
+			messageHistory: messageHistory.filter(
+				(message) => message.id !== messageId,
+			),
+			deleting: true,
 		}));
 	},
 	addError: (error) => {
@@ -107,4 +123,5 @@ export const useMessageStore = create<MessageStore>((set) => ({
 	setLastMessage: (message) => set({ lastMessage: message }),
 	setSelectedMessage: (message) => set({ selectedMessage: message }),
 	setGenerating: (generating) => set({ generating }),
+	setDeleting: (deleting) => set({ deleting }),
 }));

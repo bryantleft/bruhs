@@ -17,14 +17,19 @@ export default function Bruh({ width = 60, height = 60 }: BruhProps) {
 		<div
 			onMouseDown={() => navigate("https://bnle.me")}
 			className={cn(
-				"fixed cursor-pointer rounded-full transition-all duration-1000 ease-in-out",
+				"fixed cursor-pointer rounded-full",
+				"transition-all duration-1000 ease-in-out",
 				isCentered
 					? "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
 					: "top-4 left-4 translate-x-0 translate-y-0",
 			)}
 		>
 			<div
-				className="relative transition-transform duration-300 hover:scale-110"
+				className={cn(
+					"relative rounded-full",
+					"transition-all duration-300 hover:scale-110",
+					"shadow-lg hover:shadow-xl",
+				)}
 				onMouseEnter={() => setIsHovered(true)}
 				onMouseLeave={() => setIsHovered(false)}
 			>

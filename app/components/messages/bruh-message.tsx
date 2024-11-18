@@ -80,7 +80,7 @@ export default function BruhMessage({
 							className={cn(
 								"iconify w-3 h-3",
 								isCopied
-									? "lucide--check text-amethyst-400"
+									? "lucide--check text-emerald-400"
 									: "lucide--copy text-platinum-400",
 							)}
 						/>
@@ -89,7 +89,7 @@ export default function BruhMessage({
 								"text-xs whitespace-nowrap",
 								"max-w-0 group-hover/copy:max-w-[100px] group-hover/copy:pl-1",
 								"overflow-hidden transition-all duration-300 ease-in-out",
-								isCopied ? "text-amethyst-400" : "text-platinum-400",
+								isCopied ? "text-emerald-400" : "text-platinum-400",
 							)}
 						>
 							{isCopied ? "Copied" : "Copy"}

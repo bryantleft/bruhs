@@ -145,7 +145,7 @@ function CodeBlock({ lang, text }: CodeBlockProps) {
 						className={cn(
 							"iconify w-4 h-4",
 							isChecked
-								? "lucide--check text-amethyst-400"
+								? "lucide--check text-emerald-400"
 								: "lucide--copy text-platinum-400",
 						)}
 					/>
