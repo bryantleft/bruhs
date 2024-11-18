@@ -33,7 +33,7 @@ export default function Index() {
 				>
 					<span className="iconify lucide--eraser text-platinum-400 group-hover:text-ruby-700 w-6 h-6" />
 				</button>
-				<div className="fixed bottom-4 right-4">
+				<div className="fixed bottom-4 left-4">
 					<img
 						src={modelLogo("github", { type: "symbol", theme: "light" })}
 						alt={"github logo"}

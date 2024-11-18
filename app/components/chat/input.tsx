@@ -39,7 +39,9 @@ export default function Input() {
 			const errorMessage: APIError = JSON.parse(error.message);
 
 			if (errorMessage.code === "invalid_api_key") {
-				addError("Must populate a valid API key");
+				addError("Must populate a valid API key for openai");
+			} else if (errorMessage.message === "invalid x-api-key") {
+				addError("Must populate a valid API key for anthropic");
 			} else {
 				addError(errorMessage.message);
 			}

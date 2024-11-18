@@ -4,6 +4,7 @@ import UserMessage from "@/components/messages/user-message";
 import { useMessageStore } from "@/lib/stores";
 import { copyToClipboard } from "@/lib/utils";
 import React, { useEffect } from "react";
+import { toast } from "sonner";
 
 export default function MessageHistory() {
 	const { messageHistory, selectedMessage, setSelectedMessage } =
@@ -42,7 +43,6 @@ export default function MessageHistory() {
 				const currentIndex = messageHistory.findIndex(
 					(msg) => msg.id === selectedMessage.id,
 				);
-				console.log(currentIndex);
 				const newIndex =
 					event.key === "k"
 						? Math.max(1, currentIndex - 1)
@@ -56,6 +56,11 @@ export default function MessageHistory() {
 				if (!selectedMessage) return;
 
 				await copyToClipboard(selectedMessage?.content);
+				toast.custom(() => (
+					<span className="text-platinum-400">
+						Message <span className="text-amethyst-500">copied</span>
+					</span>
+				));
 			}
 		};
 

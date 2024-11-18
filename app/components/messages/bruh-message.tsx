@@ -1,4 +1,5 @@
 import { TokenBlock } from "@/components/messages/blocks";
+import { useBruhStore } from "@/lib/stores";
 import type { Message } from "@/lib/types";
 import { cn, copyToClipboard, randomKey } from "@/lib/utils";
 import { marked } from "marked";
@@ -13,6 +14,7 @@ export default function BruhMessage({
 	message,
 	selected = false,
 }: BruhMessageProps) {
+	const { setFocusPosition } = useBruhStore();
 	const [isCopied, setIsCopied] = useState<boolean>(false);
 	const messageRef = useRef<HTMLDivElement>(null);
 	const tokens = marked.lexer(message.content);
@@ -24,8 +26,11 @@ export default function BruhMessage({
 				behavior: "instant",
 				block: "center",
 			});
+
+			const rect = messageRef.current.getBoundingClientRect();
+			setFocusPosition({ x: rect.left, y: rect.top });
 		}
-	}, [selected]);
+	}, [selected, setFocusPosition]);
 
 	async function copyContent() {
 		setIsCopied(await copyToClipboard(message.content));

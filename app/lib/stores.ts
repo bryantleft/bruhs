@@ -13,14 +13,23 @@ export const useInitialStore = create<InitialStore>((set) => ({
 	setVisible: (visible) => set({ visible }),
 }));
 
+type Coordinates = {
+	x: number;
+	y: number;
+};
+
 type BruhStore = {
 	centered: boolean;
+	focusPosition: Coordinates;
 	setCentered: (centered: boolean) => void;
+	setFocusPosition: (coordinates: Coordinates) => void;
 };
 
 export const useBruhStore = create<BruhStore>((set) => ({
 	centered: true,
+	focusPosition: { x: 0, y: 0 },
 	setCentered: (centered) => set({ centered }),
+	setFocusPosition: (coordinates) => set({ focusPosition: coordinates }),
 }));
 
 type LLMStore = {

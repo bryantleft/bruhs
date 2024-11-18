@@ -2,9 +2,9 @@ import { useBruhStore, useInitialStore, useMessageStore } from "@/lib/stores";
 import { useEffect, useRef, useState } from "react";
 
 export const useBruh = (width: number, height: number) => {
-	const { centered, setCentered } = useBruhStore();
+	const { centered, setCentered, focusPosition, setFocusPosition } =
+		useBruhStore();
 	const { messageHistory } = useMessageStore();
-	const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 	const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 });
 	const [isBlinking, setIsBlinking] = useState(false);
 	const [isHovered, setIsHovered] = useState(false);
@@ -23,12 +23,12 @@ export const useBruh = (width: number, height: number) => {
 				? (e.clientY / window.innerHeight) * 100
 				: e.clientY + 16;
 
-			setMousePosition({ x, y });
+			setFocusPosition({ x, y });
 		};
 
 		window.addEventListener("mousemove", handleMouseMove);
 		return () => window.removeEventListener("mousemove", handleMouseMove);
-	}, [centered]);
+	}, [centered, setFocusPosition]);
 
 	useEffect(() => {
 		const blinkInterval = setInterval(() => {
@@ -45,8 +45,8 @@ export const useBruh = (width: number, height: number) => {
 		const animate = () => {
 			setCurrentPosition((prev) => {
 				const springStrength = 0.08;
-				const dx = (mousePosition.x - prev.x) * springStrength;
-				const dy = (mousePosition.y - prev.y) * springStrength;
+				const dx = (focusPosition.x - prev.x) * springStrength;
+				const dy = (focusPosition.y - prev.y) * springStrength;
 
 				return {
 					x: prev.x + dx,
@@ -64,7 +64,7 @@ export const useBruh = (width: number, height: number) => {
 				cancelAnimationFrame(animationFrameRef.current);
 			}
 		};
-	}, [mousePosition]);
+	}, [focusPosition]);
 
 	const calculatePosition = () => {
 		const deltaX = currentPosition.x - width;

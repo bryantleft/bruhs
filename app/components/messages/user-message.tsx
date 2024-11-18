@@ -1,4 +1,5 @@
 import { useInitialLoad } from "@/lib/hooks";
+import { useBruhStore } from "@/lib/stores";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef } from "react";
@@ -13,6 +14,7 @@ export default function UserMessage({
 	selected = false,
 }: UserMessageProps) {
 	const { isVisible } = useInitialLoad();
+	const { setFocusPosition } = useBruhStore();
 	const messageRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -22,8 +24,11 @@ export default function UserMessage({
 				behavior: "instant",
 				block: "center",
 			});
+
+			const rect = messageRef.current.getBoundingClientRect();
+			setFocusPosition({ x: rect.left, y: rect.top });
 		}
-	}, [selected]);
+	}, [selected, setFocusPosition]);
 
 	return (
 		<div className="flex flex-col gap-y-1">
