@@ -27,7 +27,7 @@ type BruhStore = {
 
 export const useBruhStore = create<BruhStore>((set) => ({
 	centered: true,
-	focusPosition: { x: 0, y: 0 },
+	focusPosition: { x: 60, y: 60 },
 	setCentered: (centered) => set({ centered }),
 	setFocusPosition: (coordinates) => set({ focusPosition: coordinates }),
 }));
