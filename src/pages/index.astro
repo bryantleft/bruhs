@@ -1,29 +1,66 @@
 ---
 import { Image } from "astro:assets";
-import github from "@assets/github.svg";
-import linkedin from "@assets/linkedin.svg";
-import x from "@assets/x.svg";
-import BaseLayout from "@layouts/BaseLayout.astro";
+import bruh from "@/assets/bruh.svg";
+import github from "@/assets/github.svg";
+import linkedin from "@/assets/linkedin.svg";
+import x from "@/assets/x.svg";
+import BaseLayout from "@/layouts/BaseLayout.astro";
 ---
 
 <BaseLayout>
-  <div class="h-full bg-black flex flex-col items-center justify-center gap-y-4">
-    <div class="flex">
-      <div class="flex flex-col items-center">
-        <span class="text-lg text-center text-black bg-white py-1 px-2 mb-4">Bryant Le</span>
-        <div class="flex justify-between w-full">
-          <a href="https://github.com/bnleft" target="_blank" class="bg-white p-1">
-            <Image src={github} alt="github logo" width={24} height={24} loading="eager"/>
-          </a>
-          <a href="https://www.linkedin.com/in/bnle" target="_blank" class="bg-white p-1">
-            <Image src={linkedin} alt="linkedin logo" width={24} height={24} loading="eager"/>
-          </a>
-          <a href="https://x.com/bnleft" target="_blank" class="bg-white p-1">
-            <Image src={x} alt="x logo" width={24} height={24} loading="eager"/>
-          </a>
-        </div>
+  <div class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+      <Image src={bruh} alt="bruh logo" width={60} height={60} loading="eager"/>
+  </div>
+  <div id="home" class="h-full animate-fade-in opacity-0">
+    <div class="flex flex-col h-full justify-center">
+      <div class="flex justify-center items-center h-full">
+        <span class="text-lg text-center text-platinum py-1 px-2 mb-4 font-semibold">Bryant Le</span>
+      </div>
+      <div class="flex flex-col mx-auto justify-center items-start h-full">
+          <span class="text-sm text-center text-platinum-300 py-1 px-2 mb-4">&gt; under construction</span>
+          <span class="text-sm text-center text-platinum-300 py-1 px-2 mb-4">
+              &gt; check out bruh
+              <a href="https://llm.bnle.me" class="text-platinum-500 underline">llm</a>
+          </span>
       </div>
     </div>
-    <span class="text-sm text-center text-white py-1 px-2 mb-4">&gt; under construction</span>
+
+    <div class="fixed bottom-4 right-4 flex gap-x-2">
+        <a href="https://github.com/bnleft" class="bg-platinum-200 hover:bg-platinum-300 p-1">
+            <Image src={github} alt="github logo" width={24} height={24} loading="eager"/>
+        </a>
+        <a href="https://www.linkedin.com/in/bnle" class="bg-platinum-200 hover:bg-platinum-300 p-1">
+            <Image src={linkedin} alt="linkedin logo" width={24} height={24} loading="eager"/>
+        </a>
+        <a href="https://x.com/bnleft" class="bg-platinum-200 hover:bg-platinum-300 p-1">
+            <Image src={x} alt="x logo" width={24} height={24} loading="eager"/>
+        </a>
+    </div>
   </div>
 </BaseLayout>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const mainContent = document.getElementById('home');
+    const links = document.querySelectorAll('a');
+
+    // Initial fade in
+    setTimeout(() => {
+      mainContent.style.transition = 'opacity 1s ease-in-out';
+      mainContent.style.opacity = '1';
+    }, 0);
+
+    links.forEach(link => {
+      link.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const href = link.getAttribute('href');
+
+        mainContent.style.opacity = '0';
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        window.location.href = href;
+      });
+    });
+  });
+</script>

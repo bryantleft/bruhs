@@ -2,9 +2,7 @@
 	"compilerOptions": {
 		"baseUrl": ".",
 		"paths": {
-			"@assets/*": ["src/assets/*"],
-			"@layouts/*": ["src/layouts/*"],
-			"@styles/*": ["src/styles/*"]
+			"@/*": ["src/*"],
 		},
 		"plugins": [
 			{
