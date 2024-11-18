@@ -5,8 +5,6 @@ export default {
 	content: ["./src/**/*.{astro,svelte,ts}"],
 	theme: {
 		colors: {
-			black: "#111111",
-			white: "#cccccc",
 			'platinum': {
 				'50': '#f6f6f6',
 				'100': '#e5e4e2',
