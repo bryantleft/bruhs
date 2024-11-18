@@ -33,10 +33,10 @@ export default function ShortcutLegend() {
 			onMouseDown={toggleOpen}
 			className={cn(
 				"fixed top-1/2 left-4 -translate-y-1/2 group",
-				"p-3 bg-onyx-800 rounded-lg shadow-lg",
+				"p-2 bg-onyx-800 rounded-lg shadow-lg",
 				"border border-onyx-700 hover:border-onyx-600 text-onyx-200",
 				"cursor-pointer transition-all duration-300 ease-in-out",
-				isOpen ? "w-64" : "w-10 hover:w-32",
+				isOpen ? "w-56" : "w-[34px] hover:w-[120px]",
 			)}
 		>
 			<div className="flex items-center">
