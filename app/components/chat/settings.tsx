@@ -1,5 +1,6 @@
 import Select from "@/components/chat/select";
 import { useLLMStore } from "@/lib/stores";
+import { Provider } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { type ChangeEvent, useEffect, useState } from "react";
 
@@ -50,7 +51,7 @@ export default function Settings() {
 					type="password"
 					value={apiKey}
 					onChange={handleKeyChange}
-					placeholder="sk-..."
+					placeholder={model.provider === Provider.XAI ? "xai-..." : "sk-..."}
 					className={cn(
 						"w-full h-full py-3 pl-4 pr-8 rounded",
 						"bg-platinum-950 text-platinum-400 text-xs placeholder:text-platinum-400",
@@ -60,6 +61,7 @@ export default function Settings() {
 							: "opacity-100 cursor-text",
 					)}
 					disabled={!!initialKey}
+					autoComplete={'off'}
 				/>
 				<div
 					className={cn(

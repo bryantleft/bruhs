@@ -1,4 +1,4 @@
-import { modelLogo, models } from "@/lib/data";
+import { models, ProviderLogo } from '@/lib/data';
 import { useLLMStore } from "@/lib/stores";
 import type { Model } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -42,7 +42,7 @@ export default function Select() {
 				<div className="flex p-2 justify-between gap-x-2 items-center">
 					<div className="flex items-center gap-x-2">
 						<img
-							src={modelLogo(model.provider)}
+							src={ProviderLogo(model.provider)}
 							alt={`${model.provider} logo`}
 							width={20}
 							height={20}
@@ -70,7 +70,7 @@ export default function Select() {
 							onMouseDown={() => handleOptionClick(model)}
 						>
 							<img
-								src={modelLogo(model.provider)}
+								src={ProviderLogo(model.provider)}
 								alt={`${model.provider} logo`}
 								width={20}
 								height={20}

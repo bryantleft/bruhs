@@ -1,7 +1,7 @@
 import Bruh from "@/components/bruh";
 import Chat from "@/components/chat";
 import ShortcutLegend from "@/components/shortcut-legend";
-import { modelLogo } from "@/lib/data";
+import { LogoIcon } from "@/lib/data";
 import { useExternalNavigation, useInitialScreenLoad } from "@/lib/hooks";
 import { useMessageStore } from "@/lib/stores";
 import { cn } from "@/lib/utils";
@@ -59,7 +59,7 @@ export default function Index() {
 				<ShortcutLegend />
 				<div className="fixed bottom-4 left-4">
 					<img
-						src={modelLogo("github", { type: "symbol", theme: "light" })}
+						src={LogoIcon("github", { type: "symbol", theme: "light" })}
 						alt={"github logo"}
 						width={30}
 						height={30}

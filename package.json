@@ -9,14 +9,15 @@
 		"start": "wrangler pages dev ./build/client"
 	},
 	"dependencies": {
-		"@ai-sdk/anthropic": "0.0.56",
-		"@ai-sdk/openai": "0.0.71",
+		"@ai-sdk/anthropic": "1.0.1",
+		"@ai-sdk/openai": "1.0.2",
+		"@ai-sdk/xai": "1.0.2",
 		"@radix-ui/react-tooltip": "1.1.4",
 		"@remix-run/cloudflare-pages": "2.13.1",
 		"@remix-run/node": "^2.13.1",
 		"@remix-run/react": "^2.13.1",
 		"@remix-run/serve": "^2.13.1",
-		"ai": "3.4.31",
+		"ai": "4.0.2",
 		"clsx": "2.1.1",
 		"isbot": "5.1.17",
 		"marked": "15.0.0",

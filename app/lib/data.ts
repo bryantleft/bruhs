@@ -1,4 +1,4 @@
-import { type Message, type Model, Provider } from "@/lib/types";
+import {Message, Model, Provider, ProviderMetadata} from '@/lib/types';
 
 // TODO: add more
 export const models: Model[] = [
@@ -20,7 +20,24 @@ export const models: Model[] = [
 		name: "Claude 3 Opus",
 		provider: Provider.ANTHROPIC,
 	},
+	{
+		id: "grok-beta",
+		name: "Grok Beta",
+		provider: Provider.XAI,
+	},
 ];
+
+const ProviderInfo: Record<Provider, ProviderMetadata> = {
+	[Provider.OPENAI]: {
+		domain: "openai.com",
+	},
+	[Provider.ANTHROPIC]: {
+		domain: "anthropic.com",
+	},
+	[Provider.XAI]: {
+		domain: "x.ai",
+	}
+};
 
 export const defaultModel = models[0];
 
@@ -32,12 +49,17 @@ const systemMessage: Message = {
 
 export const defaultMessages = [systemMessage];
 
+export function ProviderLogo(provider: Provider): string {
+	const domain = ProviderInfo[provider].domain;
+	return `https://img.logo.dev/${domain}?token=pk_F-bOQT0IQ_WlM2ccLTa25Q`;
+}
+
 type LogoConfig = {
 	type?: "icon" | "logo" | "symbol";
 	theme?: "light" | "dark";
 };
 
-export function modelLogo(company: string, config?: LogoConfig): string {
+export function LogoIcon(company: string, config?: LogoConfig): string {
 	const width = 400;
 	const height = 400;
 	const size = `w/${width}/h/${height}`;

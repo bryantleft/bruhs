@@ -1,6 +1,6 @@
 import { defaultMessages } from "@/lib/data";
 import { useLLMStore, useMessageStore } from "@/lib/stores";
-import type { APIError, Message } from "@/lib/types";
+import type {APIError, Message} from '@/lib/types';
 import { cn, randomKey } from "@/lib/utils";
 import { useChat } from "ai/react";
 import type React from "react";
@@ -26,7 +26,7 @@ export default function Input() {
 	const { messages, isLoading, setMessages, append, stop } = useChat({
 		api: "/api/llm",
 		body: {
-			key: keys?.[model.provider] ? keys[model.provider] : null,
+			key: keys?.[model.provider],
 			model: model.id,
 			provider: model.provider,
 		},
@@ -45,7 +45,6 @@ export default function Input() {
 		onFinish: (message) => {
 			addMessage(message);
 		},
-		keepLastMessageOnError: true,
 		experimental_throttle: 50,
 	});
 
@@ -104,7 +103,6 @@ export default function Input() {
 			content: input,
 		};
 		addMessage(userMessage);
-
 		setInput("");
 		await append(userMessage);
 	}
