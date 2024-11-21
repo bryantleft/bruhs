@@ -2,8 +2,8 @@ import { Provider } from "@/lib/types";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
-import { ActionFunctionArgs } from '@remix-run/node';
-import { streamText } from 'ai';
+import type { ActionFunctionArgs } from "@remix-run/node";
+import { streamText } from "ai";
 import { z } from "zod";
 
 const StreamChatSchema = z.object({
@@ -47,45 +47,49 @@ export async function action({ request }: ActionFunctionArgs) {
 
 type ProviderConfig = {
 	endpoint: string;
-	method: 'GET' | 'POST';
+	method: "GET" | "POST";
 	headers: Record<string, string>;
 	body?: string;
-}
+};
 
-async function validateApiKey(provider: Provider, key: string, model: string): Promise<boolean> {
+async function validateApiKey(
+	provider: Provider,
+	key: string,
+	model: string,
+): Promise<boolean> {
 	if (!key) return false;
 
 	const configs: { [key in Provider]: ProviderConfig } = {
 		[Provider.ANTHROPIC]: {
-			endpoint: 'https://api.anthropic.com/v1/messages',
-			method: 'POST',
+			endpoint: "https://api.anthropic.com/v1/messages",
+			method: "POST",
 			headers: {
-				'x-api-key': key,
+				"x-api-key": key,
 				"anthropic-version": "2023-06-01",
-				'content-type': 'application/json'
+				"content-type": "application/json",
 			},
 			body: JSON.stringify({
 				model: model,
 				max_tokens: 1,
-				messages: [{ role: 'user', content: 'test' }]
-			})
+				messages: [{ role: "user", content: "test" }],
+			}),
 		},
 		[Provider.XAI]: {
 			endpoint: `https://api.x.ai/v1/models/${model}`,
-			method: 'GET',
+			method: "GET",
 			headers: {
-				'Authorization': `Bearer ${key}`,
-				'Content-Type': 'application/json'
-			}
+				Authorization: `Bearer ${key}`,
+				"Content-Type": "application/json",
+			},
 		},
 		[Provider.OPENAI]: {
 			endpoint: `https://api.openai.com/v1/models/${model}`,
-			method: 'GET',
+			method: "GET",
 			headers: {
-				'Authorization': `Bearer ${key}`,
-				'Content-Type': 'application/json'
-			}
-		}
+				Authorization: `Bearer ${key}`,
+				"Content-Type": "application/json",
+			},
+		},
 	};
 
 	const config = configs[provider];
@@ -95,7 +99,7 @@ async function validateApiKey(provider: Provider, key: string, model: string): P
 		const response = await fetch(config.endpoint, {
 			method: config.method,
 			headers: config.headers,
-			...(config.body && { body: config.body })
+			...(config.body && { body: config.body }),
 		});
 
 		return response.ok;
@@ -105,7 +109,11 @@ async function validateApiKey(provider: Provider, key: string, model: string): P
 	}
 }
 
-async function createLLMClient(provider: Provider, model: string, key: string | undefined) {
+async function createLLMClient(
+	provider: Provider,
+	model: string,
+	key: string | undefined,
+) {
 	if (!key) {
 		throw new Error(`Must populate an API key for ${provider}`);
 	}

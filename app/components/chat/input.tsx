@@ -1,6 +1,6 @@
 import { defaultMessages } from "@/lib/data";
 import { useLLMStore, useMessageStore } from "@/lib/stores";
-import type {APIError, Message} from '@/lib/types';
+import type { APIError, Message } from "@/lib/types";
 import { cn, randomKey } from "@/lib/utils";
 import { useChat } from "ai/react";
 import type React from "react";

@@ -1,4 +1,9 @@
-import {Message, Model, Provider, ProviderMetadata} from '@/lib/types';
+import {
+	type Message,
+	type Model,
+	Provider,
+	type ProviderMetadata,
+} from "@/lib/types";
 
 // TODO: add more
 export const models: Model[] = [
@@ -36,7 +41,7 @@ const ProviderInfo: Record<Provider, ProviderMetadata> = {
 	},
 	[Provider.XAI]: {
 		domain: "x.ai",
-	}
+	},
 };
 
 export const defaultModel = models[0];

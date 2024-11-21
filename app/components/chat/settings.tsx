@@ -61,7 +61,7 @@ export default function Settings() {
 							: "opacity-100 cursor-text",
 					)}
 					disabled={!!initialKey}
-					autoComplete={'off'}
+					autoComplete={"off"}
 				/>
 				<div
 					className={cn(

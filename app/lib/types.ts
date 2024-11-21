@@ -8,12 +8,12 @@ export enum Provider {
 
 export type ProviderMetadata = {
 	domain: string;
-}
+};
 
 type Company = {
 	name: string;
 	domain: string;
-}
+};
 
 export type Model = {
 	id: string;

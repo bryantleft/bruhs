@@ -1,4 +1,4 @@
-import { models, ProviderLogo } from '@/lib/data';
+import { ProviderLogo, models } from "@/lib/data";
 import { useLLMStore } from "@/lib/stores";
 import type { Model } from "@/lib/types";
 import { cn } from "@/lib/utils";
