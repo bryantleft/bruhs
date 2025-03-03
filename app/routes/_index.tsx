@@ -47,7 +47,9 @@ export default function Index() {
 
 	return (
 		<div className="h-full">
-			<Bruh />
+			<div className="hidden md:block">
+				<Bruh />
+			</div>
 			<div
 				className={cn(
 					"h-full transition-opacity duration-1000 ease-in-out",
@@ -55,9 +57,13 @@ export default function Index() {
 				)}
 			>
 				<Chat />
-				<ClearHistoryButton />
-				<ShortcutLegend />
-				<div className="fixed bottom-4 left-4">
+				<div className="hidden md:block">
+					<ClearHistoryButton />
+				</div>
+				<div className="hidden md:block">
+					<ShortcutLegend />
+				</div>
+				<div className="hidden md:block fixed bottom-4 left-4">
 					<img
 						src={LogoIcon("github", { type: "symbol", theme: "light" })}
 						alt={"github logo"}
