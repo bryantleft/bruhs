@@ -1,0 +1,13 @@
+# IDE
+.idea
+
+# Build
+node_modules
+*.tsbuildinfo
+
+# React Router
+.react-router
+build/
+
+# Cloudflare
+.wrangler
