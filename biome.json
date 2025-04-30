@@ -31,6 +31,6 @@
   },
   "files": {
     "include": ["app/**/*"],
-    "ignore": ["node_modules", "build"]
+    "ignore": ["app/root.css", "node_modules", "build"]
   }
 }
