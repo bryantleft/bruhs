@@ -1,8 +1,6 @@
 @import "tailwindcss";
 
-@plugin "@iconify/tailwind4" {
-  prefixes: lucide, vscode-icons;
-}
+@config "../tailwind.config.ts";
 
 @theme {
   --color-jet-black: #0a0a0a;
