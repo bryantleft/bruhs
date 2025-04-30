@@ -2,8 +2,8 @@ import { Provider } from "@/lib/types";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
-import type { ActionFunctionArgs } from "@remix-run/node";
 import { streamText } from "ai";
+import type { ActionFunctionArgs } from "react-router";
 import { z } from "zod";
 
 const StreamChatSchema = z.object({

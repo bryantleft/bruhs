@@ -6,8 +6,8 @@ import { useExternalNavigation, useInitialScreenLoad } from "@/lib/hooks";
 import { useMessageStore } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import type { MetaFunction } from "@remix-run/node";
 import React from "react";
+import type { MetaFunction } from "react-router";
 
 export const meta: MetaFunction = () => {
 	return [{ title: "llm" }, { name: "description", content: "llm" }];

@@ -8,7 +8,7 @@ export const useBruh = (width: number, height: number) => {
 	const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 });
 	const [isBlinking, setIsBlinking] = useState(false);
 	const [isHovered, setIsHovered] = useState(false);
-	const animationFrameRef = useRef<number>();
+	const animationFrameRef = useRef<number>(0);
 
 	useEffect(() => {
 		setCentered(messageHistory.length < 2);
