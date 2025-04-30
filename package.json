@@ -45,5 +45,5 @@
     "vite": "^6.2.1",
     "vite-tsconfig-paths": "^5.1.4",
     "wrangler": "^3.114.3"
-  },
+  }
 }
