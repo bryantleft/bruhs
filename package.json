@@ -38,6 +38,7 @@
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.1",
     "@types/react-syntax-highlighter": "15.5.13",
+    "tailwind-scrollbar": "4.0.2",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
     "vite": "^6.2.1",
