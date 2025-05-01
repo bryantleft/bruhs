@@ -69,13 +69,13 @@ export default function Settings() {
     <div
       ref={settingsRef}
       className={cn(
-        "group fixed top-4 right-4 z-50",
+        "group",
         "rounded-lg bg-onyx-800 p-2 shadow-lg",
         "border border-onyx-700 text-onyx-200",
         isOpen ? "border-onyx-600" : "hover:border-onyx-600",
         "transition-all duration-300 ease-in-out",
-        isOpen ? "w-80" : "w-[34px] hover:w-[120px]",
-        isOpen && "hover:w-80",
+        isOpen ? "w-56" : "w-[34px] hover:w-[110px]",
+        isOpen && "hover:w-56",
       )}
     >
       <div className="flex items-center">
@@ -88,15 +88,15 @@ export default function Settings() {
         >
           <h3
             className={cn(
-              "overflow-hidden whitespace-nowrap font-semibold text-sm transition-all duration-300 ease-in-out",
+              'overflow-hidden whitespace-nowrap font-semibold text-sm transition-all duration-300 ease-in-out',
               isOpen
-                ? "max-w-full opacity-100"
-                : "max-w-0 opacity-0 group-hover:max-w-full group-hover:opacity-100",
+                ? 'max-w-full opacity-100'
+                : 'max-w-0 opacity-0 group-hover:max-w-full group-hover:opacity-100',
             )}
           >
             Settings
           </h3>
-          <span className="iconify lucide--settings h-4 w-4 text-onyx-200" />
+          <span className="iconify lucide--settings h-4 w-4 text-onyx-200"/>
         </button>
       </div>
 
@@ -231,7 +231,7 @@ export default function Settings() {
             onClick={() => clearMessageHistory()}
           >
             <span className="cursor-pointer text-platinum-400 text-xs transition-colors duration-300 group-hover/clear:text-ruby-700">
-              Clear all chats
+              Clear history
             </span>
           </button>
         </div>

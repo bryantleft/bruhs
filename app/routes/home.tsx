@@ -27,16 +27,16 @@ export default function Index() {
           visible ? "opacity-100" : "opacity-0",
         )}
       >
-        <Chat />
-        <div className="hidden md:block">
-          <Settings />
+        <div className="fixed top-4 right-4 grid grid-flow-col auto-cols-max gap-x-2 items-start z-20">
+          <ShortcutLegend/>
+          <Settings/>
         </div>
+        <Chat/>
         <div className="hidden md:block">
-          <ShortcutLegend />
         </div>
-        <div className="fixed bottom-4 left-4 hidden md:block">
+        <div className="fixed bottom-4 right-4 hidden md:block">
           <img
-            src={LogoIcon("github.com", { type: "symbol", theme: "light" })}
+            src={LogoIcon("github.com", {type: "symbol", theme: "light"})}
             alt={"github logo"}
             width={30}
             height={30}

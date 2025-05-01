@@ -151,7 +151,7 @@ export default function Input() {
           placeholder="Bruhhhh..."
           onKeyDown={handleKeyDown}
         />
-        <div className="self-end">
+        {!generating && <div className="self-end">
           <button
             type="submit"
             disabled={generating || input.trim().length === 0}
@@ -162,9 +162,9 @@ export default function Input() {
           >
             <span className="iconify lucide--arrow-up h-4 w-4 text-onyx-300"/>
           </button>
-        </div>
+        </div>}
         {generating && (
-          <div className="absolute right-4 bottom-2">
+          <div className="self-end">
             <button
               type="button"
               onMouseDown={handleStop}
