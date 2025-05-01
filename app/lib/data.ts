@@ -32,15 +32,18 @@ export const models: Model[] = [
   },
 ];
 
-const ProviderInfo: Record<Provider, ProviderMetadata> = {
+export const ProviderInfo: Record<Provider, ProviderMetadata> = {
   [Provider.OPENAI]: {
     domain: "openai.com",
+    logo: LogoIcon("openai.com", { type: "symbol", theme: "light" }),
   },
   [Provider.ANTHROPIC]: {
     domain: "anthropic.com",
+    logo: LogoIcon("anthropic.com", { type: "icon" }),
   },
   [Provider.XAI]: {
     domain: "x.ai",
+    logo: LogoIcon("x.ai", { type: "icon" }),
   },
 };
 
@@ -54,17 +57,12 @@ const systemMessage: Message = {
 
 export const defaultMessages = [systemMessage];
 
-export function ProviderLogo(provider: Provider): string {
-  const domain = ProviderInfo[provider].domain;
-  return `https://img.logo.dev/${domain}?token=pk_F-bOQT0IQ_WlM2ccLTa25Q`;
-}
-
 type LogoConfig = {
   type?: "icon" | "logo" | "symbol";
   theme?: "light" | "dark";
 };
 
-export function LogoIcon(company: string, config?: LogoConfig): string {
+export function LogoIcon(domain: string, config?: LogoConfig): string {
   const width = 400;
   const height = 400;
   const size = `w/${width}/h/${height}`;
@@ -73,7 +71,6 @@ export function LogoIcon(company: string, config?: LogoConfig): string {
   const theme = config && config.theme === "light" ? "/theme/light" : "";
   const clientId = "1id8ORhCPHW7oJZ3_xl";
 
-  const domain = `${company}.com`;
   const path = `${size}${theme}${type}?c=${clientId}`;
 
   return `https://cdn.brandfetch.io/${domain}/${path}`;

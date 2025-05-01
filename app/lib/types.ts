@@ -8,6 +8,7 @@ export enum Provider {
 
 export type ProviderMetadata = {
   domain: string;
+  logo: string;
 };
 
 type Company = {

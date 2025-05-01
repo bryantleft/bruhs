@@ -12,7 +12,6 @@
     "@ai-sdk/anthropic": "1.0.1",
     "@ai-sdk/openai": "1.0.2",
     "@ai-sdk/xai": "1.0.2",
-    "@radix-ui/react-tooltip": "1.1.4",
     "@react-router/cloudflare": "7.4.1",
     "@react-router/dev": "7.4.1",
     "@types/node": "22.13.14",
