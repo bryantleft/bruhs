@@ -17,7 +17,7 @@ export default function Bruh({ width = 60, height = 60 }: BruhProps) {
     <div
       onMouseDown={() => navigate("https://bnle.me")}
       className={cn(
-        "fixed cursor-pointer rounded-full z-20",
+        "fixed z-20 cursor-pointer rounded-full",
         "transition-all duration-1000 ease-in-out",
         isCentered
           ? "-translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2"

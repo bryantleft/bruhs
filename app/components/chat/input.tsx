@@ -146,23 +146,25 @@ export default function Input() {
             "bg-onyx text-onyx-200 text-sm placeholder:text-onyx-300",
             "focus:outline-none",
             "overflow-y-auto",
-            "scrollbar-thin scrollbar-thumb-onyx-300 scrollbar-track-transparent"
+            "scrollbar-thin scrollbar-thumb-onyx-300 scrollbar-track-transparent",
           )}
           placeholder="Bruhhhh..."
           onKeyDown={handleKeyDown}
         />
-        {!generating && <div className="self-end">
-          <button
-            type="submit"
-            disabled={generating || input.trim().length === 0}
-            className={cn(
-              "flex rounded-lg bg-amethyst-700 p-[5px] hover:bg-amethyst-600",
-              "transition-colors duration-200",
-            )}
-          >
-            <span className="iconify lucide--arrow-up h-4 w-4 text-onyx-300"/>
-          </button>
-        </div>}
+        {!generating && (
+          <div className="self-end">
+            <button
+              type="submit"
+              disabled={generating || input.trim().length === 0}
+              className={cn(
+                "flex rounded-lg bg-amethyst-700 p-[5px] hover:bg-amethyst-600",
+                "transition-colors duration-200",
+              )}
+            >
+              <span className="iconify lucide--arrow-up h-4 w-4 text-onyx-300" />
+            </button>
+          </div>
+        )}
         {generating && (
           <div className="self-end">
             <button
@@ -174,13 +176,12 @@ export default function Input() {
                 "transition-colors duration-200",
               )}
             >
-              <span className="iconify lucide--loader-circle h-4 w-4 animate-spin text-onyx-300"/>
-              <span
-                className="iconify lucide--dot -translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 h-2 w-2 text-onyx-300/60"/>
+              <span className="iconify lucide--loader-circle h-4 w-4 animate-spin text-onyx-300" />
+              <span className="iconify lucide--dot -translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 h-2 w-2 text-onyx-300/60" />
             </button>
           </div>
         )}
       </div>
     </form>
-);
+  );
 }

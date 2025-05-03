@@ -43,21 +43,21 @@ export default function ShortcutLegend() {
         <div className="flex w-full items-center justify-between">
           <h3
             className={cn(
-              'overflow-hidden whitespace-nowrap font-semibold text-sm transition-all duration-300 ease-in-out',
+              "overflow-hidden whitespace-nowrap font-semibold text-sm transition-all duration-300 ease-in-out",
               isOpen
-                ? 'max-w-full opacity-100'
-                : 'max-w-0 opacity-0 group-hover:max-w-full group-hover:opacity-100',
+                ? "max-w-full opacity-100"
+                : "max-w-0 opacity-0 group-hover:max-w-full group-hover:opacity-100",
             )}
           >
             Shortcuts
           </h3>
-          <span className="iconify lucide--keyboard h-4 w-4 text-onyx-200"/>
+          <span className="iconify lucide--keyboard h-4 w-4 text-onyx-200" />
         </div>
       </div>
 
       <div
         className={cn(
-          'space-y-2 overflow-hidden transition-all duration-300 ease-in-out',
+          "space-y-2 overflow-hidden transition-all duration-300 ease-in-out",
           isOpen ? "mt-3 max-h-96 opacity-100" : "max-h-0 opacity-0",
         )}
       >

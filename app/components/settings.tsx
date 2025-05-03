@@ -88,15 +88,15 @@ export default function Settings() {
         >
           <h3
             className={cn(
-              'overflow-hidden whitespace-nowrap font-semibold text-sm transition-all duration-300 ease-in-out',
+              "overflow-hidden whitespace-nowrap font-semibold text-sm transition-all duration-300 ease-in-out",
               isOpen
-                ? 'max-w-full opacity-100'
-                : 'max-w-0 opacity-0 group-hover:max-w-full group-hover:opacity-100',
+                ? "max-w-full opacity-100"
+                : "max-w-0 opacity-0 group-hover:max-w-full group-hover:opacity-100",
             )}
           >
             Settings
           </h3>
-          <span className="iconify lucide--settings h-4 w-4 text-onyx-200"/>
+          <span className="iconify lucide--settings h-4 w-4 text-onyx-200" />
         </button>
       </div>
 
