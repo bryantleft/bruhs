@@ -173,7 +173,7 @@ function CodeSpanBlock({ text }: CodeSpanBlockProps) {
     <code
       key={randomKey()}
       onMouseDown={copyText}
-      className="cursor-pointer rounded bg-platinum-950 p-1 text-amethyst-400 text-sm"
+      className="cursor-pointer rounded bg-platinum-950 px-1 py-[0.5px] text-amethyst-400 text-sm"
     >
       {text}
     </code>

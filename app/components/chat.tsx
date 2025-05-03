@@ -14,7 +14,9 @@ export default function Chat() {
         <div
           className="pointer-events-none h-8 w-full bg-gradient-to-t from-platinum-950 to-transparent"
         />
-        <Input/>
+        <div className="bg-platinum-950">
+          <Input/>
+        </div>
       </div>
     </div>
   );
