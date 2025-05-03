@@ -18,9 +18,7 @@ export default function Index() {
 
   return (
     <div className="h-full">
-      <div className="hidden md:block">
-        <Bruh />
-      </div>
+      <Bruh />
       <div
         className={cn(
           "h-full transition-opacity duration-1000 ease-in-out",
