@@ -135,7 +135,7 @@ export default function Input() {
         "relative overflow-hidden rounded-t-2xl bg-onyx",
         "py-3",
         "border-onyx-800 border-x-[0.5px] border-t-[0.5px]",
-        "group-hover:border-onyx-700"
+        "group-hover:border-onyx-700",
       )}
     >
       <div className="relative flex flex-col px-4">
@@ -149,7 +149,7 @@ export default function Input() {
             "bg-onyx text-onyx-200 text-sm placeholder:text-onyx-300",
             "focus:outline-none",
             "overflow-y-auto",
-            "scrollbar-thin scrollbar-thumb-onyx-300 scrollbar-track-transparent"
+            "scrollbar-thin scrollbar-thumb-onyx-300 scrollbar-track-transparent",
           )}
           placeholder="Bruhhhh..."
           onKeyDown={handleKeyDown}
@@ -160,8 +160,8 @@ export default function Input() {
               type="submit"
               disabled={generating || input.trim().length === 0}
               className={cn(
-                "flex rounded-lg bg-amethyst-700 p-[5px] hover:bg-amethyst-600 cursor-pointer",
-                "transition-colors duration-200"
+                "flex cursor-pointer rounded-lg bg-amethyst-700 p-[5px] hover:bg-amethyst-600",
+                "transition-colors duration-200",
               )}
             >
               <span className="iconify lucide--arrow-up h-4 w-4 text-onyx-300" />
@@ -174,9 +174,9 @@ export default function Input() {
               type="button"
               onMouseDown={handleStop}
               className={cn(
-                "relative flex items-center justify-center rounded-lg cursor-pointer",
+                "relative flex cursor-pointer items-center justify-center rounded-lg",
                 "bg-amethyst-700 p-[5px] hover:bg-amethyst-600",
-                "transition-colors duration-200"
+                "transition-colors duration-200",
               )}
             >
               <span className="iconify lucide--loader-circle h-4 w-4 animate-spin text-onyx-300" />

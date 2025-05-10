@@ -10,11 +10,11 @@ export default function Settings() {
   const [isOpen, setIsOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
 
-  const initialKey = keys ? keys[model.provider] ?? "" : "";
+  const initialKey = keys ? (keys[model.provider] ?? "") : "";
   const [apiKey, setApiKey] = useState(initialKey);
 
   useEffect(() => {
-    const key = keys ? keys[model.provider] ?? "" : "";
+    const key = keys ? (keys[model.provider] ?? "") : "";
     setApiKey(key);
   }, [keys, model]);
 
@@ -75,7 +75,7 @@ export default function Settings() {
         "transition-all duration-300 ease-in-out",
         isOpen ? "border-onyx-600" : "hover:border-onyx-600",
         isOpen ? "w-56" : "w-[34px] hover:w-[110px]",
-        isOpen && "hover:w-56"
+        isOpen && "hover:w-56",
       )}
     >
       <div className="flex items-center">
@@ -91,7 +91,7 @@ export default function Settings() {
               "overflow-hidden whitespace-nowrap font-semibold text-sm transition-all duration-300 ease-in-out",
               isOpen
                 ? "max-w-full opacity-100"
-                : "max-w-0 opacity-0 group-hover:max-w-full group-hover:opacity-100"
+                : "max-w-0 opacity-0 group-hover:max-w-full group-hover:opacity-100",
             )}
           >
             Settings
@@ -104,7 +104,7 @@ export default function Settings() {
         id="settings-content"
         className={cn(
           "space-y-4 overflow-hidden transition-all duration-300 ease-in-out",
-          isOpen ? "mt-3 max-h-96 opacity-100" : "max-h-0 opacity-0"
+          isOpen ? "mt-3 max-h-96 opacity-100" : "max-h-0 opacity-0",
         )}
       >
         <div className="mb-4">
@@ -121,7 +121,7 @@ export default function Settings() {
                   "flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors duration-200",
                   model.id === currentModel.id
                     ? "cursor-default bg-amethyst-700 font-semibold text-white"
-                    : "cursor-pointer text-platinum-400 hover:bg-onyx-700 hover:text-platinum-200"
+                    : "cursor-pointer text-platinum-400 hover:bg-onyx-700 hover:text-platinum-200",
                 )}
                 disabled={model.id === currentModel.id}
               >
@@ -148,7 +148,7 @@ export default function Settings() {
               "border-[0.5px] border-platinum-900 transition-colors duration-300",
               initialKey
                 ? "cursor-not-allowed"
-                : "cursor-text hover:border-platinum-700"
+                : "cursor-text hover:border-platinum-700",
             )}
           >
             <input
@@ -164,7 +164,7 @@ export default function Settings() {
                 "transition-opacity duration-300 focus:outline-none",
                 initialKey
                   ? "cursor-not-allowed opacity-50"
-                  : "cursor-text opacity-100"
+                  : "cursor-text opacity-100",
               )}
               disabled={!!initialKey}
               autoComplete="off"
@@ -175,7 +175,7 @@ export default function Settings() {
                 "transition-all duration-300",
                 !initialKey
                   ? "right-0 pr-3 opacity-100"
-                  : "pointer-events-none right-[calc(50%-12px)] opacity-0"
+                  : "pointer-events-none right-[calc(50%-12px)] opacity-0",
               )}
             >
               <button
@@ -186,7 +186,7 @@ export default function Settings() {
                   canAddKey()
                     ? "cursor-pointer bg-amethyst-700 hover:bg-amethyst-600"
                     : "cursor-not-allowed",
-                  initialKey && "bg-amethyst"
+                  initialKey && "bg-amethyst",
                 )}
                 disabled={!canAddKey() || !!initialKey}
                 aria-label="Save API Key"
@@ -198,7 +198,7 @@ export default function Settings() {
               className={cn(
                 "-translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 z-10 transform",
                 "transition-all duration-300",
-                initialKey ? "opacity-100" : "pointer-events-none opacity-0"
+                initialKey ? "opacity-100" : "pointer-events-none opacity-0",
               )}
             >
               <div className="flex cursor-not-allowed rounded-lg bg-amethyst-700 p-[5px]">
@@ -209,7 +209,7 @@ export default function Settings() {
               className={cn(
                 "absolute inset-y-0 right-0 z-20 flex items-center pr-3",
                 "transition-opacity duration-300",
-                initialKey ? "opacity-100" : "pointer-events-none opacity-0"
+                initialKey ? "opacity-100" : "pointer-events-none opacity-0",
               )}
             >
               <button
