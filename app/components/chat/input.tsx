@@ -2,7 +2,7 @@ import { defaultMessages } from "@/lib/data";
 import { useLLMStore, useMessageStore } from "@/lib/stores";
 import type { APIError, Message } from "@/lib/types";
 import { cn, randomKey } from "@/lib/utils";
-import { useChat } from "ai/react";
+import { useChat } from "@ai-sdk/react";
 import type React from "react";
 import { type ChangeEvent, type FormEvent, useEffect, useRef } from "react";
 
@@ -23,7 +23,7 @@ export default function Input() {
   } = useMessageStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { messages, isLoading, setMessages, append, stop } = useChat({
+  const { messages, status, setMessages, append, stop } = useChat({
     api: "/api/llm",
     body: {
       key: keys?.[model.provider],
@@ -65,8 +65,8 @@ export default function Input() {
   }, []);
 
   useEffect(() => {
-    setGenerating(isLoading);
-  }, [isLoading, setGenerating]);
+    setGenerating(status === "streaming");
+  }, [status, setGenerating]);
 
   useEffect(() => {
     if (deleting) {
@@ -104,7 +104,10 @@ export default function Input() {
     };
     addMessage(userMessage);
     setInput("");
-    await append(userMessage);
+    await append(userMessage, {
+      // TODO: implement upload file
+      experimental_attachments: [],
+    });
   }
 
   async function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -132,7 +135,7 @@ export default function Input() {
         "relative overflow-hidden rounded-t-2xl bg-onyx",
         "py-3",
         "border-onyx-800 border-x-[0.5px] border-t-[0.5px]",
-        "group-hover:border-onyx-700",
+        "group-hover:border-onyx-700"
       )}
     >
       <div className="relative flex flex-col px-4">
@@ -146,7 +149,7 @@ export default function Input() {
             "bg-onyx text-onyx-200 text-sm placeholder:text-onyx-300",
             "focus:outline-none",
             "overflow-y-auto",
-            "scrollbar-thin scrollbar-thumb-onyx-300 scrollbar-track-transparent",
+            "scrollbar-thin scrollbar-thumb-onyx-300 scrollbar-track-transparent"
           )}
           placeholder="Bruhhhh..."
           onKeyDown={handleKeyDown}
@@ -157,8 +160,8 @@ export default function Input() {
               type="submit"
               disabled={generating || input.trim().length === 0}
               className={cn(
-                "flex rounded-lg bg-amethyst-700 p-[5px] hover:bg-amethyst-600",
-                "transition-colors duration-200",
+                "flex rounded-lg bg-amethyst-700 p-[5px] hover:bg-amethyst-600 cursor-pointer",
+                "transition-colors duration-200"
               )}
             >
               <span className="iconify lucide--arrow-up h-4 w-4 text-onyx-300" />
@@ -171,9 +174,9 @@ export default function Input() {
               type="button"
               onMouseDown={handleStop}
               className={cn(
-                "relative flex items-center justify-center rounded-lg",
+                "relative flex items-center justify-center rounded-lg cursor-pointer",
                 "bg-amethyst-700 p-[5px] hover:bg-amethyst-600",
-                "transition-colors duration-200",
+                "transition-colors duration-200"
               )}
             >
               <span className="iconify lucide--loader-circle h-4 w-4 animate-spin text-onyx-300" />
