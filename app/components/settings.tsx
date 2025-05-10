@@ -103,7 +103,7 @@ export default function Settings() {
       <div
         id="settings-content"
         className={cn(
-          "space-y-4 overflow-hidden transition-all duration-300 ease-in-out", // Added overflow-hidden
+          "space-y-4 overflow-hidden transition-all duration-300 ease-in-out",
           isOpen ? "mt-3 max-h-96 opacity-100" : "max-h-0 opacity-0"
         )}
       >
