@@ -6,7 +6,8 @@
   "author": "Bryant Le <bryantleft@gmail.com>",
   "files": [
     "src/index.css",
-    "fonts/"
+    "fonts/",
+    "scripts/"
   ],
   "style": "src/index.css",
   "scripts": {
