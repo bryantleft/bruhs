@@ -1,13 +1,19 @@
-import { defaultMessages } from "@/lib/data";
+import { defaultMessages, models } from "@/lib/data";
 import { useLLMStore, useMessageStore } from "@/lib/stores";
-import type { APIError, Message } from "@/lib/types";
+import type { APIError, Message, Model } from "@/lib/types";
 import { cn, randomKey } from "@/lib/utils";
 import { useChat } from "@ai-sdk/react";
 import type React from "react";
-import { type ChangeEvent, type FormEvent, useEffect, useRef } from "react";
+import {
+  type ChangeEvent,
+  type FormEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 export default function Input() {
-  const { model, keys } = useLLMStore();
+  const { model, keys, setModel } = useLLMStore();
   const {
     input,
     messageHistory,
@@ -22,6 +28,11 @@ export default function Input() {
     setDeleting,
   } = useMessageStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [showModelSelector, setShowModelSelector] = useState(false);
+  const [cursorPosition, setCursorPosition] = useState<{
+    top: number;
+    left: number;
+  }>({ top: 0, left: 0 });
 
   const { messages, status, setMessages, append, stop } = useChat({
     api: "/api/llm",
@@ -91,7 +102,32 @@ export default function Input() {
 
   function handleInputChange(e: ChangeEvent<HTMLTextAreaElement>) {
     e.preventDefault();
-    setInput(e.target.value);
+    const newValue = e.target.value;
+    setInput(newValue);
+
+    if (newValue.endsWith("@")) {
+      setShowModelSelector(true);
+
+      // Calculate cursor position for popup
+      const textarea = textareaRef.current;
+      if (textarea) {
+        const cursorPos = textarea.selectionEnd;
+        const textBeforeCursor = newValue.substring(0, cursorPos);
+        const lines = textBeforeCursor.split("\n");
+        const currentLineIndex = lines.length - 1;
+        const currentLineLength = lines[currentLineIndex].length;
+
+        const lineHeight = 20;
+        const charWidth = 8;
+
+        setCursorPosition({
+          top: textarea.offsetTop + currentLineIndex * lineHeight,
+          left: textarea.offsetLeft + currentLineLength * charWidth,
+        });
+      }
+    } else if (showModelSelector && !newValue.includes("@")) {
+      setShowModelSelector(false);
+    }
   }
 
   async function handleSendMessage() {
@@ -111,6 +147,18 @@ export default function Input() {
   }
 
   async function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (showModelSelector) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setShowModelSelector(false);
+      }
+      if (e.key === "Tab") {
+        e.preventDefault();
+        handleModelSelect(model);
+      }
+      return;
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       await handleSendMessage();
@@ -126,6 +174,12 @@ export default function Input() {
     stop();
     addMessage(lastMessage);
     addError("Stopped");
+  }
+
+  function handleModelSelect(selectedModel: Model) {
+    setModel(selectedModel);
+    setInput(input.replace(/@$/, `@${selectedModel.name} `));
+    setShowModelSelector(false);
   }
 
   return (
@@ -154,6 +208,36 @@ export default function Input() {
           placeholder="Bruhhhh..."
           onKeyDown={handleKeyDown}
         />
+        {showModelSelector && (
+          <div
+            className={cn(
+              "fixed z-10 rounded-lg border border-onyx-700 bg-onyx-900 shadow-lg",
+              "max-h-64 w-64 overflow-y-auto",
+            )}
+            style={{
+              top: `${cursorPosition.top + 24}px`,
+              left: `${cursorPosition.left}px`,
+            }}
+          >
+            <ul className="py-1">
+              {models.map((modelOption) => (
+                <li
+                  key={modelOption.id}
+                  onClick={() => handleModelSelect(modelOption)}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2 px-3 py-2 text-onyx-200 text-sm hover:bg-onyx-800",
+                    model.id === modelOption.id ? "bg-onyx-800" : "",
+                  )}
+                >
+                  <span className="text-xs">{modelOption.name}</span>
+                  <span className="rounded bg-onyx-700 px-2 py-0.5 text-xs">
+                    {modelOption.provider}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {!generating && (
           <div className="self-end">
             <button

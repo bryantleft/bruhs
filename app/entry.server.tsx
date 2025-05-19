@@ -17,7 +17,7 @@ export default async function handleRequest(
     <ServerRouter context={routerContext} url={request.url} />,
     {
       onError(error: unknown) {
-        // responseStatusCode = 500;
+        responseStatusCode = 500;
         // Log streaming rendering errors from inside the shell.  Don't log
         // errors encountered during initial shell rendering since they'll
         // reject and get logged in handleDocumentRequest.

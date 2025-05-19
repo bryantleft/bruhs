@@ -4,8 +4,8 @@
   "scripts": {
     "dev": "react-router dev",
     "build": "react-router build",
-    "start": "wrangler pages dev ./build/client",
-    "deploy": "pnpm run build && wrangler pages deploy",
+    "preview": "pnpm run build && vite preview",
+    "deploy": "pnpm run build && wrangler deploy",
     "check": "wrangler types && react-router typegen && tsc -b && biome check --write"
   },
   "dependencies": {
@@ -13,8 +13,8 @@
     "@ai-sdk/openai": "1.0.2",
     "@ai-sdk/react": "1.2.12",
     "@ai-sdk/xai": "1.0.2",
-    "@react-router/cloudflare": "7.4.1",
-    "@react-router/dev": "7.4.1",
+    "@bruhs/theme": "0.1.1",
+    "@react-router/dev": "7.6.0",
     "@types/node": "22.13.14",
     "ai": "4.3.15",
     "clsx": "2.1.1",
@@ -27,11 +27,13 @@
     "sonner": "1.7.0",
     "tailwind-merge": "2.5.4",
     "workerd": "^1.20250320.0",
-    "zod": "3.23.8",
+    "zod": "3.24.4",
     "zustand": "5.0.1"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
+    "@cloudflare/vite-plugin": "1.2.2",
+    "@cloudflare/workers-types": "4.20250519.0",
     "@iconify-json/lucide": "1.2.39",
     "@iconify-json/vscode-icons": "1.2.20",
     "@iconify/tailwind": "1.2.0",
@@ -44,6 +46,6 @@
     "typescript": "^5.7.2",
     "vite": "^6.2.1",
     "vite-tsconfig-paths": "^5.1.4",
-    "wrangler": "^3.114.3"
+    "wrangler": "^4.15.2"
   }
 }
