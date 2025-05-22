@@ -11,15 +11,20 @@ export type ProviderMetadata = {
   logo: string;
 };
 
-type Company = {
-  name: string;
-  domain: string;
-};
+export enum InputType {
+  TEXT = "text",
+}
+
+export enum OutputType {
+  TEXT = "text",
+}
 
 export type Model = {
   id: string;
   name: string;
   provider: Provider;
+  inputs: InputType[];
+  outputs: OutputType[];
 };
 
 export type Keys = Record<Provider, string>;

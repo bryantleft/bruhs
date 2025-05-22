@@ -3,32 +3,42 @@ import {
   type Model,
   Provider,
   type ProviderMetadata,
+  InputType,
+  OutputType,
 } from "@/lib/types";
 
 // TODO: add more
 export const models: Model[] = [
-  { id: "gpt-4o-mini", name: "GPT-4o Mini", provider: Provider.OPENAI },
-  { id: "gpt-4-turbo", name: "GPT-4 Turbo", provider: Provider.OPENAI },
-  { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo", provider: Provider.OPENAI },
+  { id: "gpt-4o-mini", name: "GPT-4o Mini", provider: Provider.OPENAI, inputs: [InputType.TEXT], outputs: [OutputType.TEXT] },
+  { id: "gpt-4-turbo", name: "GPT-4 Turbo", provider: Provider.OPENAI, inputs: [InputType.TEXT], outputs: [OutputType.TEXT] },
+  { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo", provider: Provider.OPENAI, inputs: [InputType.TEXT], outputs: [OutputType.TEXT] },
   {
     id: "claude-3-5-sonnet-latest",
     name: "Claude 3.5 Sonnet",
     provider: Provider.ANTHROPIC,
+    inputs: [InputType.TEXT],
+    outputs: [OutputType.TEXT],
   },
   {
     id: "claude-3-5-haiku-latest",
     name: "Claude 3.5 Haiku",
     provider: Provider.ANTHROPIC,
+    inputs: [InputType.TEXT],
+    outputs: [OutputType.TEXT],
   },
   {
     id: "claude-3-opus-latest",
     name: "Claude 3 Opus",
     provider: Provider.ANTHROPIC,
+    inputs: [InputType.TEXT],
+    outputs: [OutputType.TEXT],
   },
   {
     id: "grok-beta",
     name: "Grok Beta",
     provider: Provider.XAI,
+    inputs: [InputType.TEXT],
+    outputs: [OutputType.TEXT],
   },
 ];
 

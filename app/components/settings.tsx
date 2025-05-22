@@ -1,6 +1,6 @@
 import { ProviderInfo, models } from "@/lib/data";
 import { useLLMStore, useMessageStore } from "@/lib/stores";
-import { type Model, Provider } from "@/lib/types";
+import { type Model, Provider, InputType, OutputType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import React, { type ChangeEvent, useEffect, useRef, useState } from "react";
 
@@ -133,6 +133,19 @@ export default function Settings() {
                   className="select-none rounded"
                 />
                 {currentModel.name}
+                <span className="flex items-center gap-1 ml-auto">
+                  {currentModel.inputs.includes(InputType.TEXT) && (
+                    <span className="inline-flex items-center justify-center border border-platinum-700 rounded p-0.5 bg-onyx-900">
+                      <span className="iconify lucide--type h-3 w-3 text-platinum-400" />
+                    </span>
+                  )}
+                  <span className="iconify lucide--arrow-right h-3 w-3 text-platinum-500" />
+                  {currentModel.outputs.includes(OutputType.TEXT) && (
+                    <span className="inline-flex items-center justify-center border border-platinum-700 rounded p-0.5 bg-onyx-900">
+                      <span className="iconify lucide--type h-3 w-3 text-platinum-400" />
+                    </span>
+                  )}
+                </span>
               </button>
             ))}
           </div>
