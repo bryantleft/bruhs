@@ -221,18 +221,27 @@ export default function Input() {
           >
             <ul className="py-1">
               {models.map((modelOption) => (
-                <li
-                  key={modelOption.id}
-                  onClick={() => handleModelSelect(modelOption)}
-                  className={cn(
-                    "flex cursor-pointer items-center gap-2 px-3 py-2 text-onyx-200 text-sm hover:bg-onyx-800",
-                    model.id === modelOption.id ? "bg-onyx-800" : "",
-                  )}
-                >
-                  <span className="text-xs">{modelOption.name}</span>
-                  <span className="rounded bg-onyx-700 px-2 py-0.5 text-xs">
-                    {modelOption.provider}
-                  </span>
+                <li key={modelOption.id}>
+                  <button
+                    type="button"
+                    onClick={() => handleModelSelect(modelOption)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleModelSelect(modelOption);
+                      }
+                    }}
+                    tabIndex={0}
+                    className={cn(
+                      "flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-onyx-200 text-sm hover:bg-onyx-800",
+                      model.id === modelOption.id ? "bg-onyx-800" : "",
+                    )}
+                  >
+                    <span className="text-xs">{modelOption.name}</span>
+                    <span className="rounded bg-onyx-700 px-2 py-0.5 text-xs">
+                      {modelOption.provider}
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>
