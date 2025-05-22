@@ -1,8 +1,16 @@
-const fs = require('fs');
 const path = require('path');
+const fs = require('fs');
 
-const packageFontsDir = path.join(__dirname, '../fonts');
-const consumerRoot = process.env.INIT_CWD;
+const consumerRoot = process.cwd();
+
+let packageRoot;
+try {
+  packageRoot = path.dirname(require.resolve('@bruhs/theme/package.json', { paths: [consumerRoot] }));
+} catch {
+  packageRoot = path.resolve(__dirname, '..');
+}
+
+const packageFontsDir = path.join(packageRoot, 'fonts');
 const consumerPublicFontsDir = path.join(consumerRoot, 'public', 'fonts');
 
 try {
