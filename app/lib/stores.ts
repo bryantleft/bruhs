@@ -123,3 +123,13 @@ export const useMessageStore = create<MessageStore>((set, get) => ({
   setGenerating: (generating) => set({ generating }),
   setDeleting: (deleting) => set({ deleting }),
 }));
+
+type CommandStore = {
+  commandBarOpen: boolean;
+  setCommandBarOpen: (open: boolean) => void;
+};
+
+export const useCommandStore = create<CommandStore>((set) => ({
+  commandBarOpen: false,
+  setCommandBarOpen: (open) => set({ commandBarOpen: open }),
+}));

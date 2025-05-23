@@ -1,11 +1,12 @@
 import Bruh from "@/components/bruh";
 import Chat from "@/components/chat";
+import { CommandBar, CommandBarButton } from "@/components/command-bar";
 import Settings from "@/components/settings";
 import ShortcutLegend from "@/components/shortcut-legend";
 import { LogoIcon } from "@/lib/data";
 import { useExternalNavigation, useInitialScreenLoad } from "@/lib/hooks";
+import { useCommandStore } from "@/lib/stores";
 import { cn } from "@/lib/utils";
-import React from "react";
 import type { MetaFunction } from "react-router";
 
 export const meta: MetaFunction = () => {
@@ -15,6 +16,7 @@ export const meta: MetaFunction = () => {
 export default function Index() {
   const { visible } = useInitialScreenLoad();
   const { navigate } = useExternalNavigation();
+  const { commandBarOpen, setCommandBarOpen } = useCommandStore();
 
   return (
     <div className="h-full">
@@ -26,6 +28,8 @@ export default function Index() {
         )}
       >
         <div className="fixed top-4 right-4 z-20 grid auto-cols-max grid-flow-col items-start gap-x-2">
+          <CommandBarButton onClick={() => setCommandBarOpen(true)} />
+          <CommandBar open={commandBarOpen} setOpen={setCommandBarOpen} />
           <ShortcutLegend />
           <Settings />
         </div>

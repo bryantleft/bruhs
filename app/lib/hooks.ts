@@ -1,6 +1,11 @@
 import { defaultChat } from "@/lib/data";
 import { getChats, setChats } from "@/lib/idb";
-import { useBruhStore, useInitialStore, useMessageStore } from "@/lib/stores";
+import {
+  useBruhStore,
+  useCommandStore,
+  useInitialStore,
+  useMessageStore,
+} from "@/lib/stores";
 import type { Chat } from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
 
@@ -8,14 +13,15 @@ export const useBruh = (width: number, height: number) => {
   const { centered, setCentered, focusPosition, setFocusPosition } =
     useBruhStore();
   const { messages } = useMessageStore();
+  const { commandBarOpen } = useCommandStore();
   const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 });
   const [isBlinking, setIsBlinking] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const animationFrameRef = useRef<number>(0);
 
   useEffect(() => {
-    setCentered(messages.length < 2);
-  }, [messages, setCentered]);
+    setCentered(messages.length < 2 && !commandBarOpen);
+  }, [messages, setCentered, commandBarOpen]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {

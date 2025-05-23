@@ -10,7 +10,7 @@ export default function ShortcutLegend() {
   }, []);
 
   const shortcuts = [
-    { keys: isMac ? ["⌘", "k"] : ["ctrl", "k"], description: "Input" },
+    { keys: ["/"], description: "Input" },
     { keys: ["j"], description: "Next message" },
     { keys: ["k"], description: "Previous message" },
     { keys: isMac ? ["⌘", "c"] : ["ctrl", "c"], description: "Copy message" },

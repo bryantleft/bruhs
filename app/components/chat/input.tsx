@@ -56,11 +56,16 @@ export default function Input() {
 
   useEffect(() => {
     function handleKeyPress(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      const activeElement = document.activeElement;
+      const isInputFocused =
+        activeElement &&
+        (activeElement.tagName === "INPUT" ||
+          activeElement.tagName === "TEXTAREA" ||
+          activeElement.tagName === "SELECT");
+      if (!isInputFocused && e.key === "/") {
         e.preventDefault();
         textareaRef.current?.focus();
       }
-
       if (e.key === "Escape") {
         textareaRef.current?.blur();
       }
