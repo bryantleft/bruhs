@@ -1,13 +1,10 @@
+import { useDisclosure, useIsMac } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
-import { type ReactNode, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
 export default function ShortcutLegend() {
-  const [isMac, setIsMac] = useState(false);
-  const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
-    setIsMac(navigator.userAgent.toLowerCase().indexOf("mac") >= 0);
-  }, []);
+  const isMac = useIsMac();
+  const { isOpen, setIsOpen, ref } = useDisclosure();
 
   const shortcuts = [
     { keys: ["/"], description: "Input" },
@@ -30,17 +27,21 @@ export default function ShortcutLegend() {
 
   return (
     <div
-      onMouseDown={toggleOpen}
+      ref={ref}
       className={cn(
         "group",
         "rounded-lg bg-onyx-800 p-2 shadow-lg",
         "border border-onyx-700 text-onyx-200 hover:border-onyx-600",
-        "cursor-pointer transition-all duration-300 ease-in-out",
+        "transition-all duration-300 ease-in-out",
         isOpen ? "w-56" : "w-[34px] hover:w-[120px]",
       )}
     >
       <div className="flex items-center">
-        <div className="flex w-full items-center justify-between">
+        <button
+          type="button"
+          onMouseDown={toggleOpen}
+          className="flex w-full cursor-pointer items-center justify-between"
+        >
           <h3
             className={cn(
               "overflow-hidden whitespace-nowrap font-semibold text-sm transition-all duration-300 ease-in-out",
@@ -52,7 +53,7 @@ export default function ShortcutLegend() {
             Shortcuts
           </h3>
           <span className="iconify lucide--keyboard h-4 w-4 text-onyx-200" />
-        </div>
+        </button>
       </div>
 
       <div

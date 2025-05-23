@@ -7,14 +7,43 @@ import {
   useMessageStore,
 } from "@/lib/stores";
 import type { Chat } from "@/lib/types";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-export const useBruh = (width: number, height: number) => {
+export const useWindowDimensions = () => {
+  const [windowDimensions, setWindowDimensions] = useState({
+    width: 0,
+    height: 0,
+  });
+
+  useLayoutEffect(() => {
+    const handleResize = () => {
+      setWindowDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+
+    handleResize();
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  return windowDimensions;
+};
+
+export const useBruh = () => {
+  const dimensions = { width: 60, height: 60 };
   const { centered, setCentered, focusPosition, setFocusPosition } =
     useBruhStore();
   const { messages } = useMessageStore();
   const { commandBarOpen } = useCommandStore();
-  const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 });
+  const windowDimensions = useWindowDimensions();
+  const [position, setPosition] = useState({
+    x: windowDimensions.width / 2 - dimensions.width / 2,
+    y: windowDimensions.height / 2 - dimensions.height / 2,
+  });
+  const [eyePosition, setEyePosition] = useState({ x: 0, y: 0 });
   const [isBlinking, setIsBlinking] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const animationFrameRef = useRef<number>(0);
@@ -22,6 +51,20 @@ export const useBruh = (width: number, height: number) => {
   useEffect(() => {
     setCentered(messages.length < 2 && !commandBarOpen);
   }, [messages, setCentered, commandBarOpen]);
+
+  useEffect(() => {
+    function updatePosition() {
+      if (centered) {
+        setPosition({
+          x: windowDimensions.width / 2 - dimensions.width / 2,
+          y: windowDimensions.height / 2 - dimensions.height / 2,
+        });
+      } else {
+        setPosition({ x: 12, y: 12 });
+      }
+    }
+    updatePosition();
+  }, [centered, windowDimensions.width, windowDimensions.height]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -52,7 +95,7 @@ export const useBruh = (width: number, height: number) => {
 
   useEffect(() => {
     const animate = () => {
-      setCurrentPosition((prev) => {
+      setEyePosition((prev) => {
         const springStrength = 0.08;
         const dx = (focusPosition.x - prev.x) * springStrength;
         const dy = (focusPosition.y - prev.y) * springStrength;
@@ -75,31 +118,25 @@ export const useBruh = (width: number, height: number) => {
     };
   }, [focusPosition]);
 
-  const calculatePosition = () => {
-    const deltaX = currentPosition.x - width;
-    const deltaY = currentPosition.y - height;
-
+  const calculateEyePosition = () => {
+    const deltaX = eyePosition.x - dimensions.width;
+    const deltaY = eyePosition.y - dimensions.height;
     const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
     const maxDistance = 4 * 30;
-
     const scaleFactor = distance > maxDistance ? maxDistance / distance : 1;
-
     const moveX = (deltaX * scaleFactor) / 15;
     const moveY = (deltaY * scaleFactor) / 15;
-
     const scale = 16;
-
     return {
       x: moveX * scale,
       y: moveY * scale,
     };
   };
 
-  const { x, y } = calculatePosition();
-
   return {
-    x,
-    y,
+    dimensions,
+    position,
+    eyePosition: calculateEyePosition(),
     isCentered: centered,
     isBlinking,
     isHovered,
@@ -144,7 +181,7 @@ export const useInitialLoad = () => {
   return { isVisible, setIsVisible };
 };
 
-export function useMessageStoreSync() {
+export const useMessageStoreSync = () => {
   const messages = useMessageStore((s) => s.messages);
   useEffect(() => {
     getChats().then((chats) => {
@@ -157,4 +194,34 @@ export function useMessageStoreSync() {
     const chat: Chat = { ...defaultChat, messages };
     setChats([chat]);
   }, [messages]);
-}
+};
+
+export const useIsMac = () => {
+  const [isMac, setIsMac] = useState(false);
+
+  useEffect(() => {
+    setIsMac(navigator.userAgent.toLowerCase().indexOf("mac") >= 0);
+  }, []);
+
+  return isMac;
+};
+
+export const useDisclosure = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  return { isOpen, setIsOpen, ref };
+};

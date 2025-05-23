@@ -1,28 +1,40 @@
-import { useBruh, useExternalNavigation } from "@/lib/hooks";
+import {
+  useBruh,
+  useExternalNavigation,
+  useWindowDimensions,
+} from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
-type BruhProps = {
-  width?: number;
-  height?: number;
-};
-
-export default function Bruh({ width = 60, height = 60 }: BruhProps) {
-  const { x, y, isCentered, isBlinking, isHovered, setIsHovered } = useBruh(
-    width,
-    height,
-  );
+export default function Bruh() {
+  const windowDimensions = useWindowDimensions();
+  const {
+    dimensions,
+    position,
+    eyePosition,
+    isBlinking,
+    isHovered,
+    setIsHovered,
+  } = useBruh();
   const { navigate } = useExternalNavigation();
+
+  const windowLoaded =
+    windowDimensions.width > 0 && windowDimensions.height > 0;
 
   return (
     <div
       onMouseDown={() => navigate("https://bnle.me")}
       className={cn(
         "fixed z-20 cursor-pointer rounded-full",
-        "transition-all duration-1000 ease-in-out",
-        isCentered
-          ? "-translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2"
-          : "top-4 left-4 translate-x-0 translate-y-0",
+        "transition-all duration-800 ease-in-out",
       )}
+      style={{
+        top: windowLoaded
+          ? position.y
+          : `calc(50% - ${dimensions.height / 2}px)`,
+        left: windowLoaded
+          ? position.x
+          : `calc(50% - ${dimensions.width / 2}px)`,
+      }}
     >
       <div
         className={cn(
@@ -34,8 +46,8 @@ export default function Bruh({ width = 60, height = 60 }: BruhProps) {
         onMouseLeave={() => setIsHovered(false)}
       >
         <svg
-          width={width}
-          height={height}
+          width={dimensions.width}
+          height={dimensions.height}
           viewBox="0 0 600 600"
           className="overflow-visible"
           aria-label="Bruh that follows mouse movement"
@@ -56,7 +68,10 @@ export default function Bruh({ width = 60, height = 60 }: BruhProps) {
 
           {/* Eyes */}
           {[198, 401].map((cx) => (
-            <g key={`eye-${cx}`} transform={`translate(${x} ${y})`}>
+            <g
+              key={`eye-${cx}`}
+              transform={`translate(${eyePosition.x} ${eyePosition.y})`}
+            >
               <ellipse
                 cx={cx}
                 cy="218"
@@ -75,7 +90,7 @@ export default function Bruh({ width = 60, height = 60 }: BruhProps) {
           ))}
 
           {/* Mouth */}
-          <g transform={`translate(${x} ${y})`}>
+          <g transform={`translate(${eyePosition.x} ${eyePosition.y})`}>
             <ellipse
               cx="307"
               cy="378"

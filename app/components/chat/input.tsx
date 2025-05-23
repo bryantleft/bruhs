@@ -174,6 +174,7 @@ export default function Input() {
               className={cn(
                 "flex cursor-pointer rounded-lg bg-amethyst-700 p-[5px] hover:bg-amethyst-600",
                 "transition-colors duration-200",
+                "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-amethyst-700",
               )}
             >
               <span className="iconify lucide--arrow-up h-4 w-4 text-onyx-300" />

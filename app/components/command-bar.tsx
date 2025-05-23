@@ -1,5 +1,6 @@
 import { ProviderInfo, models } from "@/lib/data";
 import { useLLMStore } from "@/lib/stores";
+import { InputType, OutputType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Command } from "cmdk";
 import { useEffect, useRef, useState } from "react";
@@ -87,7 +88,9 @@ export function CommandBar({
         )}
       />
       <Command.List className="max-h-72 overflow-y-auto">
-        <Command.Empty>No results found.</Command.Empty>
+        <Command.Empty className="px-2 text-onyx-400 text-sm">
+          No results found.
+        </Command.Empty>
         <Command.Group
           heading={
             <span className="px-2 font-medium text-onyx-400 text-xs">
@@ -118,9 +121,19 @@ export function CommandBar({
                 height={20}
                 className="select-none rounded"
               />
-              {m.name}
-              <span className="ml-auto text-onyx-400 text-xs">
-                {model.id === m.id ? "Current" : null}
+              <span className="flex items-center gap-1">{m.name}</span>
+              <span className="ml-auto flex items-center gap-1">
+                {m.inputs.includes(InputType.TEXT) && (
+                  <span className="inline-flex items-center justify-center rounded border border-platinum-700 bg-onyx-900 p-0.5">
+                    <span className="iconify lucide--type h-3 w-3 text-platinum-400" />
+                  </span>
+                )}
+                <span className="iconify lucide--arrow-right h-3 w-3 text-platinum-500" />
+                {m.outputs.includes(OutputType.TEXT) && (
+                  <span className="inline-flex items-center justify-center rounded border border-platinum-700 bg-onyx-900 p-0.5">
+                    <span className="iconify lucide--type h-3 w-3 text-platinum-400" />
+                  </span>
+                )}
               </span>
             </Command.Item>
           ))}
