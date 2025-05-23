@@ -9,6 +9,7 @@
     "check": "wrangler types && react-router typegen && tsc -b && biome check --write"
   },
   "dependencies": {
+    "@bruhs/theme": "0.1.4",
     "@react-router/dev": "7.6.0",
     "@types/node": "22.13.14",
     "isbot": "^5.1.17",

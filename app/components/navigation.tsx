@@ -59,7 +59,7 @@ const Navigation = () => {
 	}, [location.pathname]);
 
 	return (
-		<div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-zinc-900 overflow-hidden rounded-lg border border-zinc-800 z-10">
+		<div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-onyx-800 overflow-hidden rounded-lg border border-onyx-700 z-10">
 			<div className="flex">
 				{uploadOptions.map((option) => {
 					const isActive = location.pathname === option.uri;
@@ -69,13 +69,13 @@ const Navigation = () => {
 							to={option.uri}
 							className={`px-4 py-2 text-sm font-medium flex items-center ${
 								isActive
-									? "bg-zinc-800 text-white"
-									: "text-gray-300 hover:bg-zinc-800/50"
+									? "bg-onyx-700 text-onyx-200"
+									: "text-onyx-200 hover:bg-onyx-700"
 							} transition-colors`}
 						>
 							<span>{option.label}</span>
 							{option.shortcut && (
-								<span className="ml-2 px-1.5 py-0.5 text-xs rounded bg-zinc-700 text-zinc-300">
+								<span className="ml-2 px-1.5 py-0.5 text-xs rounded bg-royal-yellow text-onyx-900">
 									{option.shortcut}
 								</span>
 							)}
