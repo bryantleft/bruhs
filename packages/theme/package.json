@@ -1,6 +1,6 @@
 {
   "name": "@bruhs/theme",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "bruhs theme system",
   "license": "MIT",
   "author": "Bryant Le <bryantleft@gmail.com>",
@@ -9,8 +9,5 @@
     "fonts/",
     "scripts/"
   ],
-  "style": "src/index.css",
-  "scripts": {
-    "postinstall": "node scripts/copy-fonts.js"
-  }
+  "style": "src/index.css"
 }
