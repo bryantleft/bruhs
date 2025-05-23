@@ -9,8 +9,10 @@ import {
 import { Toaster } from "sonner";
 import type { Route } from "./+types/root";
 import "@/root.css";
+import { useMessageStoreSync } from "@/lib/hooks";
 
 export default function App() {
+  useMessageStoreSync();
   return (
     <html lang="en" className="h-full">
       <head>

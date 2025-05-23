@@ -1,18 +1,21 @@
+import { defaultChat } from "@/lib/data";
+import { getChats, setChats } from "@/lib/idb";
 import { useBruhStore, useInitialStore, useMessageStore } from "@/lib/stores";
+import type { Chat } from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
 
 export const useBruh = (width: number, height: number) => {
   const { centered, setCentered, focusPosition, setFocusPosition } =
     useBruhStore();
-  const { messageHistory } = useMessageStore();
+  const { messages } = useMessageStore();
   const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 });
   const [isBlinking, setIsBlinking] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const animationFrameRef = useRef<number>(0);
 
   useEffect(() => {
-    setCentered(messageHistory.length < 2);
-  }, [messageHistory, setCentered]);
+    setCentered(messages.length < 2);
+  }, [messages, setCentered]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -134,3 +137,18 @@ export const useInitialLoad = () => {
 
   return { isVisible, setIsVisible };
 };
+
+export function useMessageStoreSync() {
+  const messages = useMessageStore((s) => s.messages);
+  useEffect(() => {
+    getChats().then((chats) => {
+      if (chats && chats.length > 0) {
+        useMessageStore.setState({ messages: chats[0].messages });
+      }
+    });
+  }, []);
+  useEffect(() => {
+    const chat: Chat = { ...defaultChat, messages };
+    setChats([chat]);
+  }, [messages]);
+}

@@ -38,3 +38,9 @@ export type APIError = {
   type?: string;
   code?: string;
 };
+
+export type Chat = {
+  id: string;
+  title: string;
+  messages: Message[];
+};

@@ -3,34 +3,37 @@ import BruhMessage from "@/components/messages/bruh-message";
 import UserMessage from "@/components/messages/user-message";
 import { useMessageStore } from "@/lib/stores";
 import { copyToClipboard } from "@/lib/utils";
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect } from "react";
 import { toast } from "sonner";
 
-export default function MessageHistory() {
-  const { messageHistory, selectedMessage, setSelectedMessage, deleteMessage } =
+export default function Messages() {
+  const { messages, selectedMessage, setSelectedMessage, deleteMessage } =
     useMessageStore();
 
-  const deselectMessage = () => {
+  const deselectMessage = useCallback(() => {
     setSelectedMessage(null);
-  };
+  }, [setSelectedMessage]);
 
-  const navigateMessage = (direction: "up" | "down") => {
-    if (!selectedMessage) {
-      const newIndex = direction === "up" ? messageHistory.length - 1 : 1;
-      setSelectedMessage(messageHistory[newIndex]);
-      return;
-    }
-    const currentIndex = messageHistory.findIndex(
-      (msg) => msg.id === selectedMessage.id,
-    );
-    const newIndex =
-      direction === "up"
-        ? Math.max(1, currentIndex - 1)
-        : Math.min(messageHistory.length - 1, currentIndex + 1);
-    setSelectedMessage(messageHistory[newIndex]);
-  };
+  const navigateMessage = useCallback(
+    (direction: "up" | "down") => {
+      if (!selectedMessage) {
+        const newIndex = direction === "up" ? messages.length - 1 : 1;
+        setSelectedMessage(messages[newIndex]);
+        return;
+      }
+      const currentIndex = messages.findIndex(
+        (msg) => msg.id === selectedMessage.id,
+      );
+      const newIndex =
+        direction === "up"
+          ? Math.max(1, currentIndex - 1)
+          : Math.min(messages.length - 1, currentIndex + 1);
+      setSelectedMessage(messages[newIndex]);
+    },
+    [messages, selectedMessage, setSelectedMessage],
+  );
 
-  const copySelectedMessage = async () => {
+  const copySelectedMessage = useCallback(async () => {
     if (!selectedMessage) return;
     await copyToClipboard(selectedMessage.content);
     toast.custom(() => (
@@ -38,30 +41,28 @@ export default function MessageHistory() {
         Message <span className="text-emerald-500">copied</span>
       </span>
     ));
-  };
+  }, [selectedMessage]);
 
-  const deleteSelectedMessage = () => {
+  const deleteSelectedMessage = useCallback(() => {
     if (!selectedMessage) return;
-    const currentIndex = messageHistory.findIndex(
+    const currentIndex = messages.findIndex(
       (msg) => msg.id === selectedMessage.id,
     );
     deleteMessage(selectedMessage.id);
-    const newMessageHistory = messageHistory.filter(
-      (msg) => msg.id !== selectedMessage.id,
-    );
+    const newMessages = messages.filter((msg) => msg.id !== selectedMessage.id);
     let newIndex: number;
-    if (currentIndex >= newMessageHistory.length) {
-      newIndex = Math.max(1, newMessageHistory.length - 1);
+    if (currentIndex >= newMessages.length) {
+      newIndex = Math.max(1, newMessages.length - 1);
     } else {
       newIndex = Math.max(1, currentIndex);
     }
-    setSelectedMessage(newMessageHistory[newIndex]);
+    setSelectedMessage(newMessages[newIndex]);
     toast.custom(() => (
       <span className="text-platinum-400 text-sm">
         Message <span className="text-ruby-500">deleted</span>
       </span>
     ));
-  };
+  }, [messages, selectedMessage, deleteMessage, setSelectedMessage]);
 
   useEffect(() => {
     const handleKeyPress = async (event: KeyboardEvent) => {
@@ -98,11 +99,17 @@ export default function MessageHistory() {
     };
     window.addEventListener("keydown", handleKeyPress);
     return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [messageHistory, selectedMessage, deleteMessage, setSelectedMessage]);
+  }, [
+    selectedMessage,
+    deselectMessage,
+    navigateMessage,
+    copySelectedMessage,
+    deleteSelectedMessage,
+  ]);
 
   return (
     <>
-      {messageHistory.map((message) => {
+      {messages.map((message) => {
         const isSelected = message.id === selectedMessage?.id;
 
         if (message.role === "assistant") {

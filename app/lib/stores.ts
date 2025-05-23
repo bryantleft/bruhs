@@ -70,7 +70,7 @@ export const useLLMStore = create<LLMStore>()(
 
 type MessageStore = {
   input: string;
-  messageHistory: Message[];
+  messages: Message[];
   lastMessage: Message;
   selectedMessage: Message | null;
   generating: boolean;
@@ -79,47 +79,45 @@ type MessageStore = {
   addMessage: (message: Message) => void;
   deleteMessage: (messagedId: string) => void;
   addError: (error: string) => void;
-  clearMessageHistory: () => void;
+  clearMessages: () => void;
   setLastMessage: (message: Message) => void;
   setSelectedMessage: (message: Message | null) => void;
   setGenerating: (generating: boolean) => void;
   setDeleting: (deleting: boolean) => void;
 };
 
-export const useMessageStore = create<MessageStore>((set) => ({
+export const useMessageStore = create<MessageStore>((set, get) => ({
   input: "",
-  messageHistory: defaultMessages,
+  messages: defaultMessages,
   lastMessage: defaultMessages[0],
   selectedMessage: null,
   generating: false,
   deleting: false,
   setInput: (input) => set({ input }),
   addMessage: (message) => {
-    set(({ messageHistory }) => ({
-      messageHistory: [...messageHistory, message],
+    set(({ messages }) => ({
+      messages: [...messages, message],
     }));
   },
   deleteMessage: (messageId) => {
-    set(({ messageHistory }) => ({
-      messageHistory: messageHistory.filter(
-        (message) => message.id !== messageId,
-      ),
+    set(({ messages }) => ({
+      messages: messages.filter((message) => message.id !== messageId),
       deleting: true,
     }));
   },
   addError: (error) => {
-    set(({ messageHistory }) => {
-      if (!messageHistory.length) return { messageHistory };
+    set(({ messages }) => {
+      if (!messages.length) return { messages };
 
       return {
-        messageHistory: [
-          ...messageHistory.slice(0, -1),
-          { ...messageHistory[messageHistory.length - 1], error },
+        messages: [
+          ...messages.slice(0, -1),
+          { ...messages[messages.length - 1], error },
         ],
       };
     });
   },
-  clearMessageHistory: () => set({ messageHistory: defaultMessages }),
+  clearMessages: () => set({ messages: defaultMessages }),
   setLastMessage: (message) => set({ lastMessage: message }),
   setSelectedMessage: (message) => set({ selectedMessage: message }),
   setGenerating: (generating) => set({ generating }),

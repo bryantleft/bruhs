@@ -10,7 +10,7 @@ export default function Input() {
   const { model, keys } = useLLMStore();
   const {
     input,
-    messageHistory,
+    messages,
     lastMessage,
     generating,
     deleting,
@@ -23,7 +23,13 @@ export default function Input() {
   } = useMessageStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { messages, status, setMessages, append, stop } = useChat({
+  const {
+    messages: chatMessages,
+    status,
+    setMessages,
+    append,
+    stop,
+  } = useChat({
     api: "/api/llm",
     body: {
       key: keys?.[model.provider],
@@ -70,14 +76,14 @@ export default function Input() {
 
   useEffect(() => {
     if (deleting) {
-      setMessages(messageHistory);
+      setMessages(messages);
       setDeleting(false);
     }
-  }, [deleting, messageHistory, setMessages, setDeleting]);
+  }, [deleting, messages, setMessages, setDeleting]);
 
   useEffect(() => {
-    setLastMessage(messages[messages.length - 1]);
-  }, [messages, setLastMessage]);
+    setLastMessage(chatMessages[chatMessages.length - 1]);
+  }, [chatMessages, setLastMessage]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: input can change textarea height
   useEffect(() => {

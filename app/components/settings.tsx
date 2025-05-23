@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import React, { type ChangeEvent, useEffect, useRef, useState } from "react";
 
 export default function Settings() {
-  const { clearMessageHistory } = useMessageStore();
+  const { clearMessages } = useMessageStore();
   const { keys, model, addKey, removeKey, setModel } = useLLMStore();
   const [isOpen, setIsOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -241,10 +241,10 @@ export default function Settings() {
           <button
             type="button"
             className="group/clear flex w-full items-center justify-start text-sm"
-            onClick={() => clearMessageHistory()}
+            onClick={() => clearMessages()}
           >
             <span className="cursor-pointer text-platinum-400 text-xs transition-colors duration-300 group-hover/clear:text-ruby-700">
-              Clear history
+              Clear messages
             </span>
           </button>
         </div>

@@ -1,4 +1,5 @@
 import {
+  type Chat,
   InputType,
   type Message,
   type Model,
@@ -84,6 +85,12 @@ const systemMessage: Message = {
 };
 
 export const defaultMessages = [systemMessage];
+
+export const defaultChat: Chat = {
+  id: "chat-1",
+  title: "Chat 1",
+  messages: [],
+};
 
 type LogoConfig = {
   type?: "icon" | "logo" | "symbol";
