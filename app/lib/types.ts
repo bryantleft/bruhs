@@ -11,6 +11,11 @@ export type ProviderMetadata = {
   logo: string;
 };
 
+type Pricing = {
+  prompt: number;
+  completion: number;
+};
+
 export enum InputType {
   TEXT = "text",
 }
@@ -23,6 +28,7 @@ export type Model = {
   id: string;
   name: string;
   provider: Provider;
+  pricing: Pricing;
   inputs: InputType[];
   outputs: OutputType[];
 };
