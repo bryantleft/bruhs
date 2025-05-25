@@ -16,7 +16,7 @@
     "isbot": "^5.1.17",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router": "^7.3.0",
+    "react-router": "^7.6.0",
     "workerd": "^1.20250320.0"
   },
   "devDependencies": {

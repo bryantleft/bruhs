@@ -4,38 +4,29 @@ on:
   push:
 
 jobs:
-  biome-llm:
+  check:
     runs-on: ubuntu-latest
-    steps:
-      - name: checkout
-        uses: actions/checkout@v4
-      - name: setup biome
-        uses: biomejs/setup-biome@v2
-        with:
-          version: latest
-      - name: run biome in llm
-        run: biome ci ./apps/llm
+    strategy:
+      matrix:
+        project-filter: [bruhs, llm, portfolio, snip]
 
-  biome-portfolio:
-    runs-on: ubuntu-latest
     steps:
-      - name: checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
-      - name: setup biome
-        uses: biomejs/setup-biome@v2
-        with:
-          version: latest
-      - name: run biome in portfolio
-        run: biome ci ./apps/portfolio
 
-  biome-snip:
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout
-        uses: actions/checkout@v4
-      - name: setup biome
-        uses: biomejs/setup-biome@v2
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
         with:
-          version: latest
-      - name: run biome in snip
-        run: biome ci ./apps/snip
+          version: 10
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run check for ${{ matrix.project-filter }}
+        run: pnpm run check:${{ matrix.project-filter }}

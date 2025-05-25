@@ -25,7 +25,7 @@
     "marked": "15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router": "^7.3.0",
+    "react-router": "7.6.0",
     "react-syntax-highlighter": "15.6.1",
     "sonner": "1.7.0",
     "tailwind-merge": "2.5.4",
