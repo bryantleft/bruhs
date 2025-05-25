@@ -2,6 +2,11 @@
 	"name": "bruhs",
 	"private": true,
 	"scripts": {
+		"build": "turbo run build",
+		"build:bruhs": "turbo run build --filter=bruhs",
+		"build:llm": "turbo run build --filter=llm",
+		"build:portfolio": "turbo run build --filter=portfolio",
+		"build:snip": "turbo run build --filter=snip",
 		"dev:bruhs": "turbo run dev --filter=bruhs",
 		"dev:llm": "turbo run dev --filter=llm",
 		"dev:portfolio": "turbo run dev --filter=portfolio",
