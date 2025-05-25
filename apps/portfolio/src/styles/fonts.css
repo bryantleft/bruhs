@@ -1,0 +1,8 @@
+@font-face {
+	font-family: "MonaspaceKryptonVariable";
+	font-stretch: 100% 125%;
+	font-style: normal;
+	font-weight: 200 800;
+	src: url("/fonts/MonaspaceKryptonVariable.woff2") format("woff2"),
+		url("/fonts/MonaspaceKryptonVariable.woff") format("woff");
+}
