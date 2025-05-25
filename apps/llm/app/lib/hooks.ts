@@ -43,7 +43,10 @@ export const useBruh = () => {
     x: windowDimensions.width / 2 - dimensions.width / 2,
     y: windowDimensions.height / 2 - dimensions.height / 2,
   });
-  const [eyePosition, setEyePosition] = useState({ x: 0, y: 0 });
+  const [eyePosition, setEyePosition] = useState({
+    x: dimensions.width,
+    y: dimensions.height,
+  });
   const [isBlinking, setIsBlinking] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const animationFrameRef = useRef<number>(0);
