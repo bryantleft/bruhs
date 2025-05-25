@@ -1,8 +1,7 @@
 .idea
 .react-router
 .vite
-.wrangler
+.vercel
 node_modules
-*.tsbuildinfo
 build/
 .env*

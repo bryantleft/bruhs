@@ -3,11 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "react-router dev",
     "build": "react-router build",
-    "preview": "pnpm run build && vite preview",
-    "deploy": "pnpm run build && wrangler deploy",
-    "check": "wrangler types && react-router typegen && tsc -b && biome check --write"
+    "dev": "react-router dev",
+    "check": "react-router typegen && tsc -b && biome check --write"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "1.0.1",
@@ -15,8 +13,10 @@
     "@ai-sdk/react": "1.2.12",
     "@ai-sdk/xai": "1.0.2",
     "@bruhs/theme": "0.1.1",
-    "@react-router/dev": "7.6.0",
+    "@react-router/node": "7.6.1",
+    "@react-router/serve": "7.6.1",
     "@types/node": "22.13.14",
+    "@vercel/react-router": "1.1.0",
     "ai": "4.3.15",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
@@ -25,7 +25,7 @@
     "marked": "15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router": "7.6.0",
+    "react-router": "7.6.1",
     "react-syntax-highlighter": "15.6.1",
     "sonner": "1.7.0",
     "tailwind-merge": "2.5.4",
@@ -35,11 +35,10 @@
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
-    "@cloudflare/vite-plugin": "1.2.2",
-    "@cloudflare/workers-types": "4.20250519.0",
     "@iconify-json/lucide": "1.2.39",
     "@iconify-json/vscode-icons": "1.2.20",
     "@iconify/tailwind": "1.2.0",
+    "@react-router/dev": "7.6.1",
     "@tailwindcss/vite": "^4.0.0",
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.1",
@@ -48,7 +47,6 @@
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
     "vite": "^6.2.1",
-    "vite-tsconfig-paths": "^5.1.4",
-    "wrangler": "^4.15.2"
+    "vite-tsconfig-paths": "^5.1.4"
   }
 }
