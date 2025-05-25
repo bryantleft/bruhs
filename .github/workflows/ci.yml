@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+
+jobs:
+  biome-llm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: setup biome
+        uses: biomejs/setup-biome@v2
+        with:
+          version: latest
+      - name: run biome in llm
+        run: biome ci ./apps/llm
+
+  biome-portfolio:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: setup biome
+        uses: biomejs/setup-biome@v2
+        with:
+          version: latest
+      - name: run biome in portfolio
+        run: biome ci ./apps/portfolio
+
+  biome-snip:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: setup biome
+        uses: biomejs/setup-biome@v2
+        with:
+          version: latest
+      - name: run biome in snip
+        run: biome ci ./apps/snip
