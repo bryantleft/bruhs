@@ -1,0 +1,19 @@
+name: ci
+
+on:
+  push:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup biome
+        uses: biomejs/setup-biome@v2
+        with:
+          version: latest
+
+      - name: run biome
+        run: biome ci .
