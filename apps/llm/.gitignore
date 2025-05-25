@@ -1,0 +1,8 @@
+.idea
+.react-router
+.vite
+.wrangler
+node_modules
+*.tsbuildinfo
+build/
+.env*
