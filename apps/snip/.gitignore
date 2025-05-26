@@ -1,13 +1,7 @@
-# IDE
 .idea
-
-# Build
-node_modules
-*.tsbuildinfo
-
-# React Router
 .react-router
+.vite
+.vercel
+node_modules
 build/
-
-# Cloudflare
-.wrangler
+.env*
