@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        project-filter: [bruhs, llm, portfolio, snip]
+        project-filter: [bruhs, llm, snip]
 
     steps:
       - name: Checkout repository
