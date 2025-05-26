@@ -3,12 +3,8 @@
 	"private": true,
 	"scripts": {
 		"build": "turbo run build",
-		"dev:bruhs": "turbo run dev --filter=bruhs",
-		"dev:llm": "turbo run dev --filter=llm",
-		"dev:snip": "turbo run dev --filter=snip",
-		"check:bruhs": "turbo run check --filter=bruhs",
-		"check:llm": "turbo run check --filter=llm",
-		"check:snip": "turbo run check --filter=snip"
+		"dev:ui-docs": "turbo run dev --filter=ui-docs",
+		"check:ui-docs": "turbo run check --filter=ui-docs"
 	},
 	"devDependencies": {
 		"turbo": "2.5.3"
