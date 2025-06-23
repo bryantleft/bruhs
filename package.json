@@ -3,8 +3,8 @@
 	"private": true,
 	"scripts": {
 		"build": "turbo run build",
-		"dev:ui-docs": "turbo run dev --filter=ui-docs",
-		"check:ui-docs": "turbo run check --filter=ui-docs"
+		"dev:ui": "turbo run dev --filter=ui",
+		"check:ui": "turbo run check --filter=ui"
 	},
 	"devDependencies": {
 		"turbo": "2.5.3"
