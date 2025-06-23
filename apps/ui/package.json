@@ -12,6 +12,7 @@
   "dependencies": {
     "@astrojs/check": "0.9.4",
     "@astrojs/preact": "^4.1.0",
+    "@astrojs/vercel": "8.2.0",
     "@bruhs/theme": "workspace:*",
     "@tailwindcss/vite": "4.1.10",
     "astro": "^5.10.0",
