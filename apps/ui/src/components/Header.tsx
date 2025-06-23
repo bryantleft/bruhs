@@ -17,7 +17,16 @@ const Header: FunctionComponent<HeaderProps> = ({ current }) => {
 
   return (
     <header class="p-8 border-b border-lychee-100/5 flex flex-col gap-4">
-      <h1 class="text-sm font-bold tracking-tighter font-krypton text-lychee-100/20">Bruhs Design System</h1>
+      <a 
+        href="/"
+        class={
+          current === "/"
+            ? "text-sm font-bold tracking-tighter font-krypton text-lychee-100 transition-opacity duration-200"
+            : "text-sm font-bold tracking-tighter font-krypton text-lychee-100/40 hover:text-lychee-100/70 transition-opacity duration-200"
+        }
+      >
+        Bruhs Design System
+      </a>
       <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-8">
         {links.map(link => {
           const isActive = link.href === current;

@@ -1,3 +1,17 @@
 ---
-return Astro.redirect('/colors');
+import BaseLayout from "@/layouts/BaseLayout.astro";
 ---
+
+<BaseLayout>
+  <main class="p-8 flex flex-col gap-16">
+    <section>
+      <p class="text-lg text-lychee-300">
+        A 
+        <a href="https://bnle.me" class="font-semibold text-lychee-100 hover:text-lychee-50 underline decoration-lychee-100/20 hover:decoration-lychee-100/40 transition">
+          personal
+        </a>
+        modern design system.
+      </p>
+    </section>
+  </main>
+</BaseLayout>
