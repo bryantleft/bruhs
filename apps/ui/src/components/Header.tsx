@@ -10,6 +10,7 @@ const descriptions = {
 } as const;
 
 const Header: FunctionComponent<HeaderProps> = ({ current }) => {
+  const path = current.replace(/\/$/, "");
   const links = [
     { label: "Colors", href: "/colors", key: "colors" as const },
     { label: "Typography", href: "/typography", key: "typography" as const }
@@ -29,7 +30,7 @@ const Header: FunctionComponent<HeaderProps> = ({ current }) => {
       </a>
       <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-8">
         {links.map(link => {
-          const isActive = link.href === current;
+          const isActive = link.href === path;
           return (
             <a 
               key={link.key} 

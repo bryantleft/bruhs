@@ -15,7 +15,7 @@ import Header from "@/components/Header.tsx";
 		<ClientRouter />
 	</head>
 	<body class="bg-longan-950 text-lychee-100 max-w-6xl mx-auto">
-		<Header current={Astro.url.pathname} />
+		<Header client:visible current={Astro.url.pathname} />
 		<slot />
 	</body>
 </html>
