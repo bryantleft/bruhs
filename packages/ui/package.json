@@ -1,0 +1,24 @@
+{
+  "name": "@bruhs/ui",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "files": [
+    "src/",
+    "fonts/"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles/*": "./src/styles/*",
+    "./components/*": "./src/components/*",
+    "./lib/*": "./src/lib/*",
+    "./fonts/*": "./fonts/*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  }
+}

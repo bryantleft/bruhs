@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import type { FunctionComponent } from "react";
 
 type HeaderProps = {
   current: string;
@@ -17,10 +17,10 @@ const Header: FunctionComponent<HeaderProps> = ({ current }) => {
   ];
 
   return (
-    <header class="p-8 border-b border-lychee-100/5 flex flex-col gap-4">
+    <header className="p-8 border-b border-lychee-100/5 flex flex-col gap-4">
       <a 
         href="/"
-        class={
+        className={
           current === "/"
             ? "text-sm font-bold tracking-tighter font-krypton text-lychee-100 transition-opacity duration-200"
             : "text-sm font-bold tracking-tighter font-krypton text-lychee-100/40 hover:text-lychee-100/70 transition-opacity duration-200"
@@ -28,18 +28,18 @@ const Header: FunctionComponent<HeaderProps> = ({ current }) => {
       >
         Bruhs Design System
       </a>
-      <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-8">
         {links.map(link => {
           const isActive = link.href === path;
           return (
             <a 
               key={link.key} 
               href={link.href}
-              class="group flex flex-col items-start min-w-[140px]"
+              className="group flex flex-col items-start min-w-[140px]"
               aria-current={isActive ? "page" : undefined}
             >
               <span
-                class={
+                className={
                   isActive
                     ? "text-4xl font-bold tracking-tighter font-krypton text-lychee-100 transition-opacity duration-200"
                     : "text-4xl font-bold tracking-tighter font-krypton text-lychee-100/40 group-hover:text-lychee-100/70 transition-opacity duration-200"
@@ -48,7 +48,7 @@ const Header: FunctionComponent<HeaderProps> = ({ current }) => {
                 {link.label}
               </span>
               <span
-                class={`mt-2 text-lg max-w-xs transition-opacity duration-200 ${isActive ? "text-lychee-100" : "text-lychee-100/40 group-hover:text-lychee-100/70"}`}
+                className={`mt-2 text-lg max-w-xs transition-opacity duration-200 ${isActive ? "text-lychee-100" : "text-lychee-100/40 group-hover:text-lychee-100/70"}`}
               >
                 {descriptions[link.key]}
               </span>

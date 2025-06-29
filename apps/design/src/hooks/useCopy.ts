@@ -1,4 +1,4 @@
-import { useState, useCallback } from "preact/hooks";
+import { useState, useCallback } from "react";
 
 export const useCopy = () => {
   const [copied, setCopied] = useState<string | null>(null);

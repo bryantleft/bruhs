@@ -9,13 +9,13 @@
   --color-dragonfruit-200: oklch(0.866 0.073 342.7);
   --color-dragonfruit-300: oklch(0.765 0.123 342.6);
   --color-dragonfruit-400: oklch(0.650 0.180 342.5);
-  --color-dragonfruit-500: oklch(0.561 0.215 342.5); /* Default */
+  --color-dragonfruit-500: oklch(0.561 0.215 342.5);
   --color-dragonfruit-600: oklch(0.468 0.235 342.6);
   --color-dragonfruit-700: oklch(0.389 0.215 342.6);
   --color-dragonfruit-800: oklch(0.325 0.191 342.7);
   --color-dragonfruit-900: oklch(0.278 0.167 342.6);
   --color-dragonfruit-950: oklch(0.157 0.106 342.7);
-  --color-dragonfruit: var(--color-dragonfruit-500); /* Set the DEFAULT dragonfruit color */
+  --color-dragonfruit: var(--color-dragonfruit-500);
 
   /* Rambutan Colors (Red) */
   --color-rambutan-50: oklch(0.972 0.015 25.6);
@@ -24,18 +24,18 @@
   --color-rambutan-300: oklch(0.786 0.094 25.3);
   --color-rambutan-400: oklch(0.679 0.135 25.1);
   --color-rambutan-500: oklch(0.589 0.173 25.0);
-  --color-rambutan-600: oklch(0.506 0.197 24.9); /* Default */
+  --color-rambutan-600: oklch(0.506 0.197 24.9);
   --color-rambutan-700: oklch(0.422 0.187 25.2);
   --color-rambutan-800: oklch(0.364 0.174 25.2);
   --color-rambutan-900: oklch(0.305 0.154 25.3);
   --color-rambutan-950: oklch(0.163 0.096 25.3);
-  --color-rambutan: var(--color-rambutan-600); /* Set the DEFAULT rambutan color */
+  --color-rambutan: var(--color-rambutan-600);
 
   /* Persimmon Colors (Orange) */
   --color-persimmon-50: oklch(0.972 0.016 87.89);
   --color-persimmon-100: oklch(0.943 0.032 85.76);
   --color-persimmon-200: oklch(0.893 0.064 80.31);
-  --color-persimmon-300: oklch(0.831 0.096 72.45); /* Default */
+  --color-persimmon-300: oklch(0.831 0.096 72.45);
   --color-persimmon-400: oklch(0.741 0.130 61.34);
   --color-persimmon-500: oklch(0.670 0.151 55.28);
   --color-persimmon-600: oklch(0.583 0.145 50.42);
@@ -43,7 +43,7 @@
   --color-persimmon-800: oklch(0.418 0.094 45.21);
   --color-persimmon-900: oklch(0.362 0.073 43.87);
   --color-persimmon-950: oklch(0.203 0.040 42.15);
-  --color-persimmon: var(--color-persimmon-300); /* Set the DEFAULT persimmon color */
+  --color-persimmon: var(--color-persimmon-300);
 
   /* Durian Colors (Yellow) */
   --color-durian-50: oklch(0.996 0.011 106.23);
@@ -51,27 +51,27 @@
   --color-durian-200: oklch(0.980 0.043 102.14);
   --color-durian-300: oklch(0.956 0.071 98.47);
   --color-durian-400: oklch(0.913 0.098 95.12);
-  --color-durian-500: oklch(0.876 0.110 92.85); /* Default */
+  --color-durian-500: oklch(0.876 0.110 92.85);
   --color-durian-600: oklch(0.705 0.101 86.29);
   --color-durian-700: oklch(0.563 0.084 76.84);
   --color-durian-800: oklch(0.475 0.070 68.42);
   --color-durian-900: oklch(0.411 0.058 62.15);
   --color-durian-950: oklch(0.234 0.034 55.87);
-  --color-durian: var(--color-durian-500); /* Set the DEFAULT durian color */
+  --color-durian: var(--color-durian-500);
 
   /* Guava Colors (Green) */
   --color-guava-50: oklch(0.976 0.018 146.32);
   --color-guava-100: oklch(0.955 0.036 142.85);
   --color-guava-200: oklch(0.919 0.072 138.94);
   --color-guava-300: oklch(0.856 0.115 135.12);
-  --color-guava-400: oklch(0.741 0.152 131.89); /* Default */
+  --color-guava-400: oklch(0.741 0.152 131.89);
   --color-guava-500: oklch(0.665 0.139 130.24);
   --color-guava-600: oklch(0.557 0.117 128.95);
   --color-guava-700: oklch(0.444 0.092 128.12);
   --color-guava-800: oklch(0.366 0.073 127.45);
   --color-guava-900: oklch(0.309 0.058 126.98);
   --color-guava-950: oklch(0.172 0.032 126.12);
-  --color-guava: var(--color-guava-400); /* Set the DEFAULT guava color */
+  --color-guava: var(--color-guava-400);
 
   /* Blueberry Colors (Blue) */
   --color-blueberry-50: oklch(0.969 0.023 259.45);
@@ -82,10 +82,10 @@
   --color-blueberry-500: oklch(0.686 0.152 257.12);
   --color-blueberry-600: oklch(0.597 0.170 256.89);
   --color-blueberry-700: oklch(0.497 0.148 256.67);
-  --color-blueberry-800: oklch(0.428 0.118 256.45); /* Default */
+  --color-blueberry-800: oklch(0.428 0.118 256.45);
   --color-blueberry-900: oklch(0.371 0.089 256.23);
   --color-blueberry-950: oklch(0.253 0.058 256.12);
-  --color-blueberry: var(--color-blueberry-800); /* Set the DEFAULT blueberry color */
+  --color-blueberry: var(--color-blueberry-800);
 
   /* Mangosteen Colors (Purple) */
   --color-mangosteen-50: oklch(0.975 0.013 303.45);
@@ -94,12 +94,12 @@
   --color-mangosteen-300: oklch(0.838 0.078 295.12);
   --color-mangosteen-400: oklch(0.743 0.109 290.34);
   --color-mangosteen-500: oklch(0.670 0.121 287.45);
-  --color-mangosteen-600: oklch(0.616 0.118 285.67); /* Default */
+  --color-mangosteen-600: oklch(0.616 0.118 285.67);
   --color-mangosteen-700: oklch(0.497 0.099 284.12);
   --color-mangosteen-800: oklch(0.429 0.084 282.89);
   --color-mangosteen-900: oklch(0.364 0.070 281.95);
   --color-mangosteen-950: oklch(0.245 0.048 280.73);
-  --color-mangosteen: var(--color-mangosteen-600); /* Set the DEFAULT mangosteen color */
+  --color-mangosteen: var(--color-mangosteen-600);
 
   /* Lychee Colors (Gray/Neutral) */
   --color-lychee-50: oklch(0.971 0.006 68.42);
@@ -107,13 +107,13 @@
   --color-lychee-200: oklch(0.917 0.018 62.15);
   --color-lychee-300: oklch(0.863 0.024 58.94);
   --color-lychee-400: oklch(0.767 0.031 55.87);
-  --color-lychee-500: oklch(0.697 0.026 52.34); /* Default */
+  --color-lychee-500: oklch(0.697 0.026 52.34);
   --color-lychee-600: oklch(0.597 0.022 48.76);
   --color-lychee-700: oklch(0.517 0.018 45.21);
   --color-lychee-800: oklch(0.449 0.015 42.15);
   --color-lychee-900: oklch(0.396 0.012 39.87);
   --color-lychee-950: oklch(0.227 0.006 36.12);
-  --color-lychee: var(--color-lychee-500); /* Set the DEFAULT lychee color */
+  --color-lychee: var(--color-lychee-500);
 
   /* Longan Colors (Brown/Neutral) */
   --color-longan-50: oklch(0.966 0.008 78.94);
@@ -123,11 +123,11 @@
   --color-longan-400: oklch(0.677 0.028 67.23);
   --color-longan-500: oklch(0.620 0.024 64.87);
   --color-longan-600: oklch(0.533 0.020 62.15);
-  --color-longan-700: oklch(0.477 0.017 59.76); /* Default */
+  --color-longan-700: oklch(0.477 0.017 59.76);
   --color-longan-800: oklch(0.385 0.013 57.12);
   --color-longan-900: oklch(0.348 0.011 55.23);
   --color-longan-950: oklch(0.209 0.006 52.89);
-  --color-longan: var(--color-longan-700); /* Set the DEFAULT longan color */
+  --color-longan: var(--color-longan-700);
 
   /* Font Variables */
   --font-argon: "MonaspaceArgonVariable";
@@ -137,6 +137,7 @@
   --font-xenon: "MonaspaceXenonVariable";
 }
 
+/* Font Face Declarations - Fonts are copied to public/fonts by build script */
 @font-face {
   font-family: "MonaspaceArgonVariable";
   font-stretch: 100% 125%;
@@ -145,7 +146,7 @@
   src: url("/fonts/MonaspaceArgonVariable.woff2") format("woff2"),
     url("/fonts/MonaspaceArgonVariable.woff") format("woff");
 }
-  
+
 @font-face {
   font-family: "MonaspaceKryptonVariable";
   font-stretch: 100% 125%;
@@ -154,7 +155,7 @@
   src: url("/fonts/MonaspaceKryptonVariable.woff2") format("woff2"),
     url("/fonts/MonaspaceKryptonVariable.woff") format("woff");
 }
-  
+
 @font-face {
   font-family: "MonaspaceNeonVariable";
   font-stretch: 100% 125%;
@@ -163,7 +164,7 @@
   src: url("/fonts/MonaspaceNeonVariable.woff2") format("woff2"),
     url("/fonts/MonaspaceNeonVariable.woff") format("woff");
 }
-  
+
 @font-face {
   font-family: "MonaspaceRadonVariable";
   font-stretch: 100% 125%;
@@ -172,7 +173,7 @@
   src: url("/fonts/MonaspaceRadonVariable.woff2") format("woff2"),
     url("/fonts/MonaspaceRadonVariable.woff") format("woff");
 }
-  
+
 @font-face {
   font-family: "MonaspaceXenonVariable";
   font-stretch: 100% 125%;

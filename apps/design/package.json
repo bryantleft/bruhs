@@ -12,12 +12,15 @@
   },
   "dependencies": {
     "@astrojs/check": "0.9.4",
-    "@astrojs/preact": "^4.1.0",
+    "@astrojs/react": "^4.3.0",
     "@astrojs/vercel": "8.2.0",
-    "@bruhs/theme": "workspace:*",
+    "@bruhs/ui": "workspace:*",
     "@tailwindcss/vite": "4.1.10",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
     "astro": "^5.10.0",
-    "preact": "^10.26.9",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "tailwindcss": "^4.1.10",
     "typescript": "5.8.3"
   }

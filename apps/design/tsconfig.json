@@ -7,7 +7,7 @@
       ]
     },
     "jsx": "react-jsx",
-    "jsxImportSource": "preact"
+    "jsxImportSource": "react"
   },
   "extends": "astro/tsconfigs/strict",
   "include": [

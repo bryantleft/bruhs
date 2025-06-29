@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import type { FunctionComponent } from "react";
 import { useCopy } from "@/hooks/useCopy";
 
 type Props = {
