@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        project-filter: [ui]
+        project-filter: [design]
 
     steps:
       - name: Checkout repository

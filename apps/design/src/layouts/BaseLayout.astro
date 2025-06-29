@@ -1,7 +1,7 @@
 ---
 import { ClientRouter } from "astro:transitions";
 import "@/styles/global.css";
-import Header from "@/components/Header.tsx";
+import Sidebar from "@/components/Sidebar.tsx";
 ---
 
 <!DOCTYPE html>
@@ -14,8 +14,10 @@ import Header from "@/components/Header.tsx";
 		<title>Bruhs Design System</title>
 		<ClientRouter />
 	</head>
-	<body class="bg-longan-950 text-lychee-100 max-w-6xl mx-auto">
-		<Header client:visible current={Astro.url.pathname} />
-		<slot />
+	<body class="bg-longan-950 text-lychee-100">
+		<Sidebar client:visible current={Astro.url.pathname} />
+		<main class="ml-80 min-h-screen overflow-y-auto">
+			<slot />
+		</main>
 	</body>
 </html>
