@@ -1,0 +1,6 @@
+<svg width="600" height="600" viewBox="0 0 600 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle cx="300" cy="300" r="300" transform="matrix(-1 0 0 1 600 0)" fill="#FADA5E"/>
+<ellipse cx="40" cy="10" rx="40" ry="10" transform="matrix(-1 0 0 1 340 199)" fill="#2E2E29"/>
+<ellipse cx="40" cy="10" rx="40" ry="10" transform="matrix(-1 0 0 1 137 199)" fill="#2E2E29"/>
+<ellipse cx="120" cy="10" rx="120" ry="10" transform="matrix(-1 0 0 1 311 354)" fill="#FC4141"/>
+</svg>

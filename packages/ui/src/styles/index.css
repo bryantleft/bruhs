@@ -182,3 +182,193 @@
   src: url("/fonts/MonaspaceXenonVariable.woff2") format("woff2"),
     url("/fonts/MonaspaceXenonVariable.woff") format("woff");
 }
+
+/* Custom Typography Scale - Research-Based Design System */
+@layer utilities {
+  /* Display Typography - Impact and Heroes */
+  .text-display-lg {
+    font-size: 4.5rem;
+    line-height: 1.1;
+    font-weight: 300;
+    letter-spacing: -0.025em;
+  }
+
+  .text-display-md {
+    font-size: 3.5rem;
+    line-height: 1.1;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+
+  .text-display-sm {
+    font-size: 2.75rem;
+    line-height: 1.15;
+    font-weight: 400;
+    letter-spacing: -0.015em;
+  }
+
+  /* Headings - Structured Hierarchy */
+  .text-h1 {
+    font-size: 2rem;
+    line-height: 1.25;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  .text-h2 {
+    font-size: 1.5rem;
+    line-height: 1.3;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+  }
+
+  .text-h3 {
+    font-size: 1.25rem;
+    line-height: 1.3;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  .text-h4 {
+    font-size: 1.125rem;
+    line-height: 1.4;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  /* Body Text - Optimized for Reading */
+  .text-body-lg {
+    font-size: 1.125rem;
+    line-height: 1.6;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+
+  .text-body {
+    font-size: 1rem;
+    line-height: 1.6;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+
+  .text-body-sm {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+
+  /* Labels - UI and Metadata */
+  .text-label-lg {
+    font-size: 1rem;
+    line-height: 1.5;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  .text-label {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  .text-label-sm {
+    font-size: 0.75rem;
+    line-height: 1.5;
+    font-weight: 500;
+    letter-spacing: 0.025em;
+  }
+
+  /* Code - Monospace Technical Content */
+  .text-code-lg {
+    font-size: 1rem;
+    line-height: 1.6;
+    font-weight: 400;
+    letter-spacing: 0;
+    font-family: var(--font-neon), ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+  }
+
+  .text-code {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    font-weight: 400;
+    letter-spacing: 0;
+    font-family: var(--font-neon), ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+  }
+
+  .text-code-sm {
+    font-size: 0.75rem;
+    line-height: 1.5;
+    font-weight: 400;
+    letter-spacing: 0;
+    font-family: var(--font-neon), ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+  }
+
+  /* Interactive Elements - Buttons and Actions */
+  .text-button-lg {
+    font-size: 1rem;
+    line-height: 1.5;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  .text-button {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  .text-button-sm {
+    font-size: 0.75rem;
+    line-height: 1.5;
+    font-weight: 500;
+    letter-spacing: 0.025em;
+  }
+
+  /* Responsive Scaling */
+  @media (max-width: 768px) {
+    .text-display-lg {
+      font-size: 3rem;
+      line-height: 1.1;
+    }
+
+    .text-display-md {
+      font-size: 2.5rem;
+      line-height: 1.15;
+    }
+
+    .text-display-sm {
+      font-size: 2rem;
+      line-height: 1.2;
+    }
+
+    .text-h1 {
+      font-size: 1.75rem;
+      line-height: 1.25;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .text-display-lg {
+      font-size: 2.5rem;
+      line-height: 1.15;
+    }
+
+    .text-display-md {
+      font-size: 2rem;
+      line-height: 1.2;
+    }
+
+    .text-h1 {
+      font-size: 1.5rem;
+      line-height: 1.3;
+    }
+
+    .text-body {
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+  }
+}

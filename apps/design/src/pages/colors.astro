@@ -6,18 +6,18 @@ import { accentColors, neutralColors } from "@/data";
 ---
 
 <BaseLayout>
-	<div class="p-8 flex flex-col gap-16">
+	<div class="p-6 md:p-8 flex flex-col gap-12 md:gap-16">
 		<section>
-			<h2 class="text-3xl font-bold mb-6 tracking-tight">Accent Colors</h2>
-			<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+			<h2 class="text-h1 font-bold mb-6 tracking-tight">Accent Colors</h2>
+			<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8">
 				{accentColors.map(color => (
 					<ColorCard client:visible color={color} />
 				))}
 			</div>
 		</section>
 		<section>
-			<h2 class="text-3xl font-bold mb-6 tracking-tight">Neutral Colors</h2>
-			<div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+			<h2 class="text-h1 font-bold mb-6 tracking-tight">Neutral Colors</h2>
+			<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12">
 				{neutralColors.map(color => (
 					<NeutralColorRow client:visible color={color} />
 				))}

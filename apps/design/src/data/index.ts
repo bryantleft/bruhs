@@ -1,2 +1,3 @@
-export * from "@/data/colors";
-export * from "@/data/fonts";
+export * from "./colors";
+export * from "./fonts";
+export * from "./typography";

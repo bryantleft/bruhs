@@ -1,0 +1,386 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+---
+
+<BaseLayout>
+	<div class="p-6 md:p-8 flex flex-col gap-12 md:gap-16">
+		<section>
+			<h2 class="text-h1 font-bold mb-6 tracking-tight">
+			  Bruh Logo
+			</h2>
+			<p class="text-body-lg text-lychee-500 dark:text-lychee-400 mb-8 max-w-2xl">
+				The iconic "bruh" face - a simple, expressive design that captures the essence of digital culture with clean geometric forms and bold color choices.
+			</p>
+		</section>
+
+		<section>
+			<h3 class="text-h2 font-bold mb-8 tracking-tight">The Design</h3>
+			
+			<!-- Hero Logo Display -->
+			<div class="bg-gradient-to-br from-longan-50 to-longan-100 dark:from-longan-900 dark:to-longan-950 rounded-2xl p-12 md:p-16 mb-12">
+				<div class="flex items-center justify-center gap-8 md:gap-16">
+					<div class="w-32 h-32 md:w-40 md:h-40 lg:w-48 lg:h-48 transition-transform duration-300 hover:scale-110">
+						<img src="/bruhs/left.svg" alt="Bruh Face Looking Left" class="w-full h-full" />
+					</div>
+					<div class="w-40 h-40 md:w-52 md:h-52 lg:w-64 lg:h-64 transition-transform duration-300 hover:scale-110">
+						<img src="/bruhs/original.svg" alt="Original Bruh Face" class="w-full h-full" />
+					</div>
+					<div class="w-32 h-32 md:w-40 md:h-40 lg:w-48 lg:h-48 transition-transform duration-300 hover:scale-110">
+						<img src="/bruhs/right.svg" alt="Bruh Face Looking Right" class="w-full h-full" />
+					</div>
+				</div>
+			</div>
+
+			<!-- Design Breakdown -->
+			<div class="grid lg:grid-cols-2 gap-8 md:gap-12">
+				<!-- Color Palette -->
+				<div class="bg-longan-100 dark:bg-longan-900 rounded-xl p-6 md:p-8">
+					<h4 class="text-h3 font-bold mb-6 tracking-tight">Color Palette</h4>
+					<div class="space-y-4">
+						<div class="flex items-center gap-4 bg-longan-50 dark:bg-longan-950 rounded-lg p-4">
+							<div class="w-12 h-12 rounded-full border-2 border-longan-200 dark:border-longan-700" style="background-color: #FADA5E;"></div>
+							<div>
+								<div class="text-h5 font-semibold">Base</div>
+								<div class="text-label text-lychee-500 dark:text-lychee-400 font-mono">#FADA5E</div>
+							</div>
+						</div>
+						<div class="flex items-center gap-4 bg-longan-50 dark:bg-longan-950 rounded-lg p-4">
+							<div class="w-12 h-12 rounded-full border-2 border-longan-200 dark:border-longan-700" style="background-color: #2E2E29;"></div>
+							<div>
+								<div class="text-h5 font-semibold">Eyes</div>
+								<div class="text-label text-lychee-500 dark:text-lychee-400 font-mono">#2E2E29</div>
+							</div>
+						</div>
+						<div class="flex items-center gap-4 bg-longan-50 dark:bg-longan-950 rounded-lg p-4">
+							<div class="w-12 h-12 rounded-full border-2 border-longan-200 dark:border-longan-700" style="background-color: #FC4141;"></div>
+							<div>
+								<div class="text-h5 font-semibold">Mouth</div>
+								<div class="text-label text-lychee-500 dark:text-lychee-400 font-mono">#FC4141</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Technical Specifications -->
+				<div class="bg-longan-100 dark:bg-longan-900 rounded-xl p-6 md:p-8">
+					<h4 class="text-h3 font-bold mb-6 tracking-tight">Specifications</h4>
+					<div class="space-y-6">
+						<div>
+							<h5 class="text-h5 font-semibold mb-3">Format & Sizing</h5>
+							<div class="text-body-sm text-lychee-600 dark:text-lychee-300 space-y-1">
+								<div>• Format: SVG (scalable vector)</div>
+								<div>• Canvas: 600×600px</div>
+								<div>• Minimum size: 32×32px</div>
+								<div>• Optimal display: 128×128px+</div>
+							</div>
+						</div>
+						<div>
+							<h5 class="text-h5 font-semibold mb-3">Geometric Elements</h5>
+							<div class="text-body-sm text-lychee-600 dark:text-lychee-300 space-y-1">
+								<div>• Base: Perfect circle (r=300)</div>
+								<div>• Eyes: Oval ellipses (40×10px)</div>
+								<div>• Expression: Horizontal ellipse (120×10px)</div>
+								<div>• Style: Flat design, no gradients</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<section>
+			<h3 class="text-h2 font-bold mb-8 tracking-tight">Spacing & Variations</h3>
+			<p class="text-body-lg text-lychee-500 dark:text-lychee-400 mb-8 max-w-2xl">
+				The bruh logo comes in three directional variations, each with precisely calculated eye and mouth positioning to create different expressions while maintaining consistent proportions.
+			</p>
+
+			<!-- Logo Variations Comparison -->
+			<div class="bg-longan-50 dark:bg-longan-950 rounded-2xl p-8 md:p-12 mb-12">
+				<div class="grid lg:grid-cols-3 gap-8 md:gap-12">
+					<!-- Left Variation -->
+					<div class="bg-longan-100 dark:bg-longan-900 rounded-xl p-6">
+						<h4 class="text-h4 font-bold mb-6 text-persimmon-600 dark:text-persimmon-400">Left Look</h4>
+						<div class="bg-white dark:bg-longan-800 rounded-lg p-8 mb-6 relative">
+							<!-- Grid overlay -->
+							<div class="absolute inset-0 opacity-10">
+								<svg width="100%" height="100%" class="w-full h-full">
+									<defs>
+										<pattern id="grid-left" width="16" height="16" patternUnits="userSpaceOnUse">
+											<path d="M 16 0 L 0 0 0 16" fill="none" stroke="currentColor" stroke-width="0.5" class="text-lychee-400"/>
+										</pattern>
+									</defs>
+									<rect width="100%" height="100%" fill="url(#grid-left)" />
+								</svg>
+							</div>
+							
+							<!-- Logo with construction lines -->
+							<div class="relative w-32 h-32 mx-auto">
+								<img src="/bruhs/left.svg" alt="Left-facing bruh" class="w-full h-full" />
+								
+								<!-- Construction overlay -->
+								<svg viewBox="0 0 600 600" class="absolute inset-0 w-full h-full opacity-60">
+									<!-- Eye guideline -->
+									<line x1="0" y1="209" x2="600" y2="209" stroke="currentColor" stroke-width="1" stroke-dasharray="3,2" class="text-persimmon-500"/>
+									<!-- Mouth guideline -->
+									<line x1="0" y1="364" x2="600" y2="364" stroke="currentColor" stroke-width="1" stroke-dasharray="3,2" class="text-rambutan-500"/>
+									<!-- Center line -->
+									<line x1="300" y1="0" x2="300" y2="600" stroke="currentColor" stroke-width="1" stroke-dasharray="2,2" class="text-blueberry-400"/>
+									
+									<!-- Eye markers -->
+									<circle cx="260" cy="209" r="3" fill="currentColor" class="text-persimmon-600"/>
+									<circle cx="57" cy="209" r="3" fill="currentColor" class="text-persimmon-600"/>
+									<!-- Mouth marker -->
+									<circle cx="191" cy="364" r="3" fill="currentColor" class="text-rambutan-600"/>
+								</svg>
+							</div>
+						</div>
+						
+						<div class="space-y-3 text-body-sm">
+							<div class="flex justify-between">
+								<span class="text-lychee-600 dark:text-lychee-300">Eyes X</span>
+								<span class="font-mono text-persimmon-600 dark:text-persimmon-400">260px, 57px</span>
+							</div>
+							<div class="flex justify-between">
+								<span class="text-lychee-600 dark:text-lychee-300">Eyes Y</span>
+								<span class="font-mono text-persimmon-600 dark:text-persimmon-400">209px</span>
+							</div>
+							<div class="flex justify-between">
+								<span class="text-lychee-600 dark:text-lychee-300">Mouth</span>
+								<span class="font-mono text-rambutan-600 dark:text-rambutan-400">191px, 364px</span>
+							</div>
+							<div class="text-xs text-lychee-500 dark:text-lychee-400 mt-2">
+								Suspicious sideways glance
+							</div>
+						</div>
+					</div>
+
+					<!-- Original Variation -->
+					<div class="bg-longan-100 dark:bg-longan-900 rounded-xl p-6">
+						<h4 class="text-h4 font-bold mb-6 text-durian-600 dark:text-durian-400">Original</h4>
+						<div class="bg-white dark:bg-longan-800 rounded-lg p-8 mb-6 relative">
+							<!-- Grid overlay -->
+							<div class="absolute inset-0 opacity-10">
+								<svg width="100%" height="100%" class="w-full h-full">
+									<defs>
+										<pattern id="grid-original" width="16" height="16" patternUnits="userSpaceOnUse">
+											<path d="M 16 0 L 0 0 0 16" fill="none" stroke="currentColor" stroke-width="0.5" class="text-lychee-400"/>
+										</pattern>
+									</defs>
+									<rect width="100%" height="100%" fill="url(#grid-original)" />
+								</svg>
+							</div>
+							
+							<!-- Logo with construction lines -->
+							<div class="relative w-32 h-32 mx-auto">
+								<img src="/bruhs/original.svg" alt="Original bruh" class="w-full h-full" />
+								
+								<!-- Construction overlay -->
+								<svg viewBox="0 0 600 600" class="absolute inset-0 w-full h-full opacity-60">
+									<!-- Eye guideline -->
+									<line x1="0" y1="223" x2="600" y2="223" stroke="currentColor" stroke-width="1" stroke-dasharray="3,2" class="text-durian-500"/>
+									<!-- Mouth guideline -->
+									<line x1="0" y1="378" x2="600" y2="378" stroke="currentColor" stroke-width="1" stroke-dasharray="3,2" class="text-rambutan-500"/>
+									<!-- Center line -->
+									<line x1="300" y1="0" x2="300" y2="600" stroke="currentColor" stroke-width="1" stroke-dasharray="2,2" class="text-blueberry-400"/>
+									
+									<!-- Eye markers -->
+									<circle cx="198" cy="223" r="3" fill="currentColor" class="text-durian-600"/>
+									<circle cx="401" cy="223" r="3" fill="currentColor" class="text-durian-600"/>
+									<!-- Mouth marker -->
+									<circle cx="307" cy="378" r="3" fill="currentColor" class="text-rambutan-600"/>
+									
+									<!-- Eye spacing indicator -->
+									<line x1="198" y1="205" x2="401" y2="205" stroke="currentColor" stroke-width="2" class="text-guava-500"/>
+									<text x="299.5" y="200" text-anchor="middle" class="text-xs font-mono fill-guava-600 dark:fill-guava-400">203px</text>
+								</svg>
+							</div>
+						</div>
+						
+						<div class="space-y-3 text-body-sm">
+							<div class="flex justify-between">
+								<span class="text-lychee-600 dark:text-lychee-300">Eyes X</span>
+								<span class="font-mono text-durian-600 dark:text-durian-400">198px, 401px</span>
+							</div>
+							<div class="flex justify-between">
+								<span class="text-lychee-600 dark:text-lychee-300">Eyes Y</span>
+								<span class="font-mono text-durian-600 dark:text-durian-400">223px</span>
+							</div>
+							<div class="flex justify-between">
+								<span class="text-lychee-600 dark:text-lychee-300">Mouth</span>
+								<span class="font-mono text-rambutan-600 dark:text-rambutan-400">307px, 378px</span>
+							</div>
+							<div class="text-xs text-lychee-500 dark:text-lychee-400 mt-2">
+								Classic deadpan expression
+							</div>
+						</div>
+					</div>
+
+					<!-- Right Variation -->
+					<div class="bg-longan-100 dark:bg-longan-900 rounded-xl p-6">
+						<h4 class="text-h4 font-bold mb-6 text-blueberry-600 dark:text-blueberry-400">Right Look</h4>
+						<div class="bg-white dark:bg-longan-800 rounded-lg p-8 mb-6 relative">
+							<!-- Grid overlay -->
+							<div class="absolute inset-0 opacity-10">
+								<svg width="100%" height="100%" class="w-full h-full">
+									<defs>
+										<pattern id="grid-right" width="16" height="16" patternUnits="userSpaceOnUse">
+											<path d="M 16 0 L 0 0 0 16" fill="none" stroke="currentColor" stroke-width="0.5" class="text-lychee-400"/>
+										</pattern>
+									</defs>
+									<rect width="100%" height="100%" fill="url(#grid-right)" />
+								</svg>
+							</div>
+							
+							<!-- Logo with construction lines -->
+							<div class="relative w-32 h-32 mx-auto">
+								<img src="/bruhs/right.svg" alt="Right-facing bruh" class="w-full h-full" />
+								
+								<!-- Construction overlay -->
+								<svg viewBox="0 0 600 600" class="absolute inset-0 w-full h-full opacity-60">
+									<!-- Eye guideline -->
+									<line x1="0" y1="209" x2="600" y2="209" stroke="currentColor" stroke-width="1" stroke-dasharray="3,2" class="text-blueberry-500"/>
+									<!-- Mouth guideline -->
+									<line x1="0" y1="364" x2="600" y2="364" stroke="currentColor" stroke-width="1" stroke-dasharray="3,2" class="text-rambutan-500"/>
+									<!-- Center line -->
+									<line x1="300" y1="0" x2="300" y2="600" stroke="currentColor" stroke-width="1" stroke-dasharray="2,2" class="text-blueberry-400"/>
+									
+									<!-- Eye markers -->
+									<circle cx="300" cy="209" r="3" fill="currentColor" class="text-blueberry-600"/>
+									<circle cx="503" cy="209" r="3" fill="currentColor" class="text-blueberry-600"/>
+									<!-- Mouth marker -->
+									<circle cx="409" cy="364" r="3" fill="currentColor" class="text-rambutan-600"/>
+								</svg>
+							</div>
+						</div>
+						
+						<div class="space-y-3 text-body-sm">
+							<div class="flex justify-between">
+								<span class="text-lychee-600 dark:text-lychee-300">Eyes X</span>
+								<span class="font-mono text-blueberry-600 dark:text-blueberry-400">300px, 503px</span>
+							</div>
+							<div class="flex justify-between">
+								<span class="text-lychee-600 dark:text-lychee-300">Eyes Y</span>
+								<span class="font-mono text-blueberry-600 dark:text-blueberry-400">209px</span>
+							</div>
+							<div class="flex justify-between">
+								<span class="text-lychee-600 dark:text-lychee-300">Mouth</span>
+								<span class="font-mono text-rambutan-600 dark:text-rambutan-400">409px, 364px</span>
+							</div>
+							<div class="text-xs text-lychee-500 dark:text-lychee-400 mt-2">
+								Skeptical right-side glance
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Safety Zone Guidelines -->
+			<div class="grid md:grid-cols-2 gap-8 mb-12">
+				<div class="bg-longan-100 dark:bg-longan-900 rounded-xl p-6">
+					<h4 class="text-h3 font-bold mb-6 tracking-tight text-durian-600 dark:text-durian-400">Safety Zone</h4>
+					<div class="bg-longan-50 dark:bg-longan-950 rounded-lg p-6 mb-4">
+						<div class="relative w-40 h-40 mx-auto">
+							<!-- Safety zone visualization -->
+							<div class="absolute inset-0 border-2 border-dashed border-durian-400 dark:border-durian-500 rounded-lg bg-durian-50/30 dark:bg-durian-950/30"></div>
+							<div class="absolute inset-6 bg-white dark:bg-longan-800 rounded border-2 border-guava-500 dark:border-guava-400 flex items-center justify-center">
+								<div class="w-16 h-16">
+									<img src="/bruhs/original.svg" alt="Logo with safety zone" class="w-full h-full" />
+								</div>
+							</div>
+							<!-- Measurements -->
+							<div class="absolute -top-4 left-1/2 transform -translate-x-1/2">
+								<span class="text-xs font-mono text-durian-600 dark:text-durian-400 bg-durian-50 dark:bg-durian-950 px-1 rounded">1x</span>
+							</div>
+							<div class="absolute -left-4 top-1/2 transform -translate-y-1/2 -rotate-90">
+								<span class="text-xs font-mono text-durian-600 dark:text-durian-400 bg-durian-50 dark:bg-durian-950 px-1 rounded">1x</span>
+							</div>
+						</div>
+					</div>
+					<div class="text-body-sm text-lychee-600 dark:text-lychee-300 space-y-2">
+						<div>• Minimum clear space: 50% of logo size</div>
+						<div>• Maintains visual impact at any scale</div>
+						<div>• Prevents element overlap and crowding</div>
+					</div>
+				</div>
+
+				<div class="bg-longan-100 dark:bg-longan-900 rounded-xl p-6">
+					<h4 class="text-h3 font-bold mb-6 tracking-tight text-guava-600 dark:text-guava-400">Positioning Rules</h4>
+					<div class="space-y-4 text-body-sm">
+						<div class="bg-longan-50 dark:bg-longan-950 rounded-lg p-4">
+							<div class="font-semibold text-persimmon-600 dark:text-persimmon-400 mb-2">Eye Variations</div>
+							<div class="text-lychee-600 dark:text-lychee-300 space-y-1">
+								<div>• Left: Eyes shift toward left edge</div>
+								<div>• Original: Centered, symmetrical spacing</div>
+								<div>• Right: Eyes shift toward right edge</div>
+							</div>
+						</div>
+						<div class="bg-longan-50 dark:bg-longan-950 rounded-lg p-4">
+							<div class="font-semibold text-rambutan-600 dark:text-rambutan-400 mb-2">Mouth Alignment</div>
+							<div class="text-lychee-600 dark:text-lychee-300 space-y-1">
+								<div>• Follows eye direction consistently</div>
+								<div>• Maintains proportional distance</div>
+								<div>• Y-position varies per expression</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Usage Examples -->
+			<div class="grid md:grid-cols-2 gap-8 md:gap-12">
+				<!-- Correct Usage -->
+				<div class="bg-longan-100 dark:bg-longan-900 rounded-xl p-6 md:p-8">
+					<h4 class="text-h3 font-bold mb-6 tracking-tight text-emerald-700 dark:text-emerald-400">✓ Correct</h4>
+					<div class="bg-white dark:bg-longan-800 rounded-lg p-8 mb-4">
+						<div class="flex items-center justify-center" style="padding: 64px;">
+							<div class="w-16 h-16">
+								<img src="/bruhs/original.svg" alt="Properly spaced logo" class="w-full h-full" />
+							</div>
+						</div>
+					</div>
+					<p class="text-body-sm text-lychee-600 dark:text-lychee-300">
+						Proper spacing ensures the logo has enough breathing room and maintains visual impact.
+					</p>
+				</div>
+
+				<!-- Incorrect Usage -->
+				<div class="bg-longan-100 dark:bg-longan-900 rounded-xl p-6 md:p-8">
+					<h4 class="text-h3 font-bold mb-6 tracking-tight text-rose-700 dark:text-rose-400">✗ Incorrect</h4>
+					<div class="bg-white dark:bg-longan-800 rounded-lg p-8 mb-4">
+						<div class="flex items-center justify-center" style="padding: 8px;">
+							<div class="w-16 h-16">
+								<img src="/bruhs/original.svg" alt="Improperly spaced logo" class="w-full h-full" />
+							</div>
+						</div>
+					</div>
+					<p class="text-body-sm text-lychee-600 dark:text-lychee-300">
+						Insufficient spacing cramped the logo and reduces its visual effectiveness.
+					</p>
+				</div>
+			</div>
+
+			<!-- Spacing Guidelines -->
+			<div class="mt-12 bg-gradient-to-r from-longan-100 to-longan-50 dark:from-longan-900 dark:to-longan-950 rounded-xl p-6 md:p-8">
+				<h4 class="text-h3 font-bold mb-6 tracking-tight">Guidelines</h4>
+				<div class="grid md:grid-cols-2 gap-6">
+					<div>
+						<h5 class="text-h5 font-semibold mb-3">Minimum Clear Space</h5>
+						<div class="text-body-sm text-lychee-600 dark:text-lychee-300 space-y-2">
+							<div>• Use 1x logo height for all sides</div>
+							<div>• Maintain proportional spacing when scaling</div>
+							<div>• Never place elements within the safety zone</div>
+						</div>
+					</div>
+					<div>
+						<h5 class="text-h5 font-semibold mb-3">Practical Applications</h5>
+						<div class="text-body-sm text-lychee-600 dark:text-lychee-300 space-y-2">
+							<div>• Business cards: 8mm minimum space</div>
+							<div>• Web headers: 32px minimum space</div>
+							<div>• Large displays: Scale proportionally</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</section>
+	</div>
+</BaseLayout> 

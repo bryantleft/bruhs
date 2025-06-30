@@ -1,36 +1,64 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import FontSample from "@/components/FontSample";
-import { fonts } from "@/data";
+import TypographyScale from "@/components/TypographyScale";
+import { fonts, typographyScale, typographyCategories } from "@/data";
 ---
 
 <BaseLayout>
-	<div class="p-8 flex flex-col gap-16">
+	<div class="p-6 md:p-8 flex flex-col gap-12 md:gap-16">
 		<section>
-			<h2 class="text-3xl font-bold mb-6 tracking-tight">
-			  Fonts
+			<h2 class="text-h1 font-bold mb-6 tracking-tight">
+			  Font Family Showcase
 			</h2>
-			<div class="grid grid-cols-1 gap-8">
+			<p class="text-body-lg text-lychee-500 dark:text-lychee-400 mb-8">
+				Explore the complete Monaspace superfamily, each variant optimized for different coding contexts and design applications.
+			</p>
+			<div class="grid grid-cols-1 gap-6 md:gap-8">
 				{fonts.map(font => (
 					<FontSample client:visible name={font.name} variable={font.var} className={font.className} />
 				))}
 			</div>
 		</section>
+
 		<section>
-			<h2 class="text-3xl font-bold mb-6 tracking-tight">References</h2>
-			<div class="bg-longan-900 rounded-lg p-6 border border-lychee-100/5">
-				<p class="text-lg text-lychee-300">
-					The typography is based on
-					<a 
-						href="https://monaspace.githubnext.com/" 
-						target="_blank" 
-						rel="noopener noreferrer"
-						class="font-semibold text-lychee-100 hover:text-lychee-50 underline decoration-lychee-100/20 hover:decoration-lychee-100/40 transition"
-					>
-						Monaspace
-					</a>
-					, an innovative superfamily of fonts from GitHub.
+			<div class="mb-8">
+				<h2 class="text-h1 font-bold mb-4 tracking-tight">Typography Scale</h2>
+				<p class="text-body-lg text-lychee-500 dark:text-lychee-400">
+					Six semantic categories provide clear intent and reduce decision fatigue, with each size mathematically harmonious and purpose-built for modern interface design.
 				</p>
+			</div>
+
+			<div class="flex flex-col gap-10 md:gap-12">
+				{typographyCategories.map(category => (
+					<TypographyScale 
+						client:visible
+						items={typographyScale[category.key]}
+						title={category.title}
+						description={category.description}
+					/>
+				))}
+			</div>
+		</section>
+
+		<section>
+			<h2 class="text-h1 font-bold mb-6 tracking-tight">References</h2>
+			<div class="grid gap-5 md:gap-6">
+				<div class="bg-longan-900 rounded-lg p-5 md:p-6 border border-lychee-100/5">
+					<h3 class="text-h3 font-semibold text-lychee-100 mb-3">Typography Foundation</h3>
+					<p class="text-body-lg text-lychee-300 mb-4">
+						Built upon the innovative
+						<a 
+							href="https://monaspace.githubnext.com/" 
+							target="_blank" 
+							rel="noopener noreferrer"
+							class="font-semibold text-lychee-100 hover:text-lychee-50 underline decoration-lychee-100/20 hover:decoration-lychee-100/40 transition"
+						>
+							Monaspace superfamily
+						</a>
+						from GitHub, offering unprecedented flexibility for technical and creative typography.
+					</p>
+				</div>
 			</div>
 		</section>
 	</div>
