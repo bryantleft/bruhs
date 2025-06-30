@@ -1,7 +1,4 @@
-export const typographyScale = {
-  // Research-based custom scale using Minor Third (1.2) + Perfect Fourth (1.333) hybrid approach
-  // Optimized for design systems, Monaspace fonts, and 4px grid alignment
-  
+export const typographyScale: Record<string, any[]> = {
   display: [
     { name: "Display Large", className: "text-display-lg", usage: "Hero headlines, landing pages", size: "72px", weight: "300", lineHeight: "1.1" },
     { name: "Display Medium", className: "text-display-md", usage: "Section heroes, major headings", size: "56px", weight: "400", lineHeight: "1.1" },
@@ -48,11 +45,3 @@ export const typographyCategories = [
   { key: "code", title: "Code", description: "Monospace text for technical content" },
   { key: "interactive", title: "Interactive", description: "Buttons, links, and actionable elements" }
 ];
-
-// Mathematical principles used:
-// - Minor Third (1.2) for body text progression 
-// - Perfect Fourth (1.333) for heading hierarchy
-// - 4px grid alignment for all sizes
-// - WCAG 1.5x line-height minimum for body text
-// - Tighter line-heights (1.1-1.3) for display/headings
-// - Optimized for Monaspace font characteristics 
