@@ -4,7 +4,6 @@
   },
   "typescript.preferences.includePackageJsonAutoImports": "on",
   "typescript.tsdk": "node_modules/typescript/lib",
-  "astro.typescript.enabled": true,
   "[astro]": {
     "editor.defaultFormatter": "astro-build.astro-vscode"
   }

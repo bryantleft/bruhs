@@ -35,7 +35,7 @@ export const getContrastingColors = (baseColor: string): { eyes: string; mouth: 
   }
   
   // Default fallback
-  return { eyes: '#2E2E29', mouth: '#FC4141' };
+  return { eyes: '#2e2e29', mouth: '#fc4141' };
 };
 
 export const generateLogoSVG = (baseColor: string, eyeColor: string, mouthColor: string, variant: 'left' | 'original' | 'right'): string => {

@@ -2,6 +2,7 @@
   /* Bruh Colors */
   --color-bruh-eye: oklch(0.146 0.000 0);
   --color-bruh-mouth: oklch(0.666 0.175 27.34);
+  --color-bruh-base: oklch(0.8924 0.1454 94.78);
 
   /* Dragonfruit Colors (Pink) */
   --color-dragonfruit-50: oklch(0.969 0.019 342.5);
@@ -101,7 +102,7 @@
   --color-mangosteen-950: oklch(0.245 0.048 280.73);
   --color-mangosteen: var(--color-mangosteen-600);
 
-  /* Lychee Colors (Gray/Neutral) */
+  /* Lychee Colors (Foreground/Gray/Neutral) */
   --color-lychee-50: oklch(0.971 0.006 68.42);
   --color-lychee-100: oklch(0.951 0.012 65.23);
   --color-lychee-200: oklch(0.917 0.018 62.15);
@@ -115,7 +116,7 @@
   --color-lychee-950: oklch(0.227 0.006 36.12);
   --color-lychee: var(--color-lychee-500);
 
-  /* Longan Colors (Brown/Neutral) */
+  /* Longan Colors (Background/Brown/Neutral) */
   --color-longan-50: oklch(0.966 0.008 78.94);
   --color-longan-100: oklch(0.918 0.015 76.32);
   --color-longan-200: oklch(0.853 0.023 73.45);

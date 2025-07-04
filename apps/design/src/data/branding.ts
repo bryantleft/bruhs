@@ -47,7 +47,7 @@ export const colorVariations = [
   {
     id: "classic",
     name: "Classic",
-    baseColor: "#FADA5E",
+    baseColor: "#fada5e",
     colorName: "yellow"
   },
   {
