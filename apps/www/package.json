@@ -16,6 +16,7 @@
     "@bruhs/ui": "workspace:*",
     "@tailwindcss/vite": "4.1.10",
     "astro": "^5.10.0",
+    "sharp": "0.34.2",
     "tailwindcss": "^4.1.10",
     "typescript": "5.8.3"
   }
