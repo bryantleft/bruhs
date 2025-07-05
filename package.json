@@ -4,7 +4,9 @@
 	"scripts": {
 		"build": "turbo run build",
 		"dev:design": "turbo run dev --filter=design",
-		"check:design": "turbo run check --filter=design"
+		"dev:www": "turbo run dev --filter=www",
+		"check:design": "turbo run check --filter=design",
+		"check:www": "turbo run check --filter=www"
 	},
 	"devDependencies": {
 		"turbo": "2.5.3"

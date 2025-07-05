@@ -1,0 +1,77 @@
+---
+import { Image } from "astro:assets";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import bruh from "@/assets/bruh.svg";
+import github from "@/assets/github.svg";
+---
+
+<BaseLayout>
+  <div class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+    <a href="https://bnle.me" class="cursor-pointer">
+      <Image 
+        src={bruh} 
+        alt="bruh logo" 
+        width={60} 
+        height={60} 
+        loading="eager" 
+      />
+    </a>
+  </div>
+  
+  <div id="home" class="h-full animate-fade-in opacity-0">
+    <div class="flex flex-col h-full justify-center">
+      <div class="flex justify-center items-center h-full">
+        <span class="text-h2 text-center text-lychee-50 py-1 px-2 mb-4 font-semibold">Bruhs</span>
+      </div>
+      <div class="flex flex-col mx-auto justify-center items-start h-full gap-y-4">
+          <span class="text-body-sm text-center text-lychee-300 py-1 px-2">
+            &gt; building
+            <a href="https://bruhs.ai" class="text-durian-400 hover:text-durian-300 underline">.ai</a>,
+            <a href="https://design.bruhs.dev" class="text-blueberry-400 hover:text-blueberry-300 underline">design.</a>
+          </span>
+      </div>
+    </div>
+
+    <div class="fixed bottom-4 right-4 flex gap-x-2">
+      <a href="https://github.com/bryantleft/bruhs" class="bg-lychee-200 hover:bg-lychee-300 p-1 rounded transition-colors">
+        <Image 
+          src={github} 
+          alt="github" 
+          width={24} 
+          height={24} 
+          loading="eager" 
+        />
+      </a>
+    </div>
+  </div>
+</BaseLayout>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const mainContent = document.getElementById('home');
+    const links = document.querySelectorAll('a');
+
+    if (!mainContent) return;
+
+    // Initial fade in
+    setTimeout(() => {
+      mainContent.style.transition = 'opacity 1s ease-in-out';
+      mainContent.style.opacity = '1';
+    }, 0);
+
+    links.forEach(link => {
+      link.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const href = link.getAttribute('href');
+
+        if (!href) return;
+
+        mainContent.style.opacity = '0';
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        window.location.href = href;
+      });
+    });
+  });
+</script>
