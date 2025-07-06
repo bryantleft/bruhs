@@ -116,7 +116,7 @@ export function SearchInput({
     } else {
       // No TLD included - check if domain is long enough
       if (searchDomain.length < MIN_DOMAIN_LENGTH) return;
-      
+
       // Search across all TLDs
       const query: DomainSearchQuery = {
         domains: [searchDomain],
