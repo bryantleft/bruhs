@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import tlds from "tlds";
 import { Input } from "~/components/ui/input";
@@ -33,6 +33,9 @@ interface SearchInputState {
   selectedTlds: TLD[];
 }
 
+// Minimum domain length (excluding TLD)
+const MIN_DOMAIN_LENGTH = 3;
+
 export function SearchInput({
   onSearch,
   onClear,
@@ -44,6 +47,7 @@ export function SearchInput({
     selectedTlds: POPULAR_TLDS,
   });
   const [hasInvalidTld, setHasInvalidTld] = useState(false);
+  const [isDomainTooShort, setIsDomainTooShort] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -61,6 +65,10 @@ export function SearchInput({
     } else {
       setHasInvalidTld(false);
     }
+
+    // Check if domain is too short
+    const domainLength = lastDotIndex > 0 ? lastDotIndex : value.length;
+    setIsDomainTooShort(domainLength > 0 && domainLength < MIN_DOMAIN_LENGTH);
 
     // Clear existing debounce
     if (debounceRef.current) {
@@ -90,6 +98,9 @@ export function SearchInput({
       const potentialTld = searchDomain.slice(lastDotIndex);
       const domainPart = searchDomain.slice(0, lastDotIndex);
 
+      // Check if domain part is long enough
+      if (domainPart.length < MIN_DOMAIN_LENGTH) return;
+
       // Check if it's a valid TLD
       if (ALL_TLDS.includes(potentialTld as TLD)) {
         // Valid TLD - search only for this specific domain
@@ -103,7 +114,10 @@ export function SearchInput({
         return;
       }
     } else {
-      // No TLD included - search across all TLDs
+      // No TLD included - check if domain is long enough
+      if (searchDomain.length < MIN_DOMAIN_LENGTH) return;
+      
+      // Search across all TLDs
       const query: DomainSearchQuery = {
         domains: [searchDomain],
         tlds: state.selectedTlds,
@@ -149,6 +163,19 @@ export function SearchInput({
             </TooltipTrigger>
             <TooltipContent>
               <p>Invalid TLD</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
+
+        {isDomainTooShort && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="-translate-y-1/2 absolute top-1/2 right-4 cursor-help text-persimmon-400">
+                <Info size={16} />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Domain must be at least {MIN_DOMAIN_LENGTH} characters</p>
             </TooltipContent>
           </Tooltip>
         )}
