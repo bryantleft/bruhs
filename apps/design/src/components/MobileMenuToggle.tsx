@@ -16,7 +16,7 @@ const MobileMenuToggle: FunctionComponent<MobileMenuToggleProps> = ({ current })
       {/* Mobile menu button */}
       <button
         onClick={toggleMenu}
-        className="fixed top-4 left-4 z-50 lg:hidden bg-longan-900 border border-lychee-100/10 rounded-xl p-3 text-lychee-100/80 hover:text-lychee-100 hover:bg-longan-800 transition-all duration-300 active:scale-95"
+        className="fixed top-4 left-4 z-50 lg:hidden bg-longan-900 border border-rambutan-100/10 rounded-xl p-3 text-rambutan-100/80 hover:text-rambutan-100 hover:bg-longan-800 transition-all duration-300 active:scale-95"
         aria-label="Toggle menu"
       >
         <svg 

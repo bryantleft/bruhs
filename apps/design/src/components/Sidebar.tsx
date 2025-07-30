@@ -26,17 +26,17 @@ const Sidebar: FunctionComponent<SidebarProps> = ({ current, isOpen = false, onC
       
       {/* Sidebar */}
       <aside className={`
-        fixed left-0 top-0 w-80 h-screen border-r border-lychee-100/5 bg-longan-950 flex flex-col z-50 transition-all duration-500 ease-out
+        fixed left-0 top-0 w-80 h-screen border-r border-rambutan-100/5 bg-longan-950 flex flex-col z-50 transition-all duration-500 ease-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0
       `}>
-      <div className="p-4 sm:p-6 md:p-8 border-b border-lychee-100/5 flex items-center justify-between">
+      <div className="p-4 sm:p-6 md:p-8 border-b border-rambutan-100/5 flex items-center justify-between">
         <a 
           href="/"
           className={
             current === "/"
-              ? "text-h3 font-bold tracking-tighter font-krypton text-lychee-100 transition-opacity duration-200"
-              : "text-h3 font-bold tracking-tighter font-krypton text-lychee-100/40 hover:text-lychee-100/70 transition-opacity duration-200"
+              ? "text-h3 font-bold tracking-tighter font-krypton text-rambutan-100 transition-opacity duration-200"
+              : "text-h3 font-bold tracking-tighter font-krypton text-rambutan-100/40 hover:text-rambutan-100/70 transition-opacity duration-200"
           }
         >
           Bruhs Design System
@@ -46,7 +46,7 @@ const Sidebar: FunctionComponent<SidebarProps> = ({ current, isOpen = false, onC
         {onClose && (
           <button
             onClick={onClose}
-            className="lg:hidden text-lychee-100/60 hover:text-lychee-100 hover:bg-longan-800/50 transition-all duration-300 p-2 rounded-lg active:scale-95"
+            className="lg:hidden text-rambutan-100/60 hover:text-rambutan-100 hover:bg-longan-800/50 transition-all duration-300 p-2 rounded-lg active:scale-95"
             aria-label="Close menu"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -70,8 +70,8 @@ const Sidebar: FunctionComponent<SidebarProps> = ({ current, isOpen = false, onC
                   <span
                     className={
                       isActive
-                        ? "text-h3 sm:text-h2 font-bold tracking-tighter font-krypton text-lychee-100 transition-all duration-300 mb-1"
-                        : "text-h3 sm:text-h2 font-bold tracking-tighter font-krypton text-lychee-100/40 group-hover:text-lychee-100/80 transition-all duration-300 mb-1 group-hover:translate-x-1"
+                        ? "text-h3 sm:text-h2 font-bold tracking-tighter font-krypton text-rambutan-100 transition-all duration-300 mb-1"
+                        : "text-h3 sm:text-h2 font-bold tracking-tighter font-krypton text-rambutan-100/40 group-hover:text-rambutan-100/80 transition-all duration-300 mb-1 group-hover:translate-x-1"
                     }
                   >
                     {link.label}

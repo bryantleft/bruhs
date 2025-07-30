@@ -114,13 +114,13 @@ export default BruhsSVG;`;
               onClick={() => setActiveColor(color)}
               className={`px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-label transition-all flex items-center gap-2 ${
                 activeColor.id === color.id
-                  ? "bg-longan-900 text-lychee-100 ring-2 ring-lychee-100/50"
-                  : "bg-longan-800/50 text-lychee-300 hover:bg-longan-800"
+                  ? "bg-longan-900 text-rambutan-100 ring-2 ring-rambutan-100/50"
+                  : "bg-longan-800/50 text-rambutan-300 hover:bg-longan-800"
               }`}
               aria-label={`Switch to ${color.name} color`}
             >
               <span 
-                className="w-3 h-3 sm:w-4 sm:h-4 rounded-full border border-lychee-100/20" 
+                className="w-3 h-3 sm:w-4 sm:h-4 rounded-full border border-rambutan-100/20" 
                 style={{ backgroundColor: color.baseColor }}
               />
               <span className="hidden sm:inline">{color.name}</span>
@@ -132,13 +132,13 @@ export default BruhsSVG;`;
         {/* View Mode Toggle */}
         <div className="px-4 sm:px-6 md:px-8 pb-4 sm:pb-6 md:pb-8">
           <div className="flex justify-center">
-            <div className="inline-flex rounded-lg bg-longan-800/50 p-1 border border-lychee-100/10">
+            <div className="inline-flex rounded-lg bg-longan-800/50 p-1 border border-rambutan-100/10">
               <button
                 onClick={() => setViewMode('preview')}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
                   viewMode === 'preview'
                     ? 'bg-persimmon-500 text-white shadow-sm'
-                    : 'text-lychee-300 hover:text-lychee-100 hover:bg-longan-800/50'
+                    : 'text-rambutan-300 hover:text-rambutan-100 hover:bg-longan-800/50'
                 }`}
               >
                 <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -152,7 +152,7 @@ export default BruhsSVG;`;
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
                   viewMode === 'code'
                     ? 'bg-persimmon-500 text-white shadow-sm'
-                    : 'text-lychee-300 hover:text-lychee-100 hover:bg-longan-800/50'
+                    : 'text-rambutan-300 hover:text-rambutan-100 hover:bg-longan-800/50'
                 }`}
               >
                 <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -188,7 +188,7 @@ export default BruhsSVG;`;
                 {/* Navigation Arrows */}
                 <button
                   onClick={() => handleVariantChange((activeVariantIndex - 1 + variants.length) % variants.length)}
-                  className="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-longan-800/80 backdrop-blur-sm border border-lychee-100/10 flex items-center justify-center text-lychee-100/80 hover:text-lychee-100 hover:bg-longan-700/90 transition-all duration-300 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-persimmon-400/50 cursor-pointer"
+                  className="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-longan-800/80 backdrop-blur-sm border border-rambutan-100/10 flex items-center justify-center text-rambutan-100/80 hover:text-rambutan-100 hover:bg-longan-700/90 transition-all duration-300 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-persimmon-400/50 cursor-pointer"
                   aria-label={`Switch to ${prevVariant.name} variant`}
                 >
                   <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -198,7 +198,7 @@ export default BruhsSVG;`;
 
                 <button
                   onClick={() => handleVariantChange((activeVariantIndex + 1) % variants.length)}
-                  className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-longan-800/80 backdrop-blur-sm border border-lychee-100/10 flex items-center justify-center text-lychee-100/80 hover:text-lychee-100 hover:bg-longan-700/90 transition-all duration-300 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-persimmon-400/50 cursor-pointer"
+                  className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-longan-800/80 backdrop-blur-sm border border-rambutan-100/10 flex items-center justify-center text-rambutan-100/80 hover:text-rambutan-100 hover:bg-longan-700/90 transition-all duration-300 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-persimmon-400/50 cursor-pointer"
                   aria-label={`Switch to ${nextVariant.name} variant`}
                 >
                   <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -221,9 +221,9 @@ export default BruhsSVG;`;
         {/* Variant Info and Navigation */}
         <div className="p-4 sm:p-6 md:p-8 text-center">
           <div className="mb-4">
-            <h3 className="text-h2 sm:text-h1 font-bold text-lychee-100 mb-2">{activeVariant.name}</h3>
-            <p className="text-body sm:text-body-lg text-lychee-200">{activeVariant.description}</p>
-            <p className="text-label text-lychee-300 mt-2">
+            <h3 className="text-h2 sm:text-h1 font-bold text-rambutan-100 mb-2">{activeVariant.name}</h3>
+            <p className="text-body sm:text-body-lg text-rambutan-200">{activeVariant.description}</p>
+            <p className="text-label text-rambutan-300 mt-2">
               {activeColor.name} Variant
             </p>
           </div>
@@ -237,7 +237,7 @@ export default BruhsSVG;`;
                 className={`w-3 h-3 rounded-full transition-all duration-300 ${
                   index === activeVariantIndex
                     ? 'bg-persimmon-500 scale-125'
-                    : 'bg-lychee-100/30 hover:bg-lychee-100/60'
+                    : 'bg-rambutan-100/30 hover:bg-rambutan-100/60'
                 }`}
                 aria-label={`Switch to ${variant.name} variant`}
               />

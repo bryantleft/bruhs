@@ -11,11 +11,11 @@ export function DomainCard({ domain }: DomainCardProps) {
   const getBorderColor = () => {
     switch (domain.status) {
       case "available":
-        return "border-guava-600";
+        return "border-pandan-600";
       case "unavailable":
-        return "border-rambutan-600";
+        return "border-lychee-600";
       case "error":
-        return "border-rambutan-600";
+        return "border-lychee-600";
       default:
         return "border-longan-600";
     }
@@ -27,18 +27,18 @@ export function DomainCard({ domain }: DomainCardProps) {
     >
       <CardContent className="flex h-full items-center justify-between py-0">
         {domain.status === "unknown" ? (
-          <div className="flex items-center space-x-2 text-lychee-400">
-            <div className="h-4 w-4 animate-spin rounded-full border-[1.5px] border-lychee-400 border-t-transparent" />
+          <div className="flex items-center space-x-2 text-rambutan-400">
+            <div className="h-4 w-4 animate-spin rounded-full border-[1.5px] border-rambutan-400 border-t-transparent" />
             <span className="font-bold text-base">Checking...</span>
           </div>
         ) : (
           <h3
             className={`flex min-w-0 font-bold text-base leading-tight ${
               domain.status === "unavailable"
-                ? "text-lychee-400 line-through"
+                ? "text-rambutan-400 line-through"
                 : domain.status === "error"
-                  ? "text-rambutan-400"
-                  : "text-lychee-100"
+                  ? "text-lychee-400"
+                  : "text-rambutan-100"
             }`}
           >
             <span className="truncate">{domain.domain}</span>
@@ -49,7 +49,7 @@ export function DomainCard({ domain }: DomainCardProps) {
         {domain.status === "error" && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="ml-2 flex-shrink-0 cursor-help text-rambutan-400">
+              <div className="ml-2 flex-shrink-0 cursor-help text-lychee-400">
                 <AlertTriangle size={16} />
               </div>
             </TooltipTrigger>

@@ -22,12 +22,12 @@ const ColorCard: FunctionComponent<Props> = ({ color }) => {
   const mainSwatch = color.swatches.find(s => s.name.endsWith("500"));
 
   return (
-    <div className="relative group rounded-xl overflow-hidden shadow-sm border border-longan-950/5 dark:border-lychee-50/5 bg-lychee-50 dark:bg-longan-950">
+    <div className="relative group rounded-xl overflow-hidden shadow-sm border border-longan-950/5 dark:border-rambutan-50/5 bg-rambutan-50 dark:bg-longan-950">
       <div className={`h-24 w-full ${mainSwatch?.className} flex items-center justify-center`}>
-        <h3 className="text-h3 font-bold text-lychee-50/80 drop-shadow-lg" style={{fontFeatureSettings: "'ss01'"}}>{color.name}</h3>
+        <h3 className="text-h3 font-bold text-rambutan-50/80 drop-shadow-lg" style={{fontFeatureSettings: "'ss01'"}}>{color.name}</h3>
       </div>
       <div className="p-3 md:p-4">
-        <div className="flex flex-row rounded-lg overflow-hidden border border-longan-950/10 dark:border-lychee-50/10">
+        <div className="flex flex-row rounded-lg overflow-hidden border border-longan-950/10 dark:border-rambutan-50/10">
           {color.swatches.map(swatch => (
             <button
               key={swatch.variable}
@@ -36,7 +36,7 @@ const ColorCard: FunctionComponent<Props> = ({ color }) => {
               onClick={() => handleCopy(swatch.variable)}
               aria-label={`Copy ${swatch.variable}`}
             >
-              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max px-2 py-1 bg-longan-800 text-lychee-50 text-label rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max px-2 py-1 bg-longan-800 text-rambutan-50 text-label rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
                 {swatch.name.split(' ').pop()}
               </span>
               {copied === swatch.variable && (

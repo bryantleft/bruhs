@@ -150,14 +150,14 @@ export function SearchInput({
           value={state.inputValue}
           onChange={handleInputChange}
           placeholder={placeholder}
-          className="h-14 w-full rounded-xl border-[1.5px] border-longan-700 bg-longan-900 px-6 text-lg text-lychee-100 placeholder-lychee-400 transition-all duration-200 focus-visible:border-mangosteen-500 disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-14 w-full rounded-xl border-[1.5px] border-longan-700 bg-longan-900 px-6 text-lg text-rambutan-100 placeholder-rambutan-400 transition-all duration-200 focus-visible:border-mangosteen-500 disabled:cursor-not-allowed disabled:opacity-50"
           autoComplete="off"
         />
 
         {hasInvalidTld && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="-translate-y-1/2 absolute top-1/2 right-4 cursor-help text-rambutan-400">
+              <div className="-translate-y-1/2 absolute top-1/2 right-4 cursor-help text-lychee-400">
                 <AlertTriangle size={16} />
               </div>
             </TooltipTrigger>

@@ -51,10 +51,10 @@ export const colorVariations = [
     colorName: "yellow"
   },
   {
-    id: "rambutan",
-    name: "Rambutan",
-    baseColor: "#ef4444", // Using a red shade similar to rambutan-500
-    colorName: "rambutan"
+    id: "lychee",
+    name: "Lychee",
+    baseColor: "#ef4444", // Using a red shade similar to lychee-500
+    colorName: "lychee"
   },
   {
     id: "persimmon",
@@ -69,10 +69,10 @@ export const colorVariations = [
     colorName: "durian"
   },
   {
-    id: "guava",
-    name: "Guava",
-    baseColor: "#84cc16", // Using a green shade similar to guava-500
-    colorName: "guava"
+    id: "pandan",
+    name: "Pandan",
+    baseColor: "#84cc16", // Using a green shade similar to pandan-500
+    colorName: "pandan"
   },
   {
     id: "blueberry",

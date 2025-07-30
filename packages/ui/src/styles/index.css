@@ -18,19 +18,19 @@
   --color-dragonfruit-950: oklch(0.157 0.106 342.7);
   --color-dragonfruit: var(--color-dragonfruit-500);
 
-  /* Rambutan Colors (Red) */
-  --color-rambutan-50: oklch(0.972 0.015 25.6);
-  --color-rambutan-100: oklch(0.938 0.033 25.6);
-  --color-rambutan-200: oklch(0.874 0.058 25.5);
-  --color-rambutan-300: oklch(0.786 0.094 25.3);
-  --color-rambutan-400: oklch(0.679 0.135 25.1);
-  --color-rambutan-500: oklch(0.589 0.173 25.0);
-  --color-rambutan-600: oklch(0.506 0.197 24.9);
-  --color-rambutan-700: oklch(0.422 0.187 25.2);
-  --color-rambutan-800: oklch(0.364 0.174 25.2);
-  --color-rambutan-900: oklch(0.305 0.154 25.3);
-  --color-rambutan-950: oklch(0.163 0.096 25.3);
-  --color-rambutan: var(--color-rambutan-600);
+  /* Lychee Colors (Red) */
+  --color-lychee-50: oklch(0.972 0.015 25.6);
+  --color-lychee-100: oklch(0.938 0.033 25.6);
+  --color-lychee-200: oklch(0.874 0.058 25.5);
+  --color-lychee-300: oklch(0.786 0.094 25.3);
+  --color-lychee-400: oklch(0.679 0.135 25.1);
+  --color-lychee-500: oklch(0.589 0.173 25.0);
+  --color-lychee-600: oklch(0.506 0.197 24.9);
+  --color-lychee-700: oklch(0.422 0.187 25.2);
+  --color-lychee-800: oklch(0.364 0.174 25.2);
+  --color-lychee-900: oklch(0.305 0.154 25.3);
+  --color-lychee-950: oklch(0.163 0.096 25.3);
+  --color-lychee: var(--color-lychee-600);
 
   /* Persimmon Colors (Orange) */
   --color-persimmon-50: oklch(0.972 0.016 87.89);
@@ -60,19 +60,19 @@
   --color-durian-950: oklch(0.234 0.034 55.87);
   --color-durian: var(--color-durian-500);
 
-  /* Guava Colors (Green) */
-  --color-guava-50: oklch(0.976 0.018 146.32);
-  --color-guava-100: oklch(0.955 0.036 142.85);
-  --color-guava-200: oklch(0.919 0.072 138.94);
-  --color-guava-300: oklch(0.856 0.115 135.12);
-  --color-guava-400: oklch(0.741 0.152 131.89);
-  --color-guava-500: oklch(0.665 0.139 130.24);
-  --color-guava-600: oklch(0.557 0.117 128.95);
-  --color-guava-700: oklch(0.444 0.092 128.12);
-  --color-guava-800: oklch(0.366 0.073 127.45);
-  --color-guava-900: oklch(0.309 0.058 126.98);
-  --color-guava-950: oklch(0.172 0.032 126.12);
-  --color-guava: var(--color-guava-400);
+  /* Pandan Colors (Green) */
+  --color-pandan-50: oklch(0.976 0.018 146.32);
+  --color-pandan-100: oklch(0.955 0.036 142.85);
+  --color-pandan-200: oklch(0.919 0.072 138.94);
+  --color-pandan-300: oklch(0.856 0.115 135.12);
+  --color-pandan-400: oklch(0.741 0.152 131.89);
+  --color-pandan-500: oklch(0.665 0.139 130.24);
+  --color-pandan-600: oklch(0.557 0.117 128.95);
+  --color-pandan-700: oklch(0.444 0.092 128.12);
+  --color-pandan-800: oklch(0.366 0.073 127.45);
+  --color-pandan-900: oklch(0.309 0.058 126.98);
+  --color-pandan-950: oklch(0.172 0.032 126.12);
+  --color-pandan: var(--color-pandan-400);
 
   /* Blueberry Colors (Blue) */
   --color-blueberry-50: oklch(0.969 0.023 259.45);
@@ -102,19 +102,19 @@
   --color-mangosteen-950: oklch(0.245 0.048 280.73);
   --color-mangosteen: var(--color-mangosteen-600);
 
-  /* Lychee Colors (Foreground/Gray/Neutral) */
-  --color-lychee-50: oklch(0.971 0.006 68.42);
-  --color-lychee-100: oklch(0.951 0.012 65.23);
-  --color-lychee-200: oklch(0.917 0.018 62.15);
-  --color-lychee-300: oklch(0.863 0.024 58.94);
-  --color-lychee-400: oklch(0.767 0.031 55.87);
-  --color-lychee-500: oklch(0.697 0.026 52.34);
-  --color-lychee-600: oklch(0.597 0.022 48.76);
-  --color-lychee-700: oklch(0.517 0.018 45.21);
-  --color-lychee-800: oklch(0.449 0.015 42.15);
-  --color-lychee-900: oklch(0.396 0.012 39.87);
-  --color-lychee-950: oklch(0.227 0.006 36.12);
-  --color-lychee: var(--color-lychee-500);
+  /* Rambutan Colors (Foreground/Gray/Neutral) */
+  --color-rambutan-50: oklch(0.971 0.006 68.42);
+  --color-rambutan-100: oklch(0.951 0.012 65.23);
+  --color-rambutan-200: oklch(0.917 0.018 62.15);
+  --color-rambutan-300: oklch(0.863 0.024 58.94);
+  --color-rambutan-400: oklch(0.767 0.031 55.87);
+  --color-rambutan-500: oklch(0.697 0.026 52.34);
+  --color-rambutan-600: oklch(0.597 0.022 48.76);
+  --color-rambutan-700: oklch(0.517 0.018 45.21);
+  --color-rambutan-800: oklch(0.449 0.015 42.15);
+  --color-rambutan-900: oklch(0.396 0.012 39.87);
+  --color-rambutan-950: oklch(0.227 0.006 36.12);
+  --color-rambutan: var(--color-rambutan-500);
 
   /* Longan Colors (Background/Brown/Neutral) */
   --color-longan-50: oklch(0.966 0.008 78.94);

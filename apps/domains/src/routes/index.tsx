@@ -22,7 +22,7 @@ function Home() {
         <div className="space-y-8">
           {/* Hero Section */}
           <div className="text-center">
-            <h2 className="mb-4 font-bold text-3xl text-lychee-100">
+            <h2 className="mb-4 font-bold text-3xl text-rambutan-100">
               Domain Search
             </h2>
 
@@ -34,14 +34,14 @@ function Home() {
 
           {/* Error Display */}
           {domainSearch.error && (
-            <div className="rounded-xl border border-rambutan-700 bg-rambutan-900/20 p-4">
+            <div className="rounded-xl border border-lychee-700 bg-lychee-900/20 p-4">
               <div className="flex items-start space-x-3">
-                <div className="text-rambutan-400 text-xl">⚠️</div>
+                <div className="text-lychee-400 text-xl">⚠️</div>
                 <div className="space-y-1">
-                  <h3 className="font-semibold text-rambutan-400">
+                  <h3 className="font-semibold text-lychee-400">
                     Search Error
                   </h3>
-                  <p className="text-rambutan-300 text-sm">
+                  <p className="text-lychee-300 text-sm">
                     {domainSearch.error.message}
                   </p>
                 </div>

@@ -14,9 +14,9 @@ const FontSample: FunctionComponent<Props> = ({ name, variable, className }) => 
         <button
             type="button"
             onClick={() => handleCopy(variable)}
-            className={`group relative p-5 md:p-6 rounded-lg text-left bg-longan-100 dark:bg-longan-900 border border-longan-950/5 dark:border-lychee-50/5 transition-transform duration-150 ease-in-out hover:scale-[1.02] active:scale-100 cursor-copy ${className}`}>
+            className={`group relative p-5 md:p-6 rounded-lg text-left bg-longan-100 dark:bg-longan-900 border border-longan-950/5 dark:border-rambutan-50/5 transition-transform duration-150 ease-in-out hover:scale-[1.02] active:scale-100 cursor-copy ${className}`}>
             
-            <code className="absolute top-3 right-3 md:top-4 md:right-4 text-code text-longan-500 dark:text-lychee-400 bg-longan-200 dark:bg-longan-800 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+            <code className="absolute top-3 right-3 md:top-4 md:right-4 text-code text-longan-500 dark:text-rambutan-400 bg-longan-200 dark:bg-longan-800 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
                 {variable}
             </code>
             

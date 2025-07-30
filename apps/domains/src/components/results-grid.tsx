@@ -27,7 +27,7 @@ export function ResultsGrid({
     <div className="mx-auto w-full max-w-4xl space-y-6">
       {results.length === 0 ? (
         <div className="py-8 text-center">
-          <div className="text-lychee-400">
+          <div className="text-rambutan-400">
             {emptyStateMessage || "No results found"}
           </div>
         </div>

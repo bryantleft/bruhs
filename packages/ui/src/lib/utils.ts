@@ -5,13 +5,13 @@ export const colors = {
     mouth: 'var(--color-bruh-mouth)',
   },
   dragonfruit: 'var(--color-dragonfruit)',
-  rambutan: 'var(--color-rambutan)',
+  lychee: 'var(--color-lychee)',
   persimmon: 'var(--color-persimmon)', 
   durian: 'var(--color-durian)',
-  guava: 'var(--color-guava)',
+  pandan: 'var(--color-pandan)',
   blueberry: 'var(--color-blueberry)',
   mangosteen: 'var(--color-mangosteen)',
-  lychee: 'var(--color-lychee)',
+  rambutan: 'var(--color-rambutan)',
   longan: 'var(--color-longan)',
 } as const;
 

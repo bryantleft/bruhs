@@ -11,12 +11,12 @@ const NeutralColorRow: FunctionComponent<Props> = ({ color }) => {
 
     return (
         <div>
-            <h3 className="text-h4 font-semibold mb-4 text-longan-800 dark:text-lychee-200">{color.name}</h3>
+            <h3 className="text-h4 font-semibold mb-4 text-longan-800 dark:text-rambutan-200">{color.name}</h3>
             <div className="flex flex-col gap-0.5 md:gap-1">
                 {color.swatches.map(swatch => {
                     const isDark = parseInt(swatch.variable.split('-').pop() || "0", 10) > 500;
-                    const textColor = isDark ? 'text-lychee-50' : 'text-longan-950';
-                    const subTextColor = isDark ? 'text-lychee-400' : 'text-longan-500';
+                    const textColor = isDark ? 'text-rambutan-50' : 'text-longan-950';
+                    const subTextColor = isDark ? 'text-rambutan-400' : 'text-longan-500';
 
                     return (
                         <button
