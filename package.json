@@ -6,9 +6,11 @@
 		"dev:design": "turbo run dev --filter=design",
 		"dev:www": "turbo run dev --filter=www",
 		"dev:domains": "turbo run dev --filter=domains",
+		"dev:ai": "turbo run dev --filter=ai",
 		"check:design": "turbo run check --filter=design",
 		"check:www": "turbo run check --filter=www",
-		"check:domains": "turbo run check --filter=domains"
+		"check:domains": "turbo run check --filter=domains",
+		"check:ai": "turbo run check --filter=ai"
 	},
 	"devDependencies": {
 		"turbo": "2.5.3"

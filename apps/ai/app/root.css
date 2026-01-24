@@ -1,0 +1,392 @@
+@import "tailwindcss";
+@plugin "@iconify/tailwind4" {
+  prefixes: lucide, vscode-icons;
+}
+@plugin "tailwind-scrollbar";
+
+@theme {
+  /* Bruh Colors */
+  --color-bruh-eye: oklch(0.146 0 0);
+  --color-bruh-mouth: oklch(0.666 0.175 27.34);
+  --color-bruh-base: oklch(0.8924 0.1454 94.78);
+
+  /* Dragonfruit Colors (Pink) */
+  --color-dragonfruit-50: oklch(0.969 0.019 342.5);
+  --color-dragonfruit-100: oklch(0.936 0.035 342.7);
+  --color-dragonfruit-200: oklch(0.866 0.073 342.7);
+  --color-dragonfruit-300: oklch(0.765 0.123 342.6);
+  --color-dragonfruit-400: oklch(0.65 0.18 342.5);
+  --color-dragonfruit-500: oklch(0.561 0.215 342.5);
+  --color-dragonfruit-600: oklch(0.468 0.235 342.6);
+  --color-dragonfruit-700: oklch(0.389 0.215 342.6);
+  --color-dragonfruit-800: oklch(0.325 0.191 342.7);
+  --color-dragonfruit-900: oklch(0.278 0.167 342.6);
+  --color-dragonfruit-950: oklch(0.157 0.106 342.7);
+  --color-dragonfruit: var(--color-dragonfruit-500);
+
+  /* Lychee Colors (Red) */
+  --color-lychee-50: oklch(0.972 0.015 25.6);
+  --color-lychee-100: oklch(0.938 0.033 25.6);
+  --color-lychee-200: oklch(0.874 0.058 25.5);
+  --color-lychee-300: oklch(0.786 0.094 25.3);
+  --color-lychee-400: oklch(0.679 0.135 25.1);
+  --color-lychee-500: oklch(0.589 0.173 25);
+  --color-lychee-600: oklch(0.506 0.197 24.9);
+  --color-lychee-700: oklch(0.422 0.187 25.2);
+  --color-lychee-800: oklch(0.364 0.174 25.2);
+  --color-lychee-900: oklch(0.305 0.154 25.3);
+  --color-lychee-950: oklch(0.163 0.096 25.3);
+  --color-lychee: var(--color-lychee-600);
+
+  /* Persimmon Colors (Orange) */
+  --color-persimmon-50: oklch(0.972 0.016 87.89);
+  --color-persimmon-100: oklch(0.943 0.032 85.76);
+  --color-persimmon-200: oklch(0.893 0.064 80.31);
+  --color-persimmon-300: oklch(0.831 0.096 72.45);
+  --color-persimmon-400: oklch(0.741 0.13 61.34);
+  --color-persimmon-500: oklch(0.67 0.151 55.28);
+  --color-persimmon-600: oklch(0.583 0.145 50.42);
+  --color-persimmon-700: oklch(0.496 0.121 46.85);
+  --color-persimmon-800: oklch(0.418 0.094 45.21);
+  --color-persimmon-900: oklch(0.362 0.073 43.87);
+  --color-persimmon-950: oklch(0.203 0.04 42.15);
+  --color-persimmon: var(--color-persimmon-300);
+
+  /* Durian Colors (Yellow) */
+  --color-durian-50: oklch(0.996 0.011 106.23);
+  --color-durian-100: oklch(0.992 0.021 104.85);
+  --color-durian-200: oklch(0.98 0.043 102.14);
+  --color-durian-300: oklch(0.956 0.071 98.47);
+  --color-durian-400: oklch(0.913 0.098 95.12);
+  --color-durian-500: oklch(0.876 0.11 92.85);
+  --color-durian-600: oklch(0.705 0.101 86.29);
+  --color-durian-700: oklch(0.563 0.084 76.84);
+  --color-durian-800: oklch(0.475 0.07 68.42);
+  --color-durian-900: oklch(0.411 0.058 62.15);
+  --color-durian-950: oklch(0.234 0.034 55.87);
+  --color-durian: var(--color-durian-500);
+
+  /* Pandan Colors (Green) */
+  --color-pandan-50: oklch(0.976 0.018 146.32);
+  --color-pandan-100: oklch(0.955 0.036 142.85);
+  --color-pandan-200: oklch(0.919 0.072 138.94);
+  --color-pandan-300: oklch(0.856 0.115 135.12);
+  --color-pandan-400: oklch(0.741 0.152 131.89);
+  --color-pandan-500: oklch(0.665 0.139 130.24);
+  --color-pandan-600: oklch(0.557 0.117 128.95);
+  --color-pandan-700: oklch(0.444 0.092 128.12);
+  --color-pandan-800: oklch(0.366 0.073 127.45);
+  --color-pandan-900: oklch(0.309 0.058 126.98);
+  --color-pandan-950: oklch(0.172 0.032 126.12);
+  --color-pandan: var(--color-pandan-400);
+
+  /* Blueberry Colors (Blue) */
+  --color-blueberry-50: oklch(0.969 0.023 259.45);
+  --color-blueberry-100: oklch(0.936 0.046 258.89);
+  --color-blueberry-200: oklch(0.892 0.071 258.34);
+  --color-blueberry-300: oklch(0.836 0.098 257.89);
+  --color-blueberry-400: oklch(0.762 0.125 257.45);
+  --color-blueberry-500: oklch(0.686 0.152 257.12);
+  --color-blueberry-600: oklch(0.597 0.17 256.89);
+  --color-blueberry-700: oklch(0.497 0.148 256.67);
+  --color-blueberry-800: oklch(0.428 0.118 256.45);
+  --color-blueberry-900: oklch(0.371 0.089 256.23);
+  --color-blueberry-950: oklch(0.253 0.058 256.12);
+  --color-blueberry: var(--color-blueberry-800);
+
+  /* Mangosteen Colors (Purple) */
+  --color-mangosteen-50: oklch(0.975 0.013 303.45);
+  --color-mangosteen-100: oklch(0.945 0.025 301.28);
+  --color-mangosteen-200: oklch(0.9 0.05 298.76);
+  --color-mangosteen-300: oklch(0.838 0.078 295.12);
+  --color-mangosteen-400: oklch(0.743 0.109 290.34);
+  --color-mangosteen-500: oklch(0.67 0.121 287.45);
+  --color-mangosteen-600: oklch(0.616 0.118 285.67);
+  --color-mangosteen-700: oklch(0.497 0.099 284.12);
+  --color-mangosteen-800: oklch(0.429 0.084 282.89);
+  --color-mangosteen-900: oklch(0.364 0.07 281.95);
+  --color-mangosteen-950: oklch(0.245 0.048 280.73);
+  --color-mangosteen: var(--color-mangosteen-600);
+
+  /* Rambutan Colors (Foreground/Gray/Neutral) */
+  --color-rambutan-50: oklch(0.971 0.006 68.42);
+  --color-rambutan-100: oklch(0.951 0.012 65.23);
+  --color-rambutan-200: oklch(0.917 0.018 62.15);
+  --color-rambutan-300: oklch(0.863 0.024 58.94);
+  --color-rambutan-400: oklch(0.767 0.031 55.87);
+  --color-rambutan-500: oklch(0.697 0.026 52.34);
+  --color-rambutan-600: oklch(0.597 0.022 48.76);
+  --color-rambutan-700: oklch(0.517 0.018 45.21);
+  --color-rambutan-800: oklch(0.449 0.015 42.15);
+  --color-rambutan-900: oklch(0.396 0.012 39.87);
+  --color-rambutan-950: oklch(0.227 0.006 36.12);
+  --color-rambutan: var(--color-rambutan-500);
+
+  /* Longan Colors (Background/Brown/Neutral) */
+  --color-longan-50: oklch(0.966 0.008 78.94);
+  --color-longan-100: oklch(0.918 0.015 76.32);
+  --color-longan-200: oklch(0.853 0.023 73.45);
+  --color-longan-300: oklch(0.757 0.032 70.12);
+  --color-longan-400: oklch(0.677 0.028 67.23);
+  --color-longan-500: oklch(0.62 0.024 64.87);
+  --color-longan-600: oklch(0.533 0.02 62.15);
+  --color-longan-700: oklch(0.477 0.017 59.76);
+  --color-longan-800: oklch(0.385 0.013 57.12);
+  --color-longan-900: oklch(0.348 0.011 55.23);
+  --color-longan-950: oklch(0.209 0.006 52.89);
+  --color-longan: var(--color-longan-700);
+
+  /* Font Variables */
+  --font-argon: "MonaspaceArgonVariable";
+  --font-krypton: "MonaspaceKryptonVariable";
+  --font-neon: "MonaspaceNeonVariable";
+  --font-radon: "MonaspaceRadonVariable";
+  --font-xenon: "MonaspaceXenonVariable";
+}
+
+/* Font Face Declarations - Fonts are copied to public/fonts by build script */
+@font-face {
+  font-family: "MonaspaceArgonVariable";
+  font-stretch: 100% 125%;
+  font-style: normal;
+  font-weight: 200 800;
+  src:
+    url("/fonts/MonaspaceArgonVariable.woff2") format("woff2"),
+    url("/fonts/MonaspaceArgonVariable.woff") format("woff");
+}
+
+@font-face {
+  font-family: "MonaspaceKryptonVariable";
+  font-stretch: 100% 125%;
+  font-style: normal;
+  font-weight: 200 800;
+  src:
+    url("/fonts/MonaspaceKryptonVariable.woff2") format("woff2"),
+    url("/fonts/MonaspaceKryptonVariable.woff") format("woff");
+}
+
+@font-face {
+  font-family: "MonaspaceNeonVariable";
+  font-stretch: 100% 125%;
+  font-style: normal;
+  font-weight: 200 800;
+  src:
+    url("/fonts/MonaspaceNeonVariable.woff2") format("woff2"),
+    url("/fonts/MonaspaceNeonVariable.woff") format("woff");
+}
+
+@font-face {
+  font-family: "MonaspaceRadonVariable";
+  font-stretch: 100% 125%;
+  font-style: normal;
+  font-weight: 200 800;
+  src:
+    url("/fonts/MonaspaceRadonVariable.woff2") format("woff2"),
+    url("/fonts/MonaspaceRadonVariable.woff") format("woff");
+}
+
+@font-face {
+  font-family: "MonaspaceXenonVariable";
+  font-stretch: 100% 125%;
+  font-style: normal;
+  font-weight: 200 800;
+  src:
+    url("/fonts/MonaspaceXenonVariable.woff2") format("woff2"),
+    url("/fonts/MonaspaceXenonVariable.woff") format("woff");
+}
+
+/* Custom Typography Scale - Research-Based Design System */
+@layer utilities {
+  /* Display Typography - Impact and Heroes */
+  .text-display-lg {
+    font-size: 4.5rem;
+    line-height: 1.1;
+    font-weight: 300;
+    letter-spacing: -0.025em;
+  }
+
+  .text-display-md {
+    font-size: 3.5rem;
+    line-height: 1.1;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+
+  .text-display-sm {
+    font-size: 2.75rem;
+    line-height: 1.15;
+    font-weight: 400;
+    letter-spacing: -0.015em;
+  }
+
+  /* Headings - Structured Hierarchy */
+  .text-h1 {
+    font-size: 2rem;
+    line-height: 1.25;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  .text-h2 {
+    font-size: 1.5rem;
+    line-height: 1.3;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+  }
+
+  .text-h3 {
+    font-size: 1.25rem;
+    line-height: 1.3;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  .text-h4 {
+    font-size: 1.125rem;
+    line-height: 1.4;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  /* Body Text - Optimized for Reading */
+  .text-body-lg {
+    font-size: 1.125rem;
+    line-height: 1.6;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+
+  .text-body {
+    font-size: 1rem;
+    line-height: 1.6;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+
+  .text-body-sm {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+
+  /* Labels - UI and Metadata */
+  .text-label-lg {
+    font-size: 1rem;
+    line-height: 1.5;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  .text-label {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  .text-label-sm {
+    font-size: 0.75rem;
+    line-height: 1.5;
+    font-weight: 500;
+    letter-spacing: 0.025em;
+  }
+
+  /* Code - Monospace Technical Content */
+  .text-code-lg {
+    font-size: 1rem;
+    line-height: 1.6;
+    font-weight: 400;
+    letter-spacing: 0;
+    font-family:
+      var(--font-neon), ui-monospace, "Cascadia Code", "Source Code Pro", Menlo,
+      Consolas, "DejaVu Sans Mono", monospace;
+  }
+
+  .text-code {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    font-weight: 400;
+    letter-spacing: 0;
+    font-family:
+      var(--font-neon), ui-monospace, "Cascadia Code", "Source Code Pro", Menlo,
+      Consolas, "DejaVu Sans Mono", monospace;
+  }
+
+  .text-code-sm {
+    font-size: 0.75rem;
+    line-height: 1.5;
+    font-weight: 400;
+    letter-spacing: 0;
+    font-family:
+      var(--font-neon), ui-monospace, "Cascadia Code", "Source Code Pro", Menlo,
+      Consolas, "DejaVu Sans Mono", monospace;
+  }
+
+  /* Interactive Elements - Buttons and Actions */
+  .text-button-lg {
+    font-size: 1rem;
+    line-height: 1.5;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  .text-button {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  .text-button-sm {
+    font-size: 0.75rem;
+    line-height: 1.5;
+    font-weight: 500;
+    letter-spacing: 0.025em;
+  }
+
+  /* Responsive Scaling */
+  @media (max-width: 768px) {
+    .text-display-lg {
+      font-size: 3rem;
+      line-height: 1.1;
+    }
+
+    .text-display-md {
+      font-size: 2.5rem;
+      line-height: 1.15;
+    }
+
+    .text-display-sm {
+      font-size: 2rem;
+      line-height: 1.2;
+    }
+
+    .text-h1 {
+      font-size: 1.75rem;
+      line-height: 1.25;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .text-display-lg {
+      font-size: 2.5rem;
+      line-height: 1.15;
+    }
+
+    .text-display-md {
+      font-size: 2rem;
+      line-height: 1.2;
+    }
+
+    .text-h1 {
+      font-size: 1.5rem;
+      line-height: 1.3;
+    }
+
+    .text-body {
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+  }
+}
