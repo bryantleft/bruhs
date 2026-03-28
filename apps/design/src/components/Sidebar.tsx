@@ -26,23 +26,30 @@ const Sidebar: FunctionComponent<SidebarProps> = ({ current, isOpen = false, onC
       
       {/* Sidebar */}
       <aside className={`
-        fixed left-0 top-0 w-80 h-screen border-r border-rambutan-100/5 bg-longan-950 flex flex-col z-50 transition-all duration-500 ease-out
+        fixed left-0 top-0 w-64 h-screen border-r border-rambutan-100/5 bg-longan-950 flex flex-col z-50 transition-all duration-500 ease-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0
       `}>
-      <div className="p-4 sm:p-6 md:p-8 border-b border-rambutan-100/5 flex items-center justify-between">
-        <a 
+      <div className="p-5 border-b border-rambutan-100/5 flex items-center justify-between">
+        <a
           href="/"
-          className={
-            current === "/"
-              ? "text-h3 font-bold tracking-tighter font-krypton text-rambutan-100 transition-opacity duration-200"
-              : "text-h3 font-bold tracking-tighter font-krypton text-rambutan-100/40 hover:text-rambutan-100/70 transition-opacity duration-200"
-          }
+          className="flex items-center gap-3"
         >
-          Bruhs Design System
+          <svg viewBox="0 0 600 600" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 shrink-0">
+            <circle cx="300" cy="300" r="300" fill="oklch(0.8924 0.1454 94.78)" />
+            <ellipse cx="198" cy="223" rx="40" ry="10" fill="oklch(0.146 0.000 0)" />
+            <ellipse cx="401" cy="223" rx="40" ry="10" fill="oklch(0.146 0.000 0)" />
+            <ellipse cx="307" cy="378" rx="120" ry="10" fill="oklch(0.666 0.175 27.34)" />
+          </svg>
+          <span className={
+            current === "/"
+              ? "text-h4 font-bold tracking-tighter font-krypton text-rambutan-100"
+              : "text-h4 font-bold tracking-tighter font-krypton text-rambutan-100/40 hover:text-rambutan-100/70 transition-opacity duration-200"
+          }>
+            Bruhs
+          </span>
         </a>
-        
-        {/* Mobile close button */}
+
         {onClose && (
           <button
             onClick={onClose}
@@ -56,8 +63,8 @@ const Sidebar: FunctionComponent<SidebarProps> = ({ current, isOpen = false, onC
         )}
       </div>
       
-      <nav className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto">
-        <ul className="space-y-4 sm:space-y-6 md:space-y-8">
+      <nav className="flex-1 p-5 overflow-y-auto">
+        <ul className="space-y-2">
           {links.map(link => {
             const isActive = link.href === path;
             return (
