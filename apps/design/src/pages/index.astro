@@ -3,15 +3,58 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 ---
 
 <BaseLayout>
-  <div class="p-6 md:p-8 flex flex-col gap-12 md:gap-16">
+  <div class="p-6 md:p-8 flex flex-col gap-8">
     <section>
-      <p class="text-body-lg text-rambutan-300">
-        A 
-        <a href="https://bnle.me" class="font-semibold text-rambutan-100 hover:text-rambutan-50 underline decoration-rambutan-100/20 hover:decoration-rambutan-100/40 transition">
+      <h1 class="text-display-sm font-bold tracking-tight mb-2">Bruhs</h1>
+      <p class="text-body-lg text-rambutan-400">
+        A
+        <a href="https://bnle.me" class="font-medium text-rambutan-200 hover:text-rambutan-100 underline decoration-rambutan-100/20 hover:decoration-rambutan-100/40 transition">
           personal
         </a>
-        modern design system.
+        design system built on fruit-themed tokens, OKLCH color science, and the Monaspace type family.
       </p>
     </section>
+
+    <nav class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <!-- Colors Card -->
+      <a href="/colors" class="group block rounded-xl border border-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:border-rambutan-100/15 hover:bg-longan-900/80">
+        <div class="flex gap-1 mb-4 h-8">
+          <div class="flex-1 rounded-l-md bg-lychee-500"></div>
+          <div class="flex-1 bg-persimmon-500"></div>
+          <div class="flex-1 bg-durian-500"></div>
+          <div class="flex-1 bg-pandan-500"></div>
+          <div class="flex-1 bg-blueberry-500"></div>
+          <div class="flex-1 bg-mangosteen-500"></div>
+          <div class="flex-1 rounded-r-md bg-dragonfruit-500"></div>
+        </div>
+        <h2 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Colors</h2>
+        <p class="text-body-sm text-rambutan-400">7 accent families + 2 neutrals in OKLCH</p>
+      </a>
+
+      <!-- Typography Card -->
+      <a href="/typography" class="group block rounded-xl border border-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:border-rambutan-100/15 hover:bg-longan-900/80">
+        <div class="mb-4 h-8 flex items-end gap-2 overflow-hidden">
+          <span class="text-2xl font-light font-krypton text-rambutan-300 leading-none">Aa</span>
+          <span class="text-lg font-normal font-krypton text-rambutan-500 leading-none">Bb</span>
+          <span class="text-sm font-medium font-krypton text-rambutan-600 leading-none">Cc</span>
+        </div>
+        <h2 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Typography</h2>
+        <p class="text-body-sm text-rambutan-400">Monaspace superfamily with 6-category scale</p>
+      </a>
+
+      <!-- Bruhs Card -->
+      <a href="/bruhs" class="group block rounded-xl border border-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:border-rambutan-100/15 hover:bg-longan-900/80">
+        <div class="mb-4 h-8 flex items-center justify-center">
+          <svg viewBox="0 0 600 600" fill="none" xmlns="http://www.w3.org/2000/svg" class="h-8 w-8">
+            <circle cx="300" cy="300" r="300" fill="oklch(0.8924 0.1454 94.78)" />
+            <ellipse cx="198" cy="223" rx="40" ry="10" fill="oklch(0.146 0.000 0)" />
+            <ellipse cx="401" cy="223" rx="40" ry="10" fill="oklch(0.146 0.000 0)" />
+            <ellipse cx="307" cy="378" rx="120" ry="10" fill="oklch(0.666 0.175 27.34)" />
+          </svg>
+        </div>
+        <h2 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Bruhs</h2>
+        <p class="text-body-sm text-rambutan-400">Customizable logo with 3 variants and 8 palettes</p>
+      </a>
+    </nav>
   </div>
 </BaseLayout>
