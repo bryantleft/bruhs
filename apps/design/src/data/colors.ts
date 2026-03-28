@@ -4,6 +4,7 @@ export const accentColors: ColorGroup[] = [
   {
     name: "Lychee",
     prefix: "lychee",
+    description: "Errors, destructive actions, and critical alerts",
     swatches: [
       { name: "Lychee 50", variable: "--color-lychee-50", className: "bg-lychee-50" },
       { name: "Lychee 100", variable: "--color-lychee-100", className: "bg-lychee-100" },
@@ -21,6 +22,7 @@ export const accentColors: ColorGroup[] = [
   {
     name: "Persimmon",
     prefix: "persimmon",
+    description: "Primary actions, active states, and navigation accents",
     swatches: [
       { name: "Persimmon 50", variable: "--color-persimmon-50", className: "bg-persimmon-50" },
       { name: "Persimmon 100", variable: "--color-persimmon-100", className: "bg-persimmon-100" },
@@ -38,6 +40,7 @@ export const accentColors: ColorGroup[] = [
   {
     name: "Durian",
     prefix: "durian",
+    description: "Warnings, attention-grabbing highlights, and branding",
     swatches: [
       { name: "Durian 50", variable: "--color-durian-50", className: "bg-durian-50" },
       { name: "Durian 100", variable: "--color-durian-100", className: "bg-durian-100" },
@@ -55,6 +58,7 @@ export const accentColors: ColorGroup[] = [
   {
     name: "Pandan",
     prefix: "pandan",
+    description: "Success states, confirmations, and availability",
     swatches: [
       { name: "Pandan 50", variable: "--color-pandan-50", className: "bg-pandan-50" },
       { name: "Pandan 100", variable: "--color-pandan-100", className: "bg-pandan-100" },
@@ -72,6 +76,7 @@ export const accentColors: ColorGroup[] = [
   {
     name: "Blueberry",
     prefix: "blueberry",
+    description: "Informational elements, links, and secondary accents",
     swatches: [
       { name: "Blueberry 50", variable: "--color-blueberry-50", className: "bg-blueberry-50" },
       { name: "Blueberry 100", variable: "--color-blueberry-100", className: "bg-blueberry-100" },
@@ -89,6 +94,7 @@ export const accentColors: ColorGroup[] = [
   {
     name: "Mangosteen",
     prefix: "mangosteen",
+    description: "Decorative accents, tags, and creative elements",
     swatches: [
       { name: "Mangosteen 50", variable: "--color-mangosteen-50", className: "bg-mangosteen-50" },
       { name: "Mangosteen 100", variable: "--color-mangosteen-100", className: "bg-mangosteen-100" },
@@ -106,6 +112,7 @@ export const accentColors: ColorGroup[] = [
   {
     name: "Dragonfruit",
     prefix: "dragonfruit",
+    description: "Featured content, badges, and playful highlights",
     swatches: [
       { name: "Dragonfruit 50", variable: "--color-dragonfruit-50", className: "bg-dragonfruit-50" },
       { name: "Dragonfruit 100", variable: "--color-dragonfruit-100", className: "bg-dragonfruit-100" },
@@ -126,6 +133,7 @@ export const neutralColors: ColorGroup[] = [
   {
     name: "Rambutan (Foreground)",
     prefix: "rambutan",
+    description: "Text, icons, borders, and foreground elements",
     swatches: [
       { name: "Rambutan (Foreground) 50", variable: "--color-rambutan-50", className: "bg-rambutan-50" },
       { name: "Rambutan (Foreground) 100", variable: "--color-rambutan-100", className: "bg-rambutan-100" },
@@ -143,6 +151,7 @@ export const neutralColors: ColorGroup[] = [
   {
     name: "Longan (Background)",
     prefix: "longan",
+    description: "Surfaces, containers, and background layers",
     swatches: [
       { name: "Longan (Background) 50", variable: "--color-longan-50", className: "bg-longan-50" },
       { name: "Longan (Background) 100", variable: "--color-longan-100", className: "bg-longan-100" },

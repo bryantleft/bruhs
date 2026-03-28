@@ -10,6 +10,7 @@ type Swatch = {
 export type ColorGroup = {
   name: string;
   prefix: string;
+  description: string;
   swatches: Swatch[];
 };
 
@@ -23,10 +24,11 @@ const ColorCard: FunctionComponent<Props> = ({ color }) => {
 
   return (
     <div className="relative group rounded-xl overflow-hidden shadow-sm border border-longan-950/5 dark:border-rambutan-50/5 bg-rambutan-50 dark:bg-longan-950">
-      <div className={`h-24 w-full ${mainSwatch?.className} flex items-center justify-center`}>
+      <div className={`h-24 w-full ${mainSwatch?.className} flex flex-col items-center justify-center`}>
         <h3 className="text-h3 font-bold text-rambutan-50/80 drop-shadow-lg" style={{fontFeatureSettings: "'ss01'"}}>{color.name}</h3>
+        <p className="text-label-sm text-rambutan-50/50 drop-shadow-lg mt-1">{color.description}</p>
       </div>
-      <div className="p-3 md:p-4">
+      <div className="p-3 md:p-4 space-y-3">
         <div className="flex flex-row rounded-lg overflow-hidden border border-longan-950/10 dark:border-rambutan-50/10">
           {color.swatches.map(swatch => (
             <button
@@ -46,6 +48,30 @@ const ColorCard: FunctionComponent<Props> = ({ color }) => {
               )}
             </button>
           ))}
+        </div>
+        {/* In-use preview */}
+        <div className="flex items-center gap-2 pt-1">
+          <span
+            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-medium"
+            style={{
+              backgroundColor: `color-mix(in oklch, var(--color-${color.prefix}-500) 15%, transparent)`,
+              color: `var(--color-${color.prefix}-400)`,
+            }}
+          >
+            Label
+          </span>
+          <span
+            className="text-body-sm"
+            style={{ color: `var(--color-${color.prefix}-400)` }}
+          >
+            Sample text
+          </span>
+          <span
+            className="ml-auto inline-flex items-center justify-center px-3 py-1 rounded-md text-label-sm font-medium text-rambutan-50"
+            style={{ backgroundColor: `var(--color-${color.prefix}-600)` }}
+          >
+            Action
+          </span>
         </div>
       </div>
     </div>
