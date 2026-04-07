@@ -26,7 +26,7 @@ const ColorCard: FunctionComponent<Props> = ({ color }) => {
     <div className="relative group rounded-xl overflow-hidden shadow-sm border border-longan-950/5 dark:border-rambutan-50/5 bg-rambutan-50 dark:bg-longan-950">
       <div className={`h-24 w-full ${mainSwatch?.className} flex flex-col items-center justify-center`}>
         <h3 className="text-h3 font-bold text-rambutan-50/80 drop-shadow-lg" style={{fontFeatureSettings: "'ss01'"}}>{color.name}</h3>
-        <p className="text-label-sm text-rambutan-50/50 drop-shadow-lg mt-1">{color.description}</p>
+        <p className="text-label-sm lg:text-body-sm text-rambutan-50/70 drop-shadow-lg mt-1 px-4 text-center max-w-prose">{color.description}</p>
       </div>
       <div className="p-3 md:p-4 space-y-3">
         <div className="flex flex-row rounded-lg overflow-hidden border border-longan-950/10 dark:border-rambutan-50/10">
