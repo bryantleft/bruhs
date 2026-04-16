@@ -104,7 +104,7 @@ export default BruhsSVG;`;
 
   return (
     <section className="space-y-6">
-      <div className="rounded-3xl overflow-hidden">
+      <div className="rounded-pomelo overflow-hidden">
         {/* Color Variation Selector */}
         <div className="p-4 sm:p-6 md:p-8">
           <div className="flex flex-wrap gap-2 justify-center max-w-4xl mx-auto">
@@ -112,7 +112,7 @@ export default BruhsSVG;`;
             <button
               key={color.id}
               onClick={() => setActiveColor(color)}
-              className={`px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-label transition-all flex items-center gap-2 ${
+              className={`px-3 py-2 sm:px-4 sm:py-2 rounded-grape text-label transition-all flex items-center gap-2 ${
                 activeColor.id === color.id
                   ? "bg-longan-900 text-rambutan-100 ring-2 ring-rambutan-100/50"
                   : "bg-longan-800/50 text-rambutan-300 hover:bg-longan-800"
@@ -120,7 +120,7 @@ export default BruhsSVG;`;
               aria-label={`Switch to ${color.name} color`}
             >
               <span 
-                className="w-3 h-3 sm:w-4 sm:h-4 rounded-full border border-rambutan-100/20" 
+                className="w-3 h-3 sm:w-4 sm:h-4 rounded-orb border border-rambutan-100/20" 
                 style={{ backgroundColor: color.baseColor }}
               />
               <span className="hidden sm:inline">{color.name}</span>
@@ -132,12 +132,12 @@ export default BruhsSVG;`;
         {/* View Mode Toggle */}
         <div className="px-4 sm:px-6 md:px-8 pb-4 sm:pb-6 md:pb-8">
           <div className="flex justify-center">
-            <div className="inline-flex rounded-lg bg-longan-800/50 p-1 border border-rambutan-100/10">
+            <div className="inline-flex rounded-grape bg-longan-800/50 p-1 border border-rambutan-100/10">
               <button
                 onClick={() => setViewMode('preview')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                className={`px-4 py-2 rounded-grape text-sm font-medium transition-all ${
                   viewMode === 'preview'
-                    ? 'bg-persimmon-500 text-white shadow-sm'
+                    ? 'bg-persimmon-500 text-longan-950'
                     : 'text-rambutan-300 hover:text-rambutan-100 hover:bg-longan-800/50'
                 }`}
               >
@@ -149,9 +149,9 @@ export default BruhsSVG;`;
               </button>
               <button
                 onClick={() => setViewMode('code')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                className={`px-4 py-2 rounded-grape text-sm font-medium transition-all ${
                   viewMode === 'code'
-                    ? 'bg-persimmon-500 text-white shadow-sm'
+                    ? 'bg-persimmon-500 text-longan-950'
                     : 'text-rambutan-300 hover:text-rambutan-100 hover:bg-longan-800/50'
                 }`}
               >
@@ -181,14 +181,14 @@ export default BruhsSVG;`;
                     eyeColor={contrastingColors.eyes}
                     mouthColor={contrastingColors.mouth}
                     variant={activeVariant.id as 'left' | 'original' | 'right'}
-                    className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 lg:w-56 lg:h-56 transition-all duration-500 drop-shadow-2xl"
+                    className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 lg:w-56 lg:h-56 transition-all duration-500"
                   />
                 </div>
 
                 {/* Navigation Arrows */}
                 <button
                   onClick={() => handleVariantChange((activeVariantIndex - 1 + variants.length) % variants.length)}
-                  className="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-longan-800/80 backdrop-blur-sm border border-rambutan-100/10 flex items-center justify-center text-rambutan-100/80 hover:text-rambutan-100 hover:bg-longan-700/90 transition-all duration-300 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-persimmon-400/50 cursor-pointer"
+                  className="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-orb bg-longan-800/80 backdrop-blur-sm border border-rambutan-100/10 flex items-center justify-center text-rambutan-100/80 hover:text-rambutan-100 hover:bg-longan-700/90 transition-all duration-300 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-persimmon-400/50 cursor-pointer"
                   aria-label={`Switch to ${prevVariant.name} variant`}
                 >
                   <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -198,7 +198,7 @@ export default BruhsSVG;`;
 
                 <button
                   onClick={() => handleVariantChange((activeVariantIndex + 1) % variants.length)}
-                  className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-longan-800/80 backdrop-blur-sm border border-rambutan-100/10 flex items-center justify-center text-rambutan-100/80 hover:text-rambutan-100 hover:bg-longan-700/90 transition-all duration-300 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-persimmon-400/50 cursor-pointer"
+                  className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-orb bg-longan-800/80 backdrop-blur-sm border border-rambutan-100/10 flex items-center justify-center text-rambutan-100/80 hover:text-rambutan-100 hover:bg-longan-700/90 transition-all duration-300 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-persimmon-400/50 cursor-pointer"
                   aria-label={`Switch to ${nextVariant.name} variant`}
                 >
                   <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -234,7 +234,7 @@ export default BruhsSVG;`;
               <button
                 key={variant.id}
                 onClick={() => handleVariantChange(index)}
-                className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                className={`w-3 h-3 rounded-orb transition-all duration-300 ${
                   index === activeVariantIndex
                     ? 'bg-persimmon-500 scale-125'
                     : 'bg-rambutan-100/30 hover:bg-rambutan-100/60'

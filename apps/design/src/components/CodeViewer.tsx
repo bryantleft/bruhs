@@ -65,7 +65,7 @@ const CodeViewer: React.FC<CodeViewerProps> = ({ code, language, title }) => {
   }, [code]);
 
   return (
-    <div className="rounded-lg bg-longan-900 border border-rambutan-100/10 overflow-hidden">
+    <div className="rounded-grape bg-longan-900 border border-rambutan-100/10 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-rambutan-100/10">
         <div className="flex items-center">
@@ -76,7 +76,7 @@ const CodeViewer: React.FC<CodeViewerProps> = ({ code, language, title }) => {
         
         <button
           onClick={copyToClipboard}
-          className="flex items-center gap-2 px-3 py-1.5 text-xs text-rambutan-300 hover:text-rambutan-100 bg-longan-800/50 hover:bg-longan-800 rounded-md transition-all duration-200 border border-rambutan-100/10"
+          className="flex items-center gap-2 px-3 py-1.5 text-xs text-rambutan-300 hover:text-rambutan-100 bg-longan-800/50 hover:bg-longan-800 rounded-grape transition-all duration-200 border border-rambutan-100/10"
         >
           {copied ? (
             <>

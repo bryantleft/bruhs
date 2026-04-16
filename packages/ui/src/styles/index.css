@@ -116,7 +116,7 @@
   --color-rambutan-950: oklch(0.227 0.006 36.12);
   --color-rambutan: var(--color-rambutan-500);
 
-  /* Longan Colors (Background/Brown/Neutral) */
+  /* Longan Colors (Background/Brown/Neutral — warm-dark, never pure gray) */
   --color-longan-50: oklch(0.966 0.008 78.94);
   --color-longan-100: oklch(0.918 0.015 76.32);
   --color-longan-200: oklch(0.853 0.023 73.45);
@@ -125,9 +125,9 @@
   --color-longan-500: oklch(0.620 0.024 64.87);
   --color-longan-600: oklch(0.533 0.020 62.15);
   --color-longan-700: oklch(0.477 0.017 59.76);
-  --color-longan-800: oklch(0.385 0.013 57.12);
-  --color-longan-900: oklch(0.348 0.011 55.23);
-  --color-longan-950: oklch(0.209 0.006 52.89);
+  --color-longan-800: oklch(0.265 0.012 65);
+  --color-longan-900: oklch(0.220 0.011 65);
+  --color-longan-950: oklch(0.180 0.010 65);
   --color-longan: var(--color-longan-700);
 
   /* Font Variables */
@@ -136,6 +136,17 @@
   --font-neon: "MonaspaceNeonVariable";
   --font-radon: "MonaspaceRadonVariable";
   --font-xenon: "MonaspaceXenonVariable";
+
+  /* Fruit-named Radius Scale — sole vocabulary in Bruhs */
+  --radius-seed: 0.25rem;
+  --radius-grape: 0.5rem;
+  --radius-lychee: 0.875rem;
+  --radius-mango: 1.375rem;
+  --radius-pomelo: 2.25rem;
+  --radius-orb: 9999px;
+
+  /* Elevation — rings and tone steps, not drop shadows. Bloom is reserved for focus/active accents. */
+  --shadow-bloom: 0 0 24px -4px oklch(0.670 0.151 55.28 / 0.45);
 }
 
 /* Font Face Declarations - Fonts are copied to public/fonts by build script */
@@ -184,14 +195,52 @@
     url("/fonts/MonaspaceXenonVariable.woff") format("woff");
 }
 
-/* Custom Typography Scale - Research-Based Design System */
+/* Bruhs Scrollbar — warm-dark, thin, neutral throughout */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-longan-600) transparent;
+  }
+
+  *:hover {
+    scrollbar-color: var(--color-longan-500) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-longan-600);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: var(--radius-orb);
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--color-longan-500);
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+/* Monaspace Typography — all-mono system with role-assigned variants */
 @layer utilities {
-  /* Display Typography - Impact and Heroes */
+  /* Display — Krypton (geometric, imposing) */
   .text-display-lg {
     font-size: clamp(2.5rem, 4vw + 1rem, 4.5rem);
     line-height: 1.1;
     font-weight: 300;
     letter-spacing: -0.025em;
+    font-family: var(--font-krypton), ui-monospace, Menlo, monospace;
   }
 
   .text-display-md {
@@ -199,6 +248,7 @@
     line-height: 1.1;
     font-weight: 400;
     letter-spacing: -0.02em;
+    font-family: var(--font-krypton), ui-monospace, Menlo, monospace;
   }
 
   .text-display-sm {
@@ -206,14 +256,16 @@
     line-height: 1.15;
     font-weight: 400;
     letter-spacing: -0.015em;
+    font-family: var(--font-krypton), ui-monospace, Menlo, monospace;
   }
 
-  /* Headings - Structured Hierarchy */
+  /* Headings — Xenon (slab-serif, structural) */
   .text-h1 {
     font-size: clamp(1.5rem, 1.5vw + 0.75rem, 2rem);
     line-height: 1.25;
     font-weight: 500;
     letter-spacing: -0.01em;
+    font-family: var(--font-xenon), ui-monospace, Menlo, monospace;
   }
 
   .text-h2 {
@@ -221,6 +273,7 @@
     line-height: 1.3;
     font-weight: 500;
     letter-spacing: -0.005em;
+    font-family: var(--font-xenon), ui-monospace, Menlo, monospace;
   }
 
   .text-h3 {
@@ -228,6 +281,7 @@
     line-height: 1.3;
     font-weight: 500;
     letter-spacing: 0;
+    font-family: var(--font-xenon), ui-monospace, Menlo, monospace;
   }
 
   .text-h4 {
@@ -235,14 +289,16 @@
     line-height: 1.4;
     font-weight: 500;
     letter-spacing: 0;
+    font-family: var(--font-xenon), ui-monospace, Menlo, monospace;
   }
 
-  /* Body Text - Optimized for Reading */
+  /* Body — Neon (neo-grotesque, most neutral mono) */
   .text-body-lg {
     font-size: 1.125rem;
     line-height: 1.6;
     font-weight: 400;
     letter-spacing: 0;
+    font-family: var(--font-neon), ui-monospace, Menlo, monospace;
   }
 
   .text-body {
@@ -250,6 +306,7 @@
     line-height: 1.6;
     font-weight: 400;
     letter-spacing: 0;
+    font-family: var(--font-neon), ui-monospace, Menlo, monospace;
   }
 
   .text-body-sm {
@@ -257,14 +314,16 @@
     line-height: 1.5;
     font-weight: 400;
     letter-spacing: 0;
+    font-family: var(--font-neon), ui-monospace, Menlo, monospace;
   }
 
-  /* Labels - UI and Metadata */
+  /* Labels — Argon (humanist, friendlier at small sizes) */
   .text-label-lg {
     font-size: 1rem;
     line-height: 1.5;
     font-weight: 500;
     letter-spacing: 0;
+    font-family: var(--font-argon), ui-monospace, Menlo, monospace;
   }
 
   .text-label {
@@ -272,6 +331,7 @@
     line-height: 1.5;
     font-weight: 500;
     letter-spacing: 0;
+    font-family: var(--font-argon), ui-monospace, Menlo, monospace;
   }
 
   .text-label-sm {
@@ -279,15 +339,16 @@
     line-height: 1.5;
     font-weight: 500;
     letter-spacing: 0.025em;
+    font-family: var(--font-argon), ui-monospace, Menlo, monospace;
   }
 
-  /* Code - Monospace Technical Content */
+  /* Code — Neon (same as body; code and prose share one voice) */
   .text-code-lg {
     font-size: 1rem;
     line-height: 1.6;
     font-weight: 400;
     letter-spacing: 0;
-    font-family: var(--font-neon), ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+    font-family: var(--font-neon), ui-monospace, Menlo, monospace;
   }
 
   .text-code {
@@ -295,7 +356,7 @@
     line-height: 1.5;
     font-weight: 400;
     letter-spacing: 0;
-    font-family: var(--font-neon), ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+    font-family: var(--font-neon), ui-monospace, Menlo, monospace;
   }
 
   .text-code-sm {
@@ -303,15 +364,16 @@
     line-height: 1.5;
     font-weight: 400;
     letter-spacing: 0;
-    font-family: var(--font-neon), ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+    font-family: var(--font-neon), ui-monospace, Menlo, monospace;
   }
 
-  /* Interactive Elements - Buttons and Actions */
+  /* Interactive — Argon (reads as a label, not prose) */
   .text-button-lg {
     font-size: 1rem;
     line-height: 1.5;
     font-weight: 500;
     letter-spacing: 0;
+    font-family: var(--font-argon), ui-monospace, Menlo, monospace;
   }
 
   .text-button {
@@ -319,6 +381,7 @@
     line-height: 1.5;
     font-weight: 500;
     letter-spacing: 0;
+    font-family: var(--font-argon), ui-monospace, Menlo, monospace;
   }
 
   .text-button-sm {
@@ -326,6 +389,15 @@
     line-height: 1.5;
     font-weight: 500;
     letter-spacing: 0.025em;
+    font-family: var(--font-argon), ui-monospace, Menlo, monospace;
   }
 
+  /* Callout — Radon (handwritten, reserved for pull quotes and asides) */
+  .text-callout {
+    font-size: 1.125rem;
+    line-height: 1.5;
+    font-weight: 400;
+    letter-spacing: 0;
+    font-family: var(--font-radon), ui-monospace, Menlo, monospace;
+  }
 }

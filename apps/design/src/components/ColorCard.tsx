@@ -23,22 +23,22 @@ const ColorCard: FunctionComponent<Props> = ({ color }) => {
   const mainSwatch = color.swatches.find(s => s.name.endsWith("500"));
 
   return (
-    <div className="relative group rounded-xl overflow-hidden shadow-sm border border-longan-950/5 dark:border-rambutan-50/5 bg-rambutan-50 dark:bg-longan-950">
+    <div className="relative group rounded-lychee overflow-hidden inset-ring inset-ring-longan-950/5 dark:inset-ring-rambutan-50/5 bg-rambutan-50 dark:bg-longan-950">
       <div className={`h-24 w-full ${mainSwatch?.className} flex flex-col items-center justify-center`}>
-        <h3 className="text-h3 font-bold text-rambutan-50/80 drop-shadow-lg" style={{fontFeatureSettings: "'ss01'"}}>{color.name}</h3>
-        <p className="text-label-sm lg:text-body-sm text-rambutan-50/70 drop-shadow-lg mt-1 px-4 text-center max-w-prose">{color.description}</p>
+        <h3 className="text-h3 font-bold text-rambutan-50/80" style={{fontFeatureSettings: "'ss01'"}}>{color.name}</h3>
+        <p className="text-label-sm lg:text-body-sm text-rambutan-50/70 mt-1 px-4 text-center max-w-prose">{color.description}</p>
       </div>
       <div className="p-3 md:p-4 space-y-3">
-        <div className="flex flex-row rounded-lg overflow-hidden border border-longan-950/10 dark:border-rambutan-50/10">
+        <div className="flex flex-row rounded-grape overflow-hidden inset-ring inset-ring-longan-950/10 dark:inset-ring-rambutan-50/10">
           {color.swatches.map(swatch => (
             <button
               key={swatch.variable}
               type="button"
-              className={`relative group h-10 flex-1 transition-all duration-150 ease-in-out focus:outline-none focus:z-10 hover:-translate-y-1 hover:shadow-lg cursor-copy ${swatch.className}`}
+              className={`relative group h-10 flex-1 transition-all duration-150 ease-in-out focus:outline-none focus:z-10 hover:-translate-y-1 cursor-copy ${swatch.className}`}
               onClick={() => handleCopy(swatch.variable)}
               aria-label={`Copy ${swatch.variable}`}
             >
-              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max px-2 py-1 bg-longan-800 text-rambutan-50 text-label rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max px-2 py-1 bg-longan-800 text-rambutan-50 text-label rounded-grape opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
                 {swatch.name.split(' ').pop()}
               </span>
               {copied === swatch.variable && (
@@ -52,7 +52,7 @@ const ColorCard: FunctionComponent<Props> = ({ color }) => {
         {/* In-use preview */}
         <div className="flex items-center gap-2 pt-1">
           <span
-            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-medium"
+            className="inline-flex items-center px-2.5 py-0.5 rounded-orb text-label-sm font-medium"
             style={{
               backgroundColor: `color-mix(in oklch, var(--color-${color.prefix}-500) 15%, transparent)`,
               color: `var(--color-${color.prefix}-400)`,
@@ -67,7 +67,7 @@ const ColorCard: FunctionComponent<Props> = ({ color }) => {
             Sample text
           </span>
           <span
-            className="ml-auto inline-flex items-center justify-center px-3 py-1 rounded-md text-label-sm font-medium text-rambutan-50"
+            className="ml-auto inline-flex items-center justify-center px-3 py-1 rounded-grape text-label-sm font-medium text-rambutan-50"
             style={{ backgroundColor: `var(--color-${color.prefix}-600)` }}
           >
             Action
