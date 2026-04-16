@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "@bruhs/ui/styles/index.css";
+@import "@bruhs/theme/styles/index.css";
 
 .animate-fade-in {
   animation: fadeIn 1s ease-in-out;

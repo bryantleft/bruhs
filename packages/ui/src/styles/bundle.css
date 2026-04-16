@@ -1,0 +1,99 @@
+/*
+ * Bruhs — precompiled distribution bundle.
+ *
+ * Entry point for the zero-build static CSS output (`dist/bruhs.css`).
+ * Consumers with a Tailwind v4 pipeline should import "@bruhs/theme/styles/index.css"
+ * instead and bring their own content scan.
+ *
+ * This file imports the canonical tokens + utilities, overrides @font-face with
+ * relative URLs (so fonts resolve alongside the bundle wherever it's hosted),
+ * and safelists the Bruhs utility surface so valid class names are pre-generated.
+ */
+
+@import "tailwindcss";
+@import "./index.css";
+
+/* Relative font paths — override the absolute /fonts/ paths from index.css so
+ * the bundle is portable. The consumer serves dist/bruhs.css and dist/fonts/*
+ * from the same directory (that's also what jsDelivr does for npm packages). */
+@font-face {
+  font-family: "MonaspaceArgonVariable";
+  font-stretch: 100% 125%;
+  font-style: normal;
+  font-weight: 200 800;
+  src: url("./fonts/MonaspaceArgonVariable.woff2") format("woff2"),
+       url("./fonts/MonaspaceArgonVariable.woff") format("woff");
+}
+
+@font-face {
+  font-family: "MonaspaceKryptonVariable";
+  font-stretch: 100% 125%;
+  font-style: normal;
+  font-weight: 200 800;
+  src: url("./fonts/MonaspaceKryptonVariable.woff2") format("woff2"),
+       url("./fonts/MonaspaceKryptonVariable.woff") format("woff");
+}
+
+@font-face {
+  font-family: "MonaspaceNeonVariable";
+  font-stretch: 100% 125%;
+  font-style: normal;
+  font-weight: 200 800;
+  src: url("./fonts/MonaspaceNeonVariable.woff2") format("woff2"),
+       url("./fonts/MonaspaceNeonVariable.woff") format("woff");
+}
+
+@font-face {
+  font-family: "MonaspaceRadonVariable";
+  font-stretch: 100% 125%;
+  font-style: normal;
+  font-weight: 200 800;
+  src: url("./fonts/MonaspaceRadonVariable.woff2") format("woff2"),
+       url("./fonts/MonaspaceRadonVariable.woff") format("woff");
+}
+
+@font-face {
+  font-family: "MonaspaceXenonVariable";
+  font-stretch: 100% 125%;
+  font-style: normal;
+  font-weight: 200 800;
+  src: url("./fonts/MonaspaceXenonVariable.woff2") format("woff2"),
+       url("./fonts/MonaspaceXenonVariable.woff") format("woff");
+}
+
+/*
+ * Safelist — precompile every valid Bruhs utility.
+ *
+ * Scoped tight: base utilities + the four interactive state variants that
+ * zero-build consumers actually need (hover, focus-visible, active, disabled).
+ * Group and peer variants are not pre-generated — consumers who need those
+ * should use the Tailwind v4 pipeline via `@bruhs/theme/styles/index.css`.
+ */
+
+/* Base color utilities — full scale × core properties */
+@source inline("{bg,text,border,fill,stroke,outline,ring,inset-ring,divide,placeholder,accent,caret,decoration}-{lychee,persimmon,durian,pandan,blueberry,mangosteen,dragonfruit,rambutan,longan}-{50,{100..900..100},950}");
+
+/* Interactive state variants for common surface/text properties */
+@source inline("{hover:,focus-visible:,active:,disabled:}{bg,text,border,ring,inset-ring,outline}-{lychee,persimmon,durian,pandan,blueberry,mangosteen,dragonfruit,rambutan,longan}-{50,{100..900..100},950}");
+
+/* Opacity modifiers for soft fills, rings, and scrims */
+@source inline("{bg,text,border,ring,inset-ring,outline,divide,fill,stroke}-{lychee,persimmon,durian,pandan,blueberry,mangosteen,dragonfruit,rambutan,longan}-{50,{100..900..100},950}/{5,10,15,20,25,30,40,50,60,70,75,80,90,95}");
+
+@source inline("{hover:,focus-visible:,}{bg,text,ring,inset-ring}-{lychee,persimmon,durian,pandan,blueberry,mangosteen,dragonfruit,rambutan,longan}-{50,{100..900..100},950}/{5,10,15,20,25,30,40,50}");
+
+/* White + black opacity helpers (elevation rings, scrims) */
+@source inline("{bg,text,border,ring,inset-ring,outline,divide,fill,stroke}-{white,black}/{2,5,10,15,20,25,30,40,50,60,70,75,80,90,95}");
+@source inline("{hover:,focus-visible:}{bg,ring,inset-ring}-{white,black}/{5,10,15,20,25,30,40}");
+
+/* Bruh mascot tokens */
+@source inline("{bg,text,border,ring,inset-ring,outline,fill,stroke}-bruh-{base,eye,mouth}");
+
+/* Fruit radius scale with directional variants */
+@source inline("rounded-{seed,grape,lychee,mango,pomelo,orb}");
+@source inline("rounded-{t,r,b,l,tl,tr,br,bl,s,e,ss,se,ee,es}-{seed,grape,lychee,mango,pomelo,orb}");
+
+/* Monaspace font utilities */
+@source inline("font-{argon,krypton,neon,radon,xenon}");
+
+/* Typography role utilities */
+@source inline("text-{display-lg,display-md,display-sm,h1,h2,h3,h4,body-lg,body,body-sm,label-lg,label,label-sm,code-lg,code,code-sm,button-lg,button,button-sm,callout}");

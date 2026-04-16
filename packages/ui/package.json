@@ -1,24 +1,60 @@
 {
-  "name": "@bruhs/ui",
-  "private": true,
+  "name": "@bruhs/theme",
+  "version": "0.2.0",
+  "description": "Bruhs design system — fruit-named OKLCH colors, Monaspace all-mono typography, warm-dark neutrals, no drop shadows. Framework-agnostic tokens + patterns; works with Tailwind v4 or as a precompiled CSS bundle.",
   "type": "module",
+  "license": "MIT",
+  "author": "Bryant Le <bryantleft@gmail.com> (https://bnle.me)",
+  "homepage": "https://bruhs.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bnle/bruhs",
+    "directory": "packages/ui"
+  },
+  "keywords": [
+    "design-system",
+    "tailwindcss",
+    "oklch",
+    "monaspace",
+    "dark-mode",
+    "css",
+    "tokens"
+  ],
   "main": "./src/index.ts",
   "files": [
     "src/",
-    "fonts/"
+    "fonts/",
+    "dist/",
+    "AGENTS.md",
+    "README.md",
+    "LICENSE"
   ],
   "exports": {
     ".": "./src/index.ts",
     "./styles/*": "./src/styles/*",
     "./components/*": "./src/components/*",
     "./lib/*": "./src/lib/*",
-    "./fonts/*": "./fonts/*"
+    "./fonts/*": "./fonts/*",
+    "./dist/bruhs.css": "./dist/bruhs.css",
+    "./dist/fonts/*": "./dist/fonts/*",
+    "./AGENTS.md": "./AGENTS.md"
+  },
+  "scripts": {
+    "build": "tailwindcss -i ./src/styles/bundle.css -o ./dist/bruhs.css --minify && pnpm run copy-fonts",
+    "copy-fonts": "rm -rf ./dist/fonts && cp -r ./fonts ./dist/fonts",
+    "build:unminified": "tailwindcss -i ./src/styles/bundle.css -o ./dist/bruhs.css && pnpm run copy-fonts",
+    "prepublishOnly": "pnpm run build"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.1.10",
+    "tailwindcss": "^4.1.10",
     "typescript": "^5.0.0"
   },
   "peerDependencies": {
     "react": "^18.0.0",
     "react-dom": "^18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
