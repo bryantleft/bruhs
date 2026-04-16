@@ -144,6 +144,8 @@ Every `.text-*` utility self-sets its Monaspace variant. **Do not** apply `font-
 - **Add `text-balance` to headings, `text-pretty` to body paragraphs.**
 - **Constrain prose width** with `max-w-[65ch]` or `max-w-[72ch]` on the block.
 - **Add `tabular-nums`** to any element displaying numbers that change (counters, prices, stats).
+- **Never apply `text-*` utilities to inline elements** (`<span>`, `<a>`, `<strong>`, `<em>`, `<code>`). They inherit from their block-level parent. For inline `<code>`, apply only color (`text-rambutan-200`) — the parent's `text-body`/`text-body-sm` already sets the Neon mono font.
+- **`text-code-*` utilities are for block code** (`<pre>`, `<div>` wrappers). For inline code, omit them.
 
 ---
 
@@ -171,11 +173,100 @@ Do not introduce your own glows in other colors.
 
 ---
 
-## 7. Component patterns
+## 7. Motion
+
+Animation timing is tokenized so transitions feel coordinated across the system. Five durations, four easings — all exposed as CSS custom properties and as `duration-*` / `ease-*` Tailwind utilities.
+
+### Durations
+
+| Token | Value | Use for |
+|-------|-------|---------|
+| `duration-blink` | 80ms | Instant feedback — radio select, keyboard nav, typeahead |
+| `duration-fast` | 150ms | Hover, button press, small state changes (default) |
+| `duration-standard` | 250ms | Expand, fade, slide |
+| `duration-slow` | 400ms | Page-level transitions, big panel moves |
+| `duration-bloom` | 600ms | Deliberate attention moments, bloom accents |
+
+`--default-transition-duration` is set to `var(--duration-fast)`, so a bare `class="transition"` uses 150ms automatically.
+
+### Easings
+
+| Token | Curve | Use for |
+|-------|-------|---------|
+| `ease-standard` | `cubic-bezier(0.2, 0, 0, 1)` | Default for most UI transitions |
+| `ease-entrance` | `cubic-bezier(0, 0, 0, 1)` | Content entering view (slide-in, fade-in) |
+| `ease-exit` | `cubic-bezier(0.4, 0, 1, 1)` | Content leaving view (slide-out, fade-out) |
+| `ease-bloom` | `cubic-bezier(0.34, 1.56, 0.64, 1)` | Playful overshoot — reserved for bloom/attention accents |
+
+### Rules
+
+- **Bare `transition` gets the right default.** Don't reach for `duration-150` manually.
+- **Pair durations with their intended easings.** `duration-standard ease-standard` for expand/fade; `duration-bloom ease-bloom` only for brand moments.
+- **Respect `prefers-reduced-motion`.** Wrap non-essential motion in `motion-safe:` variants.
+- **Never use durations > 1000ms** except for splash/onboarding moments.
+
+---
+
+## 8. Spacing
+
+Tailwind's default 4px grid (`--spacing: 0.25rem`) is the only spacing rhythm. Every gap, padding, and margin should be a multiple of 4px.
+
+### Common patterns
+
+| Context | Value | Why |
+|---------|-------|-----|
+| Inline gap (button → icon, badge → text) | `gap-1.5` (6px) | Tight without touching |
+| Form label → field | `gap-2` (8px) | Tightly bound |
+| Form field → field | `gap-6` (24px) | Clear separation without feeling loose |
+| Card padding (compact) | `p-4` (16px) | Dense apps |
+| Card padding (default) | `p-6` (24px) | Standard |
+| Section → section | `gap-12 md:gap-16` (48/64px) | Breathing room on long pages |
+| Page padding | `p-6 md:p-8` (24/32px) | Mobile-first |
+
+### Rules
+
+- **Never use `mt-*`/`mb-*`/`ml-*`/`mr-*`/`mx-*`/`my-*` between flex or grid children** — use `gap-*` on the parent.
+- **Prefer shorthand over split axes.** `p-4` not `px-4 py-4`; keep them split only when a variant overrides one axis (e.g. `p-6 md:px-8`).
+- **Use `--spacing(…)` for arbitrary spacing values** — `--padding: --spacing(3)` not `12px` or `0.75rem`.
+- **Never use `calc(var(--spacing)*…)`** — use `--spacing(…)`.
+- **Never use `theme(spacing.…)`** — use `--spacing(…)`.
+
+---
+
+## 9. Responsive breakpoints
+
+Mobile-first. Tailwind's default breakpoints apply: `sm:` 640px, `md:` 768px, `lg:` 1024px, `xl:` 1280px, `2xl:` 1536px.
+
+### Layout shifts
+
+| Shift | At breakpoint |
+|-------|---------------|
+| 1 → 2 column | `md:` (768px) |
+| 2 → 3 column | `lg:` (1024px) |
+| 3 → 4 column | `xl:` (1280px) |
+| Off-canvas nav → in-flow sidebar | `lg:` (1024px) |
+| Page padding 24px → 32px | `md:` (768px) |
+| Section gap 48px → 64px | `md:` (768px) |
+
+### Typography
+
+- **Display and headings use `clamp()` internally** — don't add `md:text-*` overrides to them. The role utilities handle fluid scaling.
+- **Body text is fixed** at its declared size. If a context needs `text-body-sm` at desktop density, bump it to mobile-base via `max-sm:text-base/6`.
+
+### Rules
+
+- **Always `min-h-dvh`**, never `min-h-screen` (deprecated).
+- **Touch targets stay ≥44×44px** regardless of breakpoint. Use the absolute overlay pattern for small icon buttons.
+- **Reconfigure dividers per breakpoint** when column count changes — see §10.19.
+- **Checkboxes, radios, toggles are bigger on mobile** (`size-5 sm:size-4`, `w-11 sm:w-9`) for finger-friendliness.
+
+---
+
+## 10. Component patterns
 
 All patterns below are copy-paste ready. Adapt to your framework's template syntax — the classes do not change.
 
-### 7.1 Button — primary
+### 10.1 Button — primary
 
 ```html
 <button type="button" class="inline-flex items-center gap-1.5 rounded-grape bg-persimmon-500 px-3 py-2 text-button text-longan-950 ring-1 ring-persimmon-500 hover:bg-persimmon-400 hover:ring-persimmon-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-persimmon-400 active:bg-persimmon-600 transition">
@@ -185,7 +276,7 @@ All patterns below are copy-paste ready. Adapt to your framework's template synt
 
 **Rules:** only one primary per page/dialog. Ring matches fill color exactly — never use reduced-opacity rings on a solid button.
 
-### 7.2 Button — soft (secondary default)
+### 10.2 Button — soft (secondary default)
 
 ```html
 <button type="button" class="inline-flex items-center gap-1.5 rounded-grape bg-persimmon-500/15 px-3 py-2 text-button text-persimmon-200 inset-ring inset-ring-persimmon-400/20 hover:bg-persimmon-500/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-persimmon-400 transition">
@@ -193,7 +284,7 @@ All patterns below are copy-paste ready. Adapt to your framework's template synt
 </button>
 ```
 
-### 7.3 Button — outline
+### 10.3 Button — outline
 
 ```html
 <button type="button" class="inline-flex items-center gap-1.5 rounded-grape bg-transparent px-3 py-2 text-button text-rambutan-100 inset-ring inset-ring-rambutan-100/15 hover:bg-longan-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-persimmon-400 transition">
@@ -201,7 +292,7 @@ All patterns below are copy-paste ready. Adapt to your framework's template synt
 </button>
 ```
 
-### 7.4 Button — ghost
+### 10.4 Button — ghost
 
 ```html
 <button type="button" class="inline-flex items-center gap-1.5 rounded-grape px-3 py-2 text-button text-rambutan-200 hover:bg-longan-800 hover:text-rambutan-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-persimmon-400 transition">
@@ -209,7 +300,7 @@ All patterns below are copy-paste ready. Adapt to your framework's template synt
 </button>
 ```
 
-### 7.5 Button — destructive
+### 10.5 Button — destructive
 
 ```html
 <button type="button" class="inline-flex items-center gap-1.5 rounded-grape bg-lychee-600 px-3 py-2 text-button text-lychee-50 ring-1 ring-lychee-600 hover:bg-lychee-500 hover:ring-lychee-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lychee-400 transition">
@@ -219,14 +310,14 @@ All patterns below are copy-paste ready. Adapt to your framework's template synt
 
 Use the soft style for destructive actions unless the action is the primary purpose of the page/dialog.
 
-### 7.6 Button sizes
+### 10.6 Button sizes
 
 Default (~36px): `px-3 py-2 text-button`.
 Small (~28px): `px-2.5 py-1.5 text-button-sm`.
 
 Use at most two sizes per surface.
 
-### 7.7 Button with icon
+### 10.7 Button with icon
 
 Asymmetric padding — icon side padding equals vertical padding.
 
@@ -244,7 +335,7 @@ Asymmetric padding — icon side padding equals vertical padding.
 </button>
 ```
 
-### 7.8 Badge — soft
+### 10.8 Badge — soft
 
 ```html
 <span class="inline-flex items-center rounded-grape bg-pandan-500/15 text-pandan-200 px-2 py-1 text-label-sm inset-ring inset-ring-pandan-400/20">
@@ -254,7 +345,7 @@ Asymmetric padding — icon side padding equals vertical padding.
 
 Pattern: any accent tone with `-500/15` bg, `-200` text, `-400/20` ring. Works for `lychee`, `persimmon`, `durian`, `pandan`, `blueberry`, `mangosteen`, `dragonfruit`, `rambutan`.
 
-### 7.9 Badge — outline
+### 10.9 Badge — outline
 
 ```html
 <span class="inline-flex items-center rounded-grape px-2 py-1 text-label-sm text-persimmon-300 inset-ring inset-ring-persimmon-400/30">
@@ -262,7 +353,7 @@ Pattern: any accent tone with `-500/15` bg, `-200` text, `-400/20` ring. Works f
 </span>
 ```
 
-### 7.10 Badge with icon
+### 10.10 Badge with icon
 
 ```html
 <span class="inline-flex items-center gap-1 rounded-grape bg-pandan-500/15 text-pandan-200 inset-ring inset-ring-pandan-400/20 py-1 pr-2 pl-1 text-label-sm">
@@ -271,7 +362,7 @@ Pattern: any accent tone with `-500/15` bg, `-200` text, `-400/20` ring. Works f
 </span>
 ```
 
-### 7.11 Text input
+### 10.11 Text input
 
 ```html
 <div class="flex flex-col gap-2">
@@ -286,11 +377,11 @@ Pattern: any accent tone with `-500/15` bg, `-200` text, `-400/20` ring. Works f
 </div>
 ```
 
-### 7.12 Textarea
+### 10.12 Textarea
 
 Same classes as text input, on `<textarea rows="3">`.
 
-### 7.13 Select
+### 10.13 Select
 
 ```html
 <span class="inline-grid grid-cols-[1fr_--spacing(8)] rounded-grape bg-white/5 inset-ring inset-ring-white/10 focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-persimmon-400">
@@ -315,7 +406,9 @@ For disabled: add `disabled` to `<select>` and `opacity-60 bg-white/[0.02] inset
 
 For a leading icon: use `grid-cols-[--spacing(9)_1fr_--spacing(8)]` and place the icon at `col-start-1 row-start-1`.
 
-### 7.14 Checkbox
+### 10.14 Checkbox
+
+Supports three states: unchecked, checked, indeterminate. The indeterminate state is a DOM property — set `input.indeterminate = true` in JavaScript (it is not an HTML attribute).
 
 ```html
 <div class="flex items-center gap-2 text-body text-rambutan-200">
@@ -325,10 +418,11 @@ For a leading icon: use `grid-cols-[--spacing(9)_1fr_--spacing(8)]` and place th
         id="agree"
         name="agree"
         type="checkbox"
-        class="col-start-1 row-start-1 appearance-none rounded-seed border border-white/10 bg-white/5 checked:border-persimmon-500 checked:bg-persimmon-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-persimmon-400 disabled:border-white/5 disabled:bg-white/10 disabled:checked:bg-white/10 forced-colors:appearance-auto"
+        class="col-start-1 row-start-1 appearance-none rounded-seed border border-white/10 bg-white/5 checked:border-persimmon-500 checked:bg-persimmon-500 indeterminate:border-persimmon-500 indeterminate:bg-persimmon-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-persimmon-400 disabled:border-white/5 disabled:bg-white/10 disabled:checked:bg-white/10 forced-colors:appearance-auto"
       />
       <svg viewBox="0 0 14 14" fill="none" class="pointer-events-none col-start-1 row-start-1 size-7/8 self-center justify-self-center stroke-longan-950 group-has-disabled:stroke-white/25">
         <path d="M3 8L6 11L11 3.5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-not-has-checked:opacity-0" />
+        <path d="M3 7H11" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-not-has-indeterminate:opacity-0" />
       </svg>
     </span>
   </span>
@@ -336,14 +430,14 @@ For a leading icon: use `grid-cols-[--spacing(9)_1fr_--spacing(8)]` and place th
 </div>
 ```
 
-### 7.15 Radio
+### 10.15 Radio
 
 Identical structure to checkbox but with:
 - `type="radio"` on the input
 - `rounded-orb` (not `rounded-seed`)
 - A filled dot indicator: `<span class="pointer-events-none col-start-1 row-start-1 size-[round(down,40%,1px)] self-center justify-self-center rounded-orb bg-longan-950 group-not-has-checked:opacity-0"></span>`
 
-### 7.16 Toggle
+### 10.16 Toggle
 
 ```html
 <div class="group relative inline-flex w-11 sm:w-9 shrink-0 rounded-orb bg-white/5 p-0.5 inset-ring inset-ring-white/10 outline-persimmon-500 outline-offset-2 has-checked:bg-persimmon-500 has-focus-visible:outline-2 transition-colors duration-200 ease-in-out">
@@ -352,7 +446,7 @@ Identical structure to checkbox but with:
 </div>
 ```
 
-### 7.17 Card
+### 10.17 Card
 
 ```html
 <div class="rounded-lychee bg-longan-800 p-6 inset-ring inset-ring-white/10">
@@ -361,7 +455,7 @@ Identical structure to checkbox but with:
 </div>
 ```
 
-### 7.18 Well (recessed panel)
+### 10.18 Well (recessed panel)
 
 ```html
 <div class="rounded-lychee bg-longan-900/60 p-6 inset-ring inset-ring-white/5">
@@ -369,7 +463,7 @@ Identical structure to checkbox but with:
 </div>
 ```
 
-### 7.19 Divided grid
+### 10.19 Divided grid
 
 ```html
 <ul role="list" class="grid grid-cols-3">
@@ -383,7 +477,7 @@ Reconfigure divider patterns when column count changes at a breakpoint.
 
 ---
 
-## 8. Icons
+## 11. Icons
 
 Use [Heroicons](https://heroicons.com) as the default set.
 
@@ -419,7 +513,7 @@ Add a hidden 48×48 touch target to meet mobile tap requirements:
 
 ---
 
-## 9. Global document setup
+## 12. Global document setup
 
 Put these on the root elements of every Bruhs-powered document:
 
@@ -440,7 +534,7 @@ Put these on the root elements of every Bruhs-powered document:
 
 ---
 
-## 10. Accessibility checklist
+## 13. Accessibility checklist
 
 - Every form control has a `name` attribute and either a `<label>` (associated via `for`/`id`) or an `aria-label`.
 - Every `<button>` has an explicit `type` attribute (`"submit"` inside forms, `"button"` otherwise).
@@ -452,7 +546,7 @@ Put these on the root elements of every Bruhs-powered document:
 
 ---
 
-## 11. Hard bans (never do these)
+## 14. Hard bans (never do these)
 
 1. **Never use `shadow-xs`, `shadow-sm`, `shadow-md`, `shadow-lg`, `shadow-xl`, `shadow-2xl`.** Bruhs has no drop-shadow system. Use tone-step + `inset-ring` instead.
 2. **Never use `rounded-sm`, `rounded-md`, `rounded-lg`, `rounded-xl`, `rounded-2xl`, `rounded-3xl`, `rounded-full`.** Use the fruit names.
@@ -467,7 +561,7 @@ Put these on the root elements of every Bruhs-powered document:
 
 ---
 
-## 12. Opacity conventions
+## 15. Opacity conventions
 
 When you need a softer tint of a color, use opacity modifiers on the scale:
 
@@ -481,7 +575,7 @@ When you need a softer tint of a color, use opacity modifiers on the scale:
 
 ---
 
-## 13. Focus & state pattern reference
+## 16. Focus & state pattern reference
 
 - **Focus (keyboard):** `focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-persimmon-400`
 - **Focus inside input:** `focus-visible:outline-2 -outline-offset-1 focus-visible:outline-persimmon-400`
@@ -491,7 +585,7 @@ When you need a softer tint of a color, use opacity modifiers on the scale:
 
 ---
 
-## 14. Writing / copy voice
+## 17. Writing / copy voice
 
 Not every design system documents voice, but Bruhs is opinionated:
 
@@ -501,7 +595,7 @@ Not every design system documents voice, but Bruhs is opinionated:
 
 ---
 
-## 15. When in doubt
+## 18. When in doubt
 
 - Prefer whitespace over borders, borders over wells, wells over cards. Escalate only when the content demands it.
 - If a pattern isn't documented here, compose it from the primitives above rather than inventing new tokens.

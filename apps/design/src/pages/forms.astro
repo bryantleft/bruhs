@@ -46,7 +46,7 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-6">Select</h2>
       <p class="text-body-sm text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
-        Native <code class="text-code text-rambutan-200">&lt;select&gt;</code> with a custom chevron. Two sizes, support for
+        Native <code class="text-rambutan-200">&lt;select&gt;</code> with a custom chevron. Two sizes, support for
         leading icons, error and disabled states. Wrapper gets the focus ring so it reads as one surface.
       </p>
 
@@ -149,12 +149,13 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-6">Checkbox</h2>
-      <div class="rounded-lychee border border-rambutan-100/5 bg-longan-900 p-6 flex flex-col gap-3">
+      <div class="rounded-lychee inset-ring inset-ring-rambutan-100/5 bg-longan-900 p-6 flex flex-col gap-3">
         {[
-          { id: "cb-1", label: "Default", checked: false },
-          { id: "cb-2", label: "Checked", checked: true },
-          { id: "cb-3", label: "Disabled", checked: false, disabled: true },
-        ].map(({ id, label, checked, disabled }) => (
+          { id: "cb-1", label: "Default", checked: false, indeterminate: false },
+          { id: "cb-2", label: "Checked", checked: true, indeterminate: false },
+          { id: "cb-3", label: "Indeterminate", checked: false, indeterminate: true },
+          { id: "cb-4", label: "Disabled", checked: false, indeterminate: false, disabled: true },
+        ].map(({ id, label, checked, indeterminate, disabled }) => (
           <div class="flex items-center gap-2 text-body text-rambutan-200">
             <span class="h-lh items-center inline-flex">
               <span class="group inline-grid size-5 sm:size-4 grid-cols-1">
@@ -164,10 +165,12 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
                   type="checkbox"
                   checked={checked}
                   disabled={disabled}
-                  class="col-start-1 row-start-1 appearance-none rounded-seed border border-white/10 bg-white/5 checked:border-persimmon-500 checked:bg-persimmon-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-persimmon-400 disabled:border-white/5 disabled:bg-white/10 disabled:checked:bg-white/10 forced-colors:appearance-auto"
+                  data-indeterminate={indeterminate ? "true" : undefined}
+                  class="col-start-1 row-start-1 appearance-none rounded-seed border border-white/10 bg-white/5 checked:border-persimmon-500 checked:bg-persimmon-500 indeterminate:border-persimmon-500 indeterminate:bg-persimmon-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-persimmon-400 disabled:border-white/5 disabled:bg-white/10 disabled:checked:bg-white/10 forced-colors:appearance-auto"
                 />
                 <svg viewBox="0 0 14 14" fill="none" class="pointer-events-none col-start-1 row-start-1 size-7/8 self-center justify-self-center stroke-longan-950 group-has-disabled:stroke-white/25">
                   <path d="M3 8L6 11L11 3.5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-not-has-checked:opacity-0" />
+                  <path d="M3 7H11" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-not-has-indeterminate:opacity-0" />
                 </svg>
               </span>
             </span>
@@ -175,7 +178,15 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
           </div>
         ))}
       </div>
+      <p class="text-body-sm text-rambutan-400 mt-3 max-w-[65ch] text-pretty">
+        The indeterminate state is a DOM property, not an HTML attribute — set <code class="text-rambutan-200">input.indeterminate = true</code> in JavaScript.
+        Styling is pure CSS via the <code class="text-rambutan-200">:indeterminate</code> pseudo-class and <code class="text-rambutan-200">group-not-has-indeterminate</code>.
+      </p>
     </section>
+
+    <script is:inline>
+      document.querySelectorAll('input[type="checkbox"][data-indeterminate="true"]').forEach(el => { el.indeterminate = true; });
+    </script>
 
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-6">Radio</h2>
@@ -219,9 +230,9 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-6">Rules</h2>
       <ul role="list" class="flex flex-col gap-3 max-w-[72ch]">
-        <li class="text-body text-rambutan-300 text-pretty">Every control has a <code class="text-code text-rambutan-200">name</code> and either a <code class="text-code text-rambutan-200">&lt;label&gt;</code> or <code class="text-code text-rambutan-200">aria-label</code>.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Controls use <code class="text-code text-rambutan-200">inset-ring</code> not solid borders; focus rings use <code class="text-code text-rambutan-200">-outline-offset-1</code> so they don't spill outside the field.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Checkboxes, radios, toggles are bigger on mobile (<code class="text-code text-rambutan-200">size-5 sm:size-4</code>) for touch targets.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Every control has a <code class="text-rambutan-200">name</code> and either a <code class="text-rambutan-200">&lt;label&gt;</code> or <code class="text-rambutan-200">aria-label</code>.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Controls use <code class="text-rambutan-200">inset-ring</code> not solid borders; focus rings use <code class="text-rambutan-200">-outline-offset-1</code> so they don't spill outside the field.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Checkboxes, radios, toggles are bigger on mobile (<code class="text-rambutan-200">size-5 sm:size-4</code>) for touch targets.</li>
         <li class="text-body text-rambutan-300 text-pretty">Never use the conjoined input+button pattern — leave a gap or nest the button visually.</li>
       </ul>
     </section>

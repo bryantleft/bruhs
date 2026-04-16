@@ -1,6 +1,6 @@
 {
   "name": "@bruhs/theme",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Bruhs design system — fruit-named OKLCH colors, Monaspace all-mono typography, warm-dark neutrals, no drop shadows. Framework-agnostic tokens + patterns; works with Tailwind v4 or as a precompiled CSS bundle.",
   "type": "module",
   "license": "MIT",
