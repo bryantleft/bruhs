@@ -1,0 +1,59 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+
+const steps = [
+  { name: "Canvas", bg: "bg-longan-950", ring: "", note: "The page itself. Zero elevation." },
+  { name: "Panel", bg: "bg-longan-900", ring: "inset-ring inset-ring-white/5", note: "Ambient containers: nav, sidebar, hero frames." },
+  { name: "Card", bg: "bg-longan-800", ring: "inset-ring inset-ring-white/10", note: "Independently interactive — one step above canvas." },
+  { name: "Floating", bg: "bg-longan-700", ring: "inset-ring inset-ring-white/15", note: "Popovers, menus, tooltips. Lifted two steps." },
+  { name: "Modal", bg: "bg-longan-800", ring: "inset-ring inset-ring-white/20", note: "Full-screen dialogs against a longan-950/70 scrim." },
+];
+---
+
+<BaseLayout>
+  <div class="p-6 md:p-8 flex flex-col gap-12 md:gap-16">
+    <section>
+      <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Elevation</h1>
+      <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
+        Bruhs has no <code class="text-code text-rambutan-200">shadow-*</code>. Elevation is expressed with two levers:
+        a tone step in the <span class="text-rambutan-200">longan</span> neutral and a matching
+        <code class="text-code text-rambutan-200">inset-ring</code>.
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Ladder</h2>
+      <ul role="list" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {steps.map(s => (
+          <li class={`rounded-lychee p-6 ${s.bg} ${s.ring}`}>
+            <p class="text-label text-rambutan-100">{s.name}</p>
+            <p class="text-body-sm text-rambutan-400 mt-1">{s.note}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Bloom</h2>
+      <p class="text-body-sm text-rambutan-400 mb-4 max-w-[65ch] text-pretty">
+        The one exception — a persimmon glow reserved for focus, active, and "something happened here" accents.
+      </p>
+      <div class="rounded-lychee p-8 bg-longan-900 inset-ring inset-ring-white/5 flex items-center justify-center gap-6">
+        <button type="button" class="rounded-grape bg-persimmon-500 px-4 py-2 text-button text-longan-950 ring-1 ring-persimmon-500 [box-shadow:var(--shadow-bloom)]">
+          Focused
+        </button>
+        <div class="size-12 rounded-orb bg-persimmon-500 [box-shadow:var(--shadow-bloom)]"></div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Rules</h2>
+      <ul role="list" class="flex flex-col gap-3 max-w-[72ch]">
+        <li class="text-body text-rambutan-300 text-pretty">Never use <code class="text-code text-rambutan-200">shadow-xs</code> through <code class="text-code text-rambutan-200">shadow-2xl</code>. They are not defined in Bruhs.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Elevate by stepping the background tone (<code class="text-code text-rambutan-200">longan-950 → 900 → 800 → 700</code>) and widening the inset-ring in parallel (<code class="text-code text-rambutan-200">white/5 → /10 → /15 → /20</code>).</li>
+        <li class="text-body text-rambutan-300 text-pretty"><code class="text-code text-rambutan-200">--shadow-bloom</code> is allowed only for focus states, active triggers, or deliberate attention accents.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Modals use a <code class="text-code text-rambutan-200">longan-950/70</code> scrim — never pure <code class="text-code text-rambutan-200">black/*</code>.</li>
+      </ul>
+    </section>
+  </div>
+</BaseLayout>

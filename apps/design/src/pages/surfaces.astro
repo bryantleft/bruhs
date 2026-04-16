@@ -1,0 +1,71 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+---
+
+<BaseLayout>
+  <div class="p-6 md:p-8 flex flex-col gap-12 md:gap-16">
+    <section>
+      <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Surfaces</h1>
+      <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
+        Whitespace first, then subtle borders, then cards. Only promote content to a card when it's independently
+        interactive or contains fundamentally different content.
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Hierarchy</h2>
+      <p class="text-body-sm text-rambutan-400 mb-4">From lightest to heaviest separation.</p>
+      <div class="flex flex-col gap-6">
+        <div class="p-6">
+          <p class="text-label-sm text-rambutan-500 mb-2 uppercase tracking-wide">Whitespace only</p>
+          <p class="text-body text-rambutan-200">Tightly related items. Inherent contrast between heading and supporting text does the work.</p>
+        </div>
+
+        <div class="py-6 border-t border-rambutan-100/10">
+          <p class="text-label-sm text-rambutan-500 mb-2 uppercase tracking-wide">Divider</p>
+          <p class="text-body text-rambutan-200">Siblings that share context — stat grids, KPIs, list rows.</p>
+        </div>
+
+        <div class="rounded-lychee bg-longan-900/60 p-6 inset-ring inset-ring-white/5">
+          <p class="text-label-sm text-rambutan-500 mb-2 uppercase tracking-wide">Well</p>
+          <p class="text-body text-rambutan-200">Recessed panel for secondary or nested content. Darker than canvas, no outer shadow.</p>
+        </div>
+
+        <div class="rounded-lychee bg-longan-800 p-6 inset-ring inset-ring-white/10">
+          <p class="text-label-sm text-rambutan-500 mb-2 uppercase tracking-wide">Card</p>
+          <p class="text-body text-rambutan-200">Standalone or interactive. Lifted one tone step above canvas with a stronger inset-ring — never <code class="text-code text-rambutan-200">shadow-*</code>.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Divided grid</h2>
+      <div class="rounded-lychee border border-rambutan-100/5 bg-longan-900 overflow-hidden">
+        <ul role="list" class="grid grid-cols-1 sm:grid-cols-3">
+          <li class="p-6 sm:pr-6 sm:pb-6 sm:pl-6 border-t border-rambutan-100/5 sm:border-t-0 sm:[&:not(:nth-child(3n+1))]:border-l sm:[&:not(:nth-child(3n+1))]:border-rambutan-100/5">
+            <p class="text-body-sm text-rambutan-400">Repos</p>
+            <p class="text-h2 font-semibold text-rambutan-100 tabular-nums">24</p>
+          </li>
+          <li class="p-6 border-t border-rambutan-100/5 sm:border-t-0 sm:[&:not(:nth-child(3n+1))]:border-l sm:[&:not(:nth-child(3n+1))]:border-rambutan-100/5">
+            <p class="text-body-sm text-rambutan-400">Stars</p>
+            <p class="text-h2 font-semibold text-rambutan-100 tabular-nums">1,284</p>
+          </li>
+          <li class="p-6 border-t border-rambutan-100/5 sm:border-t-0 sm:[&:not(:nth-child(3n+1))]:border-l sm:[&:not(:nth-child(3n+1))]:border-rambutan-100/5">
+            <p class="text-body-sm text-rambutan-400">Issues</p>
+            <p class="text-h2 font-semibold text-rambutan-100 tabular-nums">7</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Rules</h2>
+      <ul role="list" class="flex flex-col gap-3 max-w-[72ch]">
+        <li class="text-body text-rambutan-300 text-pretty">Use the lightest separation that still works — whitespace → divider → well → card. Never jump straight to a card.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Dividers use opacity-based colors (<code class="text-code text-rambutan-200">border-rambutan-100/10</code>), not solid neutrals.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Cards sit one step lighter than canvas (longan-950 → longan-800) and use <code class="text-code text-rambutan-200">inset-ring inset-ring-white/5</code> for definition.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Wells sit one step darker or at the same tone with reduced opacity, and never carry outer shadows.</li>
+      </ul>
+    </section>
+  </div>
+</BaseLayout>

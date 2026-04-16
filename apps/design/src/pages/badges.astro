@@ -1,0 +1,74 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+
+type Tone = {
+  name: string;
+  soft: string;
+  outline: string;
+};
+
+const tones: Tone[] = [
+  { name: "Lychee", soft: "bg-lychee-500/15 text-lychee-200 inset-ring inset-ring-lychee-400/20", outline: "text-lychee-300 inset-ring inset-ring-lychee-400/30" },
+  { name: "Persimmon", soft: "bg-persimmon-500/15 text-persimmon-200 inset-ring inset-ring-persimmon-400/20", outline: "text-persimmon-300 inset-ring inset-ring-persimmon-400/30" },
+  { name: "Durian", soft: "bg-durian-500/15 text-durian-200 inset-ring inset-ring-durian-400/20", outline: "text-durian-300 inset-ring inset-ring-durian-400/30" },
+  { name: "Pandan", soft: "bg-pandan-500/15 text-pandan-200 inset-ring inset-ring-pandan-400/20", outline: "text-pandan-300 inset-ring inset-ring-pandan-400/30" },
+  { name: "Blueberry", soft: "bg-blueberry-500/15 text-blueberry-200 inset-ring inset-ring-blueberry-400/20", outline: "text-blueberry-300 inset-ring inset-ring-blueberry-400/30" },
+  { name: "Mangosteen", soft: "bg-mangosteen-500/15 text-mangosteen-200 inset-ring inset-ring-mangosteen-400/20", outline: "text-mangosteen-300 inset-ring inset-ring-mangosteen-400/30" },
+  { name: "Dragonfruit", soft: "bg-dragonfruit-500/15 text-dragonfruit-200 inset-ring inset-ring-dragonfruit-400/20", outline: "text-dragonfruit-300 inset-ring inset-ring-dragonfruit-400/30" },
+  { name: "Rambutan", soft: "bg-rambutan-500/15 text-rambutan-100 inset-ring inset-ring-rambutan-400/20", outline: "text-rambutan-200 inset-ring inset-ring-rambutan-400/30" },
+];
+---
+
+<BaseLayout>
+  <div class="p-6 md:p-8 flex flex-col gap-12 md:gap-16">
+    <section>
+      <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Badges</h1>
+      <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
+        Status pills across the palette. Soft fills for most cases; outline when the surface is already tinted.
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Soft</h2>
+      <div class="rounded-lychee border border-rambutan-100/5 bg-longan-900 p-6 flex flex-wrap gap-2">
+        {tones.map(t => (
+          <span class={`inline-flex items-center rounded-grape px-2 py-1 text-label-sm ${t.soft}`}>
+            {t.name}
+          </span>
+        ))}
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Outline</h2>
+      <div class="rounded-lychee border border-rambutan-100/5 bg-longan-900 p-6 flex flex-wrap gap-2">
+        {tones.map(t => (
+          <span class={`inline-flex items-center rounded-grape px-2 py-1 text-label-sm ${t.outline}`}>
+            {t.name}
+          </span>
+        ))}
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">With icons</h2>
+      <p class="text-body-sm text-rambutan-400 mb-4 max-w-[65ch] text-pretty">
+        Asymmetric padding — icon side padding equals vertical padding.
+      </p>
+      <div class="rounded-lychee border border-rambutan-100/5 bg-longan-900 p-6 flex flex-wrap gap-2">
+        <span class="inline-flex items-center gap-1 rounded-grape bg-pandan-500/15 text-pandan-200 inset-ring inset-ring-pandan-400/20 py-1 pr-2 pl-1 text-label-sm">
+          <svg viewBox="0 0 16 16" fill="currentColor" class="size-3.5 shrink-0"><circle cx="8" cy="8" r="3" /></svg>
+          Live
+        </span>
+        <span class="inline-flex items-center gap-1 rounded-grape bg-durian-500/15 text-durian-200 inset-ring inset-ring-durian-400/20 py-1 pr-2 pl-1 text-label-sm">
+          <svg viewBox="0 0 16 16" fill="currentColor" class="size-3.5 shrink-0"><path d="M8 2a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5A.75.75 0 0 1 8 2Zm0 9a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z" /></svg>
+          Review
+        </span>
+        <span class="inline-flex items-center gap-1 rounded-grape bg-lychee-500/15 text-lychee-200 inset-ring inset-ring-lychee-400/20 py-1 pl-2 pr-1 text-label-sm">
+          Beta
+          <svg viewBox="0 0 16 16" fill="currentColor" class="size-3.5 shrink-0"><path d="M4.03 4.03a.75.75 0 0 1 1.06 0L8 6.94l2.91-2.91a.75.75 0 1 1 1.06 1.06L9.06 8l2.91 2.91a.75.75 0 1 1-1.06 1.06L8 9.06l-2.91 2.91a.75.75 0 0 1-1.06-1.06L6.94 8 4.03 5.09a.75.75 0 0 1 0-1.06Z" /></svg>
+        </span>
+      </div>
+    </section>
+  </div>
+</BaseLayout>

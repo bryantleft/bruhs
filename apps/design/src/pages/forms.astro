@@ -1,0 +1,229 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+---
+
+<BaseLayout>
+  <div class="p-6 md:p-8 flex flex-col gap-12 md:gap-16">
+    <section>
+      <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Form controls</h1>
+      <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
+        Native HTML elements styled with CSS state variants. No JavaScript toggling classes.
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Text input</h2>
+      <div class="rounded-lychee border border-rambutan-100/5 bg-longan-900 p-6">
+        <div class="max-w-xs flex flex-col gap-2">
+          <label for="demo-email" class="text-label text-rambutan-200">Email</label>
+          <input
+            id="demo-email"
+            name="email"
+            type="email"
+            placeholder="you@bruhs.dev"
+            class="block w-full rounded-grape bg-white/5 px-3 py-2 text-body text-rambutan-100 placeholder:text-rambutan-500 inset-ring inset-ring-white/10 focus-visible:outline-2 -outline-offset-1 focus-visible:outline-persimmon-400 max-sm:text-base/6"
+          />
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Textarea</h2>
+      <div class="rounded-lychee border border-rambutan-100/5 bg-longan-900 p-6">
+        <div class="max-w-md flex flex-col gap-2">
+          <label for="demo-bio" class="text-label text-rambutan-200">Bio</label>
+          <textarea
+            id="demo-bio"
+            name="bio"
+            rows="3"
+            placeholder="A short bio..."
+            class="block w-full rounded-grape bg-white/5 px-3 py-2 text-body text-rambutan-100 placeholder:text-rambutan-500 inset-ring inset-ring-white/10 focus-visible:outline-2 -outline-offset-1 focus-visible:outline-persimmon-400 max-sm:text-base/6"
+          ></textarea>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Select</h2>
+      <p class="text-body-sm text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
+        Native <code class="text-code text-rambutan-200">&lt;select&gt;</code> with a custom chevron. Two sizes, support for
+        leading icons, error and disabled states. Wrapper gets the focus ring so it reads as one surface.
+      </p>
+
+      <div class="rounded-lychee inset-ring inset-ring-rambutan-100/5 bg-longan-900 p-6 flex flex-col gap-6">
+        <div class="max-w-xs flex flex-col gap-2">
+          <label for="select-default" class="text-label text-rambutan-200">Favorite fruit · default</label>
+          <span class="inline-grid grid-cols-[1fr_--spacing(8)] rounded-grape bg-white/5 inset-ring inset-ring-white/10 focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-persimmon-400 hover:inset-ring-white/15 transition">
+            <select
+              id="select-default"
+              name="fruit-default"
+              class="col-span-full row-start-1 appearance-none bg-transparent px-3 py-2 pr-8 text-body text-rambutan-100 focus:outline-hidden"
+            >
+              <option>Lychee</option>
+              <option>Persimmon</option>
+              <option>Durian</option>
+              <option>Mangosteen</option>
+            </select>
+            <svg viewBox="0 0 8 5" width="8" height="5" fill="none" class="pointer-events-none col-start-2 row-start-1 place-self-center text-rambutan-400">
+              <path d="M.5.5 4 4 7.5.5" stroke="currentcolor" />
+            </svg>
+          </span>
+        </div>
+
+        <div class="max-w-xs flex flex-col gap-2">
+          <label for="select-small" class="text-label text-rambutan-200">Small</label>
+          <span class="inline-grid grid-cols-[1fr_--spacing(7)] rounded-grape bg-white/5 inset-ring inset-ring-white/10 focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-persimmon-400 hover:inset-ring-white/15 transition">
+            <select
+              id="select-small"
+              name="fruit-small"
+              class="col-span-full row-start-1 appearance-none bg-transparent px-2.5 py-1.5 pr-7 text-body-sm text-rambutan-100 focus:outline-hidden"
+            >
+              <option>Lychee</option>
+              <option>Persimmon</option>
+              <option>Durian</option>
+            </select>
+            <svg viewBox="0 0 8 5" width="8" height="5" fill="none" class="pointer-events-none col-start-2 row-start-1 place-self-center text-rambutan-500">
+              <path d="M.5.5 4 4 7.5.5" stroke="currentcolor" />
+            </svg>
+          </span>
+        </div>
+
+        <div class="max-w-xs flex flex-col gap-2">
+          <label for="select-icon" class="text-label text-rambutan-200">With leading icon</label>
+          <span class="inline-grid grid-cols-[--spacing(9)_1fr_--spacing(8)] rounded-grape bg-white/5 inset-ring inset-ring-white/10 focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-persimmon-400 hover:inset-ring-white/15 transition">
+            <svg viewBox="0 0 16 16" fill="currentColor" class="pointer-events-none col-start-1 row-start-1 size-4 place-self-center text-persimmon-300">
+              <path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm.75 3.25a.75.75 0 0 0-1.5 0v3a.75.75 0 0 0 .22.53l2 2a.75.75 0 1 0 1.06-1.06L8.75 7.44V4.75Z" />
+            </svg>
+            <select
+              id="select-icon"
+              name="fruit-icon"
+              class="col-start-2 col-end-4 row-start-1 appearance-none bg-transparent pr-8 py-2 text-body text-rambutan-100 focus:outline-hidden"
+            >
+              <option>In season · Lychee</option>
+              <option>In season · Persimmon</option>
+              <option>In season · Durian</option>
+            </select>
+            <svg viewBox="0 0 8 5" width="8" height="5" fill="none" class="pointer-events-none col-start-3 row-start-1 place-self-center text-rambutan-400">
+              <path d="M.5.5 4 4 7.5.5" stroke="currentcolor" />
+            </svg>
+          </span>
+        </div>
+
+        <div class="max-w-xs flex flex-col gap-2">
+          <label for="select-error" class="text-label text-rambutan-200">Error</label>
+          <span class="inline-grid grid-cols-[1fr_--spacing(8)] rounded-grape bg-lychee-500/5 inset-ring inset-ring-lychee-400/40 focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-lychee-400 transition">
+            <select
+              id="select-error"
+              name="fruit-error"
+              class="col-span-full row-start-1 appearance-none bg-transparent px-3 py-2 pr-8 text-body text-rambutan-100 focus:outline-hidden"
+            >
+              <option>Pick one…</option>
+              <option>Lychee</option>
+              <option>Persimmon</option>
+            </select>
+            <svg viewBox="0 0 8 5" width="8" height="5" fill="none" class="pointer-events-none col-start-2 row-start-1 place-self-center text-lychee-300">
+              <path d="M.5.5 4 4 7.5.5" stroke="currentcolor" />
+            </svg>
+          </span>
+          <p class="text-body-sm text-lychee-300">Please choose a fruit before continuing.</p>
+        </div>
+
+        <div class="max-w-xs flex flex-col gap-2">
+          <label for="select-disabled" class="text-label text-rambutan-500">Disabled</label>
+          <span class="inline-grid grid-cols-[1fr_--spacing(8)] rounded-grape bg-white/[0.02] inset-ring inset-ring-white/5 opacity-60">
+            <select
+              id="select-disabled"
+              name="fruit-disabled"
+              disabled
+              class="col-span-full row-start-1 appearance-none bg-transparent px-3 py-2 pr-8 text-body text-rambutan-500 focus:outline-hidden cursor-not-allowed"
+            >
+              <option>Unavailable</option>
+            </select>
+            <svg viewBox="0 0 8 5" width="8" height="5" fill="none" class="pointer-events-none col-start-2 row-start-1 place-self-center text-rambutan-600">
+              <path d="M.5.5 4 4 7.5.5" stroke="currentcolor" />
+            </svg>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Checkbox</h2>
+      <div class="rounded-lychee border border-rambutan-100/5 bg-longan-900 p-6 flex flex-col gap-3">
+        {[
+          { id: "cb-1", label: "Default", checked: false },
+          { id: "cb-2", label: "Checked", checked: true },
+          { id: "cb-3", label: "Disabled", checked: false, disabled: true },
+        ].map(({ id, label, checked, disabled }) => (
+          <div class="flex items-center gap-2 text-body text-rambutan-200">
+            <span class="h-lh items-center inline-flex">
+              <span class="group inline-grid size-5 sm:size-4 grid-cols-1">
+                <input
+                  id={id}
+                  name={id}
+                  type="checkbox"
+                  checked={checked}
+                  disabled={disabled}
+                  class="col-start-1 row-start-1 appearance-none rounded-seed border border-white/10 bg-white/5 checked:border-persimmon-500 checked:bg-persimmon-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-persimmon-400 disabled:border-white/5 disabled:bg-white/10 disabled:checked:bg-white/10 forced-colors:appearance-auto"
+                />
+                <svg viewBox="0 0 14 14" fill="none" class="pointer-events-none col-start-1 row-start-1 size-7/8 self-center justify-self-center stroke-longan-950 group-has-disabled:stroke-white/25">
+                  <path d="M3 8L6 11L11 3.5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-not-has-checked:opacity-0" />
+                </svg>
+              </span>
+            </span>
+            <label for={id}>{label}</label>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Radio</h2>
+      <div class="rounded-lychee border border-rambutan-100/5 bg-longan-900 p-6 flex flex-col gap-3">
+        {[
+          { id: "r-1", label: "Left", value: "left" },
+          { id: "r-2", label: "Original", value: "original" },
+          { id: "r-3", label: "Right", value: "right" },
+        ].map(({ id, label, value }) => (
+          <div class="flex items-center gap-2 text-body text-rambutan-200">
+            <span class="h-lh items-center inline-flex">
+              <span class="group inline-grid size-5 sm:size-4 grid-cols-1">
+                <input
+                  id={id}
+                  name="variant"
+                  type="radio"
+                  value={value}
+                  checked={value === "original"}
+                  class="col-start-1 row-start-1 appearance-none rounded-orb border border-white/10 bg-white/5 checked:border-persimmon-500 checked:bg-persimmon-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-persimmon-400 disabled:border-white/5 disabled:bg-white/10 disabled:checked:bg-white/10 forced-colors:appearance-auto"
+                />
+                <span class="pointer-events-none col-start-1 row-start-1 size-[round(down,40%,1px)] self-center justify-self-center rounded-orb bg-longan-950 group-not-has-checked:opacity-0 group-has-disabled:bg-white/25"></span>
+              </span>
+            </span>
+            <label for={id}>{label}</label>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Toggle</h2>
+      <div class="rounded-lychee border border-rambutan-100/5 bg-longan-900 p-6 flex items-center gap-3">
+        <div class="group relative inline-flex w-11 sm:w-9 shrink-0 rounded-orb bg-white/5 p-0.5 inset-ring inset-ring-white/10 outline-persimmon-500 outline-offset-2 has-checked:bg-persimmon-500 has-focus-visible:outline-2 transition-colors duration-200 ease-in-out">
+          <span class="aspect-square w-1/2 rounded-orb bg-white ring-1 ring-white/10 transition-transform duration-200 ease-in-out group-has-checked:translate-x-full"></span>
+          <input id="toggle-demo" name="toggle" type="checkbox" aria-label="Enable fruit mode" class="absolute inset-0 size-full appearance-none focus:outline-hidden" />
+        </div>
+        <label for="toggle-demo" class="text-body text-rambutan-200">Enable fruit mode</label>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Rules</h2>
+      <ul role="list" class="flex flex-col gap-3 max-w-[72ch]">
+        <li class="text-body text-rambutan-300 text-pretty">Every control has a <code class="text-code text-rambutan-200">name</code> and either a <code class="text-code text-rambutan-200">&lt;label&gt;</code> or <code class="text-code text-rambutan-200">aria-label</code>.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Controls use <code class="text-code text-rambutan-200">inset-ring</code> not solid borders; focus rings use <code class="text-code text-rambutan-200">-outline-offset-1</code> so they don't spill outside the field.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Checkboxes, radios, toggles are bigger on mobile (<code class="text-code text-rambutan-200">size-5 sm:size-4</code>) for touch targets.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Never use the conjoined input+button pattern — leave a gap or nest the button visually.</li>
+      </ul>
+    </section>
+  </div>
+</BaseLayout>

@@ -1,0 +1,73 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+
+const radii = [
+  { name: "seed", className: "rounded-seed", size: "0.25rem · 4px", usage: "Tags, micro-chips, dense controls" },
+  { name: "grape", className: "rounded-grape", size: "0.5rem · 8px", usage: "Buttons, inputs, badges" },
+  { name: "lychee", className: "rounded-lychee", size: "0.875rem · 14px", usage: "Cards, panels, sidebar items" },
+  { name: "mango", className: "rounded-mango", size: "1.375rem · 22px", usage: "Hero tiles, media containers" },
+  { name: "pomelo", className: "rounded-pomelo", size: "2.25rem · 36px", usage: "Marketing blocks, pull-quotes" },
+  { name: "orb", className: "rounded-orb", size: "9999px", usage: "Avatars, pills, toggles, dots" },
+];
+---
+
+<BaseLayout>
+  <div class="p-6 md:p-8 flex flex-col gap-12 md:gap-16">
+    <section>
+      <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Radius</h1>
+      <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
+        A fruit-named scale: <span class="text-rambutan-200">seed</span>,
+        <span class="text-rambutan-200">grape</span>,
+        <span class="text-rambutan-200">lychee</span>,
+        <span class="text-rambutan-200">mango</span>,
+        <span class="text-rambutan-200">pomelo</span>,
+        <span class="text-rambutan-200">orb</span>.
+        Six steps, easy to remember, no T-shirt sizes.
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Scale</h2>
+      <ul role="list" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {radii.map(r => (
+          <li class="flex items-center gap-5 p-5 rounded-grape inset-ring inset-ring-rambutan-100/5 bg-longan-900">
+            <div class={`${r.className} size-16 shrink-0 bg-persimmon-500/20 inset-ring inset-ring-persimmon-400/30`} />
+            <div class="min-w-0">
+              <p class="text-label text-rambutan-100">{r.className}</p>
+              <p class="text-body-sm text-rambutan-400">{r.size}</p>
+              <p class="text-body-sm text-rambutan-500">{r.usage}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Concentric nesting</h2>
+      <p class="text-body-sm text-rambutan-400 mb-4 max-w-[65ch] text-pretty">
+        Inner corners equal outer minus padding so they stay visually parallel.
+      </p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="rounded-mango p-4 bg-longan-900 inset-ring inset-ring-rambutan-100/5 [--radius:var(--radius-mango)] [--padding:--spacing(4)]">
+          <div class="rounded-[calc(var(--radius)-var(--padding))] bg-persimmon-500/15 inset-ring inset-ring-persimmon-400/20 p-4">
+            <p class="text-body-sm text-rambutan-200">Inner = mango − p-4 → ~0.375rem</p>
+          </div>
+        </div>
+        <div class="rounded-mango p-4 bg-longan-900 inset-ring inset-ring-rambutan-100/5">
+          <div class="rounded-mango bg-lychee-500/15 inset-ring inset-ring-lychee-400/20 p-4">
+            <p class="text-body-sm text-rambutan-200">Non-concentric (wrong)</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Rules</h2>
+      <ul role="list" class="flex flex-col gap-3 max-w-[72ch]">
+        <li class="text-body text-rambutan-300 text-pretty">Use fruit names exclusively. <code class="text-code text-rambutan-200">rounded-md</code>, <code class="text-code text-rambutan-200">rounded-xl</code> etc. are not part of Bruhs.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Pair concentric rounds with CSS variables — see the example above.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Use <code class="text-code text-rambutan-200">rounded-orb</code> for anything circular: avatars, dots, toggles, focus dots.</li>
+      </ul>
+    </section>
+  </div>
+</BaseLayout>

@@ -15,35 +15,117 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
       </p>
     </section>
 
-    <nav class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <!-- Colors Card -->
-      <a href="/colors" class="group block rounded-xl border border-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:border-rambutan-100/15 hover:bg-longan-900/80">
+    <nav class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <a href="/colors" class="group block rounded-lychee inset-ring inset-ring-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:inset-ring-rambutan-100/15 hover:bg-longan-800">
         <div class="flex gap-1 mb-4 h-8">
-          <div class="flex-1 rounded-l-md bg-lychee-500"></div>
+          <div class="flex-1 rounded-l-grape bg-lychee-500"></div>
           <div class="flex-1 bg-persimmon-500"></div>
           <div class="flex-1 bg-durian-500"></div>
           <div class="flex-1 bg-pandan-500"></div>
           <div class="flex-1 bg-blueberry-500"></div>
           <div class="flex-1 bg-mangosteen-500"></div>
-          <div class="flex-1 rounded-r-md bg-dragonfruit-500"></div>
+          <div class="flex-1 rounded-r-grape bg-dragonfruit-500"></div>
         </div>
         <h2 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Colors</h2>
-        <p class="text-body-sm text-rambutan-400">7 accent families + 2 neutrals in OKLCH</p>
+        <p class="text-body-sm text-rambutan-400">7 accent families + 2 warm neutrals in OKLCH</p>
       </a>
 
-      <!-- Typography Card -->
-      <a href="/typography" class="group block rounded-xl border border-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:border-rambutan-100/15 hover:bg-longan-900/80">
+      <a href="/typography" class="group block rounded-lychee inset-ring inset-ring-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:inset-ring-rambutan-100/15 hover:bg-longan-800">
         <div class="mb-4 h-8 flex items-end gap-2 overflow-hidden">
-          <span class="text-2xl font-light font-krypton text-rambutan-300 leading-none">Aa</span>
-          <span class="text-lg font-normal font-krypton text-rambutan-500 leading-none">Bb</span>
-          <span class="text-sm font-medium font-krypton text-rambutan-600 leading-none">Cc</span>
+          <span class="text-2xl font-light font-krypton text-rambutan-300 leading-none">Kr</span>
+          <span class="text-xl font-normal font-xenon text-rambutan-400 leading-none">Xe</span>
+          <span class="text-lg font-normal font-neon text-rambutan-500 leading-none">Ne</span>
+          <span class="text-base font-medium font-argon text-rambutan-500 leading-none">Ar</span>
+          <span class="text-base font-normal font-radon text-rambutan-600 leading-none">Ra</span>
         </div>
         <h2 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Typography</h2>
-        <p class="text-body-sm text-rambutan-400">Monaspace superfamily with 6-category scale</p>
+        <p class="text-body-sm text-rambutan-400">All-mono system — one Monaspace variant per role</p>
       </a>
 
-      <!-- Bruhs Card -->
-      <a href="/bruhs" class="group block rounded-xl border border-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:border-rambutan-100/15 hover:bg-longan-900/80">
+      <a href="/radius" class="group block rounded-lychee inset-ring inset-ring-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:inset-ring-rambutan-100/15 hover:bg-longan-800">
+        <div class="mb-4 h-8 flex items-center gap-2">
+          <div class="size-6 rounded-seed bg-persimmon-500/30 inset-ring inset-ring-persimmon-400/30"></div>
+          <div class="size-6 rounded-grape bg-persimmon-500/30 inset-ring inset-ring-persimmon-400/30"></div>
+          <div class="size-6 rounded-lychee bg-persimmon-500/30 inset-ring inset-ring-persimmon-400/30"></div>
+          <div class="size-6 rounded-mango bg-persimmon-500/30 inset-ring inset-ring-persimmon-400/30"></div>
+          <div class="size-6 rounded-orb bg-persimmon-500/30 inset-ring inset-ring-persimmon-400/30"></div>
+        </div>
+        <h2 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Radius</h2>
+        <p class="text-body-sm text-rambutan-400">seed · grape · lychee · mango · pomelo · orb</p>
+      </a>
+
+      <a href="/elevation" class="group block rounded-lychee inset-ring inset-ring-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:inset-ring-rambutan-100/15 hover:bg-longan-800">
+        <div class="mb-4 h-8 flex items-center gap-3">
+          <div class="size-6 rounded-grape bg-longan-900 inset-ring inset-ring-white/5"></div>
+          <div class="size-6 rounded-grape bg-longan-800 inset-ring inset-ring-white/10"></div>
+          <div class="size-6 rounded-grape bg-longan-700 inset-ring inset-ring-white/15"></div>
+        </div>
+        <h2 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Elevation</h2>
+        <p class="text-body-sm text-rambutan-400">Tone-step + inset-ring — no drop shadows</p>
+      </a>
+
+      <a href="/buttons" class="group block rounded-lychee inset-ring inset-ring-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:inset-ring-rambutan-100/15 hover:bg-longan-800">
+        <div class="mb-4 h-8 flex items-center gap-2">
+          <span class="inline-flex items-center rounded-grape bg-persimmon-500 px-2.5 py-1 text-button-sm text-longan-950">Primary</span>
+          <span class="inline-flex items-center rounded-grape bg-persimmon-500/15 text-persimmon-200 px-2.5 py-1 text-button-sm inset-ring inset-ring-persimmon-400/20">Soft</span>
+        </div>
+        <h2 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Buttons</h2>
+        <p class="text-body-sm text-rambutan-400">Primary, soft, outline, ghost, destructive</p>
+      </a>
+
+      <a href="/badges" class="group block rounded-lychee inset-ring inset-ring-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:inset-ring-rambutan-100/15 hover:bg-longan-800">
+        <div class="mb-4 h-8 flex items-center gap-1.5 flex-wrap">
+          <span class="inline-flex rounded-grape bg-pandan-500/15 text-pandan-200 px-2 py-1 text-label-sm inset-ring inset-ring-pandan-400/20">Live</span>
+          <span class="inline-flex rounded-grape bg-durian-500/15 text-durian-200 px-2 py-1 text-label-sm inset-ring inset-ring-durian-400/20">Beta</span>
+          <span class="inline-flex rounded-grape bg-lychee-500/15 text-lychee-200 px-2 py-1 text-label-sm inset-ring inset-ring-lychee-400/20">New</span>
+        </div>
+        <h2 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Badges</h2>
+        <p class="text-body-sm text-rambutan-400">Soft and outline variants across all tones</p>
+      </a>
+
+      <a href="/forms" class="group block rounded-lychee inset-ring inset-ring-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:inset-ring-rambutan-100/15 hover:bg-longan-800">
+        <div class="mb-4 h-8 flex items-center gap-2">
+          <span class="block h-6 flex-1 rounded-grape bg-white/5 inset-ring inset-ring-white/10"></span>
+          <span class="inline-grid size-4 place-items-center rounded-seed bg-persimmon-500">
+            <svg viewBox="0 0 14 14" fill="none" class="size-3 stroke-longan-950"><path d="M3 8L6 11L11 3.5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </span>
+        </div>
+        <h2 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Forms</h2>
+        <p class="text-body-sm text-rambutan-400">Inputs, selects, checkboxes, radios, toggles</p>
+      </a>
+
+      <a href="/icons" class="group block rounded-lychee inset-ring inset-ring-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:inset-ring-rambutan-100/15 hover:bg-longan-800">
+        <div class="mb-4 h-8 flex items-center gap-3 text-persimmon-300">
+          <svg viewBox="0 0 16 16" fill="currentColor" class="size-4"><path d="M8 2.5a.75.75 0 0 1 .75.75v4h4a.75.75 0 0 1 0 1.5h-4v4a.75.75 0 0 1-1.5 0v-4h-4a.75.75 0 0 1 0-1.5h4v-4A.75.75 0 0 1 8 2.5Z" /></svg>
+          <svg viewBox="0 0 20 20" fill="currentColor" class="size-5"><path d="M10 3a.75.75 0 0 1 .75.75v5.5h5.5a.75.75 0 0 1 0 1.5h-5.5v5.5a.75.75 0 0 1-1.5 0v-5.5h-5.5a.75.75 0 0 1 0-1.5h5.5v-5.5A.75.75 0 0 1 10 3Z" /></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-6"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+        </div>
+        <h2 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Icons</h2>
+        <p class="text-body-sm text-rambutan-400">Heroicons sizing rules — never scale</p>
+      </a>
+
+      <a href="/surfaces" class="group block rounded-lychee inset-ring inset-ring-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:inset-ring-rambutan-100/15 hover:bg-longan-800">
+        <div class="mb-4 h-8 grid grid-cols-3 gap-2">
+          <div class="rounded-grape"></div>
+          <div class="rounded-grape border-t border-rambutan-100/20"></div>
+          <div class="rounded-grape bg-longan-800 inset-ring inset-ring-white/10"></div>
+        </div>
+        <h2 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Surfaces</h2>
+        <p class="text-body-sm text-rambutan-400">Whitespace, dividers, wells, and cards</p>
+      </a>
+
+      <a href="/agents" class="group block rounded-lychee inset-ring inset-ring-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:inset-ring-rambutan-100/15 hover:bg-longan-800">
+        <div class="mb-4 h-8 flex items-end gap-1 font-neon text-rambutan-300 leading-none">
+          <span class="text-base">&gt;</span>
+          <span class="text-base">adopt</span>
+          <span class="text-base text-persimmon-400">bruhs</span>
+          <span class="text-base animate-pulse">_</span>
+        </div>
+        <h2 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Agents</h2>
+        <p class="text-body-sm text-rambutan-400">Full adoption guide + one-click LLM copy</p>
+      </a>
+
+      <a href="/bruhs" class="group block rounded-lychee inset-ring inset-ring-rambutan-100/5 bg-longan-900 p-5 transition-all duration-200 hover:inset-ring-rambutan-100/15 hover:bg-longan-800">
         <div class="mb-4 h-8 flex items-center justify-center">
           <svg viewBox="0 0 600 600" fill="none" xmlns="http://www.w3.org/2000/svg" class="h-8 w-8">
             <circle cx="300" cy="300" r="300" fill="oklch(0.8924 0.1454 94.78)" />

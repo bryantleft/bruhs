@@ -11,6 +11,14 @@ const Sidebar: FunctionComponent<SidebarProps> = ({ current, isOpen = false, onC
   const links = [
     { label: "Colors", href: "/colors", key: "colors" as const },
     { label: "Typography", href: "/typography", key: "typography" as const },
+    { label: "Radius", href: "/radius", key: "radius" as const },
+    { label: "Elevation", href: "/elevation", key: "elevation" as const },
+    { label: "Buttons", href: "/buttons", key: "buttons" as const },
+    { label: "Badges", href: "/badges", key: "badges" as const },
+    { label: "Forms", href: "/forms", key: "forms" as const },
+    { label: "Icons", href: "/icons", key: "icons" as const },
+    { label: "Surfaces", href: "/surfaces", key: "surfaces" as const },
+    { label: "Agents", href: "/agents", key: "agents" as const },
     { label: "Bruhs", href: "/bruhs", key: "bruhs" as const }
   ];
 
@@ -19,7 +27,7 @@ const Sidebar: FunctionComponent<SidebarProps> = ({ current, isOpen = false, onC
       {/* Mobile backdrop */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden transition-opacity duration-300"
+          className="fixed inset-0 bg-longan-950/70 z-40 lg:hidden transition-opacity duration-300"
           onClick={onClose}
         />
       )}
@@ -53,7 +61,7 @@ const Sidebar: FunctionComponent<SidebarProps> = ({ current, isOpen = false, onC
         {onClose && (
           <button
             onClick={onClose}
-            className="lg:hidden text-rambutan-100/60 hover:text-rambutan-100 hover:bg-longan-800/50 transition-all duration-300 p-2 rounded-lg active:scale-95"
+            className="lg:hidden text-rambutan-100/60 hover:text-rambutan-100 hover:bg-longan-800/50 transition-all duration-300 p-2 rounded-grape active:scale-95"
             aria-label="Close menu"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -71,7 +79,7 @@ const Sidebar: FunctionComponent<SidebarProps> = ({ current, isOpen = false, onC
               <li key={link.key}>
                 <a 
                   href={link.href}
-                  className="group flex flex-col p-3 rounded-xl transition-all duration-300 hover:bg-longan-800/30 active:scale-98"
+                  className="group flex flex-col p-3 rounded-lychee transition-all duration-300 hover:bg-longan-800/30 active:scale-98"
                   aria-current={isActive ? "page" : undefined}
                 >
                   <span
@@ -84,7 +92,7 @@ const Sidebar: FunctionComponent<SidebarProps> = ({ current, isOpen = false, onC
                     {link.label}
                   </span>
                   {isActive && (
-                    <div className="w-8 h-0.5 bg-persimmon-500 rounded-full transition-all duration-300" />
+                    <div className="w-8 h-0.5 bg-persimmon-500 rounded-orb transition-all duration-300" />
                   )}
                 </a>
               </li>
