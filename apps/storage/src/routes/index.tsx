@@ -23,21 +23,15 @@ export const Route = createFileRoute("/")({ component: Home });
 function Home() {
   const { status, progress, result, error, scan, loadSnapshot, cancel } =
     useScan();
-  const [homeDir, setHomeDir] = useState("/");
   const [tree, setTree] = useState<TreeNode | null>(null);
   const [topFiles, setTopFiles] = useState<FileEntry[]>([]);
   const [summary, setSummary] = useState<ScanSummary | null>(null);
   const [stack, setStack] = useState<string[]>([]);
   const [selected, setSelected] = useState<TreeNode | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TreeNode | null>(null);
-  const [lastRoot, setLastRoot] = useState<string>("/");
 
-  // Initial load: home dir + cached snapshot.
+  // Initial load: show the last cached scan if there is one.
   useEffect(() => {
-    fetch("/api/home")
-      .then((r) => r.json())
-      .then((d: { home: string }) => setHomeDir(d.home))
-      .catch(() => {});
     loadSnapshot();
   }, [loadSnapshot]);
 
@@ -56,10 +50,7 @@ function Home() {
     return findByPath(tree, stack[stack.length - 1] ?? tree.path) ?? tree;
   }, [tree, stack]);
 
-  const runScan = (root: string) => {
-    setLastRoot(root);
-    scan(root, "bulk");
-  };
+  const runScan = () => scan("/", "bulk");
 
   const enterDir = (node: TreeNode) => {
     setStack((s) => [...s, node.path]);
@@ -76,12 +67,9 @@ function Home() {
     setStack((s) => (s.includes(path) ? s.slice(0, s.indexOf(path)) : s));
   };
 
-  // Heuristic: a whole-disk scan that hit mostly permission errors => Full Disk Access needed.
+  // Heuristic: a scan that hit mostly permission errors => Full Disk Access needed.
   const needsFda =
-    !!summary &&
-    lastRoot === "/" &&
-    summary.errors > 20 &&
-    summary.errors > summary.dirs * 0.15;
+    !!summary && summary.errors > 20 && summary.errors > summary.dirs * 0.15;
 
   return (
     <div className="flex h-screen flex-col bg-longan-950">
@@ -108,7 +96,6 @@ function Home() {
           progress={progress}
           onScan={runScan}
           onCancel={cancel}
-          homeDir={homeDir}
         />
       </header>
 
@@ -262,7 +249,7 @@ function EmptyState({ scanning }: { scanning: boolean }) {
       <p className="mt-2 max-w-sm text-lychee-500 text-sm">
         {scanning
           ? "Reading the filesystem — the treemap will appear when it's done."
-          : "Pick a target above and hit Scan. The treemap shows what's eating your space; click to drill in, and move space-hogs to the Trash."}
+          : "Hit Scan whole disk to begin. The treemap shows what's eating your space; double-click a folder to drill in, and move space-hogs to the Trash."}
       </p>
     </div>
   );

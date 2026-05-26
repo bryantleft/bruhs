@@ -1,54 +1,19 @@
-import { FolderOpen, HardDrive, House, Loader2, Search, X } from "lucide-react";
-import { useState } from "react";
+import { Loader2, Search, X } from "lucide-react";
 import { formatBytes } from "~/lib/format";
 import type { ProgressEvent } from "~/lib/types";
-import { cn } from "~/lib/utils";
 
 interface Props {
   scanning: boolean;
   progress: ProgressEvent | null;
-  onScan: (root: string) => void;
+  /** Start a whole-disk scan. */
+  onScan: () => void;
   onCancel: () => void;
-  homeDir: string;
 }
 
-export function ScanControls({
-  scanning,
-  progress,
-  onScan,
-  onCancel,
-  homeDir,
-}: Props) {
-  const [root, setRoot] = useState(homeDir);
-
+export function ScanControls({ scanning, progress, onScan, onCancel }: Props) {
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex overflow-hidden rounded-grape border border-longan-700">
-          <Preset
-            icon={<HardDrive size={14} />}
-            label="Whole disk"
-            onClick={() => setRoot("/")}
-            active={root === "/"}
-          />
-          <Preset
-            icon={<House size={14} />}
-            label="Home"
-            onClick={() => setRoot(homeDir)}
-            active={root === homeDir}
-          />
-        </div>
-        <div className="flex min-w-[260px] flex-1 items-center gap-2 rounded-grape border border-longan-700 bg-longan-900 px-3 py-2">
-          <FolderOpen size={15} className="shrink-0 text-lychee-500" />
-          <input
-            value={root}
-            onChange={(e) => setRoot(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !scanning && onScan(root)}
-            placeholder="/path/to/scan"
-            spellCheck={false}
-            className="w-full bg-transparent font-mono text-lychee-100 text-sm outline-none placeholder:text-lychee-600"
-          />
-        </div>
+      <div className="flex flex-wrap items-center gap-3">
         {scanning ? (
           <button
             type="button"
@@ -60,11 +25,17 @@ export function ScanControls({
         ) : (
           <button
             type="button"
-            onClick={() => onScan(root)}
+            onClick={onScan}
             className="flex items-center gap-1.5 rounded-grape bg-guava-600 px-4 py-2 font-medium text-sm text-white transition hover:bg-guava-500"
           >
-            <Search size={15} /> Scan
+            <Search size={15} /> Scan whole disk
           </button>
+        )}
+        {!scanning && (
+          <span className="text-lychee-500 text-xs">
+            Scans your entire disk (<span className="font-mono">/</span>). May
+            need Full Disk Access.
+          </span>
         )}
       </div>
 
@@ -99,32 +70,5 @@ export function ScanControls({
         </div>
       )}
     </div>
-  );
-}
-
-function Preset({
-  icon,
-  label,
-  onClick,
-  active,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  active: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-1.5 px-3 py-2 text-sm transition",
-        active
-          ? "bg-blueberry-600 text-white"
-          : "bg-longan-900 text-lychee-300 hover:bg-longan-800",
-      )}
-    >
-      {icon} {label}
-    </button>
   );
 }
