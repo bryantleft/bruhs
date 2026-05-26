@@ -20,7 +20,7 @@ export function TypeBreakdown({ node }: { node: TreeNode }) {
               <div className="flex items-center justify-between text-xs">
                 <span className="flex items-center gap-1.5 text-lychee-200">
                   <span
-                    className="inline-block size-2.5 rounded-sm"
+                    className="inline-block size-2.5 rounded-seed"
                     style={{ background: `var(${CATEGORY_VAR[r.category]})` }}
                   />
                   {CATEGORY_LABEL[r.category]}
@@ -29,9 +29,9 @@ export function TypeBreakdown({ node }: { node: TreeNode }) {
                   {formatBytes(r.bytes)}
                 </span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-longan-800">
+              <div className="h-1.5 overflow-hidden rounded-orb bg-longan-800">
                 <div
-                  className="h-full rounded-full"
+                  className="h-full rounded-orb"
                   style={{
                     width: `${pct}%`,
                     background: `var(${CATEGORY_VAR[r.category]})`,

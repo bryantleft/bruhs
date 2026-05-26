@@ -61,9 +61,9 @@ export function DeleteDialog({ target, onClose, onTrashed }: Props) {
         onClick={onClose}
         className="absolute inset-0 cursor-default bg-black/60"
       />
-      <div className="relative w-full max-w-md rounded-2xl border border-longan-700 bg-longan-900 p-5 shadow-2xl">
+      <div className="relative w-full max-w-md rounded-lychee border border-longan-700 bg-longan-900 p-5 shadow-2xl">
         <div className="mb-3 flex items-center gap-2 text-lychee-200">
-          <span className="flex size-8 items-center justify-center rounded-full bg-lychee-900 text-lychee-400">
+          <span className="flex size-8 items-center justify-center rounded-orb bg-lychee-900 text-lychee-400">
             <AlertTriangle size={16} />
           </span>
           <h2 className="font-semibold text-lg">Move to Trash?</h2>
@@ -94,7 +94,7 @@ export function DeleteDialog({ target, onClose, onTrashed }: Props) {
         )}
 
         {error && (
-          <p className="mt-3 rounded-lg bg-lychee-900/40 px-3 py-2 text-lychee-300 text-sm">
+          <p className="mt-3 rounded-grape bg-lychee-900/40 px-3 py-2 text-lychee-300 text-sm">
             {error}
           </p>
         )}
@@ -103,7 +103,7 @@ export function DeleteDialog({ target, onClose, onTrashed }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg px-4 py-2 text-lychee-300 text-sm transition hover:bg-longan-800"
+            className="rounded-grape px-4 py-2 text-lychee-300 text-sm transition hover:bg-longan-800"
           >
             Cancel
           </button>
@@ -112,7 +112,7 @@ export function DeleteDialog({ target, onClose, onTrashed }: Props) {
               type="button"
               onClick={confirm}
               disabled={busy}
-              className="flex items-center gap-1.5 rounded-lg bg-lychee-600 px-4 py-2 font-medium text-sm text-white transition hover:bg-lychee-500 disabled:opacity-60"
+              className="flex items-center gap-1.5 rounded-grape bg-lychee-600 px-4 py-2 font-medium text-sm text-white transition hover:bg-lychee-500 disabled:opacity-60"
             >
               {busy ? (
                 <Loader2 size={15} className="animate-spin" />

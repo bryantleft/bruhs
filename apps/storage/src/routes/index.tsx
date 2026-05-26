@@ -94,7 +94,7 @@ function Home() {
               </span>
               <span>{summary.files.toLocaleString()} files</span>
               <span>{summary.dirs.toLocaleString()} dirs</span>
-              <span className="rounded bg-longan-800 px-1.5 py-0.5">
+              <span className="rounded-seed bg-longan-800 px-1.5 py-0.5">
                 {summary.engine} · {summary.elapsedMs}ms
               </span>
             </span>
@@ -146,7 +146,7 @@ function Home() {
                       <button
                         type="button"
                         onClick={() => breadcrumbTo(i)}
-                        className={`max-w-[200px] truncate rounded px-1.5 py-0.5 font-mono ${
+                        className={`max-w-[200px] truncate rounded-seed px-1.5 py-0.5 font-mono ${
                           i === stack.length - 1
                             ? "bg-blueberry-900/40 text-blueberry-200"
                             : "text-lychee-400 hover:bg-longan-800 hover:text-lychee-200"
@@ -163,7 +163,7 @@ function Home() {
                   </span>
                 )}
               </div>
-              <div className="min-h-0 flex-1 border border-longan-800 bg-longan-900/40">
+              <div className="min-h-0 flex-1 overflow-hidden rounded-lychee border border-longan-800 bg-longan-900/40">
                 <TreemapCanvas
                   root={current}
                   onEnterDir={enterDir}
@@ -181,7 +181,7 @@ function Home() {
         {current && (
           <aside className="w-80 shrink-0 space-y-5 overflow-y-auto border-longan-800 border-l p-4">
             {selected ? (
-              <div className="space-y-2 rounded-xl border border-longan-700 bg-longan-900 p-3">
+              <div className="space-y-2 rounded-lychee border border-longan-700 bg-longan-900 p-3">
                 <h3 className="font-semibold text-lychee-300 text-xs uppercase tracking-wide">
                   Selected
                 </h3>
@@ -200,7 +200,7 @@ function Home() {
                 <button
                   type="button"
                   onClick={() => setDeleteTarget(selected)}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-lychee-700 px-3 py-2 font-medium text-sm text-white transition hover:bg-lychee-600"
+                  className="flex w-full items-center justify-center gap-1.5 rounded-grape bg-lychee-700 px-3 py-2 font-medium text-sm text-white transition hover:bg-lychee-600"
                 >
                   <Trash2 size={14} /> Move to Trash
                 </button>

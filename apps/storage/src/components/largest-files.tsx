@@ -19,10 +19,10 @@ export function LargestFiles({ files, onSelect }: Props) {
             <button
               type="button"
               onClick={() => onSelect(f)}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition hover:bg-longan-800"
+              className="flex w-full items-center gap-2 rounded-grape px-2 py-1 text-left text-xs transition hover:bg-longan-800"
             >
               <span
-                className="size-2.5 shrink-0 rounded-sm"
+                className="size-2.5 shrink-0 rounded-seed"
                 style={{
                   background: `var(${CATEGORY_VAR[categoryForName(f.name)]})`,
                 }}

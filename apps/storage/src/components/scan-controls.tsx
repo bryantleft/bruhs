@@ -24,7 +24,7 @@ export function ScanControls({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex overflow-hidden rounded-lg border border-longan-700">
+        <div className="flex overflow-hidden rounded-grape border border-longan-700">
           <Preset
             icon={<HardDrive size={14} />}
             label="Whole disk"
@@ -38,7 +38,7 @@ export function ScanControls({
             active={root === homeDir}
           />
         </div>
-        <div className="flex min-w-[260px] flex-1 items-center gap-2 rounded-lg border border-longan-700 bg-longan-900 px-3 py-2">
+        <div className="flex min-w-[260px] flex-1 items-center gap-2 rounded-grape border border-longan-700 bg-longan-900 px-3 py-2">
           <FolderOpen size={15} className="shrink-0 text-lychee-500" />
           <input
             value={root}
@@ -53,7 +53,7 @@ export function ScanControls({
           <button
             type="button"
             onClick={onCancel}
-            className="flex items-center gap-1.5 rounded-lg bg-lychee-700 px-4 py-2 font-medium text-sm text-white transition hover:bg-lychee-600"
+            className="flex items-center gap-1.5 rounded-grape bg-lychee-700 px-4 py-2 font-medium text-sm text-white transition hover:bg-lychee-600"
           >
             <X size={15} /> Cancel
           </button>
@@ -61,7 +61,7 @@ export function ScanControls({
           <button
             type="button"
             onClick={() => onScan(root)}
-            className="flex items-center gap-1.5 rounded-lg bg-guava-600 px-4 py-2 font-medium text-sm text-white transition hover:bg-guava-500"
+            className="flex items-center gap-1.5 rounded-grape bg-guava-600 px-4 py-2 font-medium text-sm text-white transition hover:bg-guava-500"
           >
             <Search size={15} /> Scan
           </button>
@@ -69,7 +69,7 @@ export function ScanControls({
       </div>
 
       {scanning && (
-        <div className="flex items-center gap-3 rounded-lg border border-longan-700 bg-longan-900/60 px-3 py-2 text-sm">
+        <div className="flex items-center gap-3 rounded-grape border border-longan-700 bg-longan-900/60 px-3 py-2 text-sm">
           <Loader2 size={15} className="animate-spin text-guava-400" />
           <span className="text-lychee-300">
             {progress ? (

@@ -221,10 +221,7 @@ export function TreemapCanvas({
   };
 
   return (
-    <div
-      ref={wrapRef}
-      className="relative h-full w-full overflow-hidden rounded-xl"
-    >
+    <div ref={wrapRef} className="relative h-full w-full overflow-hidden">
       <canvas
         ref={canvasRef}
         style={{
@@ -239,7 +236,7 @@ export function TreemapCanvas({
       />
       {hover && (
         <div
-          className="pointer-events-none absolute z-10 max-w-xs rounded-md border border-longan-700 bg-longan-900/95 px-2.5 py-1.5 text-xs shadow-lg"
+          className="pointer-events-none absolute z-10 max-w-xs rounded-grape border border-longan-700 bg-longan-900/95 px-2.5 py-1.5 text-xs shadow-lg"
           style={{
             left: Math.min(hover.x + 12, size.w - 220),
             top: Math.min(hover.y + 12, size.h - 56),
