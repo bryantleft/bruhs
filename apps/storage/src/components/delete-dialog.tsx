@@ -1,4 +1,4 @@
-import { AlertTriangle, Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { formatBytes } from "~/lib/format";
 import type { TrashResult, TreeNode } from "~/lib/types";
@@ -59,51 +59,58 @@ export function DeleteDialog({ target, onClose, onTrashed }: Props) {
         type="button"
         aria-label="Close dialog"
         onClick={onClose}
-        className="absolute inset-0 cursor-default bg-black/60"
+        className="absolute inset-0 cursor-default bg-longan-950/70 backdrop-blur-sm"
       />
-      <div className="relative w-full max-w-md rounded-lychee border border-longan-700 bg-longan-900 p-5 shadow-2xl">
-        <div className="mb-3 flex items-center gap-2 text-lychee-200">
-          <span className="flex size-8 items-center justify-center rounded-orb bg-lychee-900 text-lychee-400">
-            <AlertTriangle size={16} />
+      <div className="relative w-full max-w-md rounded-mango bg-longan-900 p-6 shadow-2xl ring-1 ring-white/10">
+        <div className="flex items-start gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-grape bg-lychee-500/15 text-lychee-300">
+            <TriangleAlert className="size-4 shrink-0" />
           </span>
-          <h2 className="font-semibold text-lg">Move to Trash?</h2>
+          <div className="min-w-0 flex-1">
+            <h2 className="font-semibold text-base text-lychee-50 tracking-tight">
+              Move to Trash?
+            </h2>
+
+            {aggregate ? (
+              <p className="mt-2 text-pretty text-lychee-300 text-sm">
+                This is an aggregate of many small items, not a single file.
+                Zoom in to select a real file or folder to delete.
+              </p>
+            ) : (
+              <>
+                <p
+                  className="mt-2 truncate font-medium font-mono text-lychee-100 text-sm"
+                  title={target.name}
+                >
+                  {target.name}
+                </p>
+                <p className="mt-0.5 break-all text-[0.6875rem] text-lychee-500 leading-4">
+                  {target.path}
+                </p>
+                <p className="mt-3 text-pretty text-lychee-300 text-sm">
+                  Frees{" "}
+                  <span className="font-medium font-mono text-persimmon-300 tabular-nums">
+                    {formatBytes(target.size)}
+                  </span>
+                  . It goes to the macOS Trash and can be restored with Put
+                  Back.
+                </p>
+              </>
+            )}
+          </div>
         </div>
 
-        {aggregate ? (
-          <p className="text-lychee-300 text-sm">
-            This is an aggregate of many small items, not a single file. Zoom in
-            to select a real file or folder to delete.
-          </p>
-        ) : (
-          <>
-            <p className="mb-1 truncate font-mono text-lychee-100 text-sm">
-              {target.name}
-            </p>
-            <p className="mb-3 break-all text-lychee-500 text-xs">
-              {target.path}
-            </p>
-            <p className="text-lychee-300 text-sm">
-              Frees{" "}
-              <span className="font-medium text-persimmon-300">
-                {formatBytes(target.size)}
-              </span>
-              . The item goes to the macOS Trash and can be restored with Put
-              Back.
-            </p>
-          </>
-        )}
-
         {error && (
-          <p className="mt-3 rounded-grape bg-lychee-900/40 px-3 py-2 text-lychee-300 text-sm">
+          <p className="mt-4 rounded-grape bg-lychee-500/10 px-3 py-2 text-lychee-200 text-sm ring-1 ring-lychee-500/20 ring-inset">
             {error}
           </p>
         )}
 
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-grape px-4 py-2 text-lychee-300 text-sm transition hover:bg-longan-800"
+            className="rounded-grape bg-longan-800 px-3 py-2 font-medium text-lychee-200 text-sm ring-1 ring-longan-700 ring-inset hover:bg-longan-700 focus-visible:outline-2 focus-visible:outline-lychee-400 focus-visible:outline-offset-2"
           >
             Cancel
           </button>
@@ -112,12 +119,12 @@ export function DeleteDialog({ target, onClose, onTrashed }: Props) {
               type="button"
               onClick={confirm}
               disabled={busy}
-              className="flex items-center gap-1.5 rounded-grape bg-lychee-600 px-4 py-2 font-medium text-sm text-white transition hover:bg-lychee-500 disabled:opacity-60"
+              className="flex items-center gap-1.5 rounded-grape bg-lychee-600 py-2 pr-3 pl-2 font-medium text-sm text-white hover:bg-lychee-500 focus-visible:outline-2 focus-visible:outline-lychee-400 focus-visible:outline-offset-2 disabled:opacity-60"
             >
               {busy ? (
-                <Loader2 size={15} className="animate-spin" />
+                <Loader2 className="size-4 shrink-0 animate-spin" />
               ) : (
-                <Trash2 size={15} />
+                <Trash2 className="size-4 shrink-0" />
               )}
               Move to Trash
             </button>

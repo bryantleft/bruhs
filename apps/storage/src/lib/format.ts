@@ -101,6 +101,7 @@ register("document", [
   "pptx",
   "csv",
   "epub",
+  "log",
 ]);
 register("archive", [
   "zip",
@@ -114,6 +115,14 @@ register("archive", [
   "pkg",
   "iso",
   "tgz",
+  // disk/VM images — common space hogs on dev machines
+  "img",
+  "raw",
+  "vmdk",
+  "qcow2",
+  "vdi",
+  "sparseimage",
+  "sparsebundle",
 ]);
 register("binary", [
   "app",

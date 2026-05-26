@@ -44,11 +44,11 @@ function RootComponent() {
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="dark antialiased">
       <head>
         <HeadContent />
       </head>
-      <body className="bg-longan-950 text-lychee-100">
+      <body className="bg-longan-950 text-lychee-100 [background-image:radial-gradient(70rem_50rem_at_78%_-15%,var(--color-blueberry-950),transparent_70%)]">
         {children}
         <Scripts />
       </body>

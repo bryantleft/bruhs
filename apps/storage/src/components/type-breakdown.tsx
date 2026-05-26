@@ -8,28 +8,36 @@ export function TypeBreakdown({ node }: { node: TreeNode }) {
   const total = rows.reduce((s, r) => s + r.bytes, 0) || 1;
 
   return (
-    <div className="space-y-2">
-      <h3 className="font-semibold text-lychee-300 text-xs uppercase tracking-wide">
+    <section className="space-y-3">
+      <h2 className="font-medium text-[0.6875rem] text-lychee-500 uppercase tracking-wide">
         By type
-      </h3>
-      <div className="space-y-1.5">
+      </h2>
+      <ul className="space-y-2.5">
         {rows.map((r) => {
           const pct = (r.bytes / total) * 100;
           return (
-            <div key={r.category} className="space-y-0.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="flex items-center gap-1.5 text-lychee-200">
+            <li key={r.category}>
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <div className="flex min-w-0 items-center gap-2">
                   <span
-                    className="inline-block size-2.5 rounded-seed"
+                    aria-hidden="true"
+                    className="size-2.5 shrink-0 rounded-seed"
                     style={{ background: `var(${CATEGORY_VAR[r.category]})` }}
                   />
-                  {CATEGORY_LABEL[r.category]}
-                </span>
-                <span className="font-mono text-lychee-400">
-                  {formatBytes(r.bytes)}
-                </span>
+                  <span className="truncate text-lychee-200">
+                    {CATEGORY_LABEL[r.category]}
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-baseline gap-1.5">
+                  <span className="font-mono text-lychee-200 text-xs tabular-nums">
+                    {formatBytes(r.bytes)}
+                  </span>
+                  <span className="w-9 text-right text-[0.6875rem] text-lychee-500 tabular-nums">
+                    {pct.toFixed(0)}%
+                  </span>
+                </div>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-orb bg-longan-800">
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-orb bg-longan-800">
                 <div
                   className="h-full rounded-orb"
                   style={{
@@ -38,10 +46,10 @@ export function TypeBreakdown({ node }: { node: TreeNode }) {
                   }}
                 />
               </div>
-            </div>
+            </li>
           );
         })}
-      </div>
-    </div>
+      </ul>
+    </section>
   );
 }

@@ -110,21 +110,24 @@ export function TreemapCanvas({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.w, size.h);
 
-    // Leaf rectangles with cushion shading.
+    // Leaf rectangles with softly rounded corners and cushion shading.
     for (const leaf of leaves) {
       const w = leaf.x1 - leaf.x0;
       const h = leaf.y1 - leaf.y0;
       if (w < 1 || h < 1) continue;
+      const r = w > 7 && h > 7 ? Math.min(3, w / 2, h / 2) : 0;
+      ctx.beginPath();
+      ctx.roundRect(leaf.x0, leaf.y0, w, h, r);
       ctx.fillStyle = colorFor(leaf.data, palette);
-      ctx.fillRect(leaf.x0, leaf.y0, w, h);
+      ctx.fill();
       // Cushion: light top-left, dark bottom-right.
       if (w > 3 && h > 3) {
         const g = ctx.createLinearGradient(leaf.x0, leaf.y0, leaf.x1, leaf.y1);
         g.addColorStop(0, "rgba(255,255,255,0.22)");
         g.addColorStop(0.5, "rgba(255,255,255,0.0)");
-        g.addColorStop(1, "rgba(0,0,0,0.28)");
+        g.addColorStop(1, "rgba(0,0,0,0.3)");
         ctx.fillStyle = g;
-        ctx.fillRect(leaf.x0, leaf.y0, w, h);
+        ctx.fill();
       }
     }
 
@@ -138,15 +141,20 @@ export function TreemapCanvas({
       if (w < 6 || h < 6) continue;
       ctx.strokeStyle = d.depth === 1 ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.25)";
       ctx.lineWidth = d.depth === 1 ? 1.5 : 0.75;
-      ctx.strokeRect(d.x0 + 0.5, d.y0 + 0.5, w - 1, h - 1);
+      ctx.beginPath();
+      ctx.roundRect(d.x0 + 0.5, d.y0 + 0.5, w - 1, h - 1, 3);
+      ctx.stroke();
       if (d.depth <= 2 && w > 42 && h > 14) {
         const label = d.data.name;
-        ctx.fillStyle = "rgba(255,255,255,0.92)";
         ctx.save();
         ctx.beginPath();
         ctx.rect(d.x0 + 3, d.y0, w - 6, 14);
         ctx.clip();
-        ctx.fillText(label, d.x0 + 4, d.y0 + 7);
+        // Subtle dark halo keeps labels legible over any color.
+        ctx.shadowColor = "rgba(0,0,0,0.55)";
+        ctx.shadowBlur = 2;
+        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.fillText(label, d.x0 + 4, d.y0 + 7.5);
         ctx.restore();
       }
     }
@@ -231,23 +239,35 @@ export function TreemapCanvas({
         onDoubleClick={onDoubleClick}
       />
       {hover && (
-        <div
-          className="pointer-events-none absolute z-10 max-w-xs rounded-grape border border-longan-700 bg-longan-900/95 px-2.5 py-1.5 text-xs shadow-lg"
-          style={{
-            left: Math.min(hover.x + 12, size.w - 220),
-            top: Math.min(hover.y + 12, size.h - 56),
-          }}
-        >
-          <div className="truncate font-medium text-lychee-100">
-            {hover.node.data.name}
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute z-0 rounded-[3px] ring-2 ring-white/70 ring-inset"
+            style={{
+              left: hover.node.x0,
+              top: hover.node.y0,
+              width: hover.node.x1 - hover.node.x0,
+              height: hover.node.y1 - hover.node.y0,
+            }}
+          />
+          <div
+            className="pointer-events-none absolute z-10 max-w-xs rounded-grape bg-longan-900/95 px-2.5 py-2 shadow-xl ring-1 ring-white/10 backdrop-blur-sm"
+            style={{
+              left: Math.min(hover.x + 14, size.w - 224),
+              top: Math.min(hover.y + 14, size.h - 60),
+            }}
+          >
+            <div className="truncate font-medium font-mono text-lychee-50 text-sm">
+              {hover.node.data.name}
+            </div>
+            <div className="font-mono text-persimmon-300 text-xs tabular-nums">
+              {formatBytes(hover.node.value ?? hover.node.data.size)}
+            </div>
+            <div className="mt-0.5 max-w-56 truncate text-[0.625rem] text-lychee-500">
+              {hover.node.data.path}
+            </div>
           </div>
-          <div className="text-persimmon-300">
-            {formatBytes(hover.node.value ?? hover.node.data.size)}
-          </div>
-          <div className="truncate text-[10px] text-lychee-500">
-            {hover.node.data.path}
-          </div>
-        </div>
+        </>
       )}
     </div>
   );

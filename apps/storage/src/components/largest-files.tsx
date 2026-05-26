@@ -9,19 +9,23 @@ interface Props {
 export function LargestFiles({ files, onSelect }: Props) {
   if (files.length === 0) return null;
   return (
-    <div className="space-y-2">
-      <h3 className="font-semibold text-lychee-300 text-xs uppercase tracking-wide">
+    <section className="space-y-3">
+      <h2 className="font-medium text-[0.6875rem] text-lychee-500 uppercase tracking-wide">
         Largest files
-      </h3>
-      <ul className="space-y-0.5">
-        {files.slice(0, 30).map((f) => (
+      </h2>
+      <ul className="-mx-2 space-y-px">
+        {files.slice(0, 25).map((f, i) => (
           <li key={f.path}>
             <button
               type="button"
               onClick={() => onSelect(f)}
-              className="flex w-full items-center gap-2 rounded-grape px-2 py-1 text-left text-xs transition hover:bg-longan-800"
+              className="flex w-full items-center gap-2.5 rounded-grape px-2 py-1.5 text-left text-sm hover:bg-longan-800"
             >
+              <span className="w-4 shrink-0 text-right font-mono text-[0.6875rem] text-lychee-600 tabular-nums">
+                {i + 1}
+              </span>
               <span
+                aria-hidden="true"
                 className="size-2.5 shrink-0 rounded-seed"
                 style={{
                   background: `var(${CATEGORY_VAR[categoryForName(f.name)]})`,
@@ -33,13 +37,13 @@ export function LargestFiles({ files, onSelect }: Props) {
               >
                 {f.name}
               </span>
-              <span className="shrink-0 font-mono text-lychee-400">
+              <span className="shrink-0 font-mono text-lychee-400 text-xs tabular-nums">
                 {formatBytes(f.size)}
               </span>
             </button>
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }
