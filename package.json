@@ -7,10 +7,12 @@
 		"dev:www": "turbo run dev --filter=www",
 		"dev:domains": "turbo run dev --filter=domains",
 		"dev:ai": "turbo run dev --filter=ai",
+		"dev:storage": "turbo run dev --filter=storage",
 		"check:design": "turbo run check --filter=design",
 		"check:www": "turbo run check --filter=www",
 		"check:domains": "turbo run check --filter=domains",
-		"check:ai": "turbo run check --filter=ai"
+		"check:ai": "turbo run check --filter=ai",
+		"check:storage": "turbo run check --filter=storage"
 	},
 	"devDependencies": {
 		"turbo": "2.5.3"
