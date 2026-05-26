@@ -61,7 +61,10 @@ function Home() {
     scan(root, "bulk");
   };
 
-  const enterDir = (node: TreeNode) => setStack((s) => [...s, node.path]);
+  const enterDir = (node: TreeNode) => {
+    setStack((s) => [...s, node.path]);
+    setSelected(null); // navigating shouldn't leave the entered folder selected
+  };
   const breadcrumbTo = (i: number) => setStack((s) => s.slice(0, i + 1));
 
   const onTrashed = (path: string) => {
@@ -207,7 +210,8 @@ function Home() {
               </div>
             ) : (
               <p className="flex items-center gap-1.5 text-lychee-500 text-xs">
-                <Info size={13} /> Click a block to inspect or delete it.
+                <Info size={13} /> Click a block to inspect or delete it;
+                double-click a folder to zoom in.
               </p>
             )}
 

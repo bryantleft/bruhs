@@ -158,7 +158,8 @@ export function TreemapCanvas({
         (layout.descendants() as RNode[]).find(
           (d) => d.data.path === selectedPath,
         );
-      if (sel) {
+      // Never outline the root (depth 0) — that would frame the whole map.
+      if (sel && sel.depth > 0) {
         ctx.strokeStyle = "#fff";
         ctx.lineWidth = 2;
         ctx.strokeRect(
@@ -196,27 +197,21 @@ export function TreemapCanvas({
     setHover(n ? { x, y, node: n } : null);
   };
 
+  // Single click selects (for inspect/delete). Double click on a folder zooms in.
+  // Keeping these separate means nothing is ever left "selected" just by navigating.
   const onClick = (e: React.MouseEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     const n = nodeAt(e.clientX - rect.left, e.clientY - rect.top);
-    if (!n) {
-      onSelect(null);
-      return;
-    }
-    onSelect(n.data);
-    // Zoom into the directory the click lands in (depth-1 child of the current root),
-    // unless it's a leaf the user is selecting.
-    if (n.data.isDir && n.data.children?.length) onEnterDir(n.data);
-    else {
-      const d1 = ancestorAtDepth(n, 1);
-      if (
-        d1?.data.isDir &&
-        d1.data.children?.length &&
-        d1.data.path !== root.path
-      ) {
-        onEnterDir(d1.data);
-      }
+    onSelect(n ? n.data : null);
+  };
+
+  const onDoubleClick = (e: React.MouseEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const n = nodeAt(e.clientX - rect.left, e.clientY - rect.top);
+    if (n?.data.isDir && n.data.children?.length && n.data.path !== root.path) {
+      onEnterDir(n.data);
     }
   };
 
@@ -233,6 +228,7 @@ export function TreemapCanvas({
         onMouseMove={onMove}
         onMouseLeave={() => setHover(null)}
         onClick={onClick}
+        onDoubleClick={onDoubleClick}
       />
       {hover && (
         <div
@@ -255,10 +251,4 @@ export function TreemapCanvas({
       )}
     </div>
   );
-}
-
-function ancestorAtDepth(node: RNode, depth: number): RNode | null {
-  let cur: RNode | null = node;
-  while (cur && cur.depth > depth) cur = cur.parent as RNode | null;
-  return cur && cur.depth === depth ? cur : null;
 }
