@@ -22,9 +22,14 @@ Two units with a clean process boundary:
 
 ```bash
 # from the repo root
-pnpm dev:storage        # dev server on http://localhost:3001
+pnpm dev:storage        # dev server at https://storage-bruhs.localhost (via portless)
 pnpm check:storage      # biome lint + format check
 ```
+
+The dev script runs through [portless](https://github.com/vercel-labs/portless), which
+serves the app at a stable `https://storage-bruhs.localhost` URL instead of a port number
+(the first run starts an HTTPS proxy and may prompt for sudo to bind port 443). To bypass it
+and run plain Vite, use `PORTLESS=0 pnpm dev:storage`.
 
 The scanner is built automatically by `pnpm build`. To build it on its own:
 

@@ -3,10 +3,13 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "vite dev",
+    "dev": "portless run vite dev",
     "build": "vite build",
     "start": "vite preview",
     "check": "biome check ."
+  },
+  "portless": {
+    "name": "domains-bruhs"
   },
   "dependencies": {
     "@bruhs/theme": "workspace:*",

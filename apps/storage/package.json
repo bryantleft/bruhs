@@ -3,11 +3,14 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "vite dev",
+    "dev": "portless run vite dev",
     "build": "pnpm run build:scanner && vite build",
     "build:scanner": "cargo build --release --manifest-path scanner/Cargo.toml",
     "start": "vite preview",
     "check": "biome check ."
+  },
+  "portless": {
+    "name": "storage-bruhs"
   },
   "dependencies": {
     "@bruhs/theme": "workspace:*",

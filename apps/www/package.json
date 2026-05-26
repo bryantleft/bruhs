@@ -3,12 +3,15 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "astro dev",
+    "dev": "portless run astro dev",
     "build": "astro build",
     "preview": "astro preview",
     "start": "astro build && astro preview",
     "check": "astro check",
     "astro": "astro"
+  },
+  "portless": {
+    "name": "www-bruhs"
   },
   "dependencies": {
     "@astrojs/check": "0.9.4",

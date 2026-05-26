@@ -4,8 +4,11 @@
   "type": "module",
   "scripts": {
     "build": "react-router build",
-    "dev": "react-router dev",
+    "dev": "portless run react-router dev",
     "check": "react-router typegen && tsc -b && biome check --write"
+  },
+  "portless": {
+    "name": "ai-bruhs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "1.2.12",
