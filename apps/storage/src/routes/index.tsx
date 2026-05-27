@@ -195,14 +195,14 @@ function Home() {
 
         {/* Sidebar */}
         {current && (
-          <aside className="flex w-84 shrink-0 flex-col gap-6 overflow-y-auto border-longan-800/70 border-l p-6">
+          <aside className="flex w-84 shrink-0 flex-col gap-6 overflow-hidden border-longan-800/70 border-l p-6">
             {selected ? (
               <SelectedCard
                 node={selected}
                 onTrash={() => setDeleteTarget(selected)}
               />
             ) : (
-              <div className="flex items-start gap-2 rounded-lychee bg-longan-900/50 p-3 text-lychee-400 text-sm ring-1 ring-white/5">
+              <div className="flex shrink-0 items-start gap-2 rounded-lychee bg-longan-900/50 p-3 text-lychee-400 text-sm ring-1 ring-white/5">
                 <Info className="mt-0.5 size-4 shrink-0 text-lychee-500" />
                 <p className="text-pretty">
                   Click a block to inspect or delete it. Double-click a folder
@@ -323,7 +323,7 @@ function SelectedCard({
     : `var(${CATEGORY_VAR[categoryForName(node.name)]})`;
   const aggregate = node.name.startsWith("(");
   return (
-    <div className="rounded-lychee bg-longan-900 p-4 ring-1 ring-white/5">
+    <div className="shrink-0 rounded-lychee bg-longan-900 p-4 ring-1 ring-white/5">
       <div className="flex items-start gap-2.5">
         <span
           aria-hidden="true"

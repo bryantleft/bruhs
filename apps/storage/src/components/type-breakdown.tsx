@@ -8,7 +8,7 @@ export function TypeBreakdown({ node }: { node: TreeNode }) {
   const total = rows.reduce((s, r) => s + r.bytes, 0) || 1;
 
   return (
-    <section className="space-y-3">
+    <section className="shrink-0 space-y-3">
       <h2 className="font-medium text-[0.6875rem] text-lychee-500 uppercase tracking-wide">
         By type
       </h2>

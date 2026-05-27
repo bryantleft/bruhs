@@ -9,12 +9,12 @@ interface Props {
 export function LargestFiles({ files, onSelect }: Props) {
   if (files.length === 0) return null;
   return (
-    <section className="space-y-3">
-      <h2 className="font-medium text-[0.6875rem] text-lychee-500 uppercase tracking-wide">
+    <section className="flex min-h-0 flex-1 flex-col gap-3">
+      <h2 className="shrink-0 font-medium text-[0.6875rem] text-lychee-500 uppercase tracking-wide">
         Largest files
       </h2>
-      <ul className="-mx-2 space-y-px">
-        {files.slice(0, 25).map((f, i) => (
+      <ul className="-mx-2 min-h-0 flex-1 space-y-px overflow-y-auto">
+        {files.map((f, i) => (
           <li key={f.path}>
             <button
               type="button"
