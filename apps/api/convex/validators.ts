@@ -1,7 +1,7 @@
 import { ConvexError, type Infer, v } from 'convex/values';
 
 // Every error code the Outside API can throw. Clients match on these, so the list is the
-// contract: add a code here first, then handle it in apps/steps/src/friends/client.ts.
+// contract: add a code here first, then handle it in apps/outside/src/friends/client.ts.
 export const OUTSIDE_ERRORS = [
   'sign_in_required',
   'rate_limited',

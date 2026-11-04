@@ -9,7 +9,7 @@ export const resend = new Resend(components.resend, { testMode: false });
 
 export const FROM = 'outside <outside@bruhs.app>';
 
-// Plain lowercase game voice, as on the site (apps/steps/AGENTS.md). Text and HTML carry the
+// Plain lowercase game voice, as on the site (apps/outside/AGENTS.md). Text and HTML carry the
 // same words; the HTML is only there so mail clients make the link tappable.
 function message(lines: readonly string[], link?: Readonly<{ href: string; label: string }>) {
   const html = (value: string) => value.replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`);

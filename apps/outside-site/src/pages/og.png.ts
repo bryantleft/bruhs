@@ -3,14 +3,14 @@
 // with system fonts off, so the image never depends on the build machine.
 import { fileURLToPath } from 'node:url';
 import { Resvg } from '@resvg/resvg-js';
-import { palette } from '@steps/src/theme/palette.ts';
+import { palette } from '@outside/src/theme/palette.ts';
 import type { APIRoute } from 'astro';
 import { root } from 'astro:config/server';
 import { HERO_TOP, HERO_WIDTH, heroParts } from '../lib/pixel';
 
 const WIDTH = 1200;
 const HEIGHT = 630;
-// The game's ink (apps/steps theme color.ink): outlines and shadows.
+// The game's ink (apps/outside theme color.ink): outlines and shadows.
 const INK = '#0a0a0a';
 // The strip shows the scene from HERO_TOP down, at the canvas's full width.
 const STRIP_HEIGHT = Math.round(((48 - HERO_TOP) * WIDTH) / HERO_WIDTH);
@@ -18,7 +18,7 @@ const STRIP_TOP = HEIGHT - STRIP_HEIGHT;
 
 function font(file: string): string {
   // From the project root: the bundled endpoint's own location changes between Astro versions.
-  return fileURLToPath(new URL(`../steps/assets/fonts/${file}`, root));
+  return fileURLToPath(new URL(`../outside/assets/fonts/${file}`, root));
 }
 
 // Outlined like the hero title: an ink stroke under the fill, plus a hard drop shadow.

@@ -1,8 +1,8 @@
 # outside-site
 
-The landing page and waitlist for [Outside](../steps), served at `outside.bruhs.app`. A static Astro site: no client JavaScript beyond a small enhancement of the waitlist form.
+The landing page and waitlist for [Outside](../outside), served at `outside.bruhs.app`. A static Astro site: no client JavaScript beyond a small enhancement of the waitlist form.
 
-The page imports the game directly through the `@steps` alias in `astro.config.mjs`:
+The page imports the game directly through the `@outside` alias in `astro.config.mjs`:
 - sprites and scenes from `src/pixel/`,
 - counts, places, skills and outfits from `src/game/content.ts`,
 - the patched pixel fonts from `assets/fonts/`.
@@ -45,7 +45,7 @@ Vercel deploys from git: the project is connected to `bryantleft/bruhs`, with ro
 - **Production:** every push to `main`. `scripts/vercel-build.sh` first deploys the shared Convex API (`apps/api`) to `earnest-wren-707` with the Production-only `CONVEX_DEPLOY_KEY`, then builds the page. So the waitlist route is live before the page that posts to it. The build fails if the key is missing.
 - **Preview:** every other branch. Previews build the page only and never touch the API.
 
-`vercel.json` skips the build unless the push changes this app, `apps/api`, the game sources and fonts it imports (`apps/steps/src`, `apps/steps/assets`), `packages/` or the lockfile. Vercel clones the repo, so ignored local folders such as the Expo app's native builds never reach it.
+`vercel.json` skips the build unless the push changes this app, `apps/api`, the game sources and fonts it imports (`apps/outside/src`, `apps/outside/assets`), `packages/` or the lockfile. Vercel clones the repo, so ignored local folders such as the Expo app's native builds never reach it.
 
 To deploy by hand, without git, use Vercel CLI 47.2.2 or later:
 

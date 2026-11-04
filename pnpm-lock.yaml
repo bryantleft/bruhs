@@ -429,31 +429,7 @@ importers:
         specifier: ^4.3.4
         version: 4.3.4
 
-  apps/outside-site:
-    dependencies:
-      '@astrojs/check':
-        specifier: 0.9.12
-        version: 0.9.12(@emnapi/runtime@1.11.3)(prettier@3.9.10)(typescript@6.0.3)
-      '@bruhs/theme':
-        specifier: workspace:*
-        version: link:../../packages/ui
-      '@resvg/resvg-js':
-        specifier: 2.6.2
-        version: 2.6.2
-      '@tailwindcss/vite':
-        specifier: 4.3.4
-        version: 4.3.4(vite@8.3.5(@types/node@26.6.6)(esbuild@0.27.0)(jiti@2.7.0)(terser@5.51.2)(tsx@4.20.3)(yaml@2.9.1))
-      astro:
-        specifier: 7.4.5
-        version: 7.4.5(@netlify/blobs@9.1.2)(@types/node@26.6.6)(@vercel/functions@3.10.6(ws@8.22.1))(db0@0.3.2)(esbuild@0.27.0)(idb-keyval@6.3.0)(ioredis@5.6.1(supports-color@8.1.1))(jiti@2.7.0)(terser@5.51.2)(tsx@4.20.3)(yaml@2.9.1)
-      tailwindcss:
-        specifier: 4.3.4
-        version: 4.3.4
-      typescript:
-        specifier: 6.0.3
-        version: 6.0.3
-
-  apps/steps:
+  apps/outside:
     dependencies:
       '@auth/core':
         specifier: 0.41.3
@@ -563,6 +539,30 @@ importers:
         version: 19.3.0(@types/react@19.3.0)
       typescript:
         specifier: ~6.0.3
+        version: 6.0.3
+
+  apps/outside-site:
+    dependencies:
+      '@astrojs/check':
+        specifier: 0.9.12
+        version: 0.9.12(@emnapi/runtime@1.11.3)(prettier@3.9.10)(typescript@6.0.3)
+      '@bruhs/theme':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@resvg/resvg-js':
+        specifier: 2.6.2
+        version: 2.6.2
+      '@tailwindcss/vite':
+        specifier: 4.3.4
+        version: 4.3.4(vite@8.3.5(@types/node@26.6.6)(esbuild@0.27.0)(jiti@2.7.0)(terser@5.51.2)(tsx@4.20.3)(yaml@2.9.1))
+      astro:
+        specifier: 7.4.5
+        version: 7.4.5(@netlify/blobs@9.1.2)(@types/node@26.6.6)(@vercel/functions@3.10.6(ws@8.22.1))(db0@0.3.2)(esbuild@0.27.0)(idb-keyval@6.3.0)(ioredis@5.6.1(supports-color@8.1.1))(jiti@2.7.0)(terser@5.51.2)(tsx@4.20.3)(yaml@2.9.1)
+      tailwindcss:
+        specifier: 4.3.4
+        version: 4.3.4
+      typescript:
+        specifier: 6.0.3
         version: 6.0.3
 
   apps/storage:

@@ -5,7 +5,7 @@
   "compilerOptions": {
     "allowImportingTsExtensions": true,
     "paths": {
-      "@steps/*": ["../steps/*"]
+      "@outside/*": ["../outside/*"]
     }
   }
 }

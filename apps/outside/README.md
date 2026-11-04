@@ -8,7 +8,7 @@ From the monorepo root:
 
 ```sh
 pnpm install
-pnpm dev:steps
+pnpm dev:outside
 ```
 
 Health connections and native maps require a **native development build**. Expo Go cannot load these native modules; the browser cannot access HealthKit or Health Connect. From this app directory:

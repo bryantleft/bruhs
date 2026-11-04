@@ -20,7 +20,7 @@ pnpm check:api
 
 The first command creates the deployment's signing keys without printing them. Reruns preserve existing values, reject partial settings or malformed JWKS, and refuse conflicting writes. They do not validate that existing private and public keys form a cryptographic pair; the Auth smoke flow checks that behavior. Local deployment state stays in ignored `apps/api/.convex/`; its selector and public URLs stay in ignored `apps/api/.env.local`. The backend stops when `convex dev` stops.
 
-Set Outside's ignored `apps/steps/.env.local` to the public client URL printed by Convex (normally the URL below), then reload Expo:
+Set Outside's ignored `apps/outside/.env.local` to the public client URL printed by Convex (normally the URL below), then reload Expo:
 
 ```dotenv
 EXPO_PUBLIC_CONVEX_URL=http://127.0.0.1:3210
@@ -43,7 +43,7 @@ Every push to `main` that touches `apps/api` also deploys it here, from the `bru
 
 The API's ignored `.env.local` continues to select the separate local backend. The explicit selector above targets the hosted beta. Auth keys are configured server-side; setup reruns preserve the existing pair. Outside's preview and production build profiles include the public hosted URL and URL guard. Development can use a local URL in its ignored `.env.local`.
 
-The hosted Auth/API smoke flow passed using synthetic daily totals. Independent production-browser review verified the core two-guest flow, with documented test-harness qualifications. See [the verification note](../steps/docs/convex-migration.md#hosted-beta-verification) for scope and remaining device checks.
+The hosted Auth/API smoke flow passed using synthetic daily totals. Independent production-browser review verified the core two-guest flow, with documented test-harness qualifications. See [the verification note](../outside/docs/convex-migration.md#hosted-beta-verification) for scope and remaining device checks.
 
 Local Supabase data and sessions are not imported. The migration does not remove the earlier local database volumes; the active SQL service, CLI dependency and client SDK have been replaced. This does not erase Outside's local game or GPS saves. Existing testers will create a Convex guest and a new party.
 
@@ -69,6 +69,6 @@ Board reads use two party-scoped indexed queries and return twenty rows per page
 
 ## Checks
 
-`pnpm check:api` runs formatting/lint, TypeScript and Convex-test cases. Convex-test uses an in-memory backend. Real local and hosted Auth/API checks and browser flows are recorded separately in [Outside's migration note](../steps/docs/convex-migration.md); these do not establish physical-device behavior. Generated client references are exported as `bruhs-api/api`; regenerate them with `pnpm --filter bruhs-api codegen` after changing functions.
+`pnpm check:api` runs formatting/lint, TypeScript and Convex-test cases. Convex-test uses an in-memory backend. Real local and hosted Auth/API checks and browser flows are recorded separately in [Outside's migration note](../outside/docs/convex-migration.md); these do not establish physical-device behavior. Generated client references are exported as `bruhs-api/api`; regenerate them with `pnpm --filter bruhs-api codegen` after changing functions.
 
-Session expiry or reinstall does not erase already shared records. Guest recovery and expired-guest retention need a release policy. Native Health/GPS/session checks and production abuse controls remain release work. Client-reported totals are not device-attested. See [Outside's release limits](../steps/README.md#private-parties-optional).
+Session expiry or reinstall does not erase already shared records. Guest recovery and expired-guest retention need a release policy. Native Health/GPS/session checks and production abuse controls remain release work. Client-reported totals are not device-attested. See [Outside's release limits](../outside/README.md#private-parties-optional).

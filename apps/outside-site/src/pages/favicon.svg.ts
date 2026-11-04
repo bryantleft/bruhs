@@ -1,4 +1,4 @@
-import { bruhArt } from '@steps/src/pixel/art.ts';
+import { bruhArt } from '@outside/src/pixel/art.ts';
 import type { APIRoute } from 'astro';
 import { spriteSvg } from '../lib/pixel';
 

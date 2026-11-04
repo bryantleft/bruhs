@@ -12,6 +12,6 @@ export default defineConfig({
     // Sprites, scenes, game data and fonts come straight from the game, so the page never drifts
     // from the app. An alias, not a workspace dependency: that would make turbo build the Expo app
     // before every landing build.
-    resolve: { alias: { '@steps': fileURLToPath(new URL('../steps', import.meta.url)) } },
+    resolve: { alias: { '@outside': fileURLToPath(new URL('../outside', import.meta.url)) } },
   },
 });

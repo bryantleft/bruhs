@@ -22,7 +22,7 @@ All-platform exports produced two Hermes bundles and thirteen HTML routes using 
 
 Independent source reviews approved the corrected setup/domain code, abortable uploads, authenticated-guest cleanup and Metro changes. The first independent browser review (R1) recorded a raw result of 21 passed and 1 failed check (P2: failed-first-join cleanup). The follow-up closed that P2 across 320px, 390px and compact 3× CSS text/reduced-motion samples: an authenticated guest can delete immediately after a rejected join, without reloading. It also covered same-guest create/save/reload, confirmation cancellation and held-key guards.
 
-The follow-up (R2) recorded a raw result of 29 passed and 1 failed check (P3). At the migration handoff, Back/reopen cleared the draft while retaining the old invite error; immediate failure and Delete cancellation preserved the draft. That navigation issue was still open at handoff. A later bounded correction, [feedback polish](ui-ux-research.md#2026-10-28--fresh-party-invite-feedback), cleared stale invite feedback in sampled browser flows. These sampled browser checks do not verify the interface at every paint. Local evidence is under `apps/steps/.playwright-mcp/convex-migration-20261027/`; those artifacts are ignored and do not accompany a clean checkout.
+The follow-up (R2) recorded a raw result of 29 passed and 1 failed check (P3). At the migration handoff, Back/reopen cleared the draft while retaining the old invite error; immediate failure and Delete cancellation preserved the draft. That navigation issue was still open at handoff. A later bounded correction, [feedback polish](ui-ux-research.md#2026-10-28--fresh-party-invite-feedback), cleared stale invite feedback in sampled browser flows. These sampled browser checks do not verify the interface at every paint. Local evidence is under `apps/outside/.playwright-mcp/convex-migration-20261027/`; those artifacts are ignored and do not accompany a clean checkout.
 
 ## Hosted beta verification
 
@@ -38,7 +38,7 @@ The review records 49 passed assertions out of 53. Four raw failures and their a
 
 Outside's ignored local environment and served preview bundle now use the hosted URL. The first reload still served the old local URL; a restart of the parent-owned Expo process resolved that sampled mismatch, with document and bundle HTTP 200. The API's local selector remains separate. Preview and production EAS profiles contain the public hosted URL and production guard; the exact profile candidate received source/config approval, and five root app-config probes covered hosted acceptance, local URL rejection and optional development configuration. EAS builds, signing and device distribution were not run.
 
-Evidence is under `apps/steps/.playwright-mcp/hosted-convex-beta-20261028/`, including `live-api-result.json`, `build-verification.json` and `independent-browser-r1/report.txt`. These local artifacts are ignored and absent from a clean checkout.
+Evidence is under `apps/outside/.playwright-mcp/hosted-convex-beta-20261028/`, including `live-api-result.json`, `build-verification.json` and `independent-browser-r1/report.txt`. These local artifacts are ignored and absent from a clean checkout.
 
 ## Remaining release work
 

@@ -1,8 +1,8 @@
 // Server-side SVG for the game's own pixel art. Rendered at build time, so the page ships no
 // sprite JavaScript and always matches the app.
-import { LOCATIONS } from '@steps/src/game/content.ts';
-import { type Art, BUSH, bruhArt, INK, PINE, TREE } from '@steps/src/pixel/art.ts';
-import { artPaths } from '@steps/src/pixel/paths.ts';
+import { LOCATIONS } from '@outside/src/game/content.ts';
+import { type Art, BUSH, bruhArt, INK, PINE, TREE } from '@outside/src/pixel/art.ts';
+import { artPaths } from '@outside/src/pixel/paths.ts';
 import {
   SCENE_GROUND,
   SCENE_HEIGHT,
@@ -11,9 +11,9 @@ import {
   type SceneShape,
   sceneShapes,
   spriteAt,
-} from '@steps/src/pixel/scene.ts';
-import { MAP_HEIGHT, MAP_WIDTH, roadPath, terrainPaths, tileCenter } from '@steps/src/pixel/world.ts';
-import { palette } from '@steps/src/theme/palette.ts';
+} from '@outside/src/pixel/scene.ts';
+import { MAP_HEIGHT, MAP_WIDTH, roadPath, terrainPaths, tileCenter } from '@outside/src/pixel/world.ts';
+import { palette } from '@outside/src/theme/palette.ts';
 
 // Always declared, so the same markup works inline and as a standalone .svg file or resvg input.
 const XMLNS = 'xmlns="http://www.w3.org/2000/svg"';

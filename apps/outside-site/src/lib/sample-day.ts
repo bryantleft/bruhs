@@ -1,10 +1,10 @@
 // A first day of play, run through the game's own rules at build time: a new save walks to
 // pandan woods, starts chopping, and syncs 8,000 steps. Every number on the page's report comes
 // from this run, so the landing page can't promise more than the game pays.
-import { getLocation } from '@steps/src/game/content.ts';
-import { createGame, type Game, getSkin, unlocksBetween, updateGame } from '@steps/src/game/game.ts';
-import { itemCount, parseKey } from '@steps/src/game/items.ts';
-import { diffReport } from '@steps/src/game/session.ts';
+import { getLocation } from '@outside/src/game/content.ts';
+import { createGame, type Game, getSkin, unlocksBetween, updateGame } from '@outside/src/game/game.ts';
+import { itemCount, parseKey } from '@outside/src/game/items.ts';
+import { diffReport } from '@outside/src/game/session.ts';
 
 export const SAMPLE_STEPS = 8_000;
 export const SAMPLE_PLACE = 'pandan-woods';

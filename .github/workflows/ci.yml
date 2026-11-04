@@ -10,7 +10,7 @@ jobs:
       # One app failing must not hide the results of the others.
       fail-fast: false
       matrix:
-        project-filter: [design, www, domains, ai, storage, outside-site, steps, api]
+        project-filter: [design, www, domains, ai, storage, outside-site, outside, api]
 
     steps:
       - name: Checkout repository

@@ -8,7 +8,7 @@
 		"dev:domains": "turbo run dev --filter=domains",
 		"dev:ai": "turbo run dev --filter=ai",
 		"dev:storage": "turbo run dev --filter=storage",
-		"dev:steps": "turbo run dev --filter=steps",
+		"dev:outside": "turbo run dev --filter=outside",
 		"dev:outside-site": "turbo run dev --filter=outside-site",
 		"dev:api": "pnpm --filter bruhs-api dev",
 		"check:design": "turbo run check --filter=design",
@@ -16,7 +16,7 @@
 		"check:domains": "turbo run check --filter=domains",
 		"check:ai": "turbo run check --filter=ai",
 		"check:storage": "turbo run check --filter=storage",
-		"check:steps": "turbo run check --filter=steps",
+		"check:outside": "turbo run check --filter=outside",
 		"check:outside-site": "turbo run check --filter=outside-site",
 		"check:api": "turbo run check --filter=bruhs-api"
 	},
