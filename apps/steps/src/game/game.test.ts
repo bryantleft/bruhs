@@ -3,13 +3,19 @@ import test from 'node:test';
 import {
   ACTIVITIES,
   BAG_UPGRADES,
+  FIXED_MISSIONS,
   getActivity,
   getItem,
   getQuest,
   ITEMS,
   LOCATIONS,
+  MISSION_PERIODS,
   MISSION_POOLS,
   QUESTS,
+  ROADS,
+  SKILL_CHEST,
+  START_LOCATION,
+  STORE_STOCK,
 } from './content.ts';
 import {
   actionPreview,
@@ -653,4 +659,41 @@ test('every item id is unique and every loot and recipe item exists', () => {
     for (const entry of item.loot?.table ?? [])
       assert.ok(ids.includes(entry.item), `${item.id} drops ${entry.item}`);
   for (const quest of QUESTS) for (const stack of quest.deliver) assert.ok(ids.includes(stack.item));
+});
+
+test('every content reference points at something that exists', () => {
+  const items = new Set(ITEMS.map((item) => item.id));
+  const activities = new Set(ACTIVITIES.map((activity) => activity.id));
+  const places = new Set(LOCATIONS.map((place) => place.id));
+  const quests = new Set(QUESTS.map((quest) => quest.id));
+  const item = (id: string, where: string) => assert.ok(items.has(id), `${where} names item ${id}`);
+  assert.equal(activities.size, ACTIVITIES.length, 'activity ids are unique');
+  assert.equal(places.size, LOCATIONS.length, 'place ids are unique');
+  assert.equal(quests.size, QUESTS.length, 'quest ids are unique');
+  for (const activity of ACTIVITIES) {
+    item(activity.output.item, `${activity.id} output`);
+    for (const input of activity.inputs ?? []) item(input.item, `${activity.id} input`);
+    for (const find of activity.finds ?? []) item(find.item, `${activity.id} find`);
+    if (activity.burn) item(activity.burn.item, `${activity.id} burn`);
+  }
+  for (const place of LOCATIONS) {
+    for (const id of place.activities) assert.ok(activities.has(id), `${place.id} offers ${id}`);
+    if (place.requires?.type === 'quest')
+      assert.ok(quests.has(place.requires.quest), `${place.id} needs quest ${place.requires.quest}`);
+  }
+  for (const [from, to, cost] of ROADS) {
+    assert.ok(places.has(from) && places.has(to), `road ${from} to ${to}`);
+    assert.ok(Number.isSafeInteger(cost) && cost > 0, `road ${from} to ${to} costs ${cost}`);
+  }
+  for (const place of LOCATIONS) assert.ok(route(START_LOCATION, place.id), `${place.id} is reachable`);
+  for (const quest of QUESTS) {
+    assert.ok(places.has(quest.location), `${quest.id} is handed in at ${quest.location}`);
+    for (const stack of quest.rewards.items ?? []) item(stack.item, `${quest.id} reward`);
+    for (const id of quest.requires.quests ?? []) assert.ok(quests.has(id), `${quest.id} needs ${id}`);
+  }
+  for (const offer of STORE_STOCK) item(offer.item, 'store stock');
+  for (const chest of Object.values(SKILL_CHEST)) if (chest) item(chest, 'skill chest');
+  for (const period of MISSION_PERIODS)
+    for (const mission of [FIXED_MISSIONS[period], ...MISSION_POOLS[period]])
+      for (const stack of mission.items ?? []) item(stack.item, `${mission.id} reward`);
 });
