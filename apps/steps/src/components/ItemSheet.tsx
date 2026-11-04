@@ -1,15 +1,15 @@
 import { StyleSheet, Text, View } from 'react-native';
-import {
-  type GearSlot,
-  getItem,
-  METAL_STATS,
-  QUALITIES,
-  QUESTS,
-  stackSize,
-  TOOL_SKILL,
-} from '../game/content';
+import { type GearSlot, getItem, QUALITIES, QUESTS, stackSize } from '../game/content';
 import { useGame } from '../game/GameProvider';
-import { atBank, atStore, questState, skillLevel } from '../game/game';
+import {
+  actionRejection,
+  atBank,
+  atStore,
+  type GameAction,
+  questState,
+  type Rejection,
+  requirementText,
+} from '../game/game';
 import { formatMod, keyItem, keyMods, keyName, keyValue, parseKey } from '../game/items';
 import { itemArt } from '../pixel/art';
 import { QUALITY_TINT, Slot, Tag } from '../pixel/chrome';
@@ -48,17 +48,22 @@ export function ItemSheet({
       .filter((stack) => stack.item === item.id)
       .map((stack) => ({ quest: entry, qty: stack.qty })),
   )[0];
-  const toolBlocker =
-    item.tool && skillLevel(game, TOOL_SKILL[item.tool.kind]) < METAL_STATS[item.tool.metal].level
-      ? `needs ${TOOL_SKILL[item.tool.kind]} ${METAL_STATS[item.tool.metal].level}`
-      : null;
+  // Buttons ask the rules themselves, so they never offer what the rules would refuse.
+  const wearRejection = actionRejection(game, { type: 'wear', item: itemKey });
+  const wearBlocker = wearRejection?.kind === 'requires' ? requirementText(wearRejection.requirement) : null;
+  const takeQty = Math.min(inBank, Number.isFinite(stackSize(item)) ? stackSize(item) : inBank);
+  const bagFull =
+    origin.from === 'bank' &&
+    inBank > 0 &&
+    actionRejection(game, { type: 'withdraw', item: itemKey, qty: 1 })?.kind === 'bag-full';
   const wearable =
     (item.kind === 'gear' || item.kind === 'tool') &&
     (origin.from === 'inventory' || (origin.from === 'bank' && bank));
   const lootWeight = item.loot?.table.reduce((sum, entry) => sum + entry.weight, 0) ?? 1;
-  const run = (action: Parameters<typeof act>[0], close = false): void => {
-    act(action);
-    if (close) onClose();
+  // A refused action leaves the sheet open; the session explains why in a notice.
+  const run = (action: GameAction, close = false): void => {
+    const rejection: Rejection | null = act(action);
+    if (close && (!rejection || rejection.kind === 'no-change')) onClose();
   };
   const left = (qty: number): boolean => owned - qty <= 0;
   // The main action rides in the sheet's pinned footer so it stays in reach above long loot tables.
@@ -66,9 +71,9 @@ export function ItemSheet({
     <>
       {wearable ? (
         <Button
-          label={toolBlocker ?? (item.tool ? 'wield' : 'wear')}
+          label={wearBlocker ?? (item.tool ? 'wield' : 'wear')}
           icon="check"
-          disabled={!!toolBlocker}
+          disabled={!!wearBlocker}
           onPress={() => run({ type: 'wear', item: itemKey }, left(1))}
         />
       ) : null}
@@ -204,27 +209,21 @@ export function ItemSheet({
               <Button
                 label="take 1"
                 variant="outline"
+                disabled={bagFull}
                 onPress={() => run({ type: 'withdraw', item: itemKey, qty: 1 }, left(1))}
               />
             </View>
             <View style={styles.grow}>
               <Button
-                label={`take ${Math.min(inBank, Number.isFinite(stackSize(item)) ? stackSize(item) : inBank)}`}
+                label={`take ${takeQty}`}
                 variant="outline"
-                onPress={() =>
-                  run(
-                    {
-                      type: 'withdraw',
-                      item: itemKey,
-                      qty: Math.min(inBank, Number.isFinite(stackSize(item)) ? stackSize(item) : inBank),
-                    },
-                    false,
-                  )
-                }
+                disabled={bagFull}
+                onPress={() => run({ type: 'withdraw', item: itemKey, qty: takeQty }, false)}
               />
             </View>
           </View>
         ) : null}
+        {bagFull ? <Text style={styles.small}>your bag is full. bank or drop something first.</Text> : null}
         {store && (origin.from === 'inventory' || origin.from === 'bank') && owned > 0 ? (
           <View style={styles.row}>
             <View style={styles.grow}>

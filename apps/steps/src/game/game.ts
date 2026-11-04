@@ -46,6 +46,7 @@ import {
   countOf,
   fits,
   isKnownKey,
+  itemCount,
   itemKey,
   keyItem,
   keyValue,
@@ -383,23 +384,49 @@ export function actionPreview(game: Game, activity: Activity): Preview {
   };
 }
 
-export function locationBlocker(game: Pick<Game, 'xp' | 'quests'>, place: Place): string | null {
+// What stands between the player and a place, activity, quest or tool. Typed, so rules can
+// refuse with a reason and screens can explain it in the same words.
+export type Requirement =
+  | Readonly<{ kind: 'level'; skill: SkillId; level: number }>
+  | Readonly<{ kind: 'quest'; quest: string }>
+  | Readonly<{ kind: 'item'; item: string; qty: number }>;
+
+export function requirementText(requirement: Requirement): string {
+  switch (requirement.kind) {
+    case 'level':
+      return `needs ${requirement.skill} ${requirement.level}`;
+    case 'quest':
+      return `needs quest: ${getQuest(requirement.quest)?.name ?? requirement.quest}`;
+    case 'item':
+      return `needs ${itemCount(requirement.qty, requirement.item)}`;
+  }
+}
+
+export function locationRequirement(game: Pick<Game, 'xp' | 'quests'>, place: Place): Requirement | null {
   const requirement = place.requires;
   if (!requirement) return null;
   if (requirement.type === 'skill')
     return skillLevel(game, requirement.skill) >= requirement.level
       ? null
-      : `needs ${requirement.skill} ${requirement.level}`;
-  return game.quests[requirement.quest] === 'done'
-    ? null
-    : `needs quest: ${getQuest(requirement.quest)?.name ?? requirement.quest}`;
+      : { kind: 'level', skill: requirement.skill, level: requirement.level };
+  return game.quests[requirement.quest] === 'done' ? null : { kind: 'quest', quest: requirement.quest };
+}
+
+export function locationBlocker(game: Pick<Game, 'xp' | 'quests'>, place: Place): string | null {
+  const requirement = locationRequirement(game, place);
+  return requirement ? requirementText(requirement) : null;
+}
+
+export function activityRequirement(game: Game, activity: Activity): Requirement | null {
+  if (skillLevel(game, activity.skill) < activity.level)
+    return { kind: 'level', skill: activity.skill, level: activity.level };
+  const missing = activity.inputs?.find((input) => available(game, input.item) < input.qty);
+  return missing ? { kind: 'item', item: missing.item, qty: missing.qty } : null;
 }
 
 export function activityBlocker(game: Game, activity: Activity): string | null {
-  if (skillLevel(game, activity.skill) < activity.level) return `needs ${activity.skill} ${activity.level}`;
-  const missing = activity.inputs?.find((input) => available(game, input.item) < input.qty);
-  if (missing) return `needs ${getItem(missing.item)?.name ?? missing.item} ×${missing.qty}`;
-  return null;
+  const requirement = activityRequirement(game, activity);
+  return requirement ? requirementText(requirement) : null;
 }
 
 // --- guidance ------------------------------------------------------------------------------
@@ -561,12 +588,19 @@ export function questState(game: Pick<Game, 'quests'>, id: string): 'new' | 'sta
   return game.quests[id] ?? 'new';
 }
 
-export function questBlocker(game: Pick<Game, 'xp' | 'quests'>, quest: Quest): string | null {
+export function questRequirement(game: Pick<Game, 'xp' | 'quests'>, quest: Quest): Requirement | null {
   for (const required of quest.requires.quests ?? [])
-    if (game.quests[required] !== 'done') return `complete ${getQuest(required)?.name ?? required}`;
+    if (game.quests[required] !== 'done') return { kind: 'quest', quest: required };
   for (const { skill, level } of quest.requires.skills ?? [])
-    if (skillLevel(game, skill) < level) return `needs ${skill} ${level}`;
+    if (skillLevel(game, skill) < level) return { kind: 'level', skill, level };
   return null;
+}
+
+export function questBlocker(game: Pick<Game, 'xp' | 'quests'>, quest: Quest): string | null {
+  const requirement = questRequirement(game, quest);
+  if (requirement?.kind === 'quest')
+    return `complete ${getQuest(requirement.quest)?.name ?? requirement.quest}`;
+  return requirement ? requirementText(requirement) : null;
 }
 
 export function canHandIn(game: Game, quest: Quest): boolean {
@@ -800,87 +834,131 @@ export function advance(game: Game): Game {
 
 // --- rules ---------------------------------------------------------------------------------
 
+// Why the rules refused an action. `no-change` is a request already satisfied (stop while idle,
+// re-equip the worn outfit, re-read the same step total) and needs no explanation; `invalid`
+// is a malformed or unknown action that no screen should send. Everything else is the
+// player's to fix, and the session explains it.
+export type Rejection =
+  | Readonly<{ kind: 'no-change' }>
+  | Readonly<{ kind: 'invalid' }>
+  | Readonly<{ kind: 'bag-full' }>
+  | Readonly<{ kind: 'not-at-bank' }>
+  | Readonly<{ kind: 'not-at-store' }>
+  | Readonly<{ kind: 'travelling' }>
+  | Readonly<{ kind: 'not-here'; place: string | null }>
+  | Readonly<{ kind: 'too-poor'; price: number }>
+  | Readonly<{ kind: 'requires'; requirement: Requirement }>
+  | Readonly<{ kind: 'mission-unfinished' }>
+  | Readonly<{ kind: 'outfit-locked'; total: number }>
+  | Readonly<{ kind: 'clock-behind' }>;
+
+export type RuleResult = Readonly<{ ok: true; game: Game }> | Readonly<{ ok: false; reason: Rejection }>;
+
+function accept(game: Game): RuleResult {
+  return { ok: true, game };
+}
+
+function refuse(reason: Rejection): RuleResult {
+  return { ok: false, reason };
+}
+
+const NO_CHANGE: RuleResult = refuse({ kind: 'no-change' });
+const INVALID: RuleResult = refuse({ kind: 'invalid' });
+
+function isQty(value: number, max: number): boolean {
+  return Number.isSafeInteger(value) && value >= 1 && value <= max;
+}
+
 // How far a bag runs past its capacity; 0 when everything fits.
 function overflow(game: Pick<Game, 'inventory' | 'bagUpgrades'> & Loadout): number {
   return Math.max(0, slotsUsed(game.inventory) - capacityOf(game));
 }
 
-function wear(work: Draft, key: string, slot?: GearSlot): boolean {
+function wear(game: Game, key: string, slot?: GearSlot): RuleResult {
   const item = keyItem(key);
-  const inBag = (work.inventory[key] ?? 0) > 0;
-  const inBank = atBank(work) && (work.bank[key] ?? 0) > 0;
-  if (!item || (!inBag && !inBank)) return false;
-  const before = overflow(work);
+  if (!item || !isKnownKey(key)) return INVALID;
+  const inBag = (game.inventory[key] ?? 0) > 0;
+  const inBank = atBank(game) && (game.bank[key] ?? 0) > 0;
+  if (!inBag && !inBank)
+    return refuse({ kind: 'requires', requirement: { kind: 'item', item: key, qty: 1 } });
+  const before = overflow(game);
   // Swapped-out gear goes where the new piece came from. A smaller pack can shrink the bag, so a
   // swap must still fit afterwards; at a bank the old piece may go there instead, as in `unwear`.
-  const swap = (old: string | undefined, equip: (next: Draft) => void): boolean => {
-    for (const stowInBag of atBank(work) && inBag ? [true, false] : [inBag]) {
-      const next: Draft = { ...work };
+  const swap = (old: string | undefined, equip: (next: Draft) => void): RuleResult => {
+    for (const stowInBag of atBank(game) && inBag ? [true, false] : [inBag]) {
+      const next = draft(game);
       if (inBag) next.inventory = add(next.inventory, key, -1);
       else next.bank = add(next.bank, key, -1);
       if (old && stowInBag) next.inventory = add(next.inventory, old, 1);
       else if (old) next.bank = add(next.bank, old, 1);
       equip(next);
       // A bag already over capacity (from an older build) may swap as long as it gets no worse.
-      if (overflow(next) > before) continue;
-      Object.assign(work, next);
-      return true;
+      if (overflow(next) <= before) return accept(freeze(next));
     }
-    return false;
+    return refuse({ kind: 'bag-full' });
   };
   if (item.tool) {
     const { kind, metal } = item.tool;
-    if (levelForXp(work.xp[TOOL_SKILL[kind]]) < METAL_STATS[metal].level || work.tools[kind] === key)
-      return false;
-    return swap(work.tools[kind], (next) => {
+    if (game.tools[kind] === key) return NO_CHANGE;
+    const level = METAL_STATS[metal].level;
+    if (levelForXp(game.xp[TOOL_SKILL[kind]]) < level)
+      return refuse({ kind: 'requires', requirement: { kind: 'level', skill: TOOL_SKILL[kind], level } });
+    return swap(game.tools[kind], (next) => {
       next.tools = { ...next.tools, [kind]: key };
     });
   }
   const itemSlot = item.slot;
-  if (!itemSlot) return false;
+  if (!itemSlot) return INVALID;
   const target =
     slot && slotFits(slot, itemSlot)
       ? slot
-      : (GEAR_SLOTS.find((entry) => slotFits(entry, itemSlot) && !work.gear[entry]) ??
+      : (GEAR_SLOTS.find((entry) => slotFits(entry, itemSlot) && !game.gear[entry]) ??
         GEAR_SLOTS.find((entry) => slotFits(entry, itemSlot)));
-  if (!target) return false;
-  return swap(work.gear[target], (next) => {
+  if (!target) return INVALID;
+  return swap(game.gear[target], (next) => {
     next.gear = { ...next.gear, [target]: key };
   });
 }
 
-function applyRules(game: Game, action: GameAction): Game {
+function applyRules(game: Game, action: GameAction): RuleResult {
   switch (action.type) {
     case 'health-pause':
-      return game.health?.enabled ? { ...game, health: { ...game.health, enabled: false } } : game;
+      return game.health?.enabled
+        ? accept({ ...game, health: { ...game.health, enabled: false } })
+        : NO_CHANGE;
     case 'health-sync':
       return healthSync(game, action);
     case 'equip': {
       const skin = getSkin(action.skin);
-      if (game.equipped === skin.id || skin.id !== action.skin) return game;
-      return totalLevel(game) >= skin.total ? { ...game, equipped: skin.id } : game;
+      if (skin.id !== action.skin) return INVALID;
+      if (game.equipped === skin.id) return NO_CHANGE;
+      return totalLevel(game) >= skin.total
+        ? accept({ ...game, equipped: skin.id })
+        : refuse({ kind: 'outfit-locked', total: skin.total });
     }
     case 'start': {
       const activity = getActivity(action.activity);
-      if (
-        !activity ||
-        game.travel ||
-        !placeOffers(game.location, activity.id) ||
-        activityBlocker(game, activity) ||
-        game.task?.id === activity.id
-      )
-        return game;
-      return { ...game, task: { id: activity.id, progress: 0 }, stopped: null };
+      if (!activity) return INVALID;
+      if (game.travel) return refuse({ kind: 'travelling' });
+      if (!placeOffers(game.location, activity.id)) return refuse({ kind: 'not-here', place: null });
+      const requirement = activityRequirement(game, activity);
+      if (requirement) return refuse({ kind: 'requires', requirement });
+      if (game.task?.id === activity.id) return NO_CHANGE;
+      return accept({ ...game, task: { id: activity.id, progress: 0 }, stopped: null });
     }
     case 'stop':
-      return game.task || game.stopped ? { ...game, task: null, stopped: null } : game;
+      return game.task || game.stopped ? accept({ ...game, task: null, stopped: null }) : NO_CHANGE;
     case 'travel': {
       const place = getLocation(action.to);
-      if (!place || game.travel || place.id === game.location || locationBlocker(game, place)) return game;
+      if (!place) return INVALID;
+      if (game.travel) return refuse({ kind: 'travelling' });
+      if (place.id === game.location) return NO_CHANGE;
+      const requirement = locationRequirement(game, place);
+      if (requirement) return refuse({ kind: 'requires', requirement });
       const path = route(game.location, place.id);
-      if (!path) return game;
+      if (!path) return INVALID;
       const next = action.next && placeOffers(place.id, action.next) ? action.next : null;
-      return {
+      return accept({
         ...game,
         task: null,
         stopped: null,
@@ -891,99 +969,98 @@ function applyRules(game: Game, action: GameAction): Game {
           progress: 0,
           next,
         },
-      };
+      });
     }
     case 'cancel-travel':
-      return game.travel ? { ...game, travel: null } : game;
-    case 'wear': {
-      const work = draft(game);
-      return wear(work, action.item, action.slot) ? freeze(work) : game;
-    }
+      return game.travel ? accept({ ...game, travel: null }) : NO_CHANGE;
+    case 'wear':
+      return wear(game, action.item, action.slot);
     case 'unwear': {
       const key = game.gear[action.slot];
-      if (!key) return game;
+      if (!key) return NO_CHANGE;
       const gear = { ...game.gear };
       delete gear[action.slot];
       // Taking off a pack shrinks the bag, so check space without it.
       if (fits(game.inventory, key, 1, capacityOf({ ...game, gear })))
-        return { ...game, gear, inventory: add(game.inventory, key, 1) };
-      if (atBank(game)) return { ...game, gear, bank: add(game.bank, key, 1) };
-      return game;
+        return accept({ ...game, gear, inventory: add(game.inventory, key, 1) });
+      if (atBank(game)) return accept({ ...game, gear, bank: add(game.bank, key, 1) });
+      return refuse({ kind: 'bag-full' });
     }
     case 'eat': {
       const item = getItem(action.item);
-      if (!item?.buff) return game;
+      if (!item?.buff) return INVALID;
       const work = draft(game);
-      if (!spend(work, item.id, 1)) return game;
+      if (!spend(work, item.id, 1))
+        return refuse({ kind: 'requires', requirement: { kind: 'item', item: item.id, qty: 1 } });
       work.buff = { item: item.id, actions: item.buff.actions };
       count(work, 'eaten');
-      return freeze(work);
+      return accept(freeze(work));
     }
     case 'open': {
       const item = getItem(action.item);
-      const owned = game.inventory[action.item] ?? 0;
-      if (!item?.loot || !Number.isSafeInteger(action.count) || action.count < 1 || action.count > owned)
-        return game;
+      if (!item?.loot || !isQty(action.count, game.inventory[action.item] ?? 0)) return INVALID;
       const work = draft(game);
       const dice = new Dice(game.seed);
       work.inventory = add(work.inventory, item.id, -action.count);
       for (let index = 0; index < action.count; index += 1) rollLoot(work, dice, item);
       count(work, 'chestsOpened', action.count);
       work.seed = dice.seed;
-      return freeze(work);
+      return accept(freeze(work));
     }
     case 'deposit': {
-      const qty = game.inventory[action.item] ?? 0;
-      if (!atBank(game) || !Number.isSafeInteger(action.qty) || action.qty < 1 || action.qty > qty)
-        return game;
-      return {
+      if (!atBank(game)) return refuse({ kind: 'not-at-bank' });
+      if (!isQty(action.qty, game.inventory[action.item] ?? 0)) return INVALID;
+      return accept({
         ...game,
         inventory: add(game.inventory, action.item, -action.qty),
         bank: add(game.bank, action.item, action.qty),
-      };
+      });
     }
     case 'deposit-all': {
+      if (!atBank(game)) return refuse({ kind: 'not-at-bank' });
       // Chests stay in the bag: they take no slots there, and they open from the bag.
       const keep = (key: string): boolean => keyItem(key)?.kind === 'chest';
       const moving = Object.entries(game.inventory).filter(([key]) => !keep(key));
-      if (!atBank(game) || moving.length === 0) return game;
+      if (moving.length === 0) return NO_CHANGE;
       let bank: Bag = game.bank;
       for (const [key, qty] of moving) bank = add(bank, key, qty);
       const inventory = Object.fromEntries(Object.entries(game.inventory).filter(([key]) => keep(key)));
-      return { ...game, inventory, bank };
+      return accept({ ...game, inventory, bank });
     }
     case 'withdraw': {
-      const qty = game.bank[action.item] ?? 0;
-      if (!atBank(game) || !Number.isSafeInteger(action.qty) || action.qty < 1 || action.qty > qty)
-        return game;
-      if (!fits(game.inventory, action.item, action.qty, capacityOf(game))) return game;
-      return {
+      if (!atBank(game)) return refuse({ kind: 'not-at-bank' });
+      if (!isQty(action.qty, game.bank[action.item] ?? 0)) return INVALID;
+      if (!fits(game.inventory, action.item, action.qty, capacityOf(game)))
+        return refuse({ kind: 'bag-full' });
+      return accept({
         ...game,
         inventory: add(game.inventory, action.item, action.qty),
         bank: add(game.bank, action.item, -action.qty),
-      };
+      });
     }
     case 'drop': {
-      const qty = game.inventory[action.item] ?? 0;
-      if (!Number.isSafeInteger(action.qty) || action.qty < 1 || action.qty > qty) return game;
-      return { ...game, inventory: add(game.inventory, action.item, -action.qty) };
+      if (!isQty(action.qty, game.inventory[action.item] ?? 0)) return INVALID;
+      return accept({ ...game, inventory: add(game.inventory, action.item, -action.qty) });
     }
     case 'sell': {
-      if (!atStore(game) || !isKnownKey(action.item)) return game;
+      if (!isKnownKey(action.item)) return INVALID;
+      if (!atStore(game)) return refuse({ kind: 'not-at-store' });
       const inBag = game.inventory[action.item] ?? 0;
       const inBank = game.bank[action.item] ?? 0;
-      if (!Number.isSafeInteger(action.qty) || action.qty < 1 || action.qty > inBag + inBank) return game;
+      if (!isQty(action.qty, inBag + inBank)) return INVALID;
       const fromBag = Math.min(inBag, action.qty);
-      return {
+      return accept({
         ...game,
         inventory: add(game.inventory, action.item, -fromBag),
         bank: add(game.bank, action.item, -(action.qty - fromBag)),
         coins: game.coins + keyValue(action.item) * action.qty,
-      };
+      });
     }
     case 'buy': {
       const offer = STORE_STOCK.find((entry) => entry.item === action.item);
-      if (!offer || !atStore(game) || game.coins < offer.price) return game;
+      if (!offer) return INVALID;
+      if (!atStore(game)) return refuse({ kind: 'not-at-store' });
+      if (game.coins < offer.price) return refuse({ kind: 'too-poor', price: offer.price });
       const work = draft(game);
       work.coins -= offer.price;
       if (fits(work.inventory, offer.item, 1, capacityOf(work))) gain(work, offer.item, 1);
@@ -991,23 +1068,26 @@ function applyRules(game: Game, action: GameAction): Game {
         work.bank = add(work.bank, offer.item, 1);
         if (!work.seen.includes(offer.item)) work.seen.push(offer.item);
       }
-      return freeze(work);
+      return accept(freeze(work));
     }
     case 'upgrade-bag': {
       const price = nextBagUpgrade(game);
-      if (price === null || !atBank(game) || game.coins < price) return game;
-      return { ...game, coins: game.coins - price, bagUpgrades: game.bagUpgrades + 1 };
+      if (price === null) return NO_CHANGE;
+      if (!atBank(game)) return refuse({ kind: 'not-at-bank' });
+      if (game.coins < price) return refuse({ kind: 'too-poor', price });
+      return accept({ ...game, coins: game.coins - price, bagUpgrades: game.bagUpgrades + 1 });
     }
     case 'mission-claim': {
       const mission = missionsFor(game, action.period, action.date).find(
         (entry) => entry.id === action.mission,
       );
-      if (!mission || missionClaimed(game, mission, action.date)) return game;
+      if (!mission) return INVALID;
+      if (missionClaimed(game, mission, action.date)) return NO_CHANGE;
       const { value, target } = missionProgress(game, mission, action.date);
-      if (value < target) return game;
+      if (value < target) return refuse({ kind: 'mission-unfinished' });
       const work = draft(game);
       const state = work.missions[mission.period];
-      if (!state) return game;
+      if (!state) return INVALID;
       work.missions = {
         ...work.missions,
         [mission.period]: { ...state, claimed: [...state.claimed, mission.id] },
@@ -1015,24 +1095,26 @@ function applyRules(game: Game, action: GameAction): Game {
       work.coins += mission.coins;
       for (const stack of mission.items ?? []) gain(work, stack.item, stack.qty);
       count(work, 'missions');
-      return freeze(work);
+      return accept(freeze(work));
     }
     case 'quest-start': {
       const quest = getQuest(action.quest);
-      if (!quest || questState(game, quest.id) !== 'new' || questBlocker(game, quest)) return game;
-      return { ...game, quests: { ...game.quests, [quest.id]: 'started' } };
+      if (!quest) return INVALID;
+      if (questState(game, quest.id) !== 'new') return NO_CHANGE;
+      const requirement = questRequirement(game, quest);
+      if (requirement) return refuse({ kind: 'requires', requirement });
+      return accept({ ...game, quests: { ...game.quests, [quest.id]: 'started' } });
     }
     case 'quest-complete': {
       const quest = getQuest(action.quest);
-      if (
-        !quest ||
-        questState(game, quest.id) !== 'started' ||
-        game.travel ||
-        game.location !== quest.location ||
-        questBlocker(game, quest) ||
-        !canHandIn(game, quest)
-      )
-        return game;
+      if (!quest) return INVALID;
+      if (questState(game, quest.id) !== 'started') return NO_CHANGE;
+      if (game.travel) return refuse({ kind: 'travelling' });
+      if (game.location !== quest.location) return refuse({ kind: 'not-here', place: quest.location });
+      const requirement = questRequirement(game, quest);
+      if (requirement) return refuse({ kind: 'requires', requirement });
+      const short = quest.deliver.find((stack) => available(game, stack.item) < stack.qty);
+      if (short) return refuse({ kind: 'requires', requirement: { kind: 'item', ...short } });
       const work = draft(game);
       for (const stack of quest.deliver) spend(work, stack.item, stack.qty);
       for (const stack of quest.rewards.items ?? []) gain(work, stack.item, stack.qty);
@@ -1041,7 +1123,7 @@ function applyRules(game: Game, action: GameAction): Game {
       work.xp = xp;
       work.coins += quest.rewards.coins ?? 0;
       work.quests = { ...work.quests, [quest.id]: 'done' };
-      return freeze(work);
+      return accept(freeze(work));
     }
     default:
       return dayRules(game, action);
@@ -1051,13 +1133,13 @@ function applyRules(game: Game, action: GameAction): Game {
 function dayRules(
   game: Game,
   action: Extract<GameAction, { type: 'new-day' | 'add-steps' | 'sync-steps' | 'goal' }>,
-): Game {
+): RuleResult {
   const day = getDay(game, action.date);
   let updated = day;
   let goal = game.goal;
   switch (action.type) {
     case 'new-day':
-      if (game.days.some((entry) => entry.date === action.date)) return game;
+      if (game.days.some((entry) => entry.date === action.date)) return NO_CHANGE;
       break;
     case 'add-steps':
       if (
@@ -1065,35 +1147,40 @@ function dayRules(
         action.steps <= 0 ||
         !Number.isSafeInteger(day.steps + action.steps)
       )
-        return game;
+        return INVALID;
       updated = { ...day, steps: day.steps + action.steps };
       break;
     case 'sync-steps':
-      if (!Number.isSafeInteger(action.steps) || action.steps <= day.steps) return game;
+      if (!Number.isSafeInteger(action.steps)) return INVALID;
+      if (action.steps <= day.steps) return NO_CHANGE;
       updated = { ...day, steps: action.steps };
       break;
     case 'goal':
-      if (!GOALS.includes(action.goal)) return game;
+      if (!GOALS.includes(action.goal)) return INVALID;
       if (
         action.goal === game.goal &&
         day.goal === action.goal &&
         game.days.some((entry) => entry.date === action.date)
       )
-        return game;
+        return NO_CHANGE;
       goal = action.goal;
       updated = { ...day, goal };
       break;
   }
-  return {
+  return accept({
     ...game,
     goal,
     days: [...game.days.filter((entry) => entry.date !== action.date), updated].sort((a, b) =>
       a.date.localeCompare(b.date),
     ),
-  };
+  });
 }
 
-function healthSync(game: Game, action: Extract<GameAction, { type: 'health-sync' }>): Game {
+// Why a Health batch would be refused, or null when it can be applied.
+export function healthSyncRejection(
+  game: Pick<Game, 'health'>,
+  action: Extract<GameAction, { type: 'health-sync' }>,
+): Rejection | null {
   if (
     !isHealthConnection({
       source: action.source,
@@ -1109,8 +1196,16 @@ function healthSync(game: Game, action: Extract<GameAction, { type: 'health-sync
         !isDateKey(day.date) || day.date > action.date || !Number.isSafeInteger(day.steps) || day.steps < 0,
     )
   )
-    return game;
-  if (game.health?.source === action.source && game.health.syncedAt > action.at) return game;
+    return { kind: 'invalid' };
+  // A clock set back behind the last sync would replay an older snapshot.
+  if (game.health?.source === action.source && game.health.syncedAt > action.at)
+    return { kind: 'clock-behind' };
+  return null;
+}
+
+function healthSync(game: Game, action: Extract<GameAction, { type: 'health-sync' }>): RuleResult {
+  const rejection = healthSyncRejection(game, action);
+  if (rejection) return refuse(rejection);
   const days = new Map(game.days.map((day) => [day.date, day]));
   for (const sample of action.days) {
     const previous = getDay(game, sample.date);
@@ -1131,17 +1226,37 @@ function healthSync(game: Game, action: Extract<GameAction, { type: 'health-sync
           : action.days.reduce((first, day) => (day.date < first ? day.date : first), action.date),
     },
   };
-  return Number.isSafeInteger(totalSteps(updated)) ? updated : game;
+  return Number.isSafeInteger(totalSteps(updated)) ? accept(updated) : INVALID;
 }
 
-export function updateGame(game: Game, action: GameAction): Game {
-  // Any dated action first opens the current mission periods, so their counters start
-  // before the action's own steps or work count.
-  const rolled = 'date' in action && isDateKey(action.date) ? rollMissions(game, action.date) : game;
+// Any dated action first opens the current mission periods, so their counters start before the
+// action's own steps or work count.
+function rolledFor(game: Game, action: GameAction): Game {
+  return 'date' in action && isDateKey(action.date) ? rollMissions(game, action.date) : game;
+}
+
+// Applies one action and spends any waiting steps, or says why the rules refused it. A refused
+// action changes nothing, not even the mission periods; a new day always rolls them.
+export function playGame(game: Game, action: GameAction): RuleResult {
+  const rolled = rolledFor(game, action);
   const ruled = applyRules(rolled, action);
-  // A rejected action changes nothing, not even the mission periods.
-  if (ruled === rolled && action.type !== 'new-day') return game;
-  return advance(ruled);
+  if (ruled.ok) return accept(advance(ruled.game));
+  // A new day the save already has still opens the periods and spends any waiting steps.
+  if (action.type === 'new-day') return accept(advance(rolled));
+  return ruled;
+}
+
+// Why the rules would refuse an action right now, or null if they would accept it. Screens use
+// this to disable buttons from the same source as the rules.
+export function actionRejection(game: Game, action: GameAction): Rejection | null {
+  const ruled = applyRules(rolledFor(game, action), action);
+  return ruled.ok ? null : ruled.reason;
+}
+
+// The same rules, for callers that only need the next state: a refused action returns `game`.
+export function updateGame(game: Game, action: GameAction): Game {
+  const result = playGame(game, action);
+  return result.ok ? result.game : game;
 }
 
 // --- missions ------------------------------------------------------------------------------

@@ -16,6 +16,7 @@ import { useHealthSteps } from '../health/useHealthSteps';
 import type { MissionPeriod, SkinId } from './content';
 import { eraseJourney } from './eraseJourney';
 import {
+  actionRejection,
   createDemoGame,
   createGame,
   dateKey,
@@ -23,6 +24,7 @@ import {
   type Game,
   type GameAction,
   type Goal,
+  type Rejection,
   updateGame,
 } from './game';
 import { createSession, type Notice, type Report, reduceSession, type Session } from './session';
@@ -54,7 +56,8 @@ type GameContextValue = Readonly<{
   retrySave: () => void;
   retryingSave: boolean;
   walk: () => void;
-  act: (action: GameAction) => void;
+  // Plays an action; returns why the rules refused it, or null. The session shows the reason.
+  act: (action: GameAction) => Rejection | null;
   claimMission: (period: MissionPeriod, mission: string) => void;
   equip: (skin: SkinId) => void;
   setGoal: (goal: Goal) => void;
@@ -89,8 +92,13 @@ export function GameProvider({ children }: PropsWithChildren): React.JSX.Element
     };
   }, []);
 
-  const act = useCallback((action: GameAction): void => {
+  // The rendered game, for answering `act` synchronously. The reducer stays the authority.
+  const latestGame = useRef(game);
+  latestGame.current = game;
+  const act = useCallback((action: GameAction): Rejection | null => {
+    const rejection = actionRejection(latestGame.current, action);
     dispatch({ type: 'play', action, demo: IS_DEMO });
+    return rejection;
   }, []);
   const dismissNotice = useCallback((notice?: Notice): void => {
     dispatch({ type: 'dismiss-notice', notice });

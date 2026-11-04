@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createDemoGame, createGame, type Game, updateGame } from './game.ts';
-import { createSession, reduceSession } from './session.ts';
+import { actionRejection, createDemoGame, createGame, type Game, playGame, updateGame } from './game.ts';
+import { createSession, reduceSession, rejectionText } from './session.ts';
 import { xpForLevel } from './xp.ts';
 
 const TODAY = '2026-10-20';
@@ -108,7 +108,10 @@ test('restoring progress and blocked actions do not trigger fresh rewards', () =
     action: { type: 'mission-claim', date: TODAY, period: 'daily', mission: 'daily-steps' },
     demo: true,
   } as const;
-  assert.equal(reduceSession(initial, blocked), initial);
+  const refused = reduceSession(initial, blocked);
+  assert.equal(refused.game, initial.game);
+  assert.equal(refused.reward, null);
+  assert.equal(refused.notice?.message, 'that mission isn’t finished yet. keep going, then collect it.');
 });
 
 test('save failures stay visible until a later save succeeds', () => {
@@ -139,4 +142,49 @@ test('eating, banking and equipping post notices, not reports', () => {
   });
   assert.equal(session.reward, null);
   assert.equal(session.notice?.message, 'ate the minnow. its bonus lasts 40 actions.');
+});
+
+test('a refused action keeps the game and explains how to fix it', () => {
+  // A full bag at a bank: taking an item out is refused, with a notice instead of silence.
+  const game: Game = {
+    ...createGame(TODAY),
+    location: 'bruhbridge',
+    inventory: { coal: 25 * 28 },
+    bank: { minnow: 2 },
+  };
+  const before = createSession(game);
+  const after = reduceSession(before, {
+    type: 'play',
+    action: { type: 'withdraw', item: 'minnow', qty: 1 },
+    demo: false,
+  });
+  assert.equal(after.game, game);
+  assert.equal(after.revision, before.revision);
+  assert.deepEqual(after.notice, {
+    kind: 'status',
+    message: 'your bag is full. bank or drop something first.',
+  });
+  assert.equal(actionRejection(game, { type: 'withdraw', item: 'minnow', qty: 1 })?.kind, 'bag-full');
+  const poor = playGame({ ...game, coins: 5 }, { type: 'buy', item: 'iron-axe' });
+  assert.deepEqual(poor, { ok: false, reason: { kind: 'too-poor', price: 240 } });
+  assert.equal(
+    rejectionText({ kind: 'too-poor', price: 240 }, { ...game, coins: 5 }),
+    'that costs 240 coins and you have 5. sell something first.',
+  );
+});
+
+test('a request already satisfied stays silent, and a save error is never replaced', () => {
+  const game: Game = { ...createGame(TODAY), location: 'pandan-woods' };
+  const idle = createSession(game);
+  assert.equal(reduceSession(idle, { type: 'play', action: { type: 'stop' }, demo: false }), idle);
+  const failed = reduceSession(idle, { type: 'save-failed', message: 'couldn’t save.' });
+  const refused = reduceSession(failed, {
+    type: 'play',
+    action: { type: 'deposit-all' },
+    demo: false,
+  });
+  assert.equal(refused, failed);
+  // Away from a bank, the notice names where the banks are.
+  const away = reduceSession(idle, { type: 'play', action: { type: 'deposit-all' }, demo: false });
+  assert.match(away.notice?.message ?? '', /^there’s no bank here\. walk to .+ first\.$/);
 });

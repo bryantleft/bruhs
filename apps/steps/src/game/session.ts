@@ -1,12 +1,22 @@
-import { GEAR_SLOTS, getQuest, SKILL_IDS, type SkillId, type SkinId, type Stack } from './content.ts';
+import {
+  GEAR_SLOTS,
+  getLocation,
+  getQuest,
+  LOCATIONS,
+  SKILL_IDS,
+  type SkillId,
+  type SkinId,
+  type Stack,
+} from './content.ts';
 import {
   capacityOf,
   type Game,
   type GameAction,
   getMission,
+  playGame,
+  type Rejection,
   type StopReason,
   unlockedSkins,
-  updateGame,
 } from './game.ts';
 import { add, type Bag, itemCount, keyName, keyValue } from './items.ts';
 import { levelForXp } from './xp.ts';
@@ -167,6 +177,50 @@ function gainText(report: Report): string | null {
   return parts.length ? parts.join(' · ') : null;
 }
 
+function townList(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  return `${names.slice(0, -1).join(', ')} or ${names.at(-1)}`;
+}
+
+// What to tell the player when the rules refuse an action: what failed and how to fix it.
+// Null when there is nothing to explain.
+export function rejectionText(reason: Rejection, game: Game): string | null {
+  switch (reason.kind) {
+    case 'no-change':
+      return null;
+    case 'invalid':
+      return 'that’s no longer possible. check your bag, then try again.';
+    case 'bag-full':
+      return 'your bag is full. bank or drop something first.';
+    case 'not-at-bank':
+      return `there’s no bank here. walk to ${townList(LOCATIONS.filter((place) => place.bank).map((place) => place.name))} first.`;
+    case 'not-at-store':
+      return `there’s no store here. walk to ${townList(LOCATIONS.filter((place) => place.store).map((place) => place.name))} first.`;
+    case 'travelling':
+      return 'you’re on the road. arrive or turn back first.';
+    case 'not-here':
+      return reason.place
+        ? `walk to ${getLocation(reason.place)?.name ?? reason.place} first.`
+        : 'this place doesn’t offer that. travel somewhere that does.';
+    case 'too-poor':
+      return `that costs ${reason.price.toLocaleString()} coins and you have ${game.coins.toLocaleString()}. sell something first.`;
+    case 'requires': {
+      const requirement = reason.requirement;
+      if (requirement.kind === 'level')
+        return `you need ${requirement.skill} ${requirement.level} for that. keep training ${requirement.skill}.`;
+      if (requirement.kind === 'quest')
+        return `finish the quest ${getQuest(requirement.quest)?.name ?? requirement.quest} first.`;
+      return `you need ${itemCount(requirement.qty, requirement.item)}. gather or withdraw ${requirement.qty === 1 ? 'it' : 'them'} first.`;
+    }
+    case 'mission-unfinished':
+      return 'that mission isn’t finished yet. keep going, then collect it.';
+    case 'outfit-locked':
+      return `that outfit unlocks at total level ${reason.total}. train any skill to get there.`;
+    case 'clock-behind':
+      return 'your phone’s clock is behind your last sync. check the date and time, then sync again.';
+  }
+}
+
 function noticeFor(action: GameAction, before: Game, after: Game): string | null {
   switch (action.type) {
     case 'mission-claim': {
@@ -222,7 +276,14 @@ export function reduceSession(state: Session, event: SessionAction): Session {
     return { ...state, reward: null, restoreRewardFocus: event.restoreFocus ?? true };
   if (event.type === 'dismiss-gain') return state.gain?.id === event.id ? { ...state, gain: null } : state;
 
-  const game = updateGame(state.game, event.action);
+  const result = playGame(state.game, event.action);
+  if (!result.ok) {
+    const message = rejectionText(result.reason, state.game);
+    // A refusal never replaces a save error, which needs its retry.
+    if (!message || state.notice?.kind === 'error') return state;
+    return { ...state, notice: { kind: 'status', message } };
+  }
+  const game = result.game;
   if (game === state.game) return state;
   const revision = state.revision + 1;
   const stepUpdate =
