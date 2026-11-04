@@ -1,6 +1,7 @@
 ---
 import CopiedOverlay from "@/components/CopiedOverlay.astro";
 import type { ColorGroup } from "@/data/colors";
+import { colorToken } from "@/utils/theme-tokens";
 
 interface Props {
   color: ColorGroup;
@@ -8,46 +9,52 @@ interface Props {
 
 const { color } = Astro.props;
 const mainSwatch = color.swatches.find((s) => s.name.endsWith("500"));
+
+// Dark text on light 500s (Durian), light text on dark ones. Read from the token so a
+// palette change can't leave a title unreadable.
+const mainToken = colorToken(`${color.prefix}-500`);
+const lightness = Number(mainToken.match(/^oklch\(([\d.]+)/)?.[1]);
+if (Number.isNaN(lightness)) {
+  throw new Error(`--color-${color.prefix}-500 is "${mainToken}", expected an oklch() value`);
+}
+const titleClass = lightness >= 0.6 ? "text-longan-950" : "text-rambutan-50";
 ---
 
-<div class="relative overflow-hidden rounded-lychee bg-longan-950 inset-ring inset-ring-rambutan-50/5">
-  <div class:list={["flex h-24 w-full flex-col items-center justify-center", mainSwatch?.className]}>
-    <h3 class="text-h3 font-semibold text-rambutan-50/80" style="font-feature-settings: 'ss01'">{color.name}</h3>
-    <p class="mt-1 max-w-prose px-4 text-center text-label-sm text-rambutan-50/70 lg:text-body-sm">{color.description}</p>
+<div class="overflow-hidden rounded-lychee bg-longan-900 inset-ring inset-ring-rambutan-50/5">
+  <div class:list={["flex h-28 items-end px-5 pb-4", mainSwatch?.className]}>
+    <h3 class:list={["text-h3 font-semibold", titleClass]} style="font-feature-settings: 'ss01'">{color.name}</h3>
   </div>
-  <div class="space-y-3 p-3 md:p-4">
-    <div class="flex flex-row overflow-hidden rounded-grape inset-ring inset-ring-rambutan-50/10">
-      {color.swatches.map((swatch) => (
-        <button
-          type="button"
-          data-copy={swatch.variable}
-          aria-label={`Copy ${swatch.variable}`}
-          class:list={[
-            "group/copy relative h-10 flex-1 cursor-copy transition-all duration-150 ease-in-out hover:-translate-y-1 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-persimmon-400",
-            swatch.className,
-          ]}
-        >
-          <span class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-max -translate-x-1/2 rounded-grape bg-longan-800 px-2 py-1 text-label text-rambutan-50 opacity-0 transition-opacity group-hover/copy:opacity-100 group-focus-visible/copy:opacity-100">
-            {swatch.name.split(" ").pop()}
-          </span>
-          <CopiedOverlay />
-        </button>
-      ))}
-    </div>
-    <div class="flex items-center gap-2 pt-1">
-      <span
-        class="inline-flex items-center rounded-orb px-2.5 py-0.5 text-label-sm font-medium"
-        style={`background-color: color-mix(in oklch, var(--color-${color.prefix}-500) 15%, transparent); color: var(--color-${color.prefix}-400)`}
-      >
-        Label
-      </span>
-      <span class="text-body-sm" style={`color: var(--color-${color.prefix}-400)`}>Sample text</span>
-      <span
-        class="ml-auto inline-flex items-center justify-center rounded-grape px-3 py-1 text-label-sm font-medium text-rambutan-50"
-        style={`background-color: var(--color-${color.prefix}-600)`}
-      >
-        Action
-      </span>
+  <div class="space-y-4 p-5">
+    <p class="text-body-sm text-rambutan-400">{color.description}</p>
+    <div class="flex">
+      {color.swatches.map((swatch) => {
+        const step = swatch.name.split(" ").pop();
+        return (
+          <button
+            type="button"
+            data-copy={swatch.variable}
+            aria-label={`Copy ${swatch.variable}`}
+            class="group/copy flex min-w-0 flex-1 cursor-copy flex-col items-center gap-1.5 rounded-seed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-persimmon-400"
+          >
+            <span
+              class:list={[
+                "relative block h-10 w-full transition-[filter] duration-150 group-first/copy:rounded-l-grape group-last/copy:rounded-r-grape group-hover/copy:brightness-110",
+                swatch.className,
+              ]}
+            >
+              <CopiedOverlay />
+            </span>
+            <span
+              class:list={[
+                "text-code-sm tabular-nums",
+                step === "500" ? "font-semibold text-rambutan-100" : "text-rambutan-500",
+              ]}
+            >
+              {step}
+            </span>
+          </button>
+        );
+      })}
     </div>
   </div>
 </div>

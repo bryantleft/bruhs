@@ -8,15 +8,21 @@ import { accentColors, neutralColors } from "@/data";
 <BaseLayout title="Colors">
 	<div class="p-6 md:p-8 flex flex-col gap-12 md:gap-16">
 		<section>
-			<h2 class="text-h1 font-bold mb-6 tracking-tight">Accent Colors</h2>
-			<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8">
+			<h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Colors</h1>
+			<p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
+				Seven accent families and two warm neutrals, each an 11-step OKLCH scale. Click any swatch to copy its variable.
+			</p>
+		</section>
+		<section>
+			<h2 class="text-h1 font-semibold mb-6 tracking-tight">Accents</h2>
+			<div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-6">
 				{accentColors.map(color => (
 					<ColorCard color={color} />
 				))}
 			</div>
 		</section>
 		<section>
-			<h2 class="text-h1 font-bold mb-6 tracking-tight">Neutral Colors</h2>
+			<h2 class="text-h1 font-semibold mb-6 tracking-tight">Neutrals</h2>
 			<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12">
 				{neutralColors.map(color => (
 					<NeutralColorRow color={color} />
@@ -24,4 +30,4 @@ import { accentColors, neutralColors } from "@/data";
 			</div>
 		</section>
 	</div>
-</BaseLayout> 
+</BaseLayout>
