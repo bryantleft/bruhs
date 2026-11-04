@@ -19,11 +19,11 @@ export default function Index() {
       <Bruh />
       <div
         className={cn(
-          "h-full transition-opacity duration-1000 ease-in-out",
+          "duration-bloom ease-standard h-full transition-opacity",
           visible ? "opacity-100" : "opacity-0",
         )}
       >
-        <div className="fixed top-4 right-4 z-20 grid auto-cols-max grid-flow-col items-start gap-x-2">
+        <div className="z-sticky fixed top-4 right-4 grid auto-cols-max grid-flow-col items-start gap-x-2">
           <CommandBar />
           <ShortcutLegend />
           <Settings />

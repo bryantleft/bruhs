@@ -18,17 +18,16 @@ function UserMessage({ content, error, selected = false }: UserMessageProps) {
     <div ref={ref} className="flex flex-col gap-y-1">
       <div
         className={cn(
-          "rounded-lychee border-longan-800 bg-longan-900 hover:border-longan-700 border-[0.5px] p-3",
-          "transition-all duration-300 ease-in-out",
+          "surface-panel text-body-sm p-3 hover:[--surface-ring:10%]",
+          "duration-standard transition-[opacity,box-shadow]",
           visible ? "opacity-100" : "opacity-0",
-          error && "border-lychee-600 hover:border-lychee-500",
+          error &&
+            "inset-ring-lychee-600 hover:inset-ring-lychee-500 inset-ring",
           selected &&
-            "border-blueberry-400 ring-blueberry-400 hover:border-blueberry-400 ring-2",
+            "inset-ring-blueberry-400 ring-blueberry-400 hover:inset-ring-blueberry-400 ring-2 inset-ring",
         )}
       >
-        <span className="text-rambutan-200 text-sm whitespace-pre-line">
-          {content}
-        </span>
+        <span className="text-rambutan-200 whitespace-pre-line">{content}</span>
       </div>
       {error && <MessageError error={error} />}
     </div>

@@ -40,27 +40,22 @@ export default function CommandBar() {
       open={isOpen}
       onOpenChange={setOpen}
       label="Switch model"
-      className={cn(
-        "absolute top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2",
-        "rounded-lychee bg-longan-700 text-rambutan-200 w-full max-w-md p-2 inset-ring inset-ring-white/15",
-      )}
+      className="popover absolute top-1/2 left-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 p-2"
     >
       <Command.Input
         autoFocus
         value={search}
         onValueChange={setSearch}
         placeholder="Switch model..."
-        className="border-longan-600 text-rambutan-200 placeholder:text-rambutan-400 mb-2 w-full border-b bg-transparent p-2 text-sm focus:outline-none"
+        className="border-longan-600 text-body-sm text-rambutan-200 placeholder:text-rambutan-400 mb-2 w-full border-b bg-transparent p-2 focus:outline-none"
       />
       <Command.List className="max-h-72 overflow-y-auto">
-        <Command.Empty className="text-rambutan-400 px-2 text-sm">
+        <Command.Empty className="text-body-sm text-rambutan-400 px-2">
           No results found.
         </Command.Empty>
         <Command.Group
           heading={
-            <span className="text-rambutan-400 px-2 text-xs font-medium">
-              Models
-            </span>
+            <span className="text-label-sm text-rambutan-400 px-2">Models</span>
           }
         >
           {filteredModels.map((m) => (
@@ -71,12 +66,14 @@ export default function CommandBar() {
                 setModel(m);
                 setOpen(false);
               }}
+              // cmdk sets aria-selected on the keyboard-highlighted row, which menu-item
+              // picks up. The current model is disabled (skipped by the arrow keys), so
+              // it is marked with data-highlighted and kept at full opacity.
+              data-highlighted={model.id === m.id || undefined}
               className={cn(
-                "rounded-seed flex cursor-pointer items-center gap-2 px-2 py-2 text-xs transition-colors duration-200",
-                "data-[selected=true]:bg-longan-600",
-                model.id === m.id
-                  ? "bg-blueberry-500/20 text-blueberry-100 cursor-default font-semibold"
-                  : "text-rambutan-400 hover:bg-longan-600 hover:text-rambutan-200",
+                "menu-item",
+                model.id === m.id &&
+                  "cursor-default font-semibold aria-disabled:opacity-100",
               )}
               disabled={model.id === m.id}
             >

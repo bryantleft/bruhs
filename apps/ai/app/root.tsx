@@ -26,7 +26,7 @@ export default function App() {
         <Meta />
         <Links />
       </head>
-      <body className="bg-longan-950 font-neon h-full overscroll-none">
+      <body className="h-full overscroll-none">
         <Provider>
           <Toaster
             position="bottom-right"
@@ -34,7 +34,7 @@ export default function App() {
               unstyled: true,
               classNames: {
                 toast:
-                  "absolute right-0 bg-longan-900 border border-longan-800 hover:border-longan-700 w-fit p-2 rounded-grape",
+                  "surface-panel rounded-grape absolute right-0 w-fit p-2 hover:[--surface-ring:10%]",
               },
             }}
           />
@@ -65,12 +65,12 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     import.meta.env.DEV && error instanceof Error ? error.stack : undefined;
 
   return (
-    <main className="bg-longan-950 text-rambutan-300 flex min-h-screen flex-col items-center justify-center p-6">
-      <div className="rounded-lychee bg-longan-900 w-full max-w-md space-y-4 p-6 inset-ring inset-ring-white/5">
-        <h1 className="text-lychee-400 text-3xl font-semibold">{message}</h1>
-        <p className="text-rambutan-400">{details}</p>
+    <main className="text-rambutan-300 flex min-h-dvh flex-col items-center justify-center p-6">
+      <div className="surface-panel w-full max-w-md space-y-4 p-6">
+        <h1 className="text-h1 text-lychee-400">{message}</h1>
+        <p className="text-body text-rambutan-400">{details}</p>
         {stack && (
-          <pre className="rounded-grape border-longan-700 bg-longan-900 w-full overflow-x-auto border p-3 text-xs">
+          <pre className="code-block rounded-grape text-code-sm w-full p-3">
             <code>{stack}</code>
           </pre>
         )}

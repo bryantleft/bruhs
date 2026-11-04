@@ -91,16 +91,16 @@ export default function Bruh() {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
-        "rounded-orb fixed z-20 cursor-pointer",
-        "transition-all duration-800 ease-in-out",
-        "focus-visible:outline-persimmon-400 focus-visible:outline-2 focus-visible:outline-offset-4",
+        "rounded-orb z-sticky fixed cursor-pointer focus-visible:outline-offset-4",
+        // The glide between the centre and the corner is the mascot's brand moment.
+        "duration-bloom ease-standard transition-[top,left]",
       )}
       style={{
         top: windowLoaded ? position.y : `calc(50% - ${SIZE / 2}px)`,
         left: windowLoaded ? position.x : `calc(50% - ${SIZE / 2}px)`,
       }}
     >
-      <div className="rounded-orb relative transition-transform duration-300 hover:scale-110">
+      <div className="rounded-orb duration-standard relative transition-transform hover:scale-110">
         <svg
           width={SIZE}
           height={SIZE}
@@ -117,7 +117,7 @@ export default function Bruh() {
           {/* The transition on the group smooths the eyes toward the focus point. */}
           <g
             style={{ transform: `translate(${eyes.x}px, ${eyes.y}px)` }}
-            className="transition-transform duration-150 ease-out"
+            className="transition-transform"
           >
             {[face.leftEye, face.rightEye].map((point) => (
               <ellipse
@@ -126,7 +126,7 @@ export default function Bruh() {
                 cy={point.y}
                 rx={eye.rx}
                 ry={isBlinking ? 4 : isHovered ? 20 : eye.ry}
-                className="fill-bruh-eye transition-all duration-300 ease-in-out"
+                className="fill-bruh-eye duration-standard ease-standard transition-[ry]"
               />
             ))}
             <ellipse
@@ -134,7 +134,7 @@ export default function Bruh() {
               cy={face.mouth.y}
               rx={mouth.rx}
               ry={isHovered ? 40 : mouth.ry}
-              className="fill-bruh-mouth transition-all duration-300 ease-in-out"
+              className="fill-bruh-mouth duration-standard ease-standard transition-[ry]"
             />
           </g>
         </svg>

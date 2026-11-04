@@ -46,6 +46,27 @@ for (const [name, language] of Object.entries(LANGUAGES)) {
   SyntaxHighlighter.registerLanguage(name, language);
 }
 
+// Keep the theme's token colours, but let the `code-block` wrapper supply the
+// surface, font and base text colour.
+const PRE = 'pre[class*="language-"]';
+const CODE = 'code[class*="language-"]';
+const inheritType = {
+  color: "inherit",
+  fontFamily: "inherit",
+  fontSize: "inherit",
+  lineHeight: "inherit",
+};
+const codeStyle = {
+  ...vscDarkPlus,
+  [PRE]: {
+    ...vscDarkPlus[PRE],
+    ...inheritType,
+    background: "transparent",
+    margin: 0,
+  },
+  [CODE]: { ...vscDarkPlus[CODE], ...inheritType },
+};
+
 /** Render a list of tokens. Tokens only ever append while streaming, so index keys are stable. */
 function TokenList({ tokens, text }: { tokens?: Token[]; text?: string }) {
   if (!tokens) return text ?? null;
@@ -66,12 +87,12 @@ export function TokenBlock({ token }: { token: Token }) {
           <TokenList tokens={tokens} />
         </Tag>
       ) : (
-        <Tag className="text-rambutan-300 text-sm">{text}</Tag>
+        <Tag className="text-rambutan-300">{text}</Tag>
       );
     }
     case "paragraph":
       return (
-        <p className="text-rambutan-300 text-sm">
+        <p className="text-body-sm text-rambutan-300">
           <TokenList tokens={token.tokens} text={token.text} />
         </p>
       );
@@ -88,7 +109,7 @@ export function TokenBlock({ token }: { token: Token }) {
     case "heading":
       return <HeadingBlock text={token.text} />;
     default:
-      return <span className="text-rambutan-300 text-sm">{token.raw}</span>;
+      return <span className="text-rambutan-300">{token.raw}</span>;
   }
 }
 
@@ -102,7 +123,7 @@ function CodeBlock({ lang, text }: { lang: string | undefined; text: string }) {
   }
 
   return (
-    <div className="rounded-grape border-longan-800 bg-longan-900 my-3 overflow-hidden border-[0.5px]">
+    <div className="code-block rounded-grape my-3 overflow-hidden p-0">
       <div className="border-longan-800 flex justify-between border-b-[0.5px] px-2 py-2">
         <div className="flex gap-x-1">
           {lang && (
@@ -111,13 +132,15 @@ function CodeBlock({ lang, text }: { lang: string | undefined; text: string }) {
               className={`${langIcon(highlightedLang)} text-mangosteen-400 h-4 w-4`}
             />
           )}
-          <span className="text-rambutan-500 text-xs">{highlightedLang}</span>
+          <span className="text-code-sm text-rambutan-500">
+            {highlightedLang}
+          </span>
         </div>
         <button
           type="button"
           onClick={copyText}
           aria-label={isChecked ? "Copied" : "Copy code"}
-          className="rounded-seed focus-visible:outline-persimmon-400 flex cursor-pointer items-center justify-center focus-visible:outline-2"
+          className="rounded-seed flex cursor-pointer items-center justify-center"
         >
           <span
             aria-hidden="true"
@@ -130,11 +153,9 @@ function CodeBlock({ lang, text }: { lang: string | undefined; text: string }) {
           />
         </button>
       </div>
-      <pre className="*:!m-0">
-        <SyntaxHighlighter language={highlightedLang} style={vscDarkPlus}>
-          {text}
-        </SyntaxHighlighter>
-      </pre>
+      <SyntaxHighlighter language={highlightedLang} style={codeStyle}>
+        {text}
+      </SyntaxHighlighter>
     </div>
   );
 }
@@ -145,7 +166,7 @@ function CodeSpanBlock({ text }: { text: string }) {
       type="button"
       title="Copy"
       onClick={() => copyToClipboard(text)}
-      className="rounded-seed bg-longan-950 text-mangosteen-400 focus-visible:outline-persimmon-400 cursor-pointer px-1 py-[0.5px] focus-visible:outline-2"
+      className="code-inline text-mangosteen-400 cursor-pointer"
     >
       <code>{text}</code>
     </button>
@@ -162,7 +183,7 @@ function ListItemBlock({
   return (
     <li>
       {number !== undefined && (
-        <span className="text-mangosteen-400 pr-1 text-sm">{number}.</span>
+        <span className="text-mangosteen-400 pr-1">{number}.</span>
       )}
       {tokens.map((token, i) =>
         // marked 17+ emits `paragraph` tokens in loose list items where marked
@@ -207,7 +228,7 @@ function ListBlock({
   }
 
   return (
-    <ul className="text-mangosteen-400 list-disc pl-3 text-sm">
+    <ul className="text-body-sm text-mangosteen-400 list-disc pl-3">
       {items.map((item, position) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: tokens only append while streaming, so position is stable.
         <ListItemBlock key={`${position}-${item.type}`} tokens={item.tokens} />
@@ -218,7 +239,7 @@ function ListBlock({
 
 function HeadingBlock({ text }: { text: string }) {
   return (
-    <h3 className="rounded-t-grape border-longan-800 bg-longan-900 text-rambutan-300 border-[0.5px] px-3 py-1">
+    <h3 className="rounded-t-grape border-longan-800 bg-longan-900 text-body text-rambutan-300 border-[0.5px] px-3 py-1">
       {text}
     </h3>
   );

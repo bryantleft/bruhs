@@ -6,7 +6,7 @@ export function MessageError({ error }: { error: string }) {
           aria-hidden="true"
           className="iconify lucide--circle-alert text-lychee-400 h-4 w-4"
         />
-        <span className="text-lychee-400 text-xs">{error}</span>
+        <span className="text-label-sm text-lychee-400">{error}</span>
       </div>
     </div>
   );

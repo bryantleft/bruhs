@@ -33,7 +33,7 @@ export default function Chat() {
 
   return (
     <div className="mx-auto h-full w-full overscroll-none md:w-1/2">
-      <div className="from-longan-950 pointer-events-none fixed top-0 z-10 h-8 w-full bg-gradient-to-b to-transparent md:w-1/2" />
+      <div className="from-longan-950 z-raised pointer-events-none fixed top-0 h-8 w-full bg-gradient-to-b to-transparent md:w-1/2" />
       <div className="mx-auto flex w-[94%] flex-col gap-y-4 pt-4 pb-36">
         <Messages messages={messages} setMessages={setMessages} />
       </div>

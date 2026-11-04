@@ -36,7 +36,7 @@ export default function Messages({ messages, setMessages }: MessagesProps) {
   const copySelected = async (message: ChatMessage): Promise<void> => {
     if (!(await copyToClipboard(messageText(message)))) return;
     toast.custom(() => (
-      <span className="text-rambutan-400 text-sm">
+      <span className="text-body-sm text-rambutan-400">
         Message <span className="text-pandan-500">copied</span>
       </span>
     ));
@@ -49,7 +49,7 @@ export default function Messages({ messages, setMessages }: MessagesProps) {
     const neighbour = next[Math.min(selectedIndex, next.length - 1)];
     setSelectedId(neighbour?.id ?? null);
     toast.custom((id) => (
-      <span className="text-rambutan-400 flex items-center gap-3 text-sm">
+      <span className="text-body-sm text-rambutan-400 flex items-center gap-3">
         <span>
           Message <span className="text-lychee-500">deleted</span>
         </span>
@@ -59,7 +59,7 @@ export default function Messages({ messages, setMessages }: MessagesProps) {
             setMessages(previous);
             toast.dismiss(id);
           }}
-          className="rounded-seed text-persimmon-300 hover:bg-longan-800 focus-visible:outline-persimmon-400 px-1.5 focus-visible:outline-2"
+          className="btn btn-ghost rounded-seed text-persimmon-300 px-1.5 py-0"
         >
           Undo
         </button>

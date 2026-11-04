@@ -45,13 +45,12 @@ function BruhMessage({ content, error, selected = false }: BruhMessageProps) {
     <div ref={ref} className="flex flex-col gap-y-1">
       <div
         className={cn(
-          "group rounded-lychee relative flex flex-col gap-y-2",
-          "bg-longan-900 border-[0.5px] p-3",
-          "transition-all duration-300 ease-in-out",
-          "border-longan-800 hover:border-longan-700",
-          error && "border-lychee-600 hover:border-lychee-500",
+          "group surface-panel relative flex flex-col gap-y-2 p-3",
+          "text-body-sm duration-standard hover:[--surface-ring:10%]",
+          error &&
+            "inset-ring-lychee-600 hover:inset-ring-lychee-500 inset-ring",
           selected &&
-            "border-blueberry-400 ring-blueberry-400 hover:border-blueberry-400 ring-2",
+            "inset-ring-blueberry-400 ring-blueberry-400 hover:inset-ring-blueberry-400 ring-2 inset-ring",
         )}
       >
         <img
@@ -67,9 +66,8 @@ function BruhMessage({ content, error, selected = false }: BruhMessageProps) {
         ))}
         <div
           className={cn(
-            "rounded-grape absolute -right-3 -bottom-3 p-[3px]",
-            "border-rambutan-600 bg-longan-700 border-[0.5px]",
-            "opacity-0 transition-opacity duration-300 ease-in-out group-hover:opacity-100 has-focus-visible:opacity-100",
+            "surface-floating rounded-grape absolute -right-3 -bottom-3 p-[3px]",
+            "duration-standard opacity-0 transition-opacity group-hover:opacity-100 has-focus-visible:opacity-100",
           )}
         >
           <button
@@ -79,7 +77,6 @@ function BruhMessage({ content, error, selected = false }: BruhMessageProps) {
             className={cn(
               "rounded-seed flex cursor-pointer items-center justify-center",
               "group/copy hover:bg-longan-800 px-1 py-[2px]",
-              "focus-visible:outline-persimmon-400 focus-visible:outline-2",
             )}
           >
             <span
@@ -94,9 +91,9 @@ function BruhMessage({ content, error, selected = false }: BruhMessageProps) {
             <span
               aria-hidden="true"
               className={cn(
-                "text-xs whitespace-nowrap",
+                "text-label-sm whitespace-nowrap",
                 "max-w-0 group-hover/copy:max-w-[100px] group-hover/copy:pl-1",
-                "overflow-hidden transition-all duration-300 ease-in-out",
+                "duration-standard overflow-hidden transition-[max-width,padding]",
                 isCopied ? "text-pandan-400" : "text-rambutan-400",
               )}
             >

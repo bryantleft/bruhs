@@ -3,9 +3,7 @@ import { useDisclosure } from "@/lib/hooks/use-disclosure";
 import { cn, useMetaKey } from "@/lib/utils";
 
 const KeyButton = ({ children }: { children: ReactNode }) => (
-  <kbd className="rounded-seed border-rambutan-600 bg-longan-700 text-rambutan-200 border px-2 py-1 text-xs font-semibold">
-    {children}
-  </kbd>
+  <kbd className="kbd">{children}</kbd>
 );
 
 export default function ShortcutLegend() {
@@ -35,9 +33,8 @@ export default function ShortcutLegend() {
       ref={ref}
       className={cn(
         "group",
-        "rounded-grape bg-longan-800 p-2 inset-ring inset-ring-white/10",
-        "text-rambutan-200 hover:inset-ring-white/20",
-        "transition-all duration-300 ease-in-out",
+        "surface-card surface-interactive rounded-grape text-rambutan-200 p-2",
+        "duration-standard transition-[width,box-shadow]",
         isOpen
           ? "w-56"
           : "w-[34px] hover:w-[120px] has-focus-visible:w-[120px]",
@@ -50,12 +47,12 @@ export default function ShortcutLegend() {
           aria-expanded={isOpen}
           aria-controls={panelId}
           aria-label="Keyboard shortcuts"
-          className="rounded-seed focus-visible:outline-persimmon-400 flex w-full cursor-pointer items-center justify-between focus-visible:outline-2"
+          className="rounded-seed flex w-full cursor-pointer items-center justify-between"
         >
           <span
             aria-hidden="true"
             className={cn(
-              "overflow-hidden text-sm font-semibold whitespace-nowrap transition-all duration-300 ease-in-out",
+              "text-label duration-standard ease-standard overflow-hidden whitespace-nowrap transition-[max-width,opacity]",
               isOpen
                 ? "max-w-full opacity-100"
                 : "max-w-0 opacity-0 group-hover:max-w-full group-hover:opacity-100",
@@ -74,18 +71,16 @@ export default function ShortcutLegend() {
         id={panelId}
         inert={!isOpen}
         className={cn(
-          "space-y-2 overflow-hidden transition-all duration-300 ease-in-out",
+          "duration-standard ease-standard space-y-2 overflow-hidden transition-[max-height,margin,opacity]",
           isOpen ? "mt-3 max-h-96 opacity-100" : "max-h-0 opacity-0",
         )}
       >
         {shortcuts.map((shortcut) => (
           <div
             key={shortcut.description}
-            className="flex items-center justify-between gap-x-8 text-sm"
+            className="text-label-sm flex items-center justify-between gap-x-8"
           >
-            <span className="text-rambutan-400 text-xs">
-              {shortcut.description}
-            </span>
+            <span className="text-rambutan-400">{shortcut.description}</span>
             <div className="flex gap-1">
               {shortcut.keys.map((key) => (
                 <KeyButton key={key}>{key}</KeyButton>

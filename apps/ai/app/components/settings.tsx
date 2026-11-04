@@ -17,9 +17,8 @@ export default function Settings() {
       ref={ref}
       className={cn(
         "group",
-        "rounded-grape bg-longan-800 p-2 inset-ring inset-ring-white/10",
-        "text-rambutan-200 hover:inset-ring-white/20",
-        "transition-all duration-300 ease-in-out",
+        "surface-card surface-interactive rounded-grape text-rambutan-200 p-2",
+        "duration-standard transition-[width,box-shadow]",
         isOpen
           ? "w-56"
           : "w-[34px] hover:w-[110px] has-focus-visible:w-[110px]",
@@ -32,12 +31,12 @@ export default function Settings() {
           aria-expanded={isOpen}
           aria-controls={panelId}
           aria-label="Settings"
-          className="rounded-seed focus-visible:outline-persimmon-400 flex w-full cursor-pointer items-center justify-between focus-visible:outline-2"
+          className="rounded-seed flex w-full cursor-pointer items-center justify-between"
         >
           <span
             aria-hidden="true"
             className={cn(
-              "overflow-hidden text-sm font-semibold whitespace-nowrap transition-all duration-300 ease-in-out",
+              "text-label duration-standard ease-standard overflow-hidden whitespace-nowrap transition-[max-width,opacity]",
               isOpen
                 ? "max-w-full opacity-100"
                 : "max-w-0 opacity-0 group-hover:max-w-full group-hover:opacity-100",
@@ -57,12 +56,12 @@ export default function Settings() {
         // Closed: collapsed and inert, so its controls leave the tab order.
         inert={!isOpen}
         className={cn(
-          "space-y-4 overflow-hidden transition-all duration-300 ease-in-out",
+          "duration-standard ease-standard space-y-4 overflow-hidden transition-[max-height,margin,opacity]",
           isOpen ? "mt-3 max-h-[32rem] opacity-100" : "max-h-0 opacity-0",
         )}
       >
         <fieldset className="mb-4">
-          <legend className="text-rambutan-400 mb-2 text-xs font-medium">
+          <legend className="text-label-sm text-rambutan-400 mb-2">
             Model
           </legend>
           <div className="space-y-1">
@@ -73,11 +72,8 @@ export default function Settings() {
                 onClick={() => setModel(m)}
                 aria-pressed={model.id === m.id}
                 className={cn(
-                  "rounded-seed flex w-full items-center gap-2 px-2 py-1 text-left text-xs transition-colors duration-200",
-                  "focus-visible:outline-persimmon-400 focus-visible:outline-2",
-                  model.id === m.id
-                    ? "bg-blueberry-500/20 text-blueberry-100 cursor-default font-semibold"
-                    : "text-rambutan-400 hover:bg-longan-700 hover:text-rambutan-200 cursor-pointer",
+                  "menu-item text-code-sm px-2 py-1",
+                  model.id === m.id && "cursor-default font-semibold",
                 )}
               >
                 <ModelOption model={m} />
@@ -108,27 +104,22 @@ function ApiKeyField({ model }: { model: Model }) {
     <div className="space-y-2">
       <label
         htmlFor={inputId}
-        className="text-rambutan-400 mb-2 block text-xs font-medium"
+        className="text-label-sm text-rambutan-400 mb-2 block"
       >
         API key ({model.provider})
       </label>
-      <div className="rounded-seed border-longan-900 hover:border-longan-700 relative w-full overflow-hidden border-[0.5px] transition-colors duration-300">
+      <div className="relative w-full">
         <input
           id={inputId}
           type="password"
           value={isSaved ? savedKey : apiKey}
           onChange={(e) => setApiKey(e.target.value)}
           placeholder={model.provider === Provider.XAI ? "xai-..." : "sk-..."}
-          className={cn(
-            "rounded-seed h-full w-full py-2 pr-8 pl-3",
-            "bg-longan-950 text-rambutan-300 placeholder:text-rambutan-500 text-xs",
-            "focus-visible:inset-ring-persimmon-400 focus:outline-none focus-visible:inset-ring",
-            isSaved && "cursor-not-allowed opacity-50",
-          )}
+          className="input text-code-sm pr-8"
           disabled={isSaved}
           autoComplete="off"
         />
-        <div className="absolute inset-y-0 right-0 z-20 flex items-center pr-2">
+        <div className="z-raised absolute inset-y-0 right-0 flex items-center pr-2">
           {isSaved ? (
             <button
               type="button"
@@ -137,7 +128,7 @@ function ApiKeyField({ model }: { model: Model }) {
                 setApiKey("");
               }}
               aria-label={`Remove the ${model.provider} API key`}
-              className="rounded-seed text-rambutan-400 hover:text-lychee-400 focus-visible:outline-persimmon-400 flex cursor-pointer p-[5px] transition-colors duration-300 focus-visible:outline-2"
+              className="btn btn-ghost btn-icon rounded-seed text-rambutan-400 hover:text-lychee-400 p-[5px]"
             >
               <span
                 aria-hidden="true"
@@ -150,7 +141,7 @@ function ApiKeyField({ model }: { model: Model }) {
               onClick={() => addKey(model.provider, apiKey)}
               disabled={apiKey.length === 0}
               aria-label={`Save the ${model.provider} API key`}
-              className="rounded-seed bg-persimmon-500 text-longan-950 hover:bg-persimmon-400 focus-visible:outline-persimmon-400 flex cursor-pointer p-[5px] transition-colors duration-300 focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-40"
+              className="btn btn-primary btn-icon rounded-seed p-[5px]"
             >
               <span
                 aria-hidden="true"
@@ -168,7 +159,7 @@ function ApiKeyField({ model }: { model: Model }) {
           onChange={(e) => setRememberKeys(e.target.checked)}
           className="accent-persimmon-500"
         />
-        <label htmlFor={rememberId} className="text-rambutan-400 text-xs">
+        <label htmlFor={rememberId} className="text-label-sm text-rambutan-400">
           Remember keys on this device
         </label>
       </div>
