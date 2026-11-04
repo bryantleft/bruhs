@@ -305,20 +305,12 @@ export function nextBagUpgrade(game: Pick<Game, 'bagUpgrades'>): number | null {
   return BAG_UPGRADES[game.bagUpgrades] ?? null;
 }
 
-export function inventoryFull(game: Game): boolean {
-  return slotsUsed(game.inventory) >= capacityOf(game);
-}
-
 // What you can use right now: the inventory, plus the bank when standing in a bank town.
 export function available(
   game: Pick<Game, 'inventory' | 'bank' | 'location' | 'travel'>,
   id: string,
 ): number {
   return countOf(game.inventory, id) + (atBank(game) ? countOf(game.bank, id) : 0);
-}
-
-export function toolFor(game: Pick<Game, 'tools'>, kind: ToolKind): Item | undefined {
-  return keyItem(game.tools[kind]);
 }
 
 // --- action math ---------------------------------------------------------------------------

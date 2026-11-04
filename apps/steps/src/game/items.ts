@@ -181,10 +181,8 @@ export function totalsFor(loadout: Loadout, skill: SkillId | null): Totals {
   return totals;
 }
 
+// The bag's size before packs and upgrades; `capacityOf` in game.ts adds those.
 export const BASE_SLOTS = 28;
-export function capacity(loadout: Loadout): number {
-  return BASE_SLOTS + totalsFor(loadout, null).slots;
-}
 
 export function formatMod(mod: Mod): string {
   const value = mod.stat === 'slots' ? `+${mod.value}` : `+${Math.round(mod.value * 1000) / 10}%`;
