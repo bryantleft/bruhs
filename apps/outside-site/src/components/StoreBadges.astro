@@ -1,0 +1,31 @@
+---
+import type { Listing } from '../lib/stores';
+
+// The official badges, unmodified, at one height: Apple's at 48px (its minimum is 40), and
+// Google's padded PNG sized so the badge inside it is 48px too. Its built-in padding stands in
+// for the clear space Google asks for, so a negative margin lines the two badges up.
+// Renders nothing until a store URL is set in src/lib/stores.ts.
+type Props = Readonly<{ stores: readonly Listing[] }>;
+const { stores } = Astro.props;
+const BADGES = {
+  'app-store': { src: '/badges/app-store.svg', alt: 'Download on the App Store', width: 144, height: 48, class: '' },
+  'google-play': { src: '/badges/google-play.png', alt: 'Get it on Google Play', width: 186, height: 72, class: '-m-3' },
+} as const;
+---
+
+{
+  stores.length > 0 && (
+    <ul class="flex flex-wrap items-center gap-4" aria-label="get outside">
+      {stores.map((store) => {
+        const badge = BADGES[store.id];
+        return (
+          <li class="flex">
+            <a href={store.url} class:list={['flex', badge.class]}>
+              <img src={badge.src} alt={badge.alt} width={badge.width} height={badge.height} />
+            </a>
+          </li>
+        );
+      })}
+    </ul>
+  )
+}

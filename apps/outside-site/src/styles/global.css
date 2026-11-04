@@ -93,6 +93,17 @@ svg {
     8px 8px 0 #0a0a0a;
 }
 
+/* A link inside body text. */
+.link {
+  color: var(--color-durian-400);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.link:hover {
+  color: var(--color-durian-300);
+}
+
 /* A small dark tag that stays legible on any background. */
 .chip {
   display: inline-flex;

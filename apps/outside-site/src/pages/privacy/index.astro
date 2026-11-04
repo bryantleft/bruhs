@@ -1,0 +1,51 @@
+---
+import Policy, { type Section } from '../../components/Policy.astro';
+import WaitlistForm from '../../components/WaitlistForm.astro';
+
+// Bump when anything below changes.
+const UPDATED = '4 November 2026';
+const sections: readonly Section[] = [
+  {
+    title: 'what we keep',
+    lines: [
+      'your email, trimmed and lowercased, when you joined, when you confirmed and when we sent you an invite. nothing else.',
+      'the form has no account, no name field and no tracking pixel.',
+      "you're only on the list once you confirm from the email we send. unconfirmed signups are deleted after 7 days.",
+    ],
+  },
+  {
+    title: 'what we use it for',
+    lines: [
+      'the confirmation email, an invite if we open early testing, and one email when outside launches on iPhone and Android.',
+      "we don't sell it, share it or use it for anything else.",
+    ],
+  },
+  {
+    title: 'where it lives',
+    lines: [
+      'the list is stored with Convex, our database host, in the US.',
+      'emails are sent through Resend, our email provider, from outside@bruhs.app.',
+      'this page is served by Vercel. it sets no cookies and runs no analytics.',
+    ],
+  },
+];
+---
+
+<Policy
+  title="privacy · bruhs / outside"
+  heading="privacy"
+  description="what the outside waitlist keeps, why, and how to remove your email."
+  path="/privacy/"
+  updated={UPDATED}
+  {sections}
+>
+  <p slot="intro" class="leading-relaxed text-rambutan-300">
+    this covers the waitlist. the game has <a href="/privacy/app/" class="link">its own privacy policy</a>, covering
+    step data from Apple Health and Health Connect.
+  </p>
+  <section aria-labelledby="remove" class="panel flex flex-col gap-4 p-5">
+    <h2 id="remove" class="text-2xl font-bold text-durian-400 shadowed">remove your email</h2>
+    <p class="leading-relaxed text-rambutan-300">enter the email you joined with and it comes off the list.</p>
+    <WaitlistForm id="leave" leave />
+  </section>
+</Policy>
