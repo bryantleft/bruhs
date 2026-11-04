@@ -16,10 +16,10 @@
     "name": "outside-bruhs"
   },
   "dependencies": {
-    "@astrojs/check": "0.9.4",
+    "@astrojs/check": "0.9.12",
     "@bruhs/theme": "workspace:*",
     "@tailwindcss/vite": "4.1.10",
-    "astro": "5.10.0",
+    "astro": "6.4.8",
     "opentype.js": "1.3.4",
     "sharp": "0.34.2",
     "tailwindcss": "4.1.10",
