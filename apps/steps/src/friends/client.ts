@@ -1,4 +1,5 @@
 import { api } from 'bruhs-api/api';
+import type { OutsideError } from 'bruhs-api/errors';
 import type { ConvexReactClient } from 'convex/react';
 import type { FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server';
 import { ConvexError } from 'convex/values';
@@ -40,15 +41,35 @@ function isConnectionError(error: unknown): boolean {
   );
 }
 
+// Every code the API can throw, mapped once. A Record over the API's own union makes a new
+// server code a compile error here until it is given a meaning.
+const SERVER_ERRORS: Readonly<Record<OutsideError, PartyError>> = {
+  sign_in_required: 'session',
+  not_in_party: 'session',
+  rate_limited: 'busy',
+  invite_not_found: 'invite',
+  already_in_party: 'membership',
+  party_full: 'full',
+  invalid_profile: 'data',
+  invalid_steps: 'data',
+  invalid_week: 'data',
+  // A random invite clashed; retrying draws a new one.
+  invite_collision: 'unknown',
+};
+
+function serverError(data: unknown): PartyError | null {
+  return typeof data === 'string' && Object.hasOwn(SERVER_ERRORS, data)
+    ? SERVER_ERRORS[data as OutsideError]
+    : null;
+}
+
 function failure(error: unknown, signal: AbortSignal): PartyError {
   // A canceled request is never shown; it keeps the quiet `network` result it always had.
   if (signal.aborted) return 'network';
   if (error instanceof PartyAuthError) return 'session';
   if (error instanceof ConvexError) {
-    if (error.data === 'invite_not_found') return 'invite';
-    if (error.data === 'already_in_party') return 'membership';
-    if (error.data === 'sign_in_required' || error.data === 'not_in_party') return 'session';
-    if (typeof error.data === 'string' && error.data.startsWith('invalid_')) return 'data';
+    const known = serverError(error.data);
+    if (known) return known;
   }
   const reason: PartyError =
     !(error instanceof ConvexError) && isConnectionError(error) ? 'network' : 'unknown';

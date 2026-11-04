@@ -20,7 +20,15 @@ export type PartyMember = Readonly<{
 }>;
 export type RaceWeek = Readonly<{ start: string; end: string; next: number }>;
 // `network` is a lost connection; `unknown` is anything else, such as a server bug, and is logged.
-export type PartyError = 'network' | 'invite' | 'membership' | 'session' | 'data' | 'unknown';
+export type PartyError =
+  | 'network'
+  | 'invite'
+  | 'membership'
+  | 'full'
+  | 'busy'
+  | 'session'
+  | 'data'
+  | 'unknown';
 export type PartyResult<T> = Readonly<{ ok: true; value: T }> | Readonly<{ ok: false; error: PartyError }>;
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -154,6 +162,10 @@ export function partyErrorCopy(error: PartyError): string {
       return 'invite not found. check the code.';
     case 'membership':
       return 'leave your current party first.';
+    case 'full':
+      return 'this party is full. ask for another invite, or start your own party.';
+    case 'busy':
+      return 'lots of guests are signing in right now. try again in a minute.';
     case 'session':
       return 'party login could not open. tap try again.';
     case 'data':

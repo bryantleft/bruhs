@@ -73,7 +73,8 @@ export function Button({
   descriptionId?: string;
   buttonRef?: Ref<ComponentRef<typeof Pressable>>;
 }>): React.JSX.Element {
-  const tint = color.text;
+  // Light text on the gold fill is 2.9:1 and fails WCAG AA; ink is 6.3:1 (as on outside.bruhs.app).
+  const tint = variant === 'primary' ? color.ink : color.text;
   const descriptionProps =
     Platform.OS === 'web' ? { 'aria-describedby': descriptionId } : { accessibilityHint };
   return (
@@ -92,7 +93,9 @@ export function Button({
         disabled && { opacity: 0.5 },
       ]}
     >
-      <Copy style={[styles.buttonText, { color: tint }]}>{label}</Copy>
+      <Copy style={[styles.buttonText, variant === 'primary' && styles.primaryText, { color: tint }]}>
+        {label}
+      </Copy>
       {icon ? <Icon name={icon} tint={tint} /> : null}
     </Pressable>
   );
@@ -356,6 +359,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     ...shadow,
   },
+  // Ink text takes a light highlight instead of the ink drop shadow.
+  primaryText: { textShadowColor: palette['durian-300'] },
   iconButton: {
     width: layout.touch,
     height: layout.touch,

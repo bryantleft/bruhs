@@ -150,7 +150,7 @@ test('cached query values and query errors always release the subscription', asy
   const h = harness();
   assert.equal((await h.service.home(signal(), () => false)).ok, true);
   assert.equal(h.calls.stops, 1);
-  h.fail(new ConvexError('invalid_party'));
+  h.fail(new ConvexError('invalid_week'));
   assert.deepEqual(await h.service.home(signal(), () => false), { ok: false, error: 'data' });
   assert.equal(h.listeners.size, 0);
   const controller = new AbortController();
@@ -194,6 +194,10 @@ test('invalid invites and membership errors retain their actionable UI meaning',
     ['invite_not_found', 'invite'],
     ['already_in_party', 'membership'],
     ['not_in_party', 'session'],
+    ['party_full', 'full'],
+    ['rate_limited', 'busy'],
+    ['invalid_profile', 'data'],
+    ['invite_collision', 'unknown'],
   ]) {
     const h = harness();
     h.fail(new ConvexError(message));

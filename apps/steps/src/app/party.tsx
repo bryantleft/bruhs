@@ -219,7 +219,7 @@ function PartyContents({
           <Copy variant="small" accessibilityRole="alert" style={styles.label}>
             {partyErrorCopy(visibleError)}
           </Copy>
-          {visibleError !== 'invite' && visibleError !== 'membership' ? (
+          {visibleError !== 'invite' && visibleError !== 'membership' && visibleError !== 'full' ? (
             <Button
               label={PARTY_LABEL.tryAgain}
               variant="outline"
