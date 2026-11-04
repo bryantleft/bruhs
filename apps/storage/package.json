@@ -27,7 +27,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.6.4",
     "@tailwindcss/vite": "^4.3.4",
-    "@types/node": "24.19.2",
+    "@types/node": "26.6.6",
     "@tanstack/router-plugin": "^1.168.48",
     "@types/d3-hierarchy": "^3.1.7",
     "@types/react": "^19.3.0",

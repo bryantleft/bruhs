@@ -18,7 +18,7 @@
     "@ai-sdk/xai": "5.0.38",
     "@bruhs/theme": "workspace:*",
     "@react-router/node": "8.5.1",
-    "@types/node": "24.19.2",
+    "@types/node": "26.6.6",
     "ai": "7.0.162",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",

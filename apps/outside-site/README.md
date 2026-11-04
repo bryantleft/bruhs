@@ -41,7 +41,7 @@ Signups are double opt-in. Joining stores the email as pending and sends a confi
 
 Live at https://outside.bruhs.app: Vercel project `bnle/bruhs-outside`, linked in `.vercel/`. `PUBLIC_WAITLIST_URL` is set for production and preview. The waitlist route runs on the hosted Convex beta (`earnest-wren-707`), with `WAITLIST_ORIGINS=https://outside.bruhs.app`.
 
-Vercel deploys from git: the project is connected to `bryantleft/bruhs`, with root directory `apps/outside-site`, the Astro preset and Node 22.x (also pinned in `package.json` `engines`).
+Vercel deploys from git: the project is connected to `bryantleft/bruhs`, with root directory `apps/outside-site`, the Astro preset and Node 26.x (also pinned in `package.json` `engines`). Installs use pnpm 12 through Corepack (`ENABLE_EXPERIMENTAL_COREPACK=1` in every bruhs Vercel project).
 - **Production:** every push to `main`. `scripts/vercel-build.sh` first deploys the shared Convex API (`apps/api`) to `earnest-wren-707` with the Production-only `CONVEX_DEPLOY_KEY`, then builds the page. So the waitlist route is live before the page that posts to it. The build fails if the key is missing.
 - **Preview:** every other branch. Previews build the page only and never touch the API.
 
