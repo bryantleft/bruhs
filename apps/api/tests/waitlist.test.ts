@@ -1,3 +1,4 @@
+import rateLimiter from '@convex-dev/rate-limiter/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import schema from '../convex/schema';
@@ -12,14 +13,19 @@ const modules = {
 };
 const SITE = 'https://outside.bruhs.app';
 const DEV = 'https://outside-bruhs.localhost';
-const create = () => convexTest(schema, modules);
+function create() {
+  const t = convexTest(schema, modules);
+  rateLimiter.register(t);
+  return t;
+}
 
 function post(
   t: ReturnType<typeof create>,
   fields: Record<string, string>,
   headers: Record<string, string> = {},
+  path = '/waitlist',
 ): Promise<Response> {
-  return t.fetch('/waitlist', {
+  return t.fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: SITE, ...headers },
     body: new URLSearchParams(fields).toString(),
@@ -89,6 +95,51 @@ describe('POST /waitlist', () => {
     const huge = await post(t, { email: 'moss@example.com', website: 'x'.repeat(2000) }, json);
     expect(huge.status).toBe(413);
     expect(await emails(t)).toEqual([]);
+  });
+
+  it('caps a flood of signups with a 429 and Retry-After, storing nothing past the cap', async () => {
+    const t = create();
+    // The bucket holds a burst of 40.
+    for (let index = 0; index < 40; index += 1) {
+      const response = await post(t, { email: `moss${index}@example.com` }, json);
+      expect(response.status, `signup ${index}`).toBe(200);
+    }
+    const limited = await post(t, { email: 'late@example.com' }, json);
+    expect(limited.status).toBe(429);
+    expect(await limited.json()).toEqual({ error: 'rate_limited' });
+    expect(Number(limited.headers.get('Retry-After'))).toBeGreaterThanOrEqual(1);
+    const form = await post(t, { email: 'later@example.com' });
+    expect(form.status).toBe(303);
+    expect(form.headers.get('Location')).toBe(`${SITE}/waitlist/busy/`);
+    expect(await emails(t)).toHaveLength(40);
+    expect(await emails(t)).not.toContain('late@example.com');
+  });
+
+  it('does not spend the limit on malformed emails or honeypot hits', async () => {
+    const t = create();
+    for (let index = 0; index < 45; index += 1) {
+      await post(t, { email: 'nope' }, json);
+      await post(t, { email: `bot${index}@example.com`, website: 'x' }, json);
+    }
+    const real = await post(t, { email: 'moss@example.com' }, json);
+    expect(real.status).toBe(200);
+    expect(await emails(t)).toEqual(['moss@example.com']);
+  });
+
+  it('removes an email on request, answering the same whether or not it was listed', async () => {
+    const t = create();
+    await post(t, { email: 'moss@example.com' }, json);
+    await post(t, { email: 'fern@example.com' }, json);
+    const left = await post(t, { email: ' Moss@Example.com' }, json, '/waitlist/leave');
+    const never = await post(t, { email: 'nobody@example.com' }, json, '/waitlist/leave');
+    expect(left.status).toBe(200);
+    expect(await never.json()).toEqual(await left.json());
+    expect(await emails(t)).toEqual(['fern@example.com']);
+    const form = await post(t, { email: 'fern@example.com' }, {}, '/waitlist/leave');
+    expect(form.headers.get('Location')).toBe(`${SITE}/waitlist/left/`);
+    expect(await emails(t)).toEqual([]);
+    const bad = await post(t, { email: 'nope' }, json, '/waitlist/leave');
+    expect(bad.status).toBe(400);
   });
 
   it('fails loudly when the landing origins are not configured', async () => {

@@ -56,7 +56,12 @@ Local Supabase data and sessions are not imported. The migration does not remove
 - Step submissions pin the expected guest, validate the complete batch and keep the highest total per date. GPS geometry and local game state are absent from the API. Health uploads use an abortable HTTP request instead of the WebSocket mutation replay queue; cancellation cannot roll back a request already accepted by the server.
 - Leaving deletes all the member's shared weekly rows. Account deletion additionally removes the profile, guest, sessions, refresh tokens, accounts and their verification records. The last departure deletes the party and invalidates its invite in the same transaction. Use the signed-in application flow for deletion; directly deleting database documents bypasses its cleanup.
 
-- `convex/waitlist.ts` serves `POST /waitlist` for Outside's landing page. It stores one row per trimmed, lowercased email in `waitlist`, and replies the same way for repeats. A filled honeypot gets a normal reply but no row. CORS and form-post redirects only go to origins listed in `WAITLIST_ORIGINS`. Without that variable the route answers 500 `waitlist_not_configured` and logs which variable to set. There is no rate limit yet.
+- `convex/waitlist.ts` serves Outside's landing page:
+  - **`POST /waitlist`** stores one row per trimmed, lowercased email in `waitlist`.
+  - **`POST /waitlist/leave`** deletes the row for an email.
+  - **Same replies:** both answer the same whether or not the email was listed, so neither reveals who signed up. A filled honeypot gets a normal reply and changes nothing.
+  - **Rate limit:** each route has a global token bucket from `@convex-dev/rate-limiter`, installed in `convex/convex.config.ts`: 20 a minute, bursts of 40. Past it, the route answers 429 `rate_limited` with `Retry-After`. Convex documents no client IP for HTTP actions, so the limit is global: it caps floods, not a slow drip.
+  - **Origins:** CORS and form-post redirects only go to origins listed in `WAITLIST_ORIGINS`. Without that variable the routes answer 500 `waitlist_not_configured` and log which variable to set.
 
 Board reads use two party-scoped indexed queries and return twenty rows per page. Sorting and ranking currently read the private party's full membership and requested weekly scores; very large parties will need a different ranking index before expanding the product's scope. Dates retain the current phone-local daily-bucket semantics, with a common Monday 00:00 UTC week label.
 
