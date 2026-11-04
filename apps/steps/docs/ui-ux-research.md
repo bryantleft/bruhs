@@ -1828,3 +1828,11 @@ Resolves audit finding M4. Verified on an iOS 26.5 simulator (iPhone 17 Pro) dev
   - After an uninstall and reinstall, the keychain kept the login, which came back to its party with a fresh local adventure.
   - With the account deleted on the server while its token stayed in the keychain, the next launch signed out, cleared the keychain and showed create and join.
 - Remaining checks: launching on a locked phone, an hour-long session that refreshes the token, a SecureStore failure on hardware (covered only by unit tests), and Android.
+
+## One world map for the app and the landing page (November 3, 2026)
+
+Verified in the web export at 320, 390 and 1280 wide (Chromium via Playwright; screenshots in `/tmp/fruitlands-shots`, not kept). Not checked on a device.
+
+- The map's tiles, terrain colours, place centres and dotted roads moved out of `components/WorldMap.tsx` into `pixel/world.ts`, with no React Native imports, so `apps/outside-site` draws the same map at build time. The map tab is unchanged: same terrain, roads, pins, name plates and key at all three widths, with no page errors.
+- The landing page's fruitlands section was a sideways-scrolling strip. It is now this map beside the places, nearest first, with the same pin colours and a key. It fits the page column from 320 wide up, with no sideways scroll.
+- Remaining checks: the map tab on a phone, and the landing page's map name plates with larger text.
