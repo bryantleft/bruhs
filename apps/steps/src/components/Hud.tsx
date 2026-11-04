@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useGame } from '../game/GameProvider';
+import { useGame, useGameFeedback } from '../game/GameProvider';
 import { questPoints, totalLevel, unspentSteps } from '../game/game';
 import { useScreenLink } from '../navigation/useScreenFocus';
 import { UI_ART } from '../pixel/art';
@@ -17,7 +17,8 @@ function compact(value: number): string {
 }
 
 export function Hud(): React.JSX.Element {
-  const { game, gain } = useGame();
+  const { game } = useGame();
+  const { gain } = useGameFeedback();
   const characterLink = useScreenLink('/character');
   const pouch = unspentSteps(game);
   return (

@@ -307,50 +307,60 @@ export function reduceSession(state: Session, event: SessionAction): Session {
   if (event.type === 'dismiss-reward')
     return { ...state, reward: null, restoreRewardFocus: event.restoreFocus ?? true };
   if (event.type === 'dismiss-gain') return state.gain?.id === event.id ? { ...state, gain: null } : state;
+  return playSession(state, event.action, event.demo).session;
+}
 
-  const result = playGame(state.game, event.action);
+// Bag, bank, store and mission actions confirm with a notice instead of opening a loot report.
+const QUIET_ACTIONS: ReadonlySet<GameAction['type']> = new Set([
+  'mission-claim',
+  'upgrade-bag',
+  'sell',
+  'buy',
+  'wear',
+  'unwear',
+  'eat',
+  'deposit',
+  'deposit-all',
+  'withdraw',
+  'drop',
+]);
+
+// Plays one action on the session: the next session, plus why the rules refused the action
+// (null when it was accepted).
+export function playSession(
+  state: Session,
+  action: GameAction,
+  demo: boolean,
+): Readonly<{ session: Session; rejection: Rejection | null }> {
+  const result = playGame(state.game, action);
   if (!result.ok) {
     const message = rejectionText(result.reason, state.game);
     // A refusal never replaces a save error, which needs its retry. Health tracking shows its
     // own sync errors, so a refused batch adds no second message.
-    if (!message || state.notice?.kind === 'error' || event.action.type === 'health-sync') return state;
-    return { ...state, notice: { kind: 'status', message } };
+    if (!message || state.notice?.kind === 'error' || action.type === 'health-sync')
+      return { session: state, rejection: result.reason };
+    return { session: { ...state, notice: { kind: 'status', message } }, rejection: result.reason };
   }
   const game = result.game;
-  if (game === state.game) return state;
+  if (game === state.game) return { session: state, rejection: null };
   const revision = state.revision + 1;
   const stepUpdate =
-    event.action.type === 'add-steps' ||
-    event.action.type === 'sync-steps' ||
-    event.action.type === 'health-sync';
+    action.type === 'add-steps' || action.type === 'sync-steps' || action.type === 'health-sync';
   const report = diffReport(revision, state.game, game, stepUpdate);
   let reward = state.reward;
   let gain = state.gain;
   let notice = state.notice?.kind === 'error' ? state.notice : null;
   // A small demo walk only flashes a gain; real syncs and milestones open the full loot report.
-  const quiet = stepUpdate && event.demo && !isMilestone(report) && !report.stopped;
+  const quiet = stepUpdate && demo && !isMilestone(report) && !report.stopped;
   const worthReporting = report.actions > 0 || isMilestone(report) || report.stopped !== null;
-  const quietAction = [
-    'mission-claim',
-    'upgrade-bag',
-    'sell',
-    'buy',
-    'wear',
-    'unwear',
-    'eat',
-    'deposit',
-    'deposit-all',
-    'withdraw',
-    'drop',
-  ];
-  if (worthReporting && !quiet && !quietAction.includes(event.action.type)) {
+  if (worthReporting && !quiet && !QUIET_ACTIONS.has(action.type)) {
     reward = state.reward ? mergeReports(state.reward, report) : report;
     gain = null;
   } else if (quiet) {
     const text = gainText(report);
     gain = text ? { id: revision, text } : null;
   }
-  const message = noticeFor(event.action, state.game, game);
+  const message = noticeFor(action, state.game, game);
   if (message && notice?.kind !== 'error') notice = { kind: 'status', message };
-  return { ...state, game, revision, reward, gain, notice };
+  return { session: { ...state, game, revision, reward, gain, notice }, rejection: null };
 }

@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { Modal, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getActivity, getLocation, getQuest } from '../game/content';
-import { useGame } from '../game/GameProvider';
+import { useGame, useGameFeedback } from '../game/GameProvider';
 import { getSkin, unlocksBetween } from '../game/game';
 import { itemCount, parseKey } from '../game/items';
 import { type Report, stopReasonText } from '../game/session';
@@ -32,7 +32,8 @@ function levelLine(skill: string, from: number, level: number): string {
 }
 
 export function RewardOverlay(): React.JSX.Element | null {
-  const { reward, dismissReward, game } = useGame();
+  const { game } = useGame();
+  const { reward, dismissReward } = useGameFeedback();
   const insets = useSafeAreaInsets();
   const rewardId = reward?.id;
   const celebrate = !!reward && (reward.levels.length > 0 || reward.quest !== null);
