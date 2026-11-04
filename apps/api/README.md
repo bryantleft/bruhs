@@ -39,6 +39,8 @@ CONVEX_DEPLOYMENT=prod:earnest-wren-707 pnpm --filter bruhs-api auth:setup --pro
 CONVEX_DEPLOYMENT=prod:earnest-wren-707 pnpm --filter bruhs-api deploy
 ```
 
+Every push to `main` that touches `apps/api` also deploys it here, from the `bruhs-outside` Vercel production build ([details](../outside-site/README.md#deploy)). Use the command above for a deploy between pushes.
+
 The API's ignored `.env.local` continues to select the separate local backend. The explicit selector above targets the hosted beta. Auth keys are configured server-side; setup reruns preserve the existing pair. Outside's preview and production build profiles include the public hosted URL and URL guard. Development can use a local URL in its ignored `.env.local`.
 
 The hosted Auth/API smoke flow passed using synthetic daily totals. Independent production-browser review verified the core two-guest flow, with documented test-harness qualifications. See [the verification note](../steps/docs/convex-migration.md#hosted-beta-verification) for scope and remaining device checks.

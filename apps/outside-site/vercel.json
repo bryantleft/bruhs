@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "astro",
-  "ignoreCommand": "git diff --quiet ${VERCEL_GIT_PREVIOUS_SHA:-HEAD^} HEAD -- . ../steps/src ../steps/assets ../../packages ../../pnpm-lock.yaml"
+  "buildCommand": "sh scripts/vercel-build.sh",
+  "ignoreCommand": "git diff --quiet ${VERCEL_GIT_PREVIOUS_SHA:-HEAD^} HEAD -- . ../api ../steps/src ../steps/assets ../../packages ../../pnpm-lock.yaml"
 }

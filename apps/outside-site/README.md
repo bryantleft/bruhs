@@ -38,10 +38,10 @@ Emails are trimmed and lowercased, and stored once. Repeats get the same reply, 
 Live at https://outside.bruhs.app: Vercel project `bnle/bruhs-outside`, linked in `.vercel/`. `PUBLIC_WAITLIST_URL` is set for production and preview. The waitlist route runs on the hosted Convex beta (`earnest-wren-707`), with `WAITLIST_ORIGINS=https://outside.bruhs.app`.
 
 Vercel deploys from git: the project is connected to `bryantleft/bruhs`, with root directory `apps/outside-site`, the Astro preset and Node 22.x (also pinned in `package.json` `engines`).
-- **Production:** every push to `main`.
-- **Preview:** every other branch.
+- **Production:** every push to `main`. `scripts/vercel-build.sh` first deploys the shared Convex API (`apps/api`) to `earnest-wren-707` with the Production-only `CONVEX_DEPLOY_KEY`, then builds the page. So the waitlist route is live before the page that posts to it. The build fails if the key is missing.
+- **Preview:** every other branch. Previews build the page only and never touch the API.
 
-`vercel.json` skips the build unless the push changes this app, the game sources and fonts it imports (`apps/steps/src`, `apps/steps/assets`), `packages/` or the lockfile. Vercel clones the repo, so ignored local folders such as the Expo app's native builds never reach it.
+`vercel.json` skips the build unless the push changes this app, `apps/api`, the game sources and fonts it imports (`apps/steps/src`, `apps/steps/assets`), `packages/` or the lockfile. Vercel clones the repo, so ignored local folders such as the Expo app's native builds never reach it.
 
 To deploy by hand, without git, use Vercel CLI 47.2.2 or later:
 
@@ -51,4 +51,4 @@ npx vercel@latest build --prod
 npx vercel@latest deploy --prebuilt --prod --scope bnle
 ```
 
-After changing `apps/api/convex/waitlist.ts`, deploy the API with `CONVEX_DEPLOYMENT=prod:earnest-wren-707 pnpm --filter bruhs-api deploy`.
+To deploy the API by hand: `CONVEX_DEPLOYMENT=prod:earnest-wren-707 pnpm --filter bruhs-api deploy`. To replace the Vercel deploy key, create one with `npx convex deployment token create <name> --deployment earnest-wren-707`, then set it as the sensitive Production variable `CONVEX_DEPLOY_KEY`.
