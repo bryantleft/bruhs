@@ -1,4 +1,4 @@
-import { Platform, StyleSheet, View } from 'react-native';
+import { Linking, Platform, StyleSheet, View } from 'react-native';
 import { Bruh } from '../components/Bruh';
 import { ConfirmAction } from '../components/ConfirmAction';
 import { Icon, type IconName } from '../components/Icon';
@@ -8,6 +8,10 @@ import { useParty } from '../friends/PartyProvider';
 import { useGame } from '../game/GameProvider';
 import { backToAdventure, useScreenFocus } from '../navigation/useScreenFocus';
 import { color, radius, space } from '../theme/theme';
+
+// The policy both stores link to. Health Connect's privacy action opens this screen
+// (plugins/with-health-rationale.cjs), so the link here is that action's privacy policy too.
+const PRIVACY_POLICY = 'https://outside.bruhs.app/privacy/#app';
 
 export default function HealthScreen(): React.JSX.Element {
   const screen = useScreenFocus();
@@ -64,6 +68,13 @@ export default function HealthScreen(): React.JSX.Element {
           </View>
         ))}
       </View>
+      <Button
+        label="read the privacy policy"
+        variant="ghost"
+        icon="arrow"
+        accessibilityHint="opens outside.bruhs.app in your browser"
+        onPress={() => void Linking.openURL(PRIVACY_POLICY)}
+      />
       {demo ? (
         <View style={styles.demo}>
           <Copy variant="label" style={{ color: color.primary }}>

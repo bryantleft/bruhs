@@ -1,7 +1,8 @@
 const { withMainActivity } = require('expo/config-plugins');
 
 // Health Connect's privacy-policy actions have no URL. Map only those actions
-// to our explanation screen before React Native resolves its initial deep link.
+// to our explanation screen, which links the privacy policy, before React Native resolves
+// its initial deep link.
 module.exports = function withHealthRationale(config) {
   return withMainActivity(config, (mod) => {
     if (mod.modResults.language !== 'kt') throw new Error('Health permission routing requires the Expo Kotlin MainActivity template.');
