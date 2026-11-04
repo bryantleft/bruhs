@@ -17,3 +17,5 @@ function checked(value: string | undefined): string {
 }
 
 export const WAITLIST_URL = checked(url);
+// Removal lives beside signup on the same Convex route.
+export const LEAVE_URL = `${WAITLIST_URL}/leave`;

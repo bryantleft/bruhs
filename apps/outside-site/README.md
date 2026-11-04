@@ -27,11 +27,13 @@ CONVEX_AGENT_MODE=anonymous npx convex env set WAITLIST_ORIGINS "https://outside
 
 ## Waitlist
 
-The form posts a urlencoded body to `POST /waitlist` on the Convex site URL. Handling lives in `apps/api/convex/waitlist.ts`:
-- **Without JavaScript,** Convex answers with a 303 redirect to `/waitlist/joined/` or `/waitlist/invalid/`.
+The signup form posts a urlencoded body to `POST /waitlist` on the Convex site URL. The privacy page's removal form posts to `POST /waitlist/leave`. Handling lives in `apps/api/convex/waitlist.ts`:
+- **Without JavaScript,** Convex answers with a 303 redirect to a static result page: `/waitlist/joined/`, `/waitlist/left/`, `/waitlist/invalid/` or `/waitlist/busy/`.
 - **With JavaScript,** the form sends the same body with `Accept: application/json` and shows the reply in place.
 
-Emails are trimmed and lowercased, and stored once. Repeats get the same reply, so the form can't reveal who signed up. A hidden honeypot field drops simple bots. There is no rate limit yet.
+Emails are trimmed and lowercased, and stored once. Replies are the same whether or not an email was listed, so the forms can't reveal who signed up. A hidden honeypot field drops simple bots. A global rate limit (20 a minute, bursts of 40) caps floods; past it, the forms say to try again in a minute.
+
+`/privacy/` says what the list keeps and why. Update it, and its `UPDATED` date, whenever that changes.
 
 ## Deploy
 

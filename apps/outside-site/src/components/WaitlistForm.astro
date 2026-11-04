@@ -1,18 +1,21 @@
 ---
-import { WAITLIST_URL } from '../lib/waitlist';
+import { LEAVE_URL, WAITLIST_URL } from '../lib/waitlist';
 
 // `stacked` keeps the field above the button, for narrow columns at any screen width.
-type Props = Readonly<{ id: string; error?: boolean; stacked?: boolean }>;
-const { id, error = false, stacked = false } = Astro.props;
+// `leave` turns the form into the privacy page's "remove my email" form.
+type Props = Readonly<{ id: string; error?: 'invalid' | 'busy'; stacked?: boolean; leave?: boolean }>;
+const { id, error, stacked = false, leave = false } = Astro.props;
 const MESSAGES = {
   invalid: "that email doesn't look right. check it and try again.",
+  busy: 'lots of people are signing up right now. try again in a minute.',
 } as const;
+const label = leave ? 'remove my email' : 'join the waitlist';
 ---
 
 <form
   method="post"
-  action={WAITLIST_URL}
-  data-waitlist
+  action={leave ? LEAVE_URL : WAITLIST_URL}
+  data-waitlist={leave ? 'leave' : 'join'}
   class="flex flex-col gap-3"
   aria-describedby={`${id}-status ${id}-note`}
 >
@@ -27,43 +30,64 @@ const MESSAGES = {
       required
       maxlength="254"
       placeholder="you@example.com"
-      aria-invalid={error ? 'true' : undefined}
+      aria-invalid={error === 'invalid' ? 'true' : undefined}
       class="well min-h-[52px] min-w-0 flex-1 px-4 font-pixel text-lg text-rambutan-50 placeholder:text-longan-500"
     />
-    <button type="submit" class="button">join the waitlist</button>
+    <button type="submit" class="button" data-label={label}>{label}</button>
   </div>
   <!-- Hidden from people and assistive tech; bots that fill it are dropped server-side. -->
   <div class="absolute -left-[9999px] h-px w-px overflow-hidden" aria-hidden="true">
     <label>website <input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
   </div>
   <p id={`${id}-status`} role="status" class="min-h-6 text-base text-lychee-400" data-status>
-    {error ? MESSAGES.invalid : ''}
+    {error ? MESSAGES[error] : ''}
   </p>
-  <p id={`${id}-note`} class="text-sm text-rambutan-500">we only use it to tell you when outside launches.</p>
+  <p id={`${id}-note`} class="text-sm text-rambutan-500">
+    {
+      leave ? (
+        "we delete it straight away. you'll get the same reply whether or not it was on the list."
+      ) : (
+        <>
+          we only use it to tell you when outside launches.{' '}
+          <a href="/privacy/" class="underline underline-offset-4 hover:text-durian-400">privacy</a>
+        </>
+      )
+    }
+  </p>
 </form>
 
 <script>
   // Progressive enhancement: without JavaScript the form posts and Convex redirects to a result page.
   const MESSAGES = {
     joined: "you're on the list. we'll email you when outside launches.",
+    left: 'done. that email is off the list.',
     invalid_email: "that email doesn't look right. check it and try again.",
+    rate_limited: 'lots of people are signing up right now. try again in a minute.',
     failed: "couldn't reach the waitlist. check your connection and try again.",
   } as const;
+  type Reply = keyof typeof MESSAGES;
+  const SERVER_ERRORS: readonly Reply[] = ['invalid_email', 'rate_limited'];
   function formBody(form: HTMLFormElement): URLSearchParams {
     const body = new URLSearchParams();
     for (const [name, value] of new FormData(form)) if (typeof value === 'string') body.append(name, value);
     return body;
   }
+  function replyOf(response: Response, body: unknown, done: Reply): Reply {
+    if (response.ok) return done;
+    const error = body && typeof body === 'object' && 'error' in body ? body.error : null;
+    return SERVER_ERRORS.find((reply) => reply === error) ?? 'failed';
+  }
   for (const form of document.querySelectorAll<HTMLFormElement>('form[data-waitlist]')) {
     const status = form.querySelector<HTMLElement>('[data-status]');
     const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
     const input = form.querySelector<HTMLInputElement>('input[name="email"]');
+    const done: Reply = form.dataset.waitlist === 'leave' ? 'left' : 'joined';
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!status || !button || !input) return;
       button.disabled = true;
-      button.textContent = 'joining…';
-      let reply: keyof typeof MESSAGES = 'failed';
+      button.textContent = done === 'left' ? 'removing…' : 'joining…';
+      let reply: Reply = 'failed';
       try {
         // A urlencoded body keeps this a simple CORS request: no preflight round trip.
         const response = await fetch(form.action, {
@@ -71,20 +95,17 @@ const MESSAGES = {
           headers: { Accept: 'application/json' },
           body: formBody(form),
         });
-        const body: unknown = await response.json().catch(() => null);
-        if (response.ok) reply = 'joined';
-        else if (body && typeof body === 'object' && 'error' in body && body.error === 'invalid_email')
-          reply = 'invalid_email';
+        reply = replyOf(response, await response.json().catch(() => null), done);
       } catch (error) {
         console.error('Waitlist request failed:', error);
       }
       status.textContent = MESSAGES[reply];
-      status.classList.toggle('text-lychee-400', reply !== 'joined');
-      status.classList.toggle('text-pandan-300', reply === 'joined');
+      status.classList.toggle('text-lychee-400', reply !== done);
+      status.classList.toggle('text-pandan-300', reply === done);
       input.setAttribute('aria-invalid', String(reply === 'invalid_email'));
       button.disabled = false;
-      button.textContent = 'join the waitlist';
-      if (reply === 'joined') form.reset();
+      button.textContent = button.dataset.label ?? '';
+      if (reply === done) form.reset();
       else input.focus();
     });
   }

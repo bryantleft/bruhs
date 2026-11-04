@@ -1,0 +1,66 @@
+---
+import Header from '../components/Header.astro';
+import WaitlistForm from '../components/WaitlistForm.astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+// Bump when anything below changes.
+const UPDATED = '3 November 2026';
+const sections = [
+  {
+    title: 'what we keep',
+    lines: [
+      'your email, trimmed and lowercased, and the time you joined. nothing else.',
+      'the form has no account, no name field and no tracking pixel.',
+    ],
+  },
+  {
+    title: 'what we use it for',
+    lines: [
+      'one email when outside launches on iPhone and Android.',
+      "we don't sell it, share it or use it for anything else.",
+    ],
+  },
+  {
+    title: 'where it lives',
+    lines: [
+      'the list is stored with Convex, our database host, in the US.',
+      'this page is served by Vercel. it sets no cookies and runs no analytics.',
+    ],
+  },
+  {
+    title: 'the game',
+    lines: [
+      'outside itself will have its own privacy policy at launch, covering step data from Apple Health and Health Connect.',
+    ],
+  },
+];
+---
+
+<BaseLayout
+  title="privacy · bruhs / outside"
+  description="what the outside waitlist keeps, why, and how to remove your email."
+  path="/privacy/"
+>
+  <Header />
+  <main class="mx-auto flex w-full max-w-2xl flex-col gap-10 px-5 py-16">
+    <div class="flex flex-col gap-2">
+      <h1 class="text-4xl font-bold text-durian-400 shadowed">privacy</h1>
+      <p class="label text-rambutan-500">updated {UPDATED}</p>
+    </div>
+    {
+      sections.map((section) => (
+        <section class="flex flex-col gap-3">
+          <h2 class="text-2xl font-bold text-rambutan-50 shadowed">{section.title}</h2>
+          {section.lines.map((line) => (
+            <p class="leading-relaxed text-rambutan-300">{line}</p>
+          ))}
+        </section>
+      ))
+    }
+    <section aria-labelledby="remove" class="panel flex flex-col gap-4 p-5">
+      <h2 id="remove" class="text-2xl font-bold text-durian-400 shadowed">remove your email</h2>
+      <p class="leading-relaxed text-rambutan-300">enter the email you joined with and it comes off the list.</p>
+      <WaitlistForm id="leave" leave />
+    </section>
+  </main>
+</BaseLayout>
