@@ -1,60 +1,31 @@
-// Domain availability status types
-export type DomainStatus = "available" | "unavailable" | "unknown" | "error";
+/** A top-level domain from the IANA list, with its leading dot (".com"). */
+export type Tld = string & { readonly __brand: "Tld" };
 
-// TLD (Top Level Domain) types - now supports all TLDs from the npm package
-export type TLD = string; // e.g., ".com", ".net", etc.
+/** What DNS says about a name. */
+export type Availability =
+  /** No DNS records: probably unregistered. */
+  | "available"
+  /** The name resolves or has SOA/NS records: registered. */
+  | "unavailable"
+  /** No DNS records, but very short names are usually registry-reserved or premium. */
+  | "premium";
 
-// Domain information interface
-export interface DomainInfo {
-  domain: string;
-  tld: TLD;
-  fullDomain: string; // domain + tld (e.g., "example.com")
-  status: DomainStatus;
-}
-
-// Search query interface
+/** One name to check across one or more TLDs. */
 export interface DomainSearchQuery {
-  domains: string[]; // Multiple domain names to search
-  tlds: TLD[]; // Selected TLDs to check
+  /** The part before the TLD, e.g. "example" or "shop.example". */
+  name: string;
+  tlds: readonly Tld[];
 }
 
-// API response interfaces
-export interface DomainSearchResponse {
-  results: DomainInfo[];
-  totalSearched: number;
-  timestamp: string;
+export type DomainCheck =
+  | { status: "checking" }
+  | { status: "error"; message: string }
+  | { status: "done"; availability: Availability };
+
+export interface DomainResult {
+  name: string;
+  tld: Tld;
+  /** name + tld, e.g. "example.com". */
+  fullDomain: string;
+  check: DomainCheck;
 }
-
-// Component prop types
-export interface SearchInputProps {
-  onSearch: (query: DomainSearchQuery) => void;
-  onClear?: () => void;
-  isLoading?: boolean;
-  placeholder?: string;
-  autoFocus?: boolean;
-}
-
-export interface DomainCardProps {
-  domain: DomainInfo;
-}
-
-export interface ResultsGridProps {
-  results: DomainInfo[];
-  isLoading?: boolean;
-  emptyStateMessage?: string;
-}
-
-// Utility types
-export type DomainSearchState = "idle" | "searching" | "success" | "error";
-
-export interface DomainSearchHookResult {
-  search: (query: DomainSearchQuery) => Promise<void>;
-  results: DomainInfo[];
-  isLoading: boolean;
-  error: Error | null;
-  state: DomainSearchState;
-  clearResults: () => void;
-}
-
-// Progress callback type for streaming results
-export type DomainSearchProgressCallback = (result: DomainInfo) => void;

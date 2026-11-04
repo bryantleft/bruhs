@@ -1,64 +1,78 @@
 import { AlertTriangle } from "lucide-react";
-import { Card, CardContent } from "~/components/ui/card";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "~/components/ui/tooltip";
-import type { DomainCardProps } from "~/lib/types";
+import type { DomainCheck, DomainResult } from "~/lib/types";
 
-export function DomainCard({ domain }: DomainCardProps) {
-  const getBorderColor = () => {
-    switch (domain.status) {
-      case "available":
-        return "border-pandan-600";
-      case "unavailable":
-        return "border-lychee-600";
-      case "error":
-        return "border-lychee-600";
-      default:
-        return "border-longan-600";
-    }
-  };
+interface Presentation {
+  label: string;
+  border: string;
+  name: string;
+}
+
+function present(check: DomainCheck): Presentation {
+  switch (check.status) {
+    case "checking":
+      return {
+        label: "Checking…",
+        border: "border-longan-600",
+        name: "text-rambutan-300",
+      };
+    case "error":
+      return {
+        label: "Couldn't check",
+        border: "border-lychee-600",
+        name: "text-lychee-300",
+      };
+    case "done":
+      switch (check.availability) {
+        case "available":
+          return {
+            label: "Available",
+            border: "border-pandan-600",
+            name: "text-rambutan-100",
+          };
+        case "premium":
+          return {
+            label: "Likely premium",
+            border: "border-durian-600",
+            name: "text-rambutan-100",
+          };
+        case "unavailable":
+          return {
+            label: "Taken",
+            border: "border-longan-600",
+            name: "text-rambutan-400 line-through",
+          };
+      }
+  }
+}
+
+export function DomainCard({ domain }: { domain: DomainResult }) {
+  const { check } = domain;
+  const { label, border, name } = present(check);
 
   return (
-    <Card
-      className={`group relative h-12 border-[1.5px] bg-longan-800 transition-all duration-200 hover:shadow-lg ${getBorderColor()}`}
+    <li
+      className={`rounded-lychee bg-longan-800 flex h-12 items-center justify-between gap-3 border-[1.5px] px-4 transition-colors ${border}`}
+      title={check.status === "error" ? check.message : undefined}
     >
-      <CardContent className="flex h-full items-center justify-between py-0">
-        {domain.status === "unknown" ? (
-          <div className="flex items-center space-x-2 text-rambutan-400">
-            <div className="h-4 w-4 animate-spin rounded-full border-[1.5px] border-rambutan-400 border-t-transparent" />
-            <span className="font-bold text-base">Checking...</span>
-          </div>
-        ) : (
-          <h3
-            className={`flex min-w-0 font-bold text-base leading-tight ${
-              domain.status === "unavailable"
-                ? "text-rambutan-400 line-through"
-                : domain.status === "error"
-                  ? "text-lychee-400"
-                  : "text-rambutan-100"
-            }`}
-          >
-            <span className="truncate">{domain.domain}</span>
-            <span className="flex-shrink-0">{domain.tld}</span>
-          </h3>
+      <span className={`flex min-w-0 text-base font-semibold ${name}`}>
+        <span className="truncate">{domain.name}</span>
+        <span className="shrink-0">{domain.tld}</span>
+      </span>
+      <span className="text-rambutan-400 flex shrink-0 items-center gap-1.5 text-xs">
+        {check.status === "checking" && (
+          <span
+            aria-hidden="true"
+            className="rounded-orb border-rambutan-400 size-3 animate-spin border-[1.5px] border-t-transparent"
+          />
         )}
-
-        {domain.status === "error" && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="ml-2 flex-shrink-0 cursor-help text-lychee-400">
-                <AlertTriangle size={16} />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Failed to check domain availability</p>
-            </TooltipContent>
-          </Tooltip>
+        {check.status === "error" && (
+          <AlertTriangle
+            aria-hidden="true"
+            className="text-lychee-400 size-3.5"
+          />
         )}
-      </CardContent>
-    </Card>
+        {label}
+      </span>
+    </li>
   );
 }

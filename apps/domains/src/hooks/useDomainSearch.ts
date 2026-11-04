@@ -1,91 +1,40 @@
-import { useMutation } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
-import { searchDomains } from "~/lib/domain-checker";
-import type {
-  DomainInfo,
-  DomainSearchHookResult,
-  DomainSearchQuery,
-  DomainSearchResponse,
-  DomainSearchState,
-} from "~/lib/types";
+import { useQueries } from "@tanstack/react-query";
+import { checkDomainAvailability } from "~/lib/domain-checker";
+import type { DomainResult, DomainSearchQuery } from "~/lib/types";
 
-export function useDomainSearch(): DomainSearchHookResult {
-  const [results, setResults] = useState<DomainInfo[]>([]);
-  const [state, setState] = useState<DomainSearchState>("idle");
+/**
+ * Check every name+TLD pair of `query`, one cached query per domain. Results arrive
+ * independently; a superseded search's lookups are aborted when its queries go unused.
+ */
+export function useDomainSearch(
+  query: DomainSearchQuery | null,
+): DomainResult[] {
+  const domains =
+    query?.tlds.map((tld) => ({
+      name: query.name,
+      tld,
+      fullDomain: `${query.name}${tld}`,
+    })) ?? [];
 
-  // TanStack Query mutation for domain search
-  const mutation = useMutation({
-    mutationFn: async (
-      query: DomainSearchQuery,
-    ): Promise<DomainSearchResponse> => {
-      // Progress callback to update results as they arrive
-      const onProgress = (result: DomainInfo) => {
-        setResults((prev) => {
-          // Replace the placeholder with the actual result
-          return prev.map((r) =>
-            r.fullDomain === result.fullDomain ? result : r,
-          );
-        });
-      };
-
-      return searchDomains(query, onProgress);
-    },
-    onMutate: () => {
-      setState("searching");
-    },
-    onSuccess: () => {
-      setState("success");
-    },
-    onError: (error) => {
-      console.error("Domain search failed:", error);
-      setState("error");
-    },
+  const checks = useQueries({
+    queries: domains.map(({ fullDomain }) => ({
+      queryKey: ["domain", fullDomain],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        checkDomainAvailability(fullDomain, signal),
+    })),
   });
 
-  // Search function
-  const search = useCallback(
-    async (query: DomainSearchQuery) => {
-      // Validate query
-      if (!query.domains.length || !query.tlds.length) {
-        console.warn("Invalid search query: domains and TLDs are required");
-        return;
-      }
-
-      // Clear previous results and create placeholders
-      const placeholders: DomainInfo[] = [];
-
-      for (const domainName of query.domains) {
-        for (const tld of query.tlds) {
-          placeholders.push({
-            domain: domainName,
-            tld,
-            fullDomain: `${domainName}${tld}`,
-            status: "unknown",
-          });
-        }
-      }
-
-      setResults(placeholders);
-
-      // Execute search
-      await mutation.mutateAsync(query);
-    },
-    [mutation],
-  );
-
-  // Clear results function
-  const clearResults = useCallback(() => {
-    setResults([]);
-    setState("idle");
-    mutation.reset();
-  }, [mutation]);
-
-  return {
-    search,
-    results,
-    isLoading: mutation.isPending,
-    error: mutation.error as Error | null,
-    state,
-    clearResults,
-  };
+  return domains.map((domain, i): DomainResult => {
+    const check = checks[i];
+    if (check?.isSuccess) {
+      return { ...domain, check: { status: "done", availability: check.data } };
+    }
+    if (check?.isError) {
+      return {
+        ...domain,
+        check: { status: "error", message: check.error.message },
+      };
+    }
+    return { ...domain, check: { status: "checking" } };
+  });
 }
