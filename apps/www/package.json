@@ -14,13 +14,13 @@
     "name": "www-bruhs"
   },
   "dependencies": {
-    "@astrojs/check": "0.9.4",
-    "@astrojs/vercel": "8.2.0",
+    "@astrojs/check": "0.9.12",
+    "@astrojs/vercel": "11.0.18",
     "@bruhs/theme": "workspace:*",
-    "@tailwindcss/vite": "4.1.10",
-    "astro": "^5.10.0",
-    "sharp": "0.34.2",
-    "tailwindcss": "^4.1.10",
-    "typescript": "5.8.3"
+    "@tailwindcss/vite": "4.3.4",
+    "astro": "^7.4.5",
+    "sharp": "0.35.5",
+    "tailwindcss": "^4.3.4",
+    "typescript": "6.0.3"
   }
 }
