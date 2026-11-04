@@ -750,3 +750,19 @@ test('percents, loot ranges and requirement hints follow the copy rules', () => 
   assert.ok(smelt);
   assert.equal(activityBlocker(at('bruhbridge'), smelt), `needs ${itemCount(1, 'copper-ore')}`);
 });
+
+test('a store without a bank sells only what you carry', () => {
+  // Today every store town has a bank. Close one town's bank for this test to stand in for a
+  // future store-only outpost, which must not sell from a bank far away.
+  const town = LOCATIONS.find((place) => place.store && place.bank);
+  assert.ok(town);
+  Reflect.set(town, 'bank', false);
+  try {
+    const game = at(town.id, { inventory: { 'pandan-logs': 2 }, bank: { 'pandan-logs': 5 }, coins: 0 });
+    assert.equal(updateGame(game, { type: 'sell', item: 'pandan-logs', qty: 3 }), game);
+    const sold = updateGame(game, { type: 'sell', item: 'pandan-logs', qty: 2 });
+    assert.deepEqual([sold.inventory, sold.bank], [{}, { 'pandan-logs': 5 }]);
+  } finally {
+    Reflect.set(town, 'bank', true);
+  }
+});

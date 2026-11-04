@@ -944,7 +944,8 @@ function applyRules(game: Game, action: GameAction): RuleResult {
       if (!isKnownKey(action.item)) return INVALID;
       if (!atStore(game)) return refuse({ kind: 'not-at-store' });
       const inBag = game.inventory[action.item] ?? 0;
-      const inBank = game.bank[action.item] ?? 0;
+      // The bank only sells from a town that also has one.
+      const inBank = atBank(game) ? (game.bank[action.item] ?? 0) : 0;
       if (!isQty(action.qty, inBag + inBank)) return INVALID;
       const fromBag = Math.min(inBag, action.qty);
       return accept({
