@@ -13,7 +13,7 @@ const sent = vi.hoisted(() => ({
 }));
 vi.mock('../convex/emails', async (original) => ({
   ...(await original<typeof import('../convex/emails')>()),
-  sendConfirmation: async (_ctx: unknown, email: string, link: string) => {
+  sendConfirmation: async (_ctx: unknown, email: string, _site: string, link: string) => {
     sent.confirm.push({ email, link });
   },
   sendAlreadyListed: async (_ctx: unknown, email: string) => {

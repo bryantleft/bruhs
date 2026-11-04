@@ -81,7 +81,7 @@ export const join = internalMutation({
     const emailKey = (await sha256(email)).slice(0, 32);
     if (existing && existing.status !== 'pending') {
       await ctx.db.patch(existing._id, { sentAt: now });
-      await sendAlreadyListed(ctx, email, `${emailKey}/${Math.floor(now / HOUR)}`);
+      await sendAlreadyListed(ctx, email, site, `${emailKey}/${Math.floor(now / HOUR)}`);
       return { status: 'done' };
     }
     const token = newToken();
@@ -89,7 +89,7 @@ export const join = internalMutation({
     if (existing) await ctx.db.patch(existing._id, { tokenHash, sentAt: now });
     else await ctx.db.insert('waitlist', { email, status: 'pending', tokenHash, sentAt: now });
     const link = `${site}/waitlist/confirm/?token=${token}`;
-    await sendConfirmation(ctx, email, link, tokenHash.slice(0, 32));
+    await sendConfirmation(ctx, email, site, link, tokenHash.slice(0, 32));
     return { status: 'done' };
   },
 });
