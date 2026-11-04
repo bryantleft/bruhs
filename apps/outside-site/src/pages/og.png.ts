@@ -12,7 +12,7 @@ export const GET: APIRoute = () => {
   const image = bannerPng(WIDTH, HEIGHT, () =>
     [
       outlined('outside', 72, 196, 156, palette['durian-400'], 7),
-      outlined('your steps are the only button.', 76, 292, 54, palette['rambutan-50'], 4),
+      outlined('touch grass. level up.', 76, 292, 54, palette['rambutan-50'], 4),
       `<rect x="${WIDTH - 72 - 300}" y="44" width="300" height="48" fill="${palette['longan-900']}" stroke="${INK}" stroke-width="4"/>`,
       `<text x="${WIDTH - 72 - 150}" y="77" text-anchor="middle" font-family="Silkscreen" font-size="22" fill="${palette['rambutan-100']}">${label}</text>`,
     ].join(''),

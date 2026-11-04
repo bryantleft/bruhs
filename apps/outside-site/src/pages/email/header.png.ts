@@ -10,7 +10,7 @@ export const GET: APIRoute = () =>
     bannerPng(1200, 400, () =>
       [
         outlined('outside', 64, 138, 120, palette['durian-400'], 6),
-        outlined('your steps are the only button.', 68, 194, 38, palette['rambutan-50'], 3),
+        outlined('touch grass. level up.', 68, 198, 46, palette['rambutan-50'], 3),
       ].join(''),
     ),
     { headers: { 'Content-Type': 'image/png' } },

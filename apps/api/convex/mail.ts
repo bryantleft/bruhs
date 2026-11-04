@@ -111,7 +111,7 @@ export function mailHtml(mail: Mail): string {
 <a href="${html(site)}" target="_blank" style="color:${C['durian-400']};text-decoration:none">bruhs / outside</a>
 </td></tr>
 <tr><td style="border:2px solid ${C.ink}">
-<img src="${asset('header.png')}" width="${WIDTH - 4}" height="${Math.round((WIDTH - 4) / 3)}" alt="outside: your steps are the only button. a pixel bruh in a small town." style="display:block;width:100%;height:auto;border:0;background:${C['blueberry-400']};font-family:${PIXEL};font-size:16px;color:${C.ink}">
+<img src="${asset('header.png')}" width="${WIDTH - 4}" height="${Math.round((WIDTH - 4) / 3)}" alt="outside: touch grass. level up. a pixel bruh in a small town." style="display:block;width:100%;height:auto;border:0;background:${C['blueberry-400']};font-family:${PIXEL};font-size:16px;color:${C.ink}">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
 <td class="pad" bgcolor="${C['longan-800']}" style="background:${C['longan-800']};${bevel(C['longan-600'], C['longan-950'])};padding:28px">
 <h1 style="margin:0 0 18px;font-family:${PIXEL};font-weight:700;font-size:28px;line-height:34px;color:${C['durian-400']};text-shadow:2px 2px 0 ${C.ink}">${html(title)}</h1>
