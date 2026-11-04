@@ -1,9 +1,20 @@
-import { marked } from "marked";
+import { marked, type Token } from "marked";
 import { memo, useEffect, useRef, useState } from "react";
 import { TokenBlock } from "@/components/messages/blocks";
 import { useBruhStore } from "@/lib/stores";
 import type { Message } from "@/lib/types";
 import { cn, copyToClipboard, randomKey } from "@/lib/utils";
+
+// marked 18 emits a `space` token after these blocks, where marked 15 kept the
+// trailing blank lines inside the block; drop it to keep the previous spacing.
+function keepsTrailingSpace(token: Token) {
+  return (
+    token.type === "heading" ||
+    token.type === "html" ||
+    token.type === "table" ||
+    (token.type === "code" && token.codeBlockStyle === "indented")
+  );
+}
 
 type BruhMessageProps = {
   message: Message;
@@ -14,7 +25,12 @@ function BruhMessage({ message, selected = false }: BruhMessageProps) {
   const { setFocusPosition } = useBruhStore();
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const messageRef = useRef<HTMLDivElement>(null);
-  const tokens = marked.lexer(message.content);
+  const tokens = marked
+    .lexer(message.content)
+    .filter(
+      (token, i, all) =>
+        !(token.type === "space" && i > 0 && keepsTrailingSpace(all[i - 1])),
+    );
 
   useEffect(() => {
     if (selected && messageRef.current) {

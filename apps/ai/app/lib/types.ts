@@ -1,5 +1,3 @@
-import type { Message as AIMessage } from "ai/react";
-
 export enum Provider {
   OPENAI = "openai",
   ANTHROPIC = "anthropic",
@@ -35,7 +33,12 @@ export type Model = {
 
 export type Keys = Record<Provider, string>;
 
-export interface Message extends AIMessage {
+// The app's own message shape (persisted in IndexedDB). AI SDK 5+ replaced the
+// `content` string with `parts`; convert at the useChat boundary instead.
+export interface Message {
+  id: string;
+  role: "system" | "user" | "assistant";
+  content: string;
   error?: string;
 }
 

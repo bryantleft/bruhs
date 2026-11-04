@@ -1,4 +1,5 @@
 import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import type React from "react";
 import {
   type ChangeEvent,
@@ -12,6 +13,41 @@ import { useGlobalHotkey } from "@/lib/hooks/use-global-hotkey";
 import { useLLMStore, useMessageStore } from "@/lib/stores";
 import type { APIError, Message } from "@/lib/types";
 import { cn, randomKey } from "@/lib/utils";
+
+// AI SDK 5+ messages carry `parts` instead of a `content` string; the app keeps
+// its own `content` shape and converts at the useChat boundary.
+function toUIMessage(message: Message): UIMessage {
+  return {
+    id: message.id,
+    role: message.role,
+    parts: [{ type: "text", text: message.content }],
+  };
+}
+
+function toMessage(message: UIMessage): Message {
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.parts
+      .map((part) => (part.type === "text" ? part.text : ""))
+      .join(""),
+  };
+}
+
+const transport = new DefaultChatTransport({
+  api: "/api/llm",
+  // Keep the request body the /api/llm action expects: { role, content } messages.
+  prepareSendMessagesRequest: ({ id, messages, body }) => ({
+    body: {
+      ...body,
+      id,
+      messages: messages.map((message) => {
+        const { role, content } = toMessage(message);
+        return { role, content };
+      }),
+    },
+  }),
+});
 
 export default function Input() {
   const { model, keys } = useLLMStore();
@@ -33,16 +69,11 @@ export default function Input() {
     messages: chatMessages,
     status,
     setMessages,
-    append,
+    sendMessage,
     stop,
   } = useChat({
-    api: "/api/llm",
-    body: {
-      key: keys?.[model.provider],
-      model: model.id,
-      provider: model.provider,
-    },
-    initialMessages: defaultMessages,
+    transport,
+    messages: defaultMessages.map(toUIMessage),
     onError: (error) => {
       const errorMessage: APIError = JSON.parse(error.message);
 
@@ -54,10 +85,12 @@ export default function Input() {
         addError(errorMessage.message);
       }
     },
-    onFinish: (message) => {
-      addMessage(message);
+    onFinish: ({ message, isAbort, isDisconnect, isError }) => {
+      // AI SDK 4 only called onFinish for completed responses.
+      if (isAbort || isDisconnect || isError) return;
+      addMessage(toMessage(message));
     },
-    experimental_throttle: 50,
+    throttle: 50,
   });
 
   useGlobalHotkey({
@@ -82,13 +115,14 @@ export default function Input() {
 
   useEffect(() => {
     if (deleting) {
-      setMessages(messages);
+      setMessages(messages.map(toUIMessage));
       setDeleting(false);
     }
   }, [deleting, messages, setMessages, setDeleting]);
 
   useEffect(() => {
-    setLastMessage(chatMessages[chatMessages.length - 1]);
+    const last = chatMessages[chatMessages.length - 1];
+    setLastMessage(last && toMessage(last));
   }, [chatMessages, setLastMessage]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: input can change textarea height
@@ -117,9 +151,12 @@ export default function Input() {
     };
     addMessage(userMessage);
     setInput("");
-    await append(userMessage, {
-      // TODO: implement upload file
-      experimental_attachments: [],
+    await sendMessage(toUIMessage(userMessage), {
+      body: {
+        key: keys?.[model.provider],
+        model: model.id,
+        provider: model.provider,
+      },
     });
   }
 
