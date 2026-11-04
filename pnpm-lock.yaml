@@ -30,6 +30,9 @@ importers:
       '@ai-sdk/xai':
         specifier: 5.0.38
         version: 5.0.38(zod@4.6.7)
+      '@bruhs/theme':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@react-router/node':
         specifier: 7.18.5
         version: 7.18.5(react-router@7.18.5(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(typescript@6.0.3)
