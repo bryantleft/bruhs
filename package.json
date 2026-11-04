@@ -21,7 +21,7 @@
 		"check:api": "turbo run check --filter=bruhs-api"
 	},
 	"devDependencies": {
-		"turbo": "2.5.3"
+		"turbo": "2.11.10"
 	},
 	"packageManager": "pnpm@10.11.0",
 	"engines": {
