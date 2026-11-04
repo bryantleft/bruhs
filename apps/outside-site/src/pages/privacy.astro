@@ -4,7 +4,8 @@ import WaitlistForm from '../components/WaitlistForm.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 
 // Bump when anything below changes.
-const UPDATED = '3 November 2026';
+const UPDATED = '4 November 2026';
+const CONTACT = 'contact@bruhs.dev';
 const sections = [
   {
     title: 'what we keep',
@@ -59,6 +60,14 @@ const sections = [
         </section>
       ))
     }
+    <section aria-labelledby="contact" class="flex flex-col gap-3">
+      <h2 id="contact" class="text-2xl font-bold text-rambutan-50 shadowed">questions</h2>
+      <p class="leading-relaxed text-rambutan-300">
+        email <a href={`mailto:${CONTACT}`} class="text-durian-400 underline underline-offset-4 hover:text-durian-300"
+          >{CONTACT}</a
+        > about your data or anything on this page.
+      </p>
+    </section>
     <section aria-labelledby="remove" class="panel flex flex-col gap-4 p-5">
       <h2 id="remove" class="text-2xl font-bold text-durian-400 shadowed">remove your email</h2>
       <p class="leading-relaxed text-rambutan-300">enter the email you joined with and it comes off the list.</p>
