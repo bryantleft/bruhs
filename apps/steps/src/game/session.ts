@@ -303,8 +303,9 @@ export function reduceSession(state: Session, event: SessionAction): Session {
   const result = playGame(state.game, event.action);
   if (!result.ok) {
     const message = rejectionText(result.reason, state.game);
-    // A refusal never replaces a save error, which needs its retry.
-    if (!message || state.notice?.kind === 'error') return state;
+    // A refusal never replaces a save error, which needs its retry. Health tracking shows its
+    // own sync errors, so a refused batch adds no second message.
+    if (!message || state.notice?.kind === 'error' || event.action.type === 'health-sync') return state;
     return { ...state, notice: { kind: 'status', message } };
   }
   const game = result.game;
