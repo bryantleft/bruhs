@@ -1,63 +1,70 @@
-// The 1200×630 link preview, drawn at build time from the game's own scene and fonts. Text becomes
-// vector paths from the game's TTF files, so the result never depends on the build machine's fonts.
-import { readFile } from 'node:fs/promises';
+// The 1200×630 link preview, drawn at build time to match the page hero: banded sky, the
+// title, and the town strip with the bruh. resvg renders it from the game's own font files
+// with system fonts off, so the image never depends on the build machine.
 import { fileURLToPath } from 'node:url';
+import { Resvg } from '@resvg/resvg-js';
+import { palette } from '@steps/src/theme/palette.ts';
 import type { APIRoute } from 'astro';
 import { root } from 'astro:config/server';
-import opentype from 'opentype.js';
-import sharp from 'sharp';
-import { palette } from '@steps/src/theme/palette.ts';
-import { sceneSvg } from '../lib/pixel';
+import { HERO_TOP, HERO_WIDTH, heroParts } from '../lib/pixel';
 
 const WIDTH = 1200;
 const HEIGHT = 630;
-const BAND = 190;
-const SVG = 'xmlns="http://www.w3.org/2000/svg"';
 // The game's ink (apps/steps theme color.ink): outlines and shadows.
 const INK = '#0a0a0a';
+// The strip shows the scene from HERO_TOP down, at the canvas's full width.
+const STRIP_HEIGHT = Math.round(((48 - HERO_TOP) * WIDTH) / HERO_WIDTH);
+const STRIP_TOP = HEIGHT - STRIP_HEIGHT;
 
-async function loadFont(file: string): Promise<opentype.Font> {
+function font(file: string): string {
   // From the project root: the bundled endpoint's own location changes between Astro versions.
-  const path = fileURLToPath(new URL(`../steps/assets/fonts/${file}`, root));
-  const bytes = await readFile(path);
-  return opentype.parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+  return fileURLToPath(new URL(`../steps/assets/fonts/${file}`, root));
 }
 
-type Line = Readonly<{ font: opentype.Font; text: string; size: number; x: number; y: number; fill: string }>;
-
-function linePath({ font, text, size, x, y, fill }: Line, anchor: 'start' | 'end' = 'start'): string {
-  const left = anchor === 'end' ? x - font.getAdvanceWidth(text, size) : x;
-  // A 3px ink drop shadow, the headings' 2px scaled up for a 1200px card.
-  const d = font.getPath(text, left, y, size).toPathData(2);
-  const shadow = font.getPath(text, left + 3, y + 3, size).toPathData(2);
-  return `<path d="${shadow}" fill="${INK}"/><path d="${d}" fill="${fill}"/>`;
+// Outlined like the hero title: an ink stroke under the fill, plus a hard drop shadow.
+function outlined(text: string, x: number, y: number, size: number, fill: string, stroke: number): string {
+  const common = `x="${x}" font-family="Pixelify Sans Outside" font-weight="700" font-size="${size}"`;
+  return [
+    `<text ${common} y="${y + stroke}" dx="${stroke}" fill="${INK}" stroke="${INK}" stroke-width="${stroke * 2}" stroke-linejoin="miter">${text}</text>`,
+    `<text ${common} y="${y}" fill="${fill}" stroke="${INK}" stroke-width="${stroke * 2}" stroke-linejoin="miter" paint-order="stroke">${text}</text>`,
+  ].join('');
 }
 
-export const GET: APIRoute = async () => {
-  const [bold, label] = await Promise.all([loadFont('PixelifySans-Bold.ttf'), loadFont('Silkscreen-Regular.ttf')]);
-  // The scene's 2:1 frame is 600 px tall at full width; trim sky so the band fits underneath.
-  const sceneHeight = HEIGHT - BAND;
-  const crop = Math.round(48 - (48 * sceneHeight) / 600);
-  const scene = await sharp(
-    Buffer.from(sceneSvg({ biome: 'town', skin: 'original' }, { width: WIDTH, crop })),
-  )
-    .resize(WIDTH, sceneHeight, { fit: 'cover', position: 'bottom', kernel: 'nearest' })
-    .png()
-    .toBuffer();
-  const top = sceneHeight;
-  const band = `<svg ${SVG} width="${WIDTH}" height="${HEIGHT}">
-    <rect x="0" y="${top}" width="${WIDTH}" height="${BAND}" fill="${palette['longan-950']}"/>
-    <rect x="0" y="${top}" width="${WIDTH}" height="4" fill="${INK}"/>
-    ${linePath({ font: bold, text: 'outside', size: 96, x: 56, y: top + 104, fill: palette['durian-400'] })}
-    ${linePath({ font: bold, text: 'your steps are the only button.', size: 36, x: 60, y: top + 158, fill: palette['rambutan-100'] })}
-    ${linePath({ font: label, text: 'outside.bruhs.app', size: 22, x: WIDTH - 56, y: top + 92, fill: palette['rambutan-500'] }, 'end')}
+export const GET: APIRoute = () => {
+  const { still, hop } = heroParts();
+  // The page's CSS sky bands, ending in blueberry-200 where the strip's own sky begins.
+  const bands = [
+    [palette['blueberry-500'], 0, 0.28],
+    [palette['blueberry-400'], 0.28, 0.56],
+    [palette['blueberry-300'], 0.56, 0.82],
+    [palette['blueberry-200'], 0.82, 1],
+  ] as const;
+  const sky = bands
+    .map(
+      ([fill, from, to]) => {
+        // Round the edges, not the heights, so neighbouring bands meet without a seam.
+        const top = Math.round(from * STRIP_TOP);
+        return `<rect x="0" y="${top}" width="${WIDTH}" height="${Math.round(to * STRIP_TOP) - top}" fill="${fill}"/>`;
+      },
+    )
+    .join('');
+  const label = 'outside.bruhs.app';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
+    ${sky}
+    <svg x="0" y="${STRIP_TOP}" width="${WIDTH}" height="${STRIP_HEIGHT}" viewBox="0 ${HERO_TOP} ${HERO_WIDTH} ${48 - HERO_TOP}" shape-rendering="crispEdges">${still}${hop[0]}</svg>
+    ${outlined('outside', 72, 196, 156, palette['durian-400'], 7)}
+    ${outlined('your steps are the only button.', 76, 292, 54, palette['rambutan-50'], 4)}
+    <rect x="${WIDTH - 72 - 300}" y="44" width="300" height="48" fill="${palette['longan-900']}" stroke="${INK}" stroke-width="4"/>
+    <text x="${WIDTH - 72 - 150}" y="77" text-anchor="middle" font-family="Silkscreen" font-size="22" fill="${palette['rambutan-100']}">${label}</text>
   </svg>`;
-  const image = await sharp({ create: { width: WIDTH, height: HEIGHT, channels: 4, background: palette['longan-950'] } })
-    .composite([
-      { input: scene, top: 0, left: 0 },
-      { input: Buffer.from(band), top: 0, left: 0 },
-    ])
-    .png()
-    .toBuffer();
+  const image = new Resvg(svg, {
+    font: {
+      fontFiles: [font('PixelifySans-Bold.ttf'), font('Silkscreen-Regular.ttf')],
+      loadSystemFonts: false,
+      defaultFontFamily: 'Pixelify Sans Outside',
+    },
+  })
+    .render()
+    .asPng();
   return new Response(new Uint8Array(image), { headers: { 'Content-Type': 'image/png' } });
 };

@@ -1,0 +1,22 @@
+---
+import Header from '../../components/Header.astro';
+import WaitlistForm from '../../components/WaitlistForm.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { WAITLIST_MESSAGES } from '../../lib/messages';
+---
+
+<BaseLayout
+  title="link expired · bruhs / outside"
+  description="that confirmation link has expired."
+  path="/waitlist/expired/"
+  noindex
+>
+  <Header />
+  <main class="mx-auto flex w-full max-w-xl flex-col gap-6 px-5 py-16">
+    <h1 class="text-4xl font-bold text-durian-400 shadowed">that link has expired</h1>
+    <p class="text-lg text-rambutan-300">{WAITLIST_MESSAGES.invalid_link}</p>
+    <div class="panel p-5">
+      <WaitlistForm id="rejoin" />
+    </div>
+  </main>
+</BaseLayout>

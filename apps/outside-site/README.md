@@ -10,7 +10,7 @@ The page imports the game directly through the `@steps` alias in `astro.config.m
 So the page always matches the app, and its numbers come from the game:
 - **"a real first day"** (`src/lib/sample-day.ts`) runs a new save through the game's rules at build time: walk to pandan woods, chop, sync 8,000 steps. The report shows that run's numbers. The build fails if the day stops spending steps or ends somewhere else.
 - **The fruitlands** draws the app's world map (`src/pixel/world.ts`, shared with the map tab) beside the places, ordered by road distance from the starting town (`route`), with lock text and grey pins from `locationBlocker`.
-- **The hero** draws the town on a double-width canvas (`sceneShapes({ width })`). The bruh's hop and the drifting clouds are CSS only, and both stay still under reduced motion. The 1200×630 link-preview image (`/og.png`) is drawn at build time from the same scene and fonts. The game's web build links to it too.
+- **The hero** draws the town on a double-width canvas (`sceneShapes({ width })`). The bruh's hop and the drifting clouds are CSS only, and both stay still under reduced motion. The 1200×630 link-preview image (`/og.png`) is the same hero, rendered at build time by resvg from the game's own font files with system fonts off, so it never depends on the build machine. The game's web build links to it too.
 
 ## Develop
 
@@ -32,6 +32,8 @@ The signup form posts a urlencoded body to `POST /waitlist` on the Convex site U
 - **With JavaScript,** the form sends the same body with `Accept: application/json` and shows the reply in place.
 
 Emails are trimmed and lowercased, and stored once. Replies are the same whether or not an email was listed, so the forms can't reveal who signed up. A hidden honeypot field drops simple bots. A global rate limit (20 a minute, bursts of 40) caps floods; past it, the forms say to try again in a minute.
+
+Signups are double opt-in. Joining stores the email as pending and sends a confirmation link through Resend (`apps/api/convex/emails.ts`, from `send.bruhs.app`). The link opens `/waitlist/confirm/`, whose button posts the token to `POST /waitlist/confirm`. It's a button rather than an automatic confirm, because mail scanners open links but don't press buttons. Links last 7 days, and unconfirmed rows are deleted after that. The confirm page needs JavaScript to read the token from the link.
 
 `/privacy/` says what the list keeps and why. Update it, and its `UPDATED` date, whenever that changes.
 

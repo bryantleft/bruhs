@@ -15,7 +15,7 @@ import {
 import { MAP_HEIGHT, MAP_WIDTH, roadPath, terrainPaths, tileCenter } from '@steps/src/pixel/world.ts';
 import { palette } from '@steps/src/theme/palette.ts';
 
-// Always declared, so the same markup works inline and as a standalone .svg file or sharp input.
+// Always declared, so the same markup works inline and as a standalone .svg file or resvg input.
 const XMLNS = 'xmlns="http://www.w3.org/2000/svg"';
 
 function escape(value: string): string {
@@ -59,14 +59,16 @@ export const HERO_WIDTH = SCENE_WIDTH * 2;
 // Sky above this row is drawn by the page, so the hero can grow to fit its copy.
 export const HERO_TOP = 16;
 
-// Town on a double-width canvas, edged with trees. The bruh hops between two frames; the page
-// animates them with CSS and shows frame 0 alone when motion is reduced.
-export function heroSvg(label: string): string {
+type HeroParts = Readonly<{ still: string; hop: readonly [string, string] }>;
+
+// Town on a double-width canvas, edged with trees, as path markup: `still` never changes and
+// `hop` holds the bruh's two frames. Shared by the page hero and the link preview image.
+export function heroParts(): HeroParts {
   const frame = (index: number) =>
     sceneShapes({ ...STILL, biome: 'town', width: HERO_WIDTH, working: true, frame: index });
   const [first, second] = [frame(0), frame(1)];
   const split = first.findIndex((shape, index) => shape.transform !== second[index]?.transform);
-  if (split < 0) throw new Error('heroSvg: the two hop frames are identical, so the bruh would not move.');
+  if (split < 0) throw new Error('heroParts: the two hop frames are identical, so the bruh would not move.');
   const ground = (art: Art, x: number, y = 0, flip = false) =>
     spriteAt(art, x, SCENE_GROUND + 1 + y - art.h, flip);
   const edges = [
@@ -77,8 +79,18 @@ export function heroSvg(label: string): string {
     ...ground(TREE, 164, 2, true),
     ...ground(PINE, 180),
   ];
+  return {
+    still: shapePaths(first.slice(0, split)) + shapePaths(edges),
+    hop: [shapePaths(first.slice(split)), shapePaths(second.slice(split))],
+  };
+}
+
+// The page hero: the bruh hops between its two frames with CSS, and shows frame 0 alone when
+// motion is reduced.
+export function heroSvg(label: string): string {
+  const { still, hop } = heroParts();
   const viewHeight = SCENE_HEIGHT - HERO_TOP;
-  return `<svg role="img" aria-label="${escape(label)}" class="hero-scene" viewBox="0 ${HERO_TOP} ${HERO_WIDTH} ${viewHeight}" preserveAspectRatio="xMidYMax slice" shape-rendering="crispEdges">${shapePaths(first.slice(0, split))}${shapePaths(edges)}<g class="hop hop-0">${shapePaths(first.slice(split))}</g><g class="hop hop-1">${shapePaths(second.slice(split))}</g></svg>`;
+  return `<svg ${XMLNS} role="img" aria-label="${escape(label)}" class="hero-scene" viewBox="0 ${HERO_TOP} ${HERO_WIDTH} ${viewHeight}" preserveAspectRatio="xMidYMax slice" shape-rendering="crispEdges">${still}<g class="hop hop-0">${hop[0]}</g><g class="hop hop-1">${hop[1]}</g></svg>`;
 }
 
 // A pixel cloud, three tones, drawn on a 1-unit grid.

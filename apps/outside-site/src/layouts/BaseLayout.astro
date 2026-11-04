@@ -11,7 +11,8 @@ const site = Astro.site;
 if (!site) throw new Error('Set `site` in astro.config.mjs: link previews need absolute URLs.');
 const url = new URL(path, site).href;
 const image = new URL('/og.png', site).href;
-const imageAlt = 'A pixel bruh standing in Bruhbridge, a small town with two houses, an anvil and a tree.';
+const imageAlt =
+  'The word outside and "your steps are the only button." over a blue sky, above a pixel bruh in Bruhbridge, a small town with two houses, an anvil and trees.';
 const faces = [
   ['Pixelify Sans Outside', 400, pixelifyRegular],
   ['Pixelify Sans Outside', 700, pixelifyBold],

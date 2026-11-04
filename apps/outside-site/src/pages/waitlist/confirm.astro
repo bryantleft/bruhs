@@ -1,0 +1,46 @@
+---
+import Header from '../../components/Header.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { CONFIRM_URL } from '../../lib/waitlist';
+---
+
+<BaseLayout
+  title="confirm your spot · bruhs / outside"
+  description="confirm your spot on the outside waitlist."
+  path="/waitlist/confirm/"
+  noindex
+>
+  <Header />
+  <main class="mx-auto flex w-full max-w-xl flex-col gap-6 px-5 py-16">
+    <h1 class="text-4xl font-bold text-durian-400 shadowed">confirm your spot</h1>
+    {/* A button, not an automatic confirm: mail scanners open links, but they don't press buttons. */}
+    <form method="post" action={CONFIRM_URL} data-confirm class="panel flex flex-col gap-4 p-5">
+      <p class="leading-relaxed text-rambutan-300">press confirm to join the outside waitlist with the email this link was sent to.</p>
+      <input type="hidden" name="token" data-token />
+      <button type="submit" class="button">confirm my spot</button>
+      <p role="status" class="min-h-6 text-base text-lychee-400" data-status></p>
+      <noscript>
+        <p class="text-rambutan-300">this page needs JavaScript to read your link. turn it on, then open the link again.</p>
+      </noscript>
+    </form>
+  </main>
+</BaseLayout>
+
+<script>
+  import { WAITLIST_MESSAGES } from '../../lib/messages';
+
+  const form = document.querySelector<HTMLFormElement>('form[data-confirm]');
+  const field = form?.querySelector<HTMLInputElement>('[data-token]');
+  const status = form?.querySelector<HTMLElement>('[data-status]');
+  const button = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
+  const token = new URLSearchParams(location.search).get('token') ?? '';
+  if (form && field && status && button) {
+    field.value = token;
+    // Keep the token out of history and screenshots once it's in the form.
+    history.replaceState(null, '', location.pathname);
+    if (!token) {
+      status.textContent = WAITLIST_MESSAGES.invalid_link;
+      button.disabled = true;
+    }
+  }
+</script>
