@@ -10,20 +10,7 @@ function isActivationKey(key: string): boolean {
   return key === 'Enter' || key === ' ' || key === 'Spacebar';
 }
 
-export function ConfirmAction({
-  label,
-  confirmLabel,
-  cancelLabel,
-  onConfirm,
-  description,
-  error,
-  onRecover,
-  buttonRef,
-  icon,
-  variant = 'outline',
-  cancelVariant = 'ghost',
-  disabled = false,
-}: Readonly<{
+type ConfirmActionProps = Readonly<{
   label: string;
   confirmLabel: string;
   cancelLabel: string;
@@ -36,11 +23,35 @@ export function ConfirmAction({
   variant?: 'outline' | 'ghost';
   cancelVariant?: 'outline' | 'ghost';
   disabled?: boolean;
-}>): React.JSX.Element {
+}>;
+
+// Two taps for anything that erases progress. Inside a route, leaving the screen cancels the
+// confirmation.
+export function ConfirmAction(props: ConfirmActionProps): React.JSX.Element {
+  const focused = useIsFocused();
+  return <ConfirmActionCore {...props} focused={focused} />;
+}
+
+// The same control for screens outside the route tree, such as the load-error screen, which
+// are always in view.
+export function ConfirmActionCore({
+  label,
+  confirmLabel,
+  cancelLabel,
+  onConfirm,
+  description,
+  error,
+  onRecover,
+  buttonRef,
+  icon,
+  variant = 'outline',
+  cancelVariant = 'ghost',
+  disabled = false,
+  focused = true,
+}: ConfirmActionProps & Readonly<{ focused?: boolean }>): React.JSX.Element {
   const [confirming, setConfirming] = useState(false);
   const descriptionId = useId();
   const activeDescription = confirming && description ? description : undefined;
-  const focused = useIsFocused();
   const actions = useRef<ComponentRef<typeof View>>(null);
   const button = useRef<ComponentRef<typeof Pressable>>(null);
   const setButton = useMemo<RefCallback<ComponentRef<typeof Pressable>>>(() => {

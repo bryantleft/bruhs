@@ -7,6 +7,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppStage } from '../components/AppStage';
 import { Bruh } from '../components/Bruh';
+import { ConfirmActionCore } from '../components/ConfirmAction';
 import { MotionProvider } from '../components/MotionProvider';
 import { RewardOverlay } from '../components/RewardOverlay';
 import { Button, Copy } from '../components/ui';
@@ -70,11 +71,15 @@ function GameApp(): React.JSX.Element {
               }}
             />
             <Copy variant="small">starting fresh will replace this device’s saved progress.</Copy>
-            <Button
-              label={resetting ? 'erasing…' : 'start a new adventure'}
+            <ConfirmActionCore
+              label={resetting ? 'erasing journey…' : 'start a new adventure'}
+              confirmLabel="yes, erase my journey"
+              cancelLabel="keep my journey"
+              description="erases the saved progress this device can’t read, and your walks. this can’t be undone."
               variant="outline"
+              cancelVariant="ghost"
+              onConfirm={reset}
               disabled={resetting}
-              onPress={reset}
             />
           </View>
           {resetError ? (
