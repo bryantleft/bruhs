@@ -23,11 +23,15 @@
   "files": [
     "src/",
     "fonts/",
+    "scripts/",
     "dist/",
     "AGENTS.md",
     "README.md",
     "LICENSE"
   ],
+  "bin": {
+    "bruhs-theme-fonts": "./scripts/copy-fonts.mjs"
+  },
   "exports": {
     "./styles/*": "./src/styles/*",
     "./logo": "./src/lib/logo.ts",

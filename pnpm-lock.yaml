@@ -497,13 +497,6 @@ importers:
         version: 6.0.3
 
   packages/ui:
-    dependencies:
-      react:
-        specifier: ^18.0.0 || ^19.0.0
-        version: 19.3.1
-      react-dom:
-        specifier: ^18.0.0 || ^19.0.0
-        version: 19.3.1(react@19.3.1)
     devDependencies:
       '@tailwindcss/cli':
         specifier: ^4.3.4

@@ -1,4 +1,5 @@
 import { useChat } from "@ai-sdk/react";
+import { bruhGeometry } from "@bruhs/theme/logo";
 import { type MouseEvent, useEffect, useState } from "react";
 import { chat } from "@/lib/chat";
 import { useExternalNavigation } from "@/lib/hooks/use-external-navigation";
@@ -9,6 +10,8 @@ import { cn } from "@/lib/utils";
 const SIZE = 60;
 const CORNER = { x: 12, y: 12 };
 const HOME = "https://bruhs.dev";
+const { base, eye, mouth, faces, viewBox } = bruhGeometry;
+const face = faces.original;
 
 /** Offset of the eyes and mouth (in SVG units) for a focus point, clamped to a radius. */
 function eyeOffset(focus: Coordinates): Coordinates {
@@ -101,31 +104,36 @@ export default function Bruh() {
         <svg
           width={SIZE}
           height={SIZE}
-          viewBox="0 0 600 600"
+          viewBox={viewBox}
           className="overflow-visible"
           aria-hidden="true"
         >
-          <circle cx="300" cy="300" r="300" className="fill-bruh-base" />
+          <circle
+            cx={base.cx}
+            cy={base.cy}
+            r={base.r}
+            className="fill-bruh-base"
+          />
           {/* The transition on the group smooths the eyes toward the focus point. */}
           <g
             style={{ transform: `translate(${eyes.x}px, ${eyes.y}px)` }}
             className="transition-transform duration-150 ease-out"
           >
-            {[198, 401].map((cx) => (
+            {[face.leftEye, face.rightEye].map((point) => (
               <ellipse
-                key={`eye-${cx}`}
-                cx={cx}
-                cy="218"
-                rx="40"
-                ry={isBlinking ? 4 : isHovered ? 20 : 10}
+                key={`eye-${point.x}`}
+                cx={point.x}
+                cy={point.y}
+                rx={eye.rx}
+                ry={isBlinking ? 4 : isHovered ? 20 : eye.ry}
                 className="fill-bruh-eye transition-all duration-300 ease-in-out"
               />
             ))}
             <ellipse
-              cx="307"
-              cy="378"
-              rx="120"
-              ry={isHovered ? 40 : 10}
+              cx={face.mouth.x}
+              cy={face.mouth.y}
+              rx={mouth.rx}
+              ry={isHovered ? 40 : mouth.ry}
               className="fill-bruh-mouth transition-all duration-300 ease-in-out"
             />
           </g>

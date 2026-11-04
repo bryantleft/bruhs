@@ -5,3 +5,6 @@
 .vercel
 .DS_Store
 node_modules
+
+# Copied from @bruhs/theme by `bruhs-theme-fonts` before dev and build
+public/fonts/

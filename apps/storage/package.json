@@ -3,8 +3,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "portless run vite dev",
-    "build": "pnpm run build:scanner && vite build",
+    "dev": "bruhs-theme-fonts && portless run vite dev",
+    "build": "pnpm run build:scanner && bruhs-theme-fonts && vite build",
     "build:scanner": "cargo build --release --manifest-path scanner/Cargo.toml",
     "start": "vite preview",
     "check": "biome check . && pnpm run test",
