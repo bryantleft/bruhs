@@ -16,8 +16,20 @@ export default defineSchema({
   })
     .index('by_user', ['userId'])
     .index('by_party', ['partyId']),
-  // Outside's launch waitlist: one row per normalised email, written only by the HTTP route.
-  waitlist: defineTable({ email: v.string() }).index('by_email', ['email']),
+  // Outside's launch waitlist: one row per normalised email, written only by the HTTP routes.
+  // A signup is pending until its owner confirms from the emailed link (double opt-in). Rows
+  // without a status joined before confirmation existed and count as confirmed.
+  waitlist: defineTable({
+    email: v.string(),
+    status: v.optional(v.union(v.literal('pending'), v.literal('confirmed'))),
+    // SHA-256 of the emailed token; the token itself is never stored.
+    tokenHash: v.optional(v.string()),
+    sentAt: v.optional(v.number()),
+    confirmedAt: v.optional(v.number()),
+  })
+    .index('by_email', ['email'])
+    .index('by_token', ['tokenHash'])
+    .index('by_status', ['status']),
   outsideParties: defineTable({ invite: v.string(), members: v.number() }).index('by_invite', ['invite']),
   // Seven daily buckets per weekly row, instead of a query per member or day.
   outsideScores: defineTable({

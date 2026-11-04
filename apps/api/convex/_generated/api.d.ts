@@ -9,6 +9,8 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as crons from "../crons.js";
+import type * as emails from "../emails.js";
 import type * as http from "../http.js";
 import type * as limits from "../limits.js";
 import type * as outside from "../outside.js";
@@ -23,6 +25,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  crons: typeof crons;
+  emails: typeof emails;
   http: typeof http;
   limits: typeof limits;
   outside: typeof outside;
@@ -58,4 +62,5 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
+  resend: import("@convex-dev/resend/_generated/component.js").ComponentApi<"resend">;
 };

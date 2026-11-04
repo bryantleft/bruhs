@@ -21,7 +21,9 @@
     "@auth/core": "0.41.3",
     "@convex-dev/auth": "0.0.96",
     "@convex-dev/rate-limiter": "0.4.3",
+    "@convex-dev/resend": "0.2.10",
     "convex": "1.49.0",
+    "convex-helpers": "0.1.133",
     "dotenv": "18.0.9"
   },
   "devDependencies": {

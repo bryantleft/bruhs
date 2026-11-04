@@ -1,4 +1,4 @@
-import { MINUTE, RateLimiter } from '@convex-dev/rate-limiter';
+import { DAY, MINUTE, RateLimiter } from '@convex-dev/rate-limiter';
 import { components } from './_generated/api';
 
 // Global buckets for unauthenticated writes. Convex documents no client IP for HTTP actions or
@@ -10,4 +10,8 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
   waitlistJoin: FLOOD,
   waitlistLeave: FLOOD,
   anonymousSignIn: FLOOD,
+  waitlistConfirm: FLOOD,
+  // A new sending domain starts around 150 emails a day (Resend's warm-up guidance), so cap
+  // waitlist mail below that rather than let a flood burn the domain's reputation.
+  waitlistEmail: { kind: 'fixed window', rate: 120, period: DAY },
 });

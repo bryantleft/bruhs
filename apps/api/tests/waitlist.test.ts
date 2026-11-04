@@ -1,13 +1,32 @@
 import rateLimiter from '@convex-dev/rate-limiter/test';
+import resend from '@convex-dev/resend/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { internal } from '../convex/_generated/api';
 import schema from '../convex/schema';
-import { normalizeEmail } from '../convex/waitlist';
+import { CONFIRM_WINDOW, normalizeEmail } from '../convex/waitlist';
+
+// Only the two sends are replaced, so tests can read the emailed link; everything else is real.
+const sent = vi.hoisted(() => ({
+  confirm: [] as { email: string; link: string }[],
+  already: [] as string[],
+}));
+vi.mock('../convex/emails', async (original) => ({
+  ...(await original<typeof import('../convex/emails')>()),
+  sendConfirmation: async (_ctx: unknown, email: string, link: string) => {
+    sent.confirm.push({ email, link });
+  },
+  sendAlreadyListed: async (_ctx: unknown, email: string) => {
+    sent.already.push(email);
+  },
+}));
 
 const modules = {
   '../convex/_generated/server.js': () => import('../convex/_generated/server.js'),
   '../convex/_generated/api.js': () => import('../convex/_generated/api.js'),
   '../convex/auth.ts': () => import('../convex/auth'),
+  '../convex/crons.ts': () => import('../convex/crons'),
+  '../convex/emails.ts': () => import('../convex/emails'),
   '../convex/http.ts': () => import('../convex/http'),
   '../convex/limits.ts': () => import('../convex/limits'),
   '../convex/waitlist.ts': () => import('../convex/waitlist'),
@@ -17,6 +36,7 @@ const DEV = 'https://outside-bruhs.localhost';
 function create() {
   const t = convexTest(schema, modules);
   rateLimiter.register(t);
+  resend.register(t);
   return t;
 }
 
@@ -36,8 +56,23 @@ const json = { Accept: 'application/json' };
 const emails = (t: ReturnType<typeof create>) =>
   t.run(async (ctx) => (await ctx.db.query('waitlist').collect()).map((row) => row.email));
 
-beforeEach(() => vi.stubEnv('WAITLIST_ORIGINS', `${SITE}, ${DEV}`));
-afterEach(() => vi.unstubAllEnvs());
+beforeEach(() => {
+  vi.stubEnv('WAITLIST_ORIGINS', `${SITE}, ${DEV}`);
+  vi.stubEnv('RESEND_API_KEY', 're_test');
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-03T12:00:00Z'));
+  sent.confirm.length = 0;
+  sent.already.length = 0;
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.useRealTimers();
+});
+const tokenOf = (link: string) => new URL(link).searchParams.get('token') ?? '';
+const rows = (t: ReturnType<typeof create>) =>
+  t.run(async (ctx) =>
+    (await ctx.db.query('waitlist').collect()).map(({ email, status }) => ({ email, status })),
+  );
 
 describe('normalizeEmail', () => {
   it('trims and lowercases real addresses and rejects malformed ones', () => {
@@ -175,5 +210,87 @@ describe('POST /waitlist', () => {
     expect(await response.json()).toEqual({ error: 'waitlist_not_configured' });
     expect(errors).toHaveBeenCalledWith(expect.stringContaining('WAITLIST_ORIGINS'));
     expect(await emails(t)).toEqual([]);
+  });
+});
+
+describe('double opt-in', () => {
+  it('emails a confirm link, and only the link holder can confirm, once', async () => {
+    const t = create();
+    expect((await post(t, { email: 'Moss@Example.com' }, json)).status).toBe(200);
+    expect(await rows(t)).toEqual([{ email: 'moss@example.com', status: 'pending' }]);
+    expect(sent.confirm).toHaveLength(1);
+    const { email, link } = sent.confirm[0] ?? { email: '', link: '' };
+    expect(email).toBe('moss@example.com');
+    expect(link.startsWith(`${SITE}/waitlist/confirm/?token=`)).toBe(true);
+    // The stored row never holds the token itself.
+    const stored = await t.run(async (ctx) => (await ctx.db.query('waitlist').collect())[0]);
+    expect(JSON.stringify(stored)).not.toContain(tokenOf(link));
+    const confirmed = await post(t, { token: tokenOf(link) }, json, '/waitlist/confirm');
+    expect(await confirmed.json()).toEqual({ status: 'confirmed' });
+    expect(await rows(t)).toEqual([{ email: 'moss@example.com', status: 'confirmed' }]);
+    const again = await post(t, { token: tokenOf(link) }, {}, '/waitlist/confirm');
+    expect(again.headers.get('Location')).toBe(`${SITE}/waitlist/expired/`);
+    const forged = await post(t, { token: 'x'.repeat(43) }, json, '/waitlist/confirm');
+    expect(await forged.json()).toEqual({ error: 'invalid_link' });
+    expect((await post(t, { token: 'short' }, json, '/waitlist/confirm')).status).toBe(400);
+  });
+
+  it('re-sends nothing inside the cooldown, then replaces the link', async () => {
+    const t = create();
+    await post(t, { email: 'moss@example.com' }, json);
+    await post(t, { email: 'moss@example.com' }, json);
+    expect(sent.confirm).toHaveLength(1);
+    vi.setSystemTime(new Date('2026-11-03T12:11:00Z'));
+    await post(t, { email: 'moss@example.com' }, json);
+    expect(sent.confirm).toHaveLength(2);
+    const [first, second] = sent.confirm.map((entry) => tokenOf(entry.link));
+    expect(await (await post(t, { token: first ?? '' }, json, '/waitlist/confirm')).json()).toEqual({
+      error: 'invalid_link',
+    });
+    expect((await post(t, { token: second ?? '' }, json, '/waitlist/confirm')).status).toBe(200);
+  });
+
+  it('tells a confirmed or pre-opt-in address it is already listed, with the same reply', async () => {
+    const t = create();
+    await t.run((ctx) => ctx.db.insert('waitlist', { email: 'early@example.com' }));
+    const reply = await post(t, { email: 'early@example.com' }, json);
+    expect(await reply.json()).toEqual({ status: 'joined' });
+    expect(sent.already).toEqual(['early@example.com']);
+    expect(sent.confirm).toHaveLength(0);
+  });
+
+  it('expires unconfirmed signups and their links after the window, keeping confirmed ones', async () => {
+    const t = create();
+    await t.run((ctx) => ctx.db.insert('waitlist', { email: 'early@example.com' }));
+    await post(t, { email: 'moss@example.com' }, json);
+    const token = tokenOf(sent.confirm[0]?.link ?? '');
+    vi.setSystemTime(new Date(Date.parse('2026-11-03T12:00:00Z') + CONFIRM_WINDOW + 1000));
+    expect(await (await post(t, { token }, json, '/waitlist/confirm')).json()).toEqual({
+      error: 'invalid_link',
+    });
+    expect(await t.mutation(internal.waitlist.expirePending, {})).toBe(1);
+    expect(await emails(t)).toEqual(['early@example.com']);
+  });
+
+  it('caps confirmation mail per day so a flood cannot burn the sending domain', async () => {
+    const t = create();
+    for (let index = 0; index < 120; index += 1) {
+      if (index % 40 === 0) vi.setSystemTime(new Date(Date.parse('2026-11-03T12:00:00Z') + index * 60_000));
+      await post(t, { email: `moss${index}@example.com` }, json);
+    }
+    expect(sent.confirm).toHaveLength(120);
+    vi.setSystemTime(new Date('2026-11-03T16:00:00Z'));
+    expect((await post(t, { email: 'late@example.com' }, json)).status).toBe(429);
+  });
+
+  it('fails loudly without a Resend key, naming it', async () => {
+    vi.stubEnv('RESEND_API_KEY', '');
+    const t = create();
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const response = await post(t, { email: 'moss@example.com' }, json);
+    expect(response.status).toBe(500);
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining('RESEND_API_KEY'));
+    expect(await emails(t)).toEqual([]);
+    errors.mockRestore();
   });
 });
