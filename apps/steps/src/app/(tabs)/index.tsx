@@ -23,6 +23,7 @@ import {
   unspentSteps,
 } from '../../game/game';
 import { keyItem, keyName, slotsUsed, totalsFor } from '../../game/items';
+import { stopReasonText } from '../../game/session';
 import { useScreenFocus } from '../../navigation/useScreenFocus';
 import { SKILL_ART } from '../../pixel/art';
 import { Bar, Panel, Tag } from '../../pixel/chrome';
@@ -143,7 +144,7 @@ function StatusPanel({ onDetails }: Readonly<{ onDetails: () => void }>): React.
     );
   }
   const stopped = game.stopped ? getActivity(game.stopped.activity) : undefined;
-  const full = game.stopped?.missing === 'inventory';
+  const full = game.stopped?.kind === 'bag-full';
   const bank = full ? nearestBank(game.location) : null;
   // One clear next step: quests first, then steady work here, then a walk to somewhere useful.
   const next = nextStep(game);
@@ -166,8 +167,7 @@ function StatusPanel({ onDetails }: Readonly<{ onDetails: () => void }>): React.
         </>
       ) : stopped ? (
         <Text style={[styles.detail, { color: color.danger }]}>
-          stopped {stopped.verb} {stopped.name}: out of{' '}
-          {getItem(game.stopped?.missing ?? '')?.name ?? 'materials'}.
+          stopped {stopped.verb} {stopped.name}: {game.stopped ? stopReasonText(game.stopped) : null}.
         </Text>
       ) : null}
       {full ? null : next ? (

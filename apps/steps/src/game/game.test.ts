@@ -142,7 +142,7 @@ test('production uses the inventory, and the bank when standing at one', () => {
   game = walk(updateGame(game, { type: 'start', activity: 'smelt-bronze' }), 60 * 5);
   assert.equal(game.inventory['bronze-bar'], 2);
   assert.equal(game.inventory['tin-ore'], 1);
-  assert.deepEqual(game.stopped, { activity: 'smelt-bronze', missing: 'copper-ore' });
+  assert.deepEqual(game.stopped, { activity: 'smelt-bronze', kind: 'missing', item: 'copper-ore' });
   assert.equal(unspentSteps(game), 180);
   let banked = at('bruhbridge', { bank: { 'copper-ore': 2, 'tin-ore': 2 } });
   banked = walk(updateGame(banked, { type: 'start', activity: 'smelt-bronze' }), 120);
@@ -154,7 +154,7 @@ test('a full inventory stops gathering and keeps the steps', () => {
   let game = at('pandan-woods', { inventory: { 'pandan-logs': 25 * 27 + 24 } });
   game = walk(updateGame(game, { type: 'start', activity: 'chop-pandan' }), 1_000);
   assert.equal(game.inventory['pandan-logs'], 700);
-  assert.deepEqual(game.stopped, { activity: 'chop-pandan', missing: 'inventory' });
+  assert.deepEqual(game.stopped, { activity: 'chop-pandan', kind: 'bag-full' });
   assert.ok(unspentSteps(game) > 900);
 });
 
@@ -577,6 +577,28 @@ test('a failed load says why, and a save from a newer build is not called corrup
   }
 });
 
+test('older stop reasons and unknown counters still decode', () => {
+  const game = { ...createGame(TODAY), stats: { chestsFound: 2, 'actions:mining': 5 } };
+  const decode = (patch: Record<string, unknown>) => {
+    const decoded = decodeGame(JSON.stringify({ ...game, ...patch }), TODAY);
+    assert.ok(decoded.ok);
+    return decoded.ok ? decoded.game : game;
+  };
+  const stop = (missing: string) => decode({ stopped: { activity: 'chop-pandan', missing } }).stopped;
+  assert.deepEqual(stop('inventory'), { activity: 'chop-pandan', kind: 'bag-full' });
+  assert.deepEqual(stop('woodcutting-level'), {
+    activity: 'chop-pandan',
+    kind: 'level',
+    skill: 'woodcutting',
+  });
+  assert.deepEqual(stop('copper-ore'), { activity: 'chop-pandan', kind: 'missing', item: 'copper-ore' });
+  assert.equal(stop('moon-rock'), null);
+  // The new shape round-trips, and counters from a newer build are dropped.
+  const typed = { activity: 'chop-pandan', kind: 'missing', item: 'copper-ore' } as const;
+  assert.deepEqual(decode({ stopped: typed }).stopped, typed);
+  assert.deepEqual(decode({ stats: { ...game.stats, dancesDone: 3 } }).stats, game.stats);
+});
+
 test('version 2 saves move into the bank; version 1 saves keep their history', () => {
   const v2 = {
     ...createGame(TODAY),
@@ -619,7 +641,7 @@ test('the demo starts with today’s sample steps in the pouch', () => {
 test('a huge backlog stops when the bag fills and stays consistent', () => {
   let game = at('pandan-woods');
   game = walk(updateGame(game, { type: 'start', activity: 'chop-pandan' }), 1_000_000);
-  assert.equal(game.stopped?.missing, 'inventory');
+  assert.equal(game.stopped?.kind, 'bag-full');
   assert.ok(unspentSteps(game) > 900_000);
   assert.equal(advance(game), game);
 });

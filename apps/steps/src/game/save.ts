@@ -28,6 +28,8 @@ import {
   type HealthConnection,
   type MissionState,
   STARTER_TOOLS,
+  STAT_KEYS,
+  type StatKey,
   type StopReason,
   type Task,
   type Travel,
@@ -130,6 +132,25 @@ function decodeMissions(value: unknown): Partial<Record<MissionPeriod, MissionSt
   return missions;
 }
 
+// Builds before typed stop reasons wrote `missing`: an item id, "inventory" for a full bag, or
+// "<skill>-level". Both shapes decode, so the save keeps version 3.
+function decodeStopped(value: unknown): StopReason | null {
+  if (!isRecord(value) || typeof value.activity !== 'string' || !getActivity(value.activity)) return null;
+  const activity = value.activity;
+  if (value.kind === 'bag-full') return { activity, kind: 'bag-full' };
+  if (value.kind === 'missing' && typeof value.item === 'string' && getItem(value.item))
+    return { activity, kind: 'missing', item: value.item };
+  const skill = SKILL_IDS.find((id) => id === value.skill);
+  if (value.kind === 'level' && skill) return { activity, kind: 'level', skill };
+  if (typeof value.missing !== 'string') return null;
+  if (value.missing === 'inventory') return { activity, kind: 'bag-full' };
+  const leveled = SKILL_IDS.find((id) => value.missing === `${id}-level`);
+  if (leveled) return { activity, kind: 'level', skill: leveled };
+  return getItem(value.missing) ? { activity, kind: 'missing', item: value.missing } : null;
+}
+
+const isStatKey = (key: string): key is StatKey => STAT_KEYS.some((stat) => stat === key);
+
 // The newest save format this build writes and reads.
 export const SAVE_VERSION = 3;
 
@@ -153,7 +174,8 @@ function decodeSave(value: Record<string, unknown>, days: Day[]): Game | Invalid
   const xpCounts = decodeCounts(value.xp, (id) => SKILL_IDS.some((skill) => skill === id));
   const bank = decodeCounts(value.bank, isKnownKey);
   const inventory = decodeCounts(value.inventory, isKnownKey);
-  const stats = decodeCounts(value.stats, () => true);
+  // Counters a newer build added are dropped, like unknown items.
+  const stats: Partial<Record<StatKey, number>> | null = decodeCounts(value.stats, isStatKey);
   const tools = decodeTools(value.tools);
   if (!skin) return invalid('equipped');
   if (!xpCounts) return invalid('xp');
@@ -197,14 +219,7 @@ function decodeSave(value: Record<string, unknown>, days: Day[]): Game | Invalid
       return invalid('travel');
     travel = { from: t.from, to: t.to, cost: t.cost, progress: t.progress, next: t.next };
   }
-  let stopped: StopReason | null = null;
-  if (
-    isRecord(value.stopped) &&
-    typeof value.stopped.activity === 'string' &&
-    typeof value.stopped.missing === 'string' &&
-    getActivity(value.stopped.activity)
-  )
-    stopped = { activity: value.stopped.activity, missing: value.stopped.missing };
+  const stopped = decodeStopped(value.stopped);
   const gear: Partial<Record<GearSlot, string>> = {};
   if (isRecord(value.gear))
     for (const slot of GEAR_SLOTS) {

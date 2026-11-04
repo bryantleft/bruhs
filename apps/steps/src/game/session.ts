@@ -19,7 +19,7 @@ import {
   type StopReason,
   unlockedSkins,
 } from './game.ts';
-import { add, type Bag, itemCount, keyName, keyValue } from './items.ts';
+import { add, type Bag, itemCount, keyName, keyValue, pluralName } from './items.ts';
 import { levelForXp } from './xp.ts';
 
 export type Report = Readonly<{
@@ -219,6 +219,18 @@ export function rejectionText(reason: Rejection, game: Game): string | null {
       return `that outfit unlocks at total level ${reason.total}. train any skill to get there.`;
     case 'clock-behind':
       return 'your phone’s clock is behind your last sync. check the date and time, then sync again.';
+  }
+}
+
+// Why the bruh stopped, after "stopped chopping pandan logs: ".
+export function stopReasonText(reason: StopReason): string {
+  switch (reason.kind) {
+    case 'bag-full':
+      return 'your bag is full';
+    case 'missing':
+      return `out of ${pluralName(keyName(reason.item))}`;
+    case 'level':
+      return `your ${reason.skill} level is too low`;
   }
 }
 

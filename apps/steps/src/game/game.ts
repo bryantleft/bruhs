@@ -97,8 +97,30 @@ export type Travel = Readonly<{
   next: string | null;
 }>;
 export type Task = Readonly<{ id: string; progress: number }>;
-// `missing` is an item id, "inventory" when the bag is full, or "<skill>-level".
-export type StopReason = Readonly<{ activity: string; missing: string }>;
+// Why the current task stopped: the bag filled, an input ran out, or the skill level is too low
+// (only reachable from an edited save).
+export type StopReason = Readonly<
+  { activity: string } & (
+    | { kind: 'bag-full' }
+    | { kind: 'missing'; item: string }
+    | { kind: 'level'; skill: SkillId }
+  )
+>;
+// Lifetime counters on the character sheet; mission counters read the chest and action ones.
+export const STAT_KEYS = [
+  'chestsFound',
+  'chestsOpened',
+  'crafted',
+  'finds',
+  'doubleActions',
+  'doubleResults',
+  'preserved',
+  'eaten',
+  'burnt',
+  'missions',
+  ...SKILL_IDS.map((skill) => `actions:${skill}` as const),
+] as const;
+export type StatKey = (typeof STAT_KEYS)[number];
 export type Buff = Readonly<{ item: string; actions: number }>;
 // One period's missions: which were drawn, the counters when the period began, and claims.
 export type MissionState = Readonly<{
@@ -136,7 +158,7 @@ export type Game = Readonly<{
   // Collection log: every item id ever obtained.
   seen: readonly string[];
   // Lifetime counters (chests opened, items crafted, doubles, actions per skill, ...).
-  stats: Readonly<Record<string, number>>;
+  stats: Readonly<Partial<Record<StatKey, number>>>;
   // Backpack upgrades bought at a bank, two slots each.
   bagUpgrades: number;
   missions: Readonly<Partial<Record<MissionPeriod, MissionState>>>;
@@ -509,7 +531,7 @@ function freeze(work: Draft): Game {
   return { ...work, seen: [...new Set(work.seen)] };
 }
 
-function count(work: Draft, stat: string, amount = 1): void {
+function count(work: Draft, stat: StatKey, amount = 1): void {
   work.stats = { ...work.stats, [stat]: (work.stats[stat] ?? 0) + amount };
 }
 
@@ -667,10 +689,11 @@ export function advance(game: Game): Game {
     const missing = activity.inputs?.find((input) => available(work, input.item) < input.qty);
     const full = !fits(work.inventory, activity.output.item, activity.output.qty, capacityOf(work));
     if (missing || full || levelForXp(work.xp[activity.skill]) < activity.level) {
-      work.stopped = {
-        activity: activity.id,
-        missing: missing?.item ?? (full ? 'inventory' : `${activity.skill}-level`),
-      };
+      work.stopped = missing
+        ? { activity: activity.id, kind: 'missing', item: missing.item }
+        : full
+          ? { activity: activity.id, kind: 'bag-full' }
+          : { activity: activity.id, kind: 'level', skill: activity.skill };
       work.task = null;
       break;
     }
