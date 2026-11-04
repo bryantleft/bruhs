@@ -348,17 +348,8 @@ const privacy = [
           </div>
           <div class="panel flex flex-col gap-3 p-6">
             <h2 class="text-2xl font-bold text-durian-400 shadowed">your steps, read-only</h2>
-            <ul class="flex flex-col gap-2 text-rambutan-300">
-              {
-                privacy.map((line) => (
-                  <li class="flex gap-3">
-                    {/* A pixel square, since the game fonts have no ■ glyph. */}
-                    <span aria-hidden="true" class="mt-2 size-2 shrink-0 bg-pandan-300 outline-2 outline-[#0a0a0a]" />
-                    <span>{line}</span>
-                  </li>
-                ))
-              }
-            </ul>
+            {/* Plain sentences, no bullet markers: the page's text never uses bullets. */}
+            {privacy.map((line) => <p class="leading-relaxed text-rambutan-300">{line}</p>)}
           </div>
         </section>
 
