@@ -75,7 +75,7 @@ export function ActivitySheet({
         <Slot art={itemArt(activity.output.item)} size={64} />
         <View style={styles.grow}>
           <View style={styles.row}>
-            <Sprite art={SKILL_ART[activity.skill] ?? SKILL_ART.agility} size={18} />
+            <Sprite art={SKILL_ART[activity.skill]} size={18} />
             <Text style={styles.skill}>
               {activity.skill} {activity.level} · you are {skillLevel(game, activity.skill)}
             </Text>

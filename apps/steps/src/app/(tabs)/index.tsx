@@ -99,7 +99,7 @@ function StatusPanel({ onDetails }: Readonly<{ onDetails: () => void }>): React.
         aside={<Tag tint={color.success}>{`${activity.skill} ${skillLevel(game, activity.skill)}`}</Tag>}
       >
         <View style={styles.row}>
-          <Sprite art={SKILL_ART[activity.skill] ?? SKILL_ART.agility} size={28} />
+          <Sprite art={SKILL_ART[activity.skill]} size={28} />
           <View style={styles.grow}>
             <Bar value={game.task.progress / cost} />
           </View>

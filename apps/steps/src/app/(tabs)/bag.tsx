@@ -169,10 +169,7 @@ function Gear({ onOpen }: Readonly<{ onOpen: (open: Open) => void }>): React.JSX
                     onPress={() => (key ? onOpen({ key, origin: { from: 'gear', slot } }) : setPicking(slot))}
                     style={styles.dollCell}
                   >
-                    <Slot
-                      art={key ? itemArt(parseKey(key).id) : ghost(SLOT_ART[slot] ?? SLOT_ART.head)}
-                      size={60}
-                    />
+                    <Slot art={key ? itemArt(parseKey(key).id) : ghost(SLOT_ART[slot])} size={60} />
                     {key && parseKey(key).quality > 0 ? (
                       <View
                         style={[styles.qualityDot, { backgroundColor: QUALITY_TINT[parseKey(key).quality] }]}

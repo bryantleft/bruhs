@@ -1,7 +1,7 @@
 import { Platform, StyleSheet, View } from 'react-native';
 import { Bruh } from '../components/Bruh';
 import { ConfirmAction } from '../components/ConfirmAction';
-import { Icon } from '../components/Icon';
+import { Icon, type IconName } from '../components/Icon';
 import { TrackingControl } from '../components/TrackingControl';
 import { Button, Copy, IconButton, Screen, SectionTitle } from '../components/ui';
 import { useParty } from '../friends/PartyProvider';
@@ -32,31 +32,30 @@ export default function HealthScreen(): React.JSX.Element {
         </Copy>
       </View>
       <View style={styles.permissions}>
-        {[
-          {
-            icon: 'trail',
-            title: 'read access only',
-            description: 'daily step totals pay for travel, xp and quests.',
-          },
-          {
-            icon: 'refresh',
-            title: 'step sync',
-            description: 'syncs when you open the app or tap sync. watch updates may arrive later.',
-          },
-          {
-            icon: 'lock',
-            title: hasParties ? 'your choice' : 'saved locally',
-            description: hasParties
-              ? 'daily totals stay here unless you join a party. party members can read shared totals.'
-              : 'daily totals stay on this device.',
-          },
-        ].map((item) => (
+        {(
+          [
+            {
+              icon: 'trail',
+              title: 'read access only',
+              description: 'daily step totals pay for travel, xp and quests.',
+            },
+            {
+              icon: 'refresh',
+              title: 'step sync',
+              description: 'syncs when you open the app or tap sync. watch updates may arrive later.',
+            },
+            {
+              icon: 'lock',
+              title: hasParties ? 'your choice' : 'saved locally',
+              description: hasParties
+                ? 'daily totals stay here unless you join a party. party members can read shared totals.'
+                : 'daily totals stay on this device.',
+            },
+          ] satisfies readonly Readonly<{ icon: IconName; title: string; description: string }>[]
+        ).map((item) => (
           <View style={styles.permission} key={item.title}>
             <View style={styles.permissionIcon}>
-              <Icon
-                name={item.icon === 'trail' ? 'trail' : item.icon === 'refresh' ? 'refresh' : 'lock'}
-                tint={color.success}
-              />
+              <Icon name={item.icon} tint={color.success} />
             </View>
             <View style={styles.permissionCopy}>
               <Copy style={styles.permissionTitle}>{item.title}</Copy>

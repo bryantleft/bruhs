@@ -92,7 +92,7 @@ export function RewardOverlay(): React.JSX.Element | null {
                 const unlocks = unlocksBetween(skill, from, level);
                 return (
                   <View key={skill} style={styles.level}>
-                    <Sprite art={SKILL_ART[skill] ?? SKILL_ART.agility} size={32} />
+                    <Sprite art={SKILL_ART[skill]} size={32} />
                     <View style={styles.levelCopy}>
                       <Text style={styles.levelText}>{levelLine(skill, from, level)}</Text>
                       {unlocks.length ? (
@@ -109,7 +109,7 @@ export function RewardOverlay(): React.JSX.Element | null {
                 <View style={styles.rows}>
                   {reward.xp.map(({ skill, amount }) => (
                     <View key={skill} style={styles.row}>
-                      <Sprite art={SKILL_ART[skill] ?? SKILL_ART.agility} size={18} />
+                      <Sprite art={SKILL_ART[skill]} size={18} />
                       <Text style={styles.rowLabel}>{skill}</Text>
                       <Text style={styles.xp}>+{amount.toLocaleString()} xp</Text>
                     </View>

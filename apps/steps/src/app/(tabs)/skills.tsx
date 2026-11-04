@@ -87,7 +87,7 @@ export default function SkillsScreen(): React.JSX.Element {
               onPress={() => setSelected(skill.id)}
               style={({ pressed }) => [styles.cell, bevel(active ? 'gold' : 'panel', pressed)]}
             >
-              <Sprite art={SKILL_ART[skill.id] ?? SKILL_ART.agility} size={28} />
+              <Sprite art={SKILL_ART[skill.id]} size={28} />
               <View style={styles.cellCopy}>
                 <Text style={styles.level}>{level.level}</Text>
                 <View style={styles.mini}>

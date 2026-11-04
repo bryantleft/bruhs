@@ -86,7 +86,7 @@ export default function MapScreen(): React.JSX.Element {
                   dim={skillLevel(game, activity.skill) < activity.level}
                 />
                 <View style={styles.tag}>
-                  <Sprite art={SKILL_ART[activity.skill] ?? SKILL_ART.agility} size={12} />
+                  <Sprite art={SKILL_ART[activity.skill]} size={12} />
                   <Text style={styles.small}>{activity.level}</Text>
                 </View>
               </View>
