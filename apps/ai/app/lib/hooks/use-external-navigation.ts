@@ -1,10 +1,11 @@
-import { useBruhStore, useInitialStore } from "../stores";
+import { useBruhStore, useInitialStore } from "@/lib/stores";
 
-export const useExternalNavigation = () => {
-  const { setCentered } = useBruhStore();
-  const { setVisible } = useInitialStore();
+/** Fade the page out and re-centre the bruh, then leave for `link`. */
+export function useExternalNavigation(): { navigate: (link: string) => void } {
+  const setCentered = useBruhStore((s) => s.setCentered);
+  const setVisible = useInitialStore((s) => s.setVisible);
 
-  const navigate = (link: string) => {
+  const navigate = (link: string): void => {
     setCentered(true);
     setVisible(false);
     setTimeout(() => {
@@ -13,4 +14,4 @@ export const useExternalNavigation = () => {
   };
 
   return { navigate };
-};
+}

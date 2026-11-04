@@ -1,0 +1,37 @@
+---
+import CopiedOverlay from "@/components/CopiedOverlay.astro";
+import type { ColorGroup } from "@/data/colors";
+
+interface Props {
+  color: ColorGroup;
+}
+
+const { color } = Astro.props;
+const step = (variable: string) => Number.parseInt(variable.split("-").pop() ?? "0", 10);
+---
+
+<div>
+  <h3 class="mb-4 text-h4 font-semibold text-rambutan-200">{color.name}</h3>
+  <div class="flex flex-col gap-0.5 md:gap-1">
+    {color.swatches.map((swatch) => {
+      const isDark = step(swatch.variable) > 500;
+      return (
+        <button
+          type="button"
+          data-copy={swatch.variable}
+          aria-label={`Copy ${swatch.variable}`}
+          class:list={[
+            "group/copy relative flex cursor-copy items-center justify-between rounded-grape p-3 text-left transition-transform duration-150 ease-in-out hover:scale-[1.02] focus-visible:outline-2 focus-visible:outline-persimmon-400 active:scale-100",
+            swatch.className,
+          ]}
+        >
+          <span class:list={["text-code font-medium", isDark ? "text-rambutan-50" : "text-longan-950"]}>
+            {swatch.name.split(" ").pop()}
+          </span>
+          <span class:list={["text-code", isDark ? "text-rambutan-400" : "text-longan-500"]}>{swatch.variable}</span>
+          <CopiedOverlay />
+        </button>
+      );
+    })}
+  </div>
+</div>

@@ -1,12 +1,14 @@
 import { useEffect } from "react";
-import { useInitialStore } from "../stores";
+import { useInitialStore } from "@/lib/stores";
 
-export const useInitialScreenLoad = () => {
-  const { visible, setVisible } = useInitialStore();
+/** Fade the page in after the first client render. */
+export function useInitialScreenLoad(): { visible: boolean } {
+  const visible = useInitialStore((s) => s.visible);
+  const setVisible = useInitialStore((s) => s.setVisible);
 
   useEffect(() => {
     setVisible(true);
   }, [setVisible]);
 
-  return { visible, setVisible };
-};
+  return { visible };
+}

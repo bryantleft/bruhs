@@ -1,0 +1,19 @@
+---
+import { type BruhVariant, bruhGeometry } from "@bruhs/theme/logo";
+
+interface Props {
+  variant?: BruhVariant;
+  class?: string;
+}
+
+const { variant = "original", class: className } = Astro.props;
+const { base, eye, mouth, faces, viewBox } = bruhGeometry;
+const face = faces[variant];
+---
+
+<svg viewBox={viewBox} fill="none" xmlns="http://www.w3.org/2000/svg" class={className} aria-hidden="true">
+  <circle cx={base.cx} cy={base.cy} r={base.r} class="fill-bruh-base"></circle>
+  <ellipse cx={face.leftEye.x} cy={face.leftEye.y} rx={eye.rx} ry={eye.ry} class="fill-bruh-eye"></ellipse>
+  <ellipse cx={face.rightEye.x} cy={face.rightEye.y} rx={eye.rx} ry={eye.ry} class="fill-bruh-eye"></ellipse>
+  <ellipse cx={face.mouth.x} cy={face.mouth.y} rx={mouth.rx} ry={mouth.ry} class="fill-bruh-mouth"></ellipse>
+</svg>

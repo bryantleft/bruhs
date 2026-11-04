@@ -1,24 +1,24 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import FontSample from "@/components/FontSample";
-import TypographyScale from "@/components/TypographyScale";
+import FontSample from "@/components/FontSample.astro";
+import TypographyScale from "@/components/TypographyScale.astro";
 import { fonts, typographyScale, typographyCategories } from "@/data";
 ---
 
-<BaseLayout>
+<BaseLayout title="Typography">
 	<div class="p-6 md:p-8 flex flex-col gap-12 md:gap-16">
 		<section>
 			<h2 class="text-h1 font-bold mb-6 tracking-tight">
 			  Monaspace Roles
 			</h2>
-			<p class="text-body-lg text-rambutan-500 dark:text-rambutan-400 mb-8 max-w-[65ch] text-pretty">
+			<p class="text-body-lg text-rambutan-400 mb-8 max-w-[65ch] text-pretty">
 				Bruhs is all mono. Every pixel of text — prose, headings, buttons, code — is set in a
 				<a href="https://monaspace.githubnext.com/" target="_blank" rel="noopener noreferrer" class="font-semibold text-rambutan-100 hover:text-rambutan-50 underline decoration-rambutan-100/20 hover:decoration-rambutan-100/40 transition">Monaspace</a>
 				variant. Each variant has one job.
 			</p>
 			<div class="grid grid-cols-1 gap-6 md:gap-8">
 				{fonts.map(font => (
-					<FontSample client:visible name={font.name} variable={font.var} className={font.className} />
+					<FontSample name={font.name} variable={font.var} className={font.className} />
 				))}
 			</div>
 		</section>
@@ -26,15 +26,14 @@ import { fonts, typographyScale, typographyCategories } from "@/data";
 		<section>
 			<div class="mb-8">
 				<h2 class="text-h1 font-bold mb-4 tracking-tight">Typography Scale</h2>
-				<p class="text-body-lg text-rambutan-500 dark:text-rambutan-400 max-w-[65ch] text-pretty">
+				<p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
 					Seven semantic categories — each bound to a specific Monaspace variant. Decisions are already made; reach for the class that matches the role.
 				</p>
 			</div>
 
 			<div class="flex flex-col gap-10 md:gap-12">
 				{typographyCategories.map(category => (
-					<TypographyScale 
-						client:visible
+					<TypographyScale
 						items={typographyScale[category.key]}
 						title={category.title}
 						description={category.description}

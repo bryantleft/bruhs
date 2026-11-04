@@ -77,15 +77,25 @@ impl DirNode {
     }
 }
 
+/// What a treemap node stands for. Serialized as `"dir"`, `"file"` or `"aggregate"`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum NodeKind {
+    Dir,
+    File,
+    /// Synthetic "(smaller items)" node: many small files and folders folded together.
+    /// It has no real path on disk and can't be trashed.
+    Aggregate,
+}
+
 /// Serialized treemap node sent to the client. Directories and files share one shape
-/// so the treemap layout can treat them uniformly.
+/// so the treemap layout can treat them uniformly; `kind` tells them apart.
 #[derive(Serialize)]
 pub struct TreeNode {
     pub name: String,
     pub path: String,
     pub size: u64,
-    #[serde(rename = "isDir")]
-    pub is_dir: bool,
+    pub kind: NodeKind,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<TreeNode>,
 }
@@ -142,7 +152,7 @@ impl DirNode {
                     name: f.name.clone(),
                     path: f.path.clone(),
                     size: f.size,
-                    is_dir: false,
+                    kind: NodeKind::File,
                     children: Vec::new(),
                 });
             }
@@ -155,7 +165,7 @@ impl DirNode {
                 name: "(smaller items)".to_string(),
                 path: format!("{path}/__other__"),
                 size: other,
-                is_dir: false,
+                kind: NodeKind::Aggregate,
                 children: Vec::new(),
             });
         }
@@ -166,7 +176,7 @@ impl DirNode {
             name,
             path,
             size,
-            is_dir: true,
+            kind: NodeKind::Dir,
             children,
         }
     }

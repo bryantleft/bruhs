@@ -1,4 +1,15 @@
-import type { ColorGroup } from "@/components/ColorCard";
+export type Swatch = {
+  name: string;
+  variable: string;
+  className: string;
+};
+
+export type ColorGroup = {
+  name: string;
+  prefix: string;
+  description: string;
+  swatches: Swatch[];
+};
 
 export const accentColors: ColorGroup[] = [
   {

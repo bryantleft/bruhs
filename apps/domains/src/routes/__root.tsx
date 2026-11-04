@@ -27,7 +27,8 @@ export const Route = createRootRoute({
       },
       {
         name: "description",
-        content: "domains",
+        content:
+          "Check whether a domain name is available across popular TLDs.",
       },
     ],
     links: [
@@ -55,7 +56,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       <head>
         <HeadContent />
       </head>
-      <body className="bg-longan-950">
+      <body className="bg-longan-950 text-rambutan-100 antialiased">
         {children}
         <Scripts />
       </body>

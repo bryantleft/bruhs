@@ -1,8 +1,12 @@
 @import "tailwindcss";
 @import "@bruhs/theme/styles/index.css";
 
-.animate-fade-in {
-  animation: fadeIn 1s ease-in-out;
+/* Pure CSS, so the page is visible without JS. `both` holds the start frame until the
+   animation runs; users who prefer reduced motion get no animation at all. */
+@media (prefers-reduced-motion: no-preference) {
+  .animate-fade-in {
+    animation: fadeIn 1s ease-in-out both;
+  }
 }
 
 @keyframes fadeIn {

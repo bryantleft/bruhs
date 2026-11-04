@@ -18,7 +18,7 @@ pnpm add @bruhs/theme
 @import "@bruhs/theme/styles/index.css";
 ```
 
-Copy `node_modules/@bruhs/theme/fonts/*` into your `public/fonts/` so the `@font-face` URLs resolve.
+Copy `node_modules/@bruhs/theme/fonts/*` into your `public/fonts/` so the `@font-face` URLs resolve. The package ships a helper for this: run `bruhs-theme-fonts` (optionally with a target directory) before your dev server and build.
 
 ### Zero-build (any language, any framework)
 
@@ -27,6 +27,14 @@ Copy `node_modules/@bruhs/theme/fonts/*` into your `public/fonts/` so the `@font
 ```
 
 Drop into any HTML document. All utilities are pre-compiled; fonts load from the same CDN path.
+
+### Mascot geometry
+
+`@bruhs/theme/logo` exports `bruhGeometry`: the viewBox, base circle, eye and mouth sizes, and the face position for each variant (`left`, `original`, `right`). It's plain TypeScript data, so draw the mascot with whatever renders SVG.
+
+```ts
+import { bruhGeometry } from "@bruhs/theme/logo";
+```
 
 ## Documentation
 

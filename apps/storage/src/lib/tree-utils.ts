@@ -1,5 +1,15 @@
 import { type Category, categoryForName } from "./format";
-import type { TreeNode } from "./types";
+import type { DirNode, TreeNode } from "./types";
+
+/** The scanner's synthetic "(smaller items)" node, which can't be trashed. */
+export function isAggregate(node: TreeNode): boolean {
+  return node.kind === "aggregate";
+}
+
+/** The colour category of a node: aggregates and folders count as "other". */
+export function categoryForNode(node: TreeNode): Category {
+  return node.kind === "file" ? categoryForName(node.name) : "other";
+}
 
 /** Sum visible leaf sizes by file-type category, descending. */
 export function aggregateByCategory(
@@ -7,14 +17,12 @@ export function aggregateByCategory(
 ): { category: Category; bytes: number }[] {
   const totals = new Map<Category, number>();
   const visit = (n: TreeNode) => {
-    if (n.children?.length) {
+    if (n.kind === "dir" && n.children.length > 0) {
       for (const c of n.children) visit(c);
-    } else {
-      const cat: Category = n.name.startsWith("(")
-        ? "other"
-        : categoryForName(n.name);
-      totals.set(cat, (totals.get(cat) ?? 0) + n.size);
+      return;
     }
+    const cat = categoryForNode(n);
+    totals.set(cat, (totals.get(cat) ?? 0) + n.size);
   };
   visit(node);
   return [...totals.entries()]
@@ -23,32 +31,42 @@ export function aggregateByCategory(
 }
 
 /**
- * Return a copy of the tree with the node at `path` removed and ancestor sizes
- * decremented. Used for optimistic UI updates after a file is trashed.
+ * Return a copy of the tree without the nodes at `paths`, with ancestor sizes
+ * decremented. Used to hide items the user has moved to the Trash.
  */
-export function removeByPath(
-  node: TreeNode,
-  path: string,
-): { node: TreeNode; removed: number } {
-  if (!node.children || node.children.length === 0) return { node, removed: 0 };
+export function removePaths(
+  node: DirNode,
+  paths: ReadonlySet<string>,
+): DirNode {
+  if (paths.size === 0) return node;
+  return removeFrom(node, paths).node;
+}
+
+function removeFrom(
+  node: DirNode,
+  paths: ReadonlySet<string>,
+): { node: DirNode; removed: number } {
   let removed = 0;
   const children: TreeNode[] = [];
   for (const child of node.children) {
-    if (child.path === path) {
+    if (paths.has(child.path)) {
       removed += child.size;
-      continue;
+    } else if (child.kind === "dir") {
+      const res = removeFrom(child, paths);
+      removed += res.removed;
+      children.push(res.node);
+    } else {
+      children.push(child);
     }
-    const res = removeByPath(child, path);
-    removed += res.removed;
-    children.push(res.node);
   }
+  if (removed === 0) return { node, removed };
   return { node: { ...node, size: node.size - removed, children }, removed };
 }
 
 /** Find a node by path anywhere in the tree. */
 export function findByPath(node: TreeNode, path: string): TreeNode | null {
   if (node.path === path) return node;
-  if (!node.children) return null;
+  if (node.kind !== "dir") return null;
   for (const c of node.children) {
     const found = findByPath(c, path);
     if (found) return found;

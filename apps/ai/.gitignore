@@ -7,3 +7,6 @@ build/
 .env*
 *.tsbuildinfo
 CLAUDE.md
+
+# Copied from @bruhs/theme by `bruhs-theme-fonts` before dev and build
+public/fonts/

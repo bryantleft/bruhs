@@ -38,7 +38,7 @@ const onKeyDown = (event: KeyboardEvent): void => {
 
 let isBound = false;
 
-export const registerHotkey = (hotkey: RegisteredHotkey): void => {
+const registerHotkey = (hotkey: RegisteredHotkey): void => {
   hotkeyMap.add(hotkey);
   if (!isBound) {
     window.addEventListener("keydown", onKeyDown);
@@ -46,7 +46,7 @@ export const registerHotkey = (hotkey: RegisteredHotkey): void => {
   }
 };
 
-export const unregisterHotkey = (hotkey: RegisteredHotkey): void => {
+const unregisterHotkey = (hotkey: RegisteredHotkey): void => {
   hotkeyMap.delete(hotkey);
   if (hotkeyMap.size === 0 && isBound) {
     window.removeEventListener("keydown", onKeyDown);

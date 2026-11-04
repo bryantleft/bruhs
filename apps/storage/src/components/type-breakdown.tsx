@@ -9,7 +9,7 @@ export function TypeBreakdown({ node }: { node: TreeNode }) {
 
   return (
     <section className="shrink-0 space-y-3">
-      <h2 className="font-medium text-[0.6875rem] text-lychee-500 uppercase tracking-wide">
+      <h2 className="text-rambutan-500 text-[0.6875rem] font-medium tracking-wide uppercase">
         By type
       </h2>
       <ul className="space-y-2.5">
@@ -21,25 +21,25 @@ export function TypeBreakdown({ node }: { node: TreeNode }) {
                 <div className="flex min-w-0 items-center gap-2">
                   <span
                     aria-hidden="true"
-                    className="size-2.5 shrink-0 rounded-seed"
+                    className="rounded-seed size-2.5 shrink-0"
                     style={{ background: `var(${CATEGORY_VAR[r.category]})` }}
                   />
-                  <span className="truncate text-lychee-200">
+                  <span className="text-rambutan-200 truncate">
                     {CATEGORY_LABEL[r.category]}
                   </span>
                 </div>
                 <div className="flex shrink-0 items-baseline gap-1.5">
-                  <span className="font-mono text-lychee-200 text-xs tabular-nums">
+                  <span className="text-rambutan-200 font-mono text-xs tabular-nums">
                     {formatBytes(r.bytes)}
                   </span>
-                  <span className="w-9 text-right text-[0.6875rem] text-lychee-500 tabular-nums">
+                  <span className="text-rambutan-500 w-9 text-right text-[0.6875rem] tabular-nums">
                     {pct.toFixed(0)}%
                   </span>
                 </div>
               </div>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-orb bg-longan-800">
+              <div className="rounded-orb bg-longan-800 mt-1.5 h-1.5 overflow-hidden">
                 <div
-                  className="h-full rounded-orb"
+                  className="rounded-orb h-full"
                   style={{
                     width: `${pct}%`,
                     background: `var(${CATEGORY_VAR[r.category]})`,

@@ -1,213 +1,176 @@
-import { type ChangeEvent, useEffect, useState } from "react";
-import { models, ProviderInfo } from "@/lib/data";
+import { useId, useState } from "react";
+import { ModelOption } from "@/components/model-option";
+import { models } from "@/lib/data";
 import { useDisclosure } from "@/lib/hooks/use-disclosure";
-import { useLLMStore } from "@/lib/stores";
-import { InputType, type Model, OutputType, Provider } from "@/lib/types";
+import { useLLMStore, useModel } from "@/lib/stores";
+import { type Model, Provider } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export default function Settings() {
-  const { keys, model, addKey, removeKey, setModel } = useLLMStore();
+  const model = useModel();
+  const setModel = useLLMStore((s) => s.setModel);
   const { isOpen, setIsOpen, ref } = useDisclosure();
-
-  const initialKey = keys ? (keys[model.provider] ?? "") : "";
-  const [apiKey, setApiKey] = useState(initialKey);
-
-  useEffect(() => {
-    const key = keys ? (keys[model.provider] ?? "") : "";
-    setApiKey(key);
-  }, [keys, model]);
-
-  const toggleOpen = () => {
-    setIsOpen(!isOpen);
-  };
-
-  const canAddKey = () => {
-    return apiKey.length > 0;
-  };
-
-  const handleKeyChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setApiKey(event.target.value);
-  };
-
-  const handleAddKey = () => {
-    if (apiKey) {
-      addKey(model.provider, apiKey);
-    }
-  };
-
-  const handleRemoveKey = () => {
-    removeKey(model.provider);
-  };
-
-  const handleModelSelect = (newModel: Model) => {
-    setModel(newModel);
-  };
+  const panelId = useId();
 
   return (
     <div
       ref={ref}
       className={cn(
         "group",
-        "rounded-lg bg-longan-800 p-2 shadow-lg",
-        "border border-longan-700 text-rambutan-200 hover:border-rambutan-600",
+        "rounded-grape bg-longan-800 p-2 inset-ring inset-ring-white/10",
+        "text-rambutan-200 hover:inset-ring-white/20",
         "transition-all duration-300 ease-in-out",
-        isOpen ? "w-56" : "w-[34px] hover:w-[110px]",
+        isOpen
+          ? "w-56"
+          : "w-[34px] hover:w-[110px] has-focus-visible:w-[110px]",
       )}
     >
       <div className="flex items-center">
         <button
           type="button"
-          onMouseDown={toggleOpen}
-          className="flex w-full cursor-pointer items-center justify-between"
+          onClick={() => setIsOpen(!isOpen)}
+          aria-expanded={isOpen}
+          aria-controls={panelId}
+          aria-label="Settings"
+          className="rounded-seed focus-visible:outline-persimmon-400 flex w-full cursor-pointer items-center justify-between focus-visible:outline-2"
         >
-          <h3
+          <span
+            aria-hidden="true"
             className={cn(
-              "overflow-hidden whitespace-nowrap font-semibold text-sm transition-all duration-300 ease-in-out",
+              "overflow-hidden text-sm font-semibold whitespace-nowrap transition-all duration-300 ease-in-out",
               isOpen
                 ? "max-w-full opacity-100"
                 : "max-w-0 opacity-0 group-hover:max-w-full group-hover:opacity-100",
             )}
           >
             Settings
-          </h3>
-          <span className="iconify lucide--settings h-4 w-4 text-rambutan-200" />
+          </span>
+          <span
+            aria-hidden="true"
+            className="iconify lucide--settings text-rambutan-200 h-4 w-4"
+          />
         </button>
       </div>
 
       <div
-        id="settings-content"
+        id={panelId}
+        // Closed: collapsed and inert, so its controls leave the tab order.
+        inert={!isOpen}
         className={cn(
           "space-y-4 overflow-hidden transition-all duration-300 ease-in-out",
-          isOpen ? "mt-3 max-h-96 opacity-100" : "max-h-0 opacity-0",
+          isOpen ? "mt-3 max-h-[32rem] opacity-100" : "max-h-0 opacity-0",
         )}
       >
-        <div className="mb-4">
-          <h4 className="mb-2 font-medium text-rambutan-400 text-xs">
-            Model Provider
-          </h4>
+        <fieldset className="mb-4">
+          <legend className="text-rambutan-400 mb-2 text-xs font-medium">
+            Model
+          </legend>
           <div className="space-y-1">
-            {models.map((currentModel) => (
+            {models.map((m) => (
               <button
-                key={currentModel.id}
+                key={m.id}
                 type="button"
-                onClick={() => handleModelSelect(currentModel)}
+                onClick={() => setModel(m)}
+                aria-pressed={model.id === m.id}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors duration-200",
-                  model.id === currentModel.id
-                    ? "cursor-default bg-mangosteen-700 font-semibold text-white"
-                    : "cursor-pointer text-rambutan-400 hover:bg-longan-700 hover:text-rambutan-200",
+                  "rounded-seed flex w-full items-center gap-2 px-2 py-1 text-left text-xs transition-colors duration-200",
+                  "focus-visible:outline-persimmon-400 focus-visible:outline-2",
+                  model.id === m.id
+                    ? "bg-blueberry-500/20 text-blueberry-100 cursor-default font-semibold"
+                    : "text-rambutan-400 hover:bg-longan-700 hover:text-rambutan-200 cursor-pointer",
                 )}
-                disabled={model.id === currentModel.id}
               >
-                <img
-                  src={ProviderInfo[currentModel.provider].logo}
-                  alt={`${currentModel.provider} logo`}
-                  width={20}
-                  height={20}
-                  className="select-none rounded"
-                />
-                {currentModel.name}
-                <span className="ml-auto flex items-center gap-1">
-                  {currentModel.inputs.includes(InputType.TEXT) && (
-                    <span className="inline-flex items-center justify-center rounded border border-longan-700 bg-longan-900 p-0.5">
-                      <span className="iconify lucide--type h-3 w-3 text-rambutan-400" />
-                    </span>
-                  )}
-                  <span className="iconify lucide--arrow-right h-3 w-3 text-rambutan-500" />
-                  {currentModel.outputs.includes(OutputType.TEXT) && (
-                    <span className="inline-flex items-center justify-center rounded border border-longan-700 bg-longan-900 p-0.5">
-                      <span className="iconify lucide--type h-3 w-3 text-rambutan-400" />
-                    </span>
-                  )}
-                </span>
+                <ModelOption model={m} />
               </button>
             ))}
           </div>
-        </div>
+        </fieldset>
 
-        <div>
-          <h4 className="mb-2 font-medium text-rambutan-400 text-xs">
-            API Key ({model.provider})
-          </h4>
-          <div
-            className={cn(
-              "relative w-full overflow-hidden rounded",
-              "border-[0.5px] border-longan-900 transition-colors duration-300",
-              initialKey
-                ? "cursor-not-allowed"
-                : "cursor-text hover:border-longan-700",
-            )}
-          >
-            <input
-              type="password"
-              value={apiKey}
-              onChange={handleKeyChange}
-              placeholder={
-                model.provider === Provider.XAI ? "xai-..." : "sk-..."
-              }
-              className={cn(
-                "h-full w-full rounded py-2 pr-8 pl-3",
-                "bg-longan-950 text-rambutan-400 text-xs placeholder:text-rambutan-400",
-                "transition-opacity duration-300 focus:outline-none",
-                initialKey
-                  ? "cursor-not-allowed opacity-50"
-                  : "cursor-text opacity-100",
-              )}
-              disabled={!!initialKey}
-              autoComplete="off"
-            />
-            <div
-              className={cn(
-                "absolute inset-y-0 z-20 flex items-center",
-                "transition-all duration-300",
-                !initialKey
-                  ? "right-0 pr-3 opacity-100"
-                  : "pointer-events-none right-[calc(50%-12px)] opacity-0",
-              )}
+        {/* Remount per provider so the field starts from that provider's saved key. */}
+        <ApiKeyField key={model.provider} model={model} />
+      </div>
+    </div>
+  );
+}
+
+function ApiKeyField({ model }: { model: Model }) {
+  const savedKey = useLLMStore((s) => s.keys[model.provider]);
+  const addKey = useLLMStore((s) => s.addKey);
+  const removeKey = useLLMStore((s) => s.removeKey);
+  const rememberKeys = useLLMStore((s) => s.rememberKeys);
+  const setRememberKeys = useLLMStore((s) => s.setRememberKeys);
+  const [apiKey, setApiKey] = useState(savedKey ?? "");
+  const inputId = useId();
+  const rememberId = useId();
+  const isSaved = savedKey !== undefined;
+
+  return (
+    <div className="space-y-2">
+      <label
+        htmlFor={inputId}
+        className="text-rambutan-400 mb-2 block text-xs font-medium"
+      >
+        API key ({model.provider})
+      </label>
+      <div className="rounded-seed border-longan-900 hover:border-longan-700 relative w-full overflow-hidden border-[0.5px] transition-colors duration-300">
+        <input
+          id={inputId}
+          type="password"
+          value={isSaved ? savedKey : apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder={model.provider === Provider.XAI ? "xai-..." : "sk-..."}
+          className={cn(
+            "rounded-seed h-full w-full py-2 pr-8 pl-3",
+            "bg-longan-950 text-rambutan-300 placeholder:text-rambutan-500 text-xs",
+            "focus-visible:inset-ring-persimmon-400 focus:outline-none focus-visible:inset-ring",
+            isSaved && "cursor-not-allowed opacity-50",
+          )}
+          disabled={isSaved}
+          autoComplete="off"
+        />
+        <div className="absolute inset-y-0 right-0 z-20 flex items-center pr-2">
+          {isSaved ? (
+            <button
+              type="button"
+              onClick={() => {
+                removeKey(model.provider);
+                setApiKey("");
+              }}
+              aria-label={`Remove the ${model.provider} API key`}
+              className="rounded-seed text-rambutan-400 hover:text-lychee-400 focus-visible:outline-persimmon-400 flex cursor-pointer p-[5px] transition-colors duration-300 focus-visible:outline-2"
             >
-              <button
-                type="button"
-                onClick={handleAddKey}
-                className={cn(
-                  "flex rounded-lg p-[5px] transition-colors duration-300",
-                  canAddKey()
-                    ? "cursor-pointer bg-mangosteen-700 hover:bg-mangosteen-600"
-                    : "cursor-not-allowed",
-                  initialKey && "bg-mangosteen",
-                )}
-                disabled={!canAddKey() || !!initialKey}
-              >
-                <span className="iconify lucide--lock-open h-3 w-3 text-rambutan-300" />
-              </button>
-            </div>
-            <div
-              className={cn(
-                "-translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 z-10 transform",
-                "transition-all duration-300",
-                initialKey ? "opacity-100" : "pointer-events-none opacity-0",
-              )}
+              <span
+                aria-hidden="true"
+                className="iconify lucide--trash h-3 w-3"
+              />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => addKey(model.provider, apiKey)}
+              disabled={apiKey.length === 0}
+              aria-label={`Save the ${model.provider} API key`}
+              className="rounded-seed bg-persimmon-500 text-longan-950 hover:bg-persimmon-400 focus-visible:outline-persimmon-400 flex cursor-pointer p-[5px] transition-colors duration-300 focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <div className="flex cursor-not-allowed rounded-lg bg-mangosteen-700 p-[5px]">
-                <span className="iconify lucide--lock h-3 w-3 text-rambutan-300" />
-              </div>
-            </div>
-            <div
-              className={cn(
-                "absolute inset-y-0 right-0 z-20 flex items-center pr-3",
-                "transition-opacity duration-300",
-                initialKey ? "opacity-100" : "pointer-events-none opacity-0",
-              )}
-            >
-              <button
-                type="button"
-                onClick={handleRemoveKey}
-                className="flex cursor-pointer rounded-lg p-[5px] *:hover:text-lychee-700 focus:outline-none"
-              >
-                <span className="iconify lucide--trash h-3 w-3 text-rambutan-400 transition-colors duration-300" />
-              </button>
-            </div>
-          </div>
+              <span
+                aria-hidden="true"
+                className="iconify lucide--lock-open h-3 w-3"
+              />
+            </button>
+          )}
         </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          id={rememberId}
+          type="checkbox"
+          checked={rememberKeys}
+          onChange={(e) => setRememberKeys(e.target.checked)}
+          className="accent-persimmon-500"
+        />
+        <label htmlFor={rememberId} className="text-rambutan-400 text-xs">
+          Remember keys on this device
+        </label>
       </div>
     </div>
   );

@@ -143,7 +143,7 @@ export const CATEGORY_VAR: Record<Category, string> = {
   image: "--color-dragonfruit-500",
   video: "--color-persimmon-500",
   audio: "--color-mangosteen-500",
-  document: "--color-guava-500",
+  document: "--color-pandan-500",
   archive: "--color-durian-500",
   binary: "--color-lychee-600",
   other: "--color-longan-600",

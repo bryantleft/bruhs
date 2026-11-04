@@ -1,112 +1,92 @@
 import {
-  type Chat,
   InputType,
-  type Message,
   type Model,
   OutputType,
   Provider,
   type ProviderMetadata,
 } from "@/lib/types";
 
-// TODO: add more
-export const models: Model[] = [
+const TEXT_TO_TEXT = {
+  inputs: [InputType.TEXT],
+  outputs: [OutputType.TEXT],
+};
+
+// IDs checked against each provider's model docs on 2026-11-03:
+// developers.openai.com/api/docs/models, platform.claude.com/docs (API primer) and
+// docs.x.ai/developers/grok-4-7.
+export const models: readonly Model[] = [
   {
-    id: "gpt-4o-mini",
-    name: "GPT-4o Mini",
+    id: "gpt-6-astra",
+    name: "GPT-6 Astra",
     provider: Provider.OPENAI,
-    pricing: {
-      prompt: 0.00000015,
-      completion: 0.0000006,
-    },
-    inputs: [InputType.TEXT],
-    outputs: [OutputType.TEXT],
+    ...TEXT_TO_TEXT,
   },
   {
-    id: "gpt-4-turbo",
-    name: "GPT-4 Turbo",
+    id: "gpt-6.1-sol",
+    name: "GPT-6.1 Sol",
     provider: Provider.OPENAI,
-    pricing: {
-      prompt: 0.00001,
-      completion: 0.00003,
-    },
-    inputs: [InputType.TEXT],
-    outputs: [OutputType.TEXT],
+    ...TEXT_TO_TEXT,
   },
   {
-    id: "claude-3-5-sonnet-latest",
-    name: "Claude 3.5 Sonnet",
+    id: "gpt-6-luna",
+    name: "GPT-6 Luna",
+    provider: Provider.OPENAI,
+    ...TEXT_TO_TEXT,
+  },
+  {
+    id: "claude-opus-5-5",
+    name: "Claude Opus 5.5",
     provider: Provider.ANTHROPIC,
-    pricing: {
-      prompt: 0.000003,
-      completion: 0.000015,
-    },
-    inputs: [InputType.TEXT],
-    outputs: [OutputType.TEXT],
+    ...TEXT_TO_TEXT,
   },
   {
-    id: "claude-3-5-haiku-latest",
-    name: "Claude 3.5 Haiku",
+    id: "claude-sonnet-5-5",
+    name: "Claude Sonnet 5.5",
     provider: Provider.ANTHROPIC,
-    pricing: {
-      prompt: 0.0000008,
-      completion: 0.000004,
-    },
-    inputs: [InputType.TEXT],
-    outputs: [OutputType.TEXT],
+    ...TEXT_TO_TEXT,
   },
   {
-    id: "claude-3-opus-latest",
-    name: "Claude 3 Opus",
+    id: "claude-haiku-5-5",
+    name: "Claude Haiku 5.5",
     provider: Provider.ANTHROPIC,
-    pricing: {
-      prompt: 0.0000025,
-      completion: 0.000003,
-    },
-    inputs: [InputType.TEXT],
-    outputs: [OutputType.TEXT],
+    ...TEXT_TO_TEXT,
   },
   {
-    id: "grok-beta",
-    name: "Grok Beta",
+    id: "claude-fable-5-1",
+    name: "Claude Fable 5.1",
+    provider: Provider.ANTHROPIC,
+    ...TEXT_TO_TEXT,
+  },
+  {
+    id: "grok-4.7",
+    name: "Grok 4.7",
     provider: Provider.XAI,
-    pricing: {
-      prompt: 0.000005,
-      completion: 0.000015,
-    },
-    inputs: [InputType.TEXT],
-    outputs: [OutputType.TEXT],
+    ...TEXT_TO_TEXT,
   },
 ];
+
+export const defaultModel: Model = models[0];
+
+/** The model with this ID and provider, or `undefined` if it isn't offered. */
+export function findModel(id: string, provider?: Provider): Model | undefined {
+  return models.find(
+    (m) => m.id === id && (provider === undefined || m.provider === provider),
+  );
+}
 
 export const ProviderInfo: Record<Provider, ProviderMetadata> = {
   [Provider.OPENAI]: {
     domain: "openai.com",
-    logo: LogoIcon("openai.com", { type: "symbol", theme: "light" }),
+    logo: brandLogo("openai.com", { type: "symbol", theme: "light" }),
   },
   [Provider.ANTHROPIC]: {
     domain: "anthropic.com",
-    logo: LogoIcon("anthropic.com", { type: "icon" }),
+    logo: brandLogo("anthropic.com", { type: "icon" }),
   },
   [Provider.XAI]: {
     domain: "x.ai",
-    logo: LogoIcon("x.ai", { type: "icon" }),
+    logo: brandLogo("x.ai", { type: "icon" }),
   },
-};
-
-export const defaultModel = models[0];
-
-const systemMessage: Message = {
-  id: "system-1",
-  role: "system",
-  content: "You are a helpful AI assistant.",
-};
-
-export const defaultMessages = [systemMessage];
-
-export const defaultChat: Chat = {
-  id: "chat-1",
-  title: "Chat 1",
-  messages: [],
 };
 
 type LogoConfig = {
@@ -114,7 +94,7 @@ type LogoConfig = {
   theme?: "light" | "dark";
 };
 
-export function LogoIcon(domain: string, config?: LogoConfig): string {
+function brandLogo(domain: string, config?: LogoConfig): string {
   const width = 400;
   const height = 400;
   const size = `w/${width}/h/${height}`;
@@ -129,7 +109,7 @@ export function LogoIcon(domain: string, config?: LogoConfig): string {
 }
 
 // TODO: make own icon set :(
-export function langIcon(lang: string) {
+export function langIcon(lang: string): string {
   if (lang === "javascript") return "iconify vscode-icons--file-type-js";
   if (lang === "typescript")
     return "iconify vscode-icons--file-type-typescript";

@@ -15,16 +15,16 @@ export function ScanControls({ scanning, progress, onScan, onCancel }: Props) {
     <div className="flex items-center gap-3">
       {scanning ? (
         <>
-          <div className="flex items-center gap-2 text-sm">
-            <Loader2 className="size-4 shrink-0 animate-spin text-guava-400" />
-            <span className="text-lychee-300 tabular-nums">
+          <div className="flex items-center gap-2 text-sm" role="status">
+            <Loader2 className="text-pandan-400 size-4 shrink-0 animate-spin" />
+            <span className="text-rambutan-300 tabular-nums">
               {progress ? (
                 <>
-                  <span className="font-mono text-lychee-100">
+                  <span className="text-rambutan-100 font-mono">
                     {progress.files.toLocaleString()}
                   </span>{" "}
                   files ·{" "}
-                  <span className="font-mono text-persimmon-300">
+                  <span className="text-persimmon-300 font-mono">
                     {formatBytes(progress.bytes)}
                   </span>
                   {progress.errors > 0 && (
@@ -42,20 +42,20 @@ export function ScanControls({ scanning, progress, onScan, onCancel }: Props) {
           <button
             type="button"
             onClick={onCancel}
-            className="flex items-center gap-1.5 rounded-grape bg-longan-800 py-2 pr-3 pl-2 font-medium text-lychee-200 text-sm ring-1 ring-longan-700 ring-inset hover:bg-longan-700 focus-visible:outline-2 focus-visible:outline-lychee-400 focus-visible:outline-offset-2"
+            className="rounded-grape bg-longan-800 text-rambutan-200 ring-longan-700 hover:bg-longan-700 focus-visible:outline-persimmon-400 flex items-center gap-1.5 py-2 pr-3 pl-2 text-sm font-medium ring-1 ring-inset focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             <X className="size-4 shrink-0" /> Cancel
           </button>
         </>
       ) : (
         <>
-          <span className="text-lychee-500 text-sm max-md:hidden">
+          <span className="text-rambutan-500 text-sm max-md:hidden">
             Scans your entire disk (<span className="font-mono">/</span>)
           </span>
           <button
             type="button"
             onClick={onScan}
-            className="flex items-center gap-1.5 rounded-grape bg-guava-600 py-2 pr-3 pl-2 font-medium text-sm text-white hover:bg-guava-500 focus-visible:outline-2 focus-visible:outline-guava-400 focus-visible:outline-offset-2"
+            className="rounded-grape bg-persimmon-500 text-longan-950 hover:bg-persimmon-400 focus-visible:outline-persimmon-400 flex items-center gap-1.5 py-2 pr-3 pl-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             <Search className="size-4 shrink-0" /> Scan whole disk
           </button>

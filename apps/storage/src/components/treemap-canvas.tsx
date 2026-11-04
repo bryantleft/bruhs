@@ -5,25 +5,24 @@ import {
   treemapSquarify,
 } from "d3-hierarchy";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  CATEGORY_VAR,
-  type Category,
-  categoryForName,
-  formatBytes,
-} from "~/lib/format";
-import type { TreeNode } from "~/lib/types";
+import { CATEGORY_VAR, type Category, formatBytes } from "~/lib/format";
+import { categoryForNode } from "~/lib/tree-utils";
+import type { DirNode, TreeNode } from "~/lib/types";
 
 interface Props {
   /** The directory currently shown as the treemap root. */
-  root: TreeNode;
+  root: DirNode;
   /** Zoom into a directory (its depth-1 child in the current view). */
-  onEnterDir: (node: TreeNode) => void;
+  onEnterDir: (node: DirNode) => void;
   /** Selection changed (for the details/delete panel). null clears. */
   onSelect: (node: TreeNode | null) => void;
   selectedPath: string | null;
 }
 
 type RNode = HierarchyRectangularNode<TreeNode>;
+
+/** Corner radius of leaf blocks; matches `rounded-seed` (4px) on the hover outline. */
+const LEAF_RADIUS = 4;
 
 const CATEGORIES: Category[] = [
   "code",
@@ -48,8 +47,17 @@ function resolvePalette(): Record<Category, string> {
 }
 
 function colorFor(node: TreeNode, palette: Record<Category, string>): string {
-  if (node.name.startsWith("(")) return palette.other;
-  return palette[categoryForName(node.name)];
+  return palette[categoryForNode(node)];
+}
+
+const childrenOf = (d: TreeNode): readonly TreeNode[] | undefined =>
+  d.kind === "dir" ? d.children : undefined;
+
+/** A folder the user can zoom into. */
+function isOpenable(node: TreeNode, root: DirNode): node is DirNode {
+  return (
+    node.kind === "dir" && node.children.length > 0 && node.path !== root.path
+  );
 }
 
 export function TreemapCanvas({
@@ -82,8 +90,8 @@ export function TreemapCanvas({
   // Compute the squarified treemap layout for the current root.
   const layout = useMemo<RNode | null>(() => {
     if (size.w < 2 || size.h < 2) return null;
-    const h = hierarchy<TreeNode>(root)
-      .sum((d) => (d.children?.length ? 0 : d.size))
+    const h = hierarchy<TreeNode>(root, childrenOf)
+      .sum((d) => (d.kind === "dir" && d.children.length > 0 ? 0 : d.size))
       .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
     return treemap<TreeNode>()
       .tile(treemapSquarify)
@@ -115,7 +123,7 @@ export function TreemapCanvas({
       const w = leaf.x1 - leaf.x0;
       const h = leaf.y1 - leaf.y0;
       if (w < 1 || h < 1) continue;
-      const r = w > 7 && h > 7 ? Math.min(3, w / 2, h / 2) : 0;
+      const r = w > 7 && h > 7 ? Math.min(LEAF_RADIUS, w / 2, h / 2) : 0;
       ctx.beginPath();
       ctx.roundRect(leaf.x0, leaf.y0, w, h, r);
       ctx.fillStyle = colorFor(leaf.data, palette);
@@ -142,7 +150,7 @@ export function TreemapCanvas({
       ctx.strokeStyle = d.depth === 1 ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.25)";
       ctx.lineWidth = d.depth === 1 ? 1.5 : 0.75;
       ctx.beginPath();
-      ctx.roundRect(d.x0 + 0.5, d.y0 + 0.5, w - 1, h - 1, 3);
+      ctx.roundRect(d.x0 + 0.5, d.y0 + 0.5, w - 1, h - 1, LEAF_RADIUS);
       ctx.stroke();
       if (d.depth <= 2 && w > 42 && h > 14) {
         const label = d.data.name;
@@ -218,15 +226,19 @@ export function TreemapCanvas({
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     const n = nodeAt(e.clientX - rect.left, e.clientY - rect.top);
-    if (n?.data.isDir && n.data.children?.length && n.data.path !== root.path) {
-      onEnterDir(n.data);
-    }
+    if (n && isOpenable(n.data, root)) onEnterDir(n.data);
   };
+
+  const summary = `Treemap of ${root.path}, ${formatBytes(root.size)} in ${
+    root.children.length
+  } items. Use the list after it to select or open them.`;
 
   return (
     <div ref={wrapRef} className="relative h-full w-full overflow-hidden">
       <canvas
         ref={canvasRef}
+        role="img"
+        aria-label={summary}
         style={{
           width: size.w,
           height: size.h,
@@ -242,7 +254,7 @@ export function TreemapCanvas({
         <>
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute z-0 rounded-[3px] ring-2 ring-white/70 ring-inset"
+            className="rounded-seed pointer-events-none absolute z-0 ring-2 ring-white/70 ring-inset"
             style={{
               left: hover.node.x0,
               top: hover.node.y0,
@@ -251,24 +263,70 @@ export function TreemapCanvas({
             }}
           />
           <div
-            className="pointer-events-none absolute z-10 max-w-xs rounded-grape bg-longan-900/95 px-2.5 py-2 shadow-xl ring-1 ring-white/10 backdrop-blur-sm"
+            className="rounded-grape bg-longan-700/95 pointer-events-none absolute z-10 max-w-xs px-2.5 py-2 inset-ring inset-ring-white/15 backdrop-blur-sm"
             style={{
               left: Math.min(hover.x + 14, size.w - 224),
               top: Math.min(hover.y + 14, size.h - 60),
             }}
           >
-            <div className="truncate font-medium font-mono text-lychee-50 text-sm">
+            <div className="text-rambutan-50 truncate font-mono text-sm font-medium">
               {hover.node.data.name}
             </div>
-            <div className="font-mono text-persimmon-300 text-xs tabular-nums">
+            <div className="text-persimmon-300 font-mono text-xs tabular-nums">
               {formatBytes(hover.node.value ?? hover.node.data.size)}
             </div>
-            <div className="mt-0.5 max-w-56 truncate text-[0.625rem] text-lychee-500">
+            <div className="text-rambutan-400 mt-0.5 max-w-56 truncate text-[0.625rem]">
               {hover.node.data.path}
             </div>
           </div>
         </>
       )}
+      <TreemapItems
+        root={root}
+        selectedPath={selectedPath}
+        onSelect={onSelect}
+        onEnterDir={onEnterDir}
+      />
     </div>
+  );
+}
+
+/**
+ * The canvas can't be reached by keyboard or read by a screen reader, so the current
+ * folder's items are also listed as buttons. The list is visually hidden until it holds
+ * focus, then it appears over the treemap.
+ */
+function TreemapItems({ root, selectedPath, onSelect, onEnterDir }: Props) {
+  return (
+    <ul
+      aria-label={`Items in ${root.name || root.path}`}
+      className="rounded-lychee bg-longan-700 sr-only max-h-[calc(100%-1rem)] overflow-y-auto p-2 inset-ring inset-ring-white/15 focus-within:not-sr-only focus-within:absolute focus-within:top-2 focus-within:left-2 focus-within:z-20 focus-within:w-80"
+    >
+      {root.children.map((child) => (
+        <li key={child.path} className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-pressed={child.path === selectedPath}
+            onClick={() => onSelect(child)}
+            className="rounded-grape text-rambutan-100 hover:bg-longan-600 focus-visible:outline-persimmon-400 aria-pressed:bg-blueberry-500/15 min-w-0 flex-1 truncate px-2 py-1 text-left text-sm focus-visible:outline-2"
+          >
+            {child.name}{" "}
+            <span className="text-rambutan-400 font-mono text-xs tabular-nums">
+              {formatBytes(child.size)}
+            </span>
+          </button>
+          {isOpenable(child, root) && (
+            <button
+              type="button"
+              onClick={() => onEnterDir(child)}
+              aria-label={`Open ${child.name}`}
+              className="rounded-grape text-rambutan-300 hover:bg-longan-600 focus-visible:outline-persimmon-400 shrink-0 px-2 py-1 text-sm focus-visible:outline-2"
+            >
+              Open
+            </button>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }

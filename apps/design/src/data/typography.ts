@@ -1,4 +1,24 @@
-export const typographyScale: Record<string, any[]> = {
+export type TypographyItem = {
+  name: string;
+  className: string;
+  usage: string;
+  size: string;
+  weight: string;
+  lineHeight: string;
+  font?: string;
+  mono?: boolean;
+};
+
+export type TypographyCategory =
+  | "display"
+  | "headings"
+  | "body"
+  | "labels"
+  | "code"
+  | "interactive"
+  | "callout";
+
+export const typographyScale: Record<TypographyCategory, TypographyItem[]> = {
   display: [
     { name: "Display Large", className: "text-display-lg", usage: "Hero headlines, landing pages", size: "72px", weight: "300", lineHeight: "1.1", font: "Krypton" },
     { name: "Display Medium", className: "text-display-md", usage: "Section heroes, major headings", size: "56px", weight: "400", lineHeight: "1.1", font: "Krypton" },
@@ -41,7 +61,11 @@ export const typographyScale: Record<string, any[]> = {
   ]
 };
 
-export const typographyCategories = [
+export const typographyCategories: {
+  key: TypographyCategory;
+  title: string;
+  description: string;
+}[] = [
   { key: "display", title: "Display — Krypton", description: "Geometric, imposing. Hero moments only." },
   { key: "headings", title: "Headings — Xenon", description: "Slab-serif mono for structural hierarchy." },
   { key: "body", title: "Body — Neon", description: "Most neutral Monaspace variant — prose and long-form." },

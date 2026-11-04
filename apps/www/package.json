@@ -3,10 +3,10 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "portless run astro dev",
-    "build": "astro build",
+    "dev": "bruhs-theme-fonts && portless run astro dev",
+    "build": "bruhs-theme-fonts && astro build",
     "preview": "astro preview",
-    "start": "astro build && astro preview",
+    "start": "bruhs-theme-fonts && astro build && astro preview",
     "check": "astro check",
     "astro": "astro"
   },

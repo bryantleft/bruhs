@@ -1,19 +1,21 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useId } from "react";
 import { useDisclosure } from "@/lib/hooks/use-disclosure";
-import { cn, getMetaKey } from "@/lib/utils";
+import { cn, useMetaKey } from "@/lib/utils";
 
 const KeyButton = ({ children }: { children: ReactNode }) => (
-  <kbd className="rounded border border-rambutan-600 bg-longan-700 px-2 py-1 font-semibold text-rambutan-200 text-xs shadow">
+  <kbd className="rounded-seed border-rambutan-600 bg-longan-700 text-rambutan-200 border px-2 py-1 text-xs font-semibold">
     {children}
   </kbd>
 );
 
 export default function ShortcutLegend() {
   const { isOpen, setIsOpen, ref } = useDisclosure();
+  const panelId = useId();
+  const metaKey = useMetaKey();
 
   const shortcuts = [
     // Core actions
-    { keys: [getMetaKey(), "k"], description: "Open command bar" },
+    { keys: [metaKey, "k"], description: "Open command bar" },
     { keys: ["/"], description: "Input" },
 
     // Navigation
@@ -21,49 +23,56 @@ export default function ShortcutLegend() {
     { keys: ["k"], description: "Previous message" },
 
     // Message actions
-    { keys: [getMetaKey(), "c"], description: "Copy message" },
+    { keys: [metaKey, "c"], description: "Copy message" },
     { keys: ["d"], description: "Delete message" },
 
     // General
     { keys: ["esc"], description: "Clear selection" },
   ];
 
-  const toggleOpen = () => {
-    setIsOpen(!isOpen);
-  };
-
   return (
     <div
       ref={ref}
       className={cn(
         "group",
-        "rounded-lg bg-longan-800 p-2 shadow-lg",
-        "border border-longan-700 text-rambutan-200 hover:border-rambutan-600",
+        "rounded-grape bg-longan-800 p-2 inset-ring inset-ring-white/10",
+        "text-rambutan-200 hover:inset-ring-white/20",
         "transition-all duration-300 ease-in-out",
-        isOpen ? "w-56" : "w-[34px] hover:w-[120px]",
+        isOpen
+          ? "w-56"
+          : "w-[34px] hover:w-[120px] has-focus-visible:w-[120px]",
       )}
     >
       <div className="flex items-center">
         <button
           type="button"
-          onMouseDown={toggleOpen}
-          className="flex w-full cursor-pointer items-center justify-between"
+          onClick={() => setIsOpen(!isOpen)}
+          aria-expanded={isOpen}
+          aria-controls={panelId}
+          aria-label="Keyboard shortcuts"
+          className="rounded-seed focus-visible:outline-persimmon-400 flex w-full cursor-pointer items-center justify-between focus-visible:outline-2"
         >
-          <h3
+          <span
+            aria-hidden="true"
             className={cn(
-              "overflow-hidden whitespace-nowrap font-semibold text-sm transition-all duration-300 ease-in-out",
+              "overflow-hidden text-sm font-semibold whitespace-nowrap transition-all duration-300 ease-in-out",
               isOpen
                 ? "max-w-full opacity-100"
                 : "max-w-0 opacity-0 group-hover:max-w-full group-hover:opacity-100",
             )}
           >
             Shortcuts
-          </h3>
-          <span className="iconify lucide--keyboard h-4 w-4 text-rambutan-200" />
+          </span>
+          <span
+            aria-hidden="true"
+            className="iconify lucide--keyboard text-rambutan-200 h-4 w-4"
+          />
         </button>
       </div>
 
       <div
+        id={panelId}
+        inert={!isOpen}
         className={cn(
           "space-y-2 overflow-hidden transition-all duration-300 ease-in-out",
           isOpen ? "mt-3 max-h-96 opacity-100" : "max-h-0 opacity-0",

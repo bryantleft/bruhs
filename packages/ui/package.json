@@ -1,6 +1,6 @@
 {
   "name": "@bruhs/theme",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Bruhs design system — fruit-named OKLCH colors, Monaspace all-mono typography, warm-dark neutrals, no drop shadows. Framework-agnostic tokens + patterns; works with Tailwind v4 or as a precompiled CSS bundle.",
   "type": "module",
   "license": "MIT",
@@ -20,20 +20,21 @@
     "css",
     "tokens"
   ],
-  "main": "./src/index.ts",
   "files": [
     "src/",
     "fonts/",
+    "scripts/",
     "dist/",
     "AGENTS.md",
     "README.md",
     "LICENSE"
   ],
+  "bin": {
+    "bruhs-theme-fonts": "./scripts/copy-fonts.mjs"
+  },
   "exports": {
-    ".": "./src/index.ts",
     "./styles/*": "./src/styles/*",
-    "./components/*": "./src/components/*",
-    "./lib/*": "./src/lib/*",
+    "./logo": "./src/lib/logo.ts",
     "./fonts/*": "./fonts/*",
     "./dist/bruhs.css": "./dist/bruhs.css",
     "./dist/fonts/*": "./dist/fonts/*",
@@ -49,10 +50,6 @@
     "@tailwindcss/cli": "^4.3.4",
     "tailwindcss": "^4.3.4",
     "typescript": "^7.0.2"
-  },
-  "peerDependencies": {
-    "react": "^18.0.0 || ^19.0.0",
-    "react-dom": "^18.0.0 || ^19.0.0"
   },
   "publishConfig": {
     "access": "public"

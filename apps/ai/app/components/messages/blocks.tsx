@@ -1,147 +1,126 @@
-import type { Token } from "marked";
+import type { Token, Tokens } from "marked";
 import { useState } from "react";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
+import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
+import bash from "react-syntax-highlighter/dist/esm/languages/prism/bash";
+import c from "react-syntax-highlighter/dist/esm/languages/prism/c";
+import cpp from "react-syntax-highlighter/dist/esm/languages/prism/cpp";
+import csharp from "react-syntax-highlighter/dist/esm/languages/prism/csharp";
+import go from "react-syntax-highlighter/dist/esm/languages/prism/go";
+import haskell from "react-syntax-highlighter/dist/esm/languages/prism/haskell";
+import java from "react-syntax-highlighter/dist/esm/languages/prism/java";
+import javascript from "react-syntax-highlighter/dist/esm/languages/prism/javascript";
+import jsx from "react-syntax-highlighter/dist/esm/languages/prism/jsx";
+import kotlin from "react-syntax-highlighter/dist/esm/languages/prism/kotlin";
+import python from "react-syntax-highlighter/dist/esm/languages/prism/python";
+import ruby from "react-syntax-highlighter/dist/esm/languages/prism/ruby";
+import rust from "react-syntax-highlighter/dist/esm/languages/prism/rust";
+import sql from "react-syntax-highlighter/dist/esm/languages/prism/sql";
+import swift from "react-syntax-highlighter/dist/esm/languages/prism/swift";
+import tsx from "react-syntax-highlighter/dist/esm/languages/prism/tsx";
+import typescript from "react-syntax-highlighter/dist/esm/languages/prism/typescript";
+import vscDarkPlus from "react-syntax-highlighter/dist/esm/styles/prism/vsc-dark-plus";
 import { langIcon } from "@/lib/data";
-import { cn, copyToClipboard, randomKey } from "@/lib/utils";
+import { cn, copyToClipboard } from "@/lib/utils";
 
-type TokenBlockProps = {
-  token: Token;
+// Only the languages that have an icon in `langIcon`; anything else renders unhighlighted.
+const LANGUAGES = {
+  bash,
+  c,
+  cpp,
+  csharp,
+  go,
+  haskell,
+  java,
+  javascript,
+  jsx,
+  kotlin,
+  python,
+  ruby,
+  rust,
+  sql,
+  swift,
+  tsx,
+  typescript,
 };
-
-export function TokenBlock({ token }: TokenBlockProps) {
-  if (token.type === "text") {
-    return (
-      <TextBlock key={randomKey()} tokens={token.tokens} text={token.text} />
-    );
-  }
-
-  if (token.type === "strong") {
-    return (
-      <StrongBlock key={randomKey()} tokens={token.tokens} text={token.text} />
-    );
-  }
-
-  if (token.type === "code") {
-    return <CodeBlock key={randomKey()} lang={token.lang} text={token.text} />;
-  }
-
-  if (token.type === "paragraph") {
-    return (
-      <ParagraphBlock
-        key={randomKey()}
-        tokens={token.tokens}
-        text={token.text}
-      />
-    );
-  }
-
-  if (token.type === "list") {
-    return (
-      <ListBlock
-        key={randomKey()}
-        items={token.items}
-        ordered={token.ordered}
-        start={token.start}
-      />
-    );
-  }
-
-  if (token.type === "codespan") {
-    return <CodeSpanBlock key={randomKey()} text={token.text} />;
-  }
-
-  if (token.type === "heading") {
-    return <HeadingBlock key={randomKey()} text={token.text} />;
-  }
-
-  return (
-    <span key={randomKey()} className="text-rambutan-300 text-sm">
-      {token.raw}
-    </span>
-  );
+for (const [name, language] of Object.entries(LANGUAGES)) {
+  SyntaxHighlighter.registerLanguage(name, language);
 }
 
-type StrongBlockProps = {
-  tokens: Token[] | undefined;
-  text: string;
-};
-
-function StrongBlock({ tokens, text }: StrongBlockProps) {
-  if (!tokens) {
-    return (
-      <strong key={randomKey()} className="text-rambutan-300 text-sm">
-        {text}
-      </strong>
-    );
-  }
-
-  return (
-    <strong key={randomKey()}>
-      {tokens.map((token) => {
-        return <TokenBlock key={randomKey()} token={token} />;
-      })}
-    </strong>
-  );
+/** Render a list of tokens. Tokens only ever append while streaming, so index keys are stable. */
+function TokenList({ tokens, text }: { tokens?: Token[]; text?: string }) {
+  if (!tokens) return text ?? null;
+  return tokens.map((token, i) => (
+    // biome-ignore lint/suspicious/noArrayIndexKey: tokens only append while streaming, so position is stable.
+    <TokenBlock key={`${i}-${token.type}`} token={token} />
+  ));
 }
 
-type TextBlockProps = {
-  tokens: Token[] | undefined;
-  text: string;
-};
-
-function TextBlock({ tokens, text }: TextBlockProps) {
-  if (!tokens) {
-    return (
-      <span key={randomKey()} className="text-rambutan-300 text-sm">
-        {text}
-      </span>
-    );
+export function TokenBlock({ token }: { token: Token }) {
+  switch (token.type) {
+    case "text":
+    case "strong": {
+      const { tokens, text } = token;
+      const Tag = token.type === "strong" ? "strong" : "span";
+      return tokens ? (
+        <Tag>
+          <TokenList tokens={tokens} />
+        </Tag>
+      ) : (
+        <Tag className="text-rambutan-300 text-sm">{text}</Tag>
+      );
+    }
+    case "paragraph":
+      return (
+        <p className="text-rambutan-300 text-sm">
+          <TokenList tokens={token.tokens} text={token.text} />
+        </p>
+      );
+    case "code": {
+      const { lang, text } = token;
+      return <CodeBlock lang={lang || undefined} text={text} />;
+    }
+    case "list": {
+      const { items, ordered, start } = token;
+      return <ListBlock items={items} ordered={ordered} start={start} />;
+    }
+    case "codespan":
+      return <CodeSpanBlock text={token.text} />;
+    case "heading":
+      return <HeadingBlock text={token.text} />;
+    default:
+      return <span className="text-rambutan-300 text-sm">{token.raw}</span>;
   }
-
-  return (
-    <span key={randomKey()}>
-      {tokens.map((token) => {
-        return <TokenBlock key={randomKey()} token={token} />;
-      })}
-    </span>
-  );
 }
 
-type CodeBlockProps = {
-  lang: string | undefined;
-  text: string;
-};
-
-function CodeBlock({ lang, text }: CodeBlockProps) {
-  const [isChecked, setIsChecked] = useState<boolean>(false);
+function CodeBlock({ lang, text }: { lang: string | undefined; text: string }) {
+  const [isChecked, setIsChecked] = useState(false);
   const highlightedLang = lang ?? "text";
 
-  async function copyText() {
+  async function copyText(): Promise<void> {
     setIsChecked(await copyToClipboard(text));
     setTimeout(() => setIsChecked(false), 3000);
   }
 
   return (
-    <div
-      key={randomKey()}
-      className="my-3 overflow-hidden rounded-lg border-[0.5px] border-longan-800 bg-longan-900 drop-shadow-lg"
-    >
-      <div className="flex justify-between border-longan-800 border-b-[0.5px] px-2 py-2">
+    <div className="rounded-grape border-longan-800 bg-longan-900 my-3 overflow-hidden border-[0.5px]">
+      <div className="border-longan-800 flex justify-between border-b-[0.5px] px-2 py-2">
         <div className="flex gap-x-1">
           {lang && (
             <span
-              className={`${langIcon(highlightedLang)} h-4 w-4 text-mangosteen-400`}
+              aria-hidden="true"
+              className={`${langIcon(highlightedLang)} text-mangosteen-400 h-4 w-4`}
             />
           )}
           <span className="text-rambutan-500 text-xs">{highlightedLang}</span>
         </div>
         <button
           type="button"
-          onMouseDown={copyText}
-          className="flex cursor-pointer items-center justify-center"
+          onClick={copyText}
+          aria-label={isChecked ? "Copied" : "Copy code"}
+          className="rounded-seed focus-visible:outline-persimmon-400 flex cursor-pointer items-center justify-center focus-visible:outline-2"
         >
           <span
+            aria-hidden="true"
             className={cn(
               "iconify h-4 w-4",
               isChecked
@@ -160,135 +139,86 @@ function CodeBlock({ lang, text }: CodeBlockProps) {
   );
 }
 
-type CodeSpanBlockProps = {
-  text: string;
-};
-
-function CodeSpanBlock({ text }: CodeSpanBlockProps) {
-  async function copyText() {
-    await copyToClipboard(text);
-  }
-
+function CodeSpanBlock({ text }: { text: string }) {
   return (
-    <code
-      key={randomKey()}
-      onMouseDown={copyText}
-      className="cursor-pointer rounded bg-longan-950 px-1 py-[0.5px] text-mangosteen-400 text-sm"
+    <button
+      type="button"
+      title="Copy"
+      onClick={() => copyToClipboard(text)}
+      className="rounded-seed bg-longan-950 text-mangosteen-400 focus-visible:outline-persimmon-400 cursor-pointer px-1 py-[0.5px] focus-visible:outline-2"
     >
-      {text}
-    </code>
+      <code>{text}</code>
+    </button>
   );
 }
 
-type ParagraphBlockProps = {
-  tokens: Token[] | undefined;
-  text: string;
-};
-
-function ParagraphBlock({ tokens, text }: ParagraphBlockProps) {
-  if (!tokens) {
-    return (
-      <p key={randomKey()}>
-        <span className="text-rambutan-300 text-sm">{text}</span>
-      </p>
-    );
-  }
-
-  return (
-    <p key={randomKey()}>
-      {tokens.map((token) => {
-        return <TokenBlock key={randomKey()} token={token} />;
-      })}
-    </p>
-  );
-}
-
-type ListItemBlockProps = {
+function ListItemBlock({
+  tokens,
+  number,
+}: {
   tokens: Token[];
   number?: number;
-};
-
-function ListItemBlock({ tokens, number }: ListItemBlockProps) {
+}) {
   return (
-    <li key={randomKey()}>
-      {number && (
-        <span className="pr-1 text-mangosteen-400 text-sm">{number}.</span>
+    <li>
+      {number !== undefined && (
+        <span className="text-mangosteen-400 pr-1 text-sm">{number}.</span>
       )}
-      {tokens.map((token) => {
+      {tokens.map((token, i) =>
         // marked 17+ emits `paragraph` tokens in loose list items where marked
         // 15 emitted inline `text` tokens; render them inline as before.
-        if (token.type === "paragraph") {
-          return (
-            <TextBlock
-              key={randomKey()}
-              tokens={token.tokens}
-              text={token.text}
-            />
-          );
-        }
-        return <TokenBlock key={randomKey()} token={token} />;
-      })}
+        token.type === "paragraph" ? (
+          // biome-ignore lint/suspicious/noArrayIndexKey: tokens only append while streaming, so position is stable.
+          <span key={`${i}-${token.type}`}>
+            <TokenList tokens={token.tokens} text={token.text} />
+          </span>
+        ) : (
+          // biome-ignore lint/suspicious/noArrayIndexKey: tokens only append while streaming, so position is stable.
+          <TokenBlock key={`${i}-${token.type}`} token={token} />
+        ),
+      )}
     </li>
   );
 }
 
-// Copied from marked.d.ts
-interface ListItem {
-  type: "list_item";
-  raw: string;
-  task: boolean;
-  checked?: boolean | undefined;
-  loose: boolean;
-  text: string;
-  tokens: Token[];
-}
-
-type ListBlockProps = {
-  items: ListItem[];
+function ListBlock({
+  items,
+  ordered,
+  start,
+}: {
+  items: Tokens.ListItem[];
   ordered: boolean;
-  start: number;
-};
-
-function ListBlock({ items, ordered, start }: ListBlockProps) {
+  start: number | "";
+}) {
   if (ordered) {
+    const first = start === "" ? 1 : start;
     return (
-      <ol key={randomKey()}>
-        {items.map((item, position) => {
-          const number = position === 0 ? start : position + 1;
-          return (
-            <ListItemBlock
-              key={randomKey()}
-              tokens={item.tokens}
-              number={number}
-            />
-          );
-        })}
+      <ol>
+        {items.map((item, position) => (
+          <ListItemBlock
+            // biome-ignore lint/suspicious/noArrayIndexKey: tokens only append while streaming, so position is stable.
+            key={`${position}-${item.type}`}
+            tokens={item.tokens}
+            number={first + position}
+          />
+        ))}
       </ol>
     );
   }
 
   return (
-    <ul
-      key={randomKey()}
-      className="list-disc pl-3 text-mangosteen-400 text-sm"
-    >
-      {items.map((item) => {
-        return <ListItemBlock key={randomKey()} tokens={item.tokens} />;
-      })}
+    <ul className="text-mangosteen-400 list-disc pl-3 text-sm">
+      {items.map((item, position) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: tokens only append while streaming, so position is stable.
+        <ListItemBlock key={`${position}-${item.type}`} tokens={item.tokens} />
+      ))}
     </ul>
   );
 }
 
-type HeadingBlockProps = {
-  text: string;
-};
-
-function HeadingBlock({ text }: HeadingBlockProps) {
+function HeadingBlock({ text }: { text: string }) {
   return (
-    <h3
-      key={randomKey()}
-      className="rounded-t-lg border-[0.5px] border-longan-800 bg-longan-900 px-3 py-1 text-rambutan-300 drop-shadow-lg"
-    >
+    <h3 className="rounded-t-grape border-longan-800 bg-longan-900 text-rambutan-300 border-[0.5px] px-3 py-1">
       {text}
     </h3>
   );

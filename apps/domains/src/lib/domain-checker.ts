@@ -1,147 +1,97 @@
-import type {
-  DomainInfo,
-  DomainSearchQuery,
-  DomainSearchResponse,
-  DomainStatus,
-  TLD,
-} from "./types";
+import type { Availability } from "./types";
 
-// DNS query utility functions
-async function queryDNS(domain: string, recordType: string) {
-  const response = await fetch(
-    `https://cloudflare-dns.com/dns-query?name=${domain}&type=${recordType}`,
-    {
-      headers: {
-        Accept: "application/dns-json",
-      },
-    },
-  );
+/** DNS response codes we act on (RFC 1035 §4.1.1). */
+const NOERROR = 0;
+const NXDOMAIN = 3;
 
-  if (!response.ok) {
-    throw new Error(`DNS query failed: ${response.status}`);
-  }
+/** Names this short are almost always registry-reserved or sold as premium. */
+const PREMIUM_MAX_LENGTH = 3;
 
-  return response.json();
+/** The subset of Cloudflare's DNS-over-HTTPS JSON response that we read. */
+interface DohResponse {
+  Status: number;
+  answerCount: number;
 }
 
+export class DnsLookupError extends Error {
+  constructor(
+    readonly domain: string,
+    readonly recordType: string,
+    reason: string,
+  ) {
+    super(`${recordType} lookup for ${domain} failed: ${reason}`);
+    this.name = "DnsLookupError";
+  }
+}
+
+function parseDohResponse(value: unknown): DohResponse | null {
+  if (typeof value !== "object" || value === null || !("Status" in value)) {
+    return null;
+  }
+  const { Status } = value;
+  if (typeof Status !== "number") return null;
+  const answer = "Answer" in value ? value.Answer : undefined;
+  if (answer !== undefined && !Array.isArray(answer)) return null;
+  return { Status, answerCount: answer?.length ?? 0 };
+}
+
+async function queryDns(
+  domain: string,
+  recordType: "A" | "SOA" | "NS",
+  signal?: AbortSignal,
+): Promise<DohResponse> {
+  const url = new URL("https://cloudflare-dns.com/dns-query");
+  url.searchParams.set("name", domain);
+  url.searchParams.set("type", recordType);
+  const response = await fetch(url, {
+    headers: { Accept: "application/dns-json" },
+    signal,
+  });
+  if (!response.ok) {
+    throw new DnsLookupError(domain, recordType, `HTTP ${response.status}`);
+  }
+  const data = parseDohResponse(await response.json());
+  if (!data) throw new DnsLookupError(domain, recordType, "malformed response");
+  return data;
+}
+
+/** Whether the name has any records of this type. Lookup failures throw. */
 async function hasRecords(
   domain: string,
-  recordType: string,
+  recordType: "SOA" | "NS",
+  signal?: AbortSignal,
 ): Promise<boolean> {
-  try {
-    const data = await queryDNS(domain, recordType);
-    return data.Status === 0 && data.Answer && data.Answer.length > 0;
-  } catch {
-    return false;
-  }
+  const data = await queryDns(domain, recordType, signal);
+  if (data.Status === NOERROR) return data.answerCount > 0;
+  if (data.Status === NXDOMAIN) return false;
+  throw new DnsLookupError(domain, recordType, `DNS status ${data.Status}`);
 }
 
-// Real domain availability checker using DNS queries
+/**
+ * Estimate whether `domain` (e.g. "example.com") is registered, from public DNS.
+ *
+ * Throws `DnsLookupError` when any lookup fails, so a network problem is reported as an
+ * error and never as "available".
+ */
 export async function checkDomainAvailability(
   domain: string,
-): Promise<DomainStatus> {
-  try {
-    // Check A records first
-    const aData = await queryDNS(domain, "A");
+  signal?: AbortSignal,
+): Promise<Availability> {
+  const a = await queryDns(domain, "A", signal);
 
-    // If A records exist, domain is definitely taken
-    if (aData.Status === 0) {
-      return "unavailable";
-    }
-
-    // If NXDOMAIN, check deeper
-    if (aData.Status === 3) {
-      // Check if SOA records exist (domain is registered)
-      if (await hasRecords(domain, "SOA")) {
-        return "unavailable";
-      }
-
-      // Check if NS records exist (domain has nameservers but no A records)
-      if (await hasRecords(domain, "NS")) {
-        return "unavailable";
-      }
-
-      // For very short domains (likely premium), be conservative
-      const domainName = domain.split(".")[0].toLowerCase();
-      if (domainName.length <= 3) {
-        return "unavailable";
-      }
-
-      return "available";
-    }
-
-    // Other status codes indicate errors
-    return "error";
-  } catch (error) {
-    console.error(`Error checking domain ${domain}:`, error);
-    return "error";
-  }
-}
-
-function parseDomainName(fullDomain: string): { domain: string; tld: TLD } {
-  const lastDotIndex = fullDomain.lastIndexOf(".");
-  if (lastDotIndex === -1) {
-    return { domain: fullDomain, tld: ".com" as TLD };
+  // NOERROR means the name exists, whether or not it has A records (NODATA).
+  if (a.Status === NOERROR) return "unavailable";
+  if (a.Status !== NXDOMAIN) {
+    throw new DnsLookupError(domain, "A", `DNS status ${a.Status}`);
   }
 
-  const domain = fullDomain.substring(0, lastDotIndex);
-  const tld = fullDomain.substring(lastDotIndex) as TLD;
+  // NXDOMAIN: a registered name can still carry SOA or NS records.
+  const [hasSoa, hasNs] = await Promise.all([
+    hasRecords(domain, "SOA", signal),
+    hasRecords(domain, "NS", signal),
+  ]);
+  if (hasSoa || hasNs) return "unavailable";
 
-  return { domain, tld };
-}
-
-async function checkSingleDomain(fullDomain: string): Promise<DomainInfo> {
-  const { domain, tld } = parseDomainName(fullDomain);
-
-  try {
-    const status = await checkDomainAvailability(fullDomain);
-
-    return {
-      domain,
-      tld,
-      fullDomain,
-      status,
-    };
-  } catch (error) {
-    console.error(`Error checking domain ${fullDomain}:`, error);
-    return {
-      domain,
-      tld,
-      fullDomain,
-      status: "error",
-    };
-  }
-}
-
-export async function searchDomains(
-  query: DomainSearchQuery,
-  onProgress?: (result: DomainInfo) => void,
-): Promise<DomainSearchResponse> {
-  const allPromises: Promise<DomainInfo>[] = [];
-  const results: DomainInfo[] = [];
-
-  // Create all domain+TLD combinations as independent promises
-  for (const domainName of query.domains) {
-    for (const tld of query.tlds) {
-      const fullDomain = `${domainName}${tld}`;
-      const promise = checkSingleDomain(fullDomain).then((result) => {
-        // Call progress callback immediately when each result is ready
-        if (onProgress) {
-          onProgress(result);
-        }
-        return result;
-      });
-      allPromises.push(promise);
-    }
-  }
-
-  // Wait for all promises to complete
-  const allResults = await Promise.all(allPromises);
-  results.push(...allResults);
-
-  return {
-    results,
-    totalSearched: results.length,
-    timestamp: new Date().toISOString(),
-  };
+  const name = domain.slice(0, domain.lastIndexOf("."));
+  return name.length <= PREMIUM_MAX_LENGTH ? "premium" : "available";
 }

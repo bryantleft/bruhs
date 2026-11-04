@@ -1,39 +1,35 @@
 import { Command } from "cmdk";
-import { useEffect, useRef, useState } from "react";
-import { models, ProviderInfo } from "@/lib/data";
-import { useCommandStore, useLLMStore } from "@/lib/stores";
-import { InputType, OutputType } from "@/lib/types";
+import { useEffect, useState } from "react";
+import { ModelOption } from "@/components/model-option";
+import { models } from "@/lib/data";
+import { useCommandStore, useLLMStore, useModel } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 
 export default function CommandBar() {
+  const isOpen = useCommandStore((s) => s.commandBarOpen);
   const setCommandBarOpen = useCommandStore((s) => s.setCommandBarOpen);
-  const { model, setModel } = useLLMStore();
-  const [isOpen, setIsOpen] = useState(false);
+  const model = useModel();
+  const setModel = useLLMStore((s) => s.setModel);
   const [search, setSearch] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    setCommandBarOpen(isOpen);
-  }, [isOpen, setCommandBarOpen]);
+  // Open state lives in the store (the bruh reads it); clear the search on every change.
+  const setOpen = (open: boolean): void => {
+    setCommandBarOpen(open);
+    setSearch("");
+  };
 
+  // A window listener with cleanup: the remaining legitimate use of an effect.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setIsOpen(!isOpen);
+        setCommandBarOpen(!useCommandStore.getState().commandBarOpen);
+        setSearch("");
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (isOpen) {
-      inputRef.current?.focus();
-    } else {
-      setSearch("");
-    }
-  }, [isOpen]);
+  }, [setCommandBarOpen]);
 
   const filteredModels = models.filter((m) =>
     m.name.toLowerCase().includes(search.toLowerCase()),
@@ -42,29 +38,27 @@ export default function CommandBar() {
   return (
     <Command.Dialog
       open={isOpen}
-      onOpenChange={setIsOpen}
-      label="Command Bar"
+      onOpenChange={setOpen}
+      label="Switch model"
       className={cn(
-        "-translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 z-50",
-        "w-full max-w-md rounded-lg border border-longan-700 bg-longan-800 p-2 text-rambutan-200 shadow-lg",
+        "absolute top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2",
+        "rounded-lychee bg-longan-700 text-rambutan-200 w-full max-w-md p-2 inset-ring inset-ring-white/15",
       )}
     >
       <Command.Input
-        ref={inputRef}
+        autoFocus
         value={search}
         onValueChange={setSearch}
         placeholder="Switch model..."
-        className={cn(
-          "mb-2 w-full border-longan-700 border-b p-2 text-rambutan-200 text-sm focus:outline-none",
-        )}
+        className="border-longan-600 text-rambutan-200 placeholder:text-rambutan-400 mb-2 w-full border-b bg-transparent p-2 text-sm focus:outline-none"
       />
       <Command.List className="max-h-72 overflow-y-auto">
-        <Command.Empty className="px-2 text-rambutan-400 text-sm">
+        <Command.Empty className="text-rambutan-400 px-2 text-sm">
           No results found.
         </Command.Empty>
         <Command.Group
           heading={
-            <span className="px-2 font-medium text-rambutan-400 text-xs">
+            <span className="text-rambutan-400 px-2 text-xs font-medium">
               Models
             </span>
           }
@@ -75,37 +69,18 @@ export default function CommandBar() {
               value={m.name}
               onSelect={() => {
                 setModel(m);
-                setIsOpen(false);
+                setOpen(false);
               }}
               className={cn(
-                "flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs transition-colors duration-200",
+                "rounded-seed flex cursor-pointer items-center gap-2 px-2 py-2 text-xs transition-colors duration-200",
+                "data-[selected=true]:bg-longan-600",
                 model.id === m.id
-                  ? "cursor-default bg-mangosteen-700 font-semibold text-white"
-                  : "text-rambutan-400 hover:bg-longan-700 hover:text-rambutan-200",
+                  ? "bg-blueberry-500/20 text-blueberry-100 cursor-default font-semibold"
+                  : "text-rambutan-400 hover:bg-longan-600 hover:text-rambutan-200",
               )}
               disabled={model.id === m.id}
             >
-              <img
-                src={ProviderInfo[m.provider].logo}
-                alt={`${m.provider} logo`}
-                width={20}
-                height={20}
-                className="select-none rounded"
-              />
-              <span className="flex items-center gap-1">{m.name}</span>
-              <span className="ml-auto flex items-center gap-1">
-                {m.inputs.includes(InputType.TEXT) && (
-                  <span className="inline-flex items-center justify-center rounded border border-longan-700 bg-longan-900 p-0.5">
-                    <span className="iconify lucide--type h-3 w-3 text-rambutan-400" />
-                  </span>
-                )}
-                <span className="iconify lucide--arrow-right h-3 w-3 text-rambutan-500" />
-                {m.outputs.includes(OutputType.TEXT) && (
-                  <span className="inline-flex items-center justify-center rounded border border-longan-700 bg-longan-900 p-0.5">
-                    <span className="iconify lucide--type h-3 w-3 text-rambutan-400" />
-                  </span>
-                )}
-              </span>
+              <ModelOption model={m} />
             </Command.Item>
           ))}
         </Command.Group>
