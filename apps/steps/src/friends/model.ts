@@ -19,7 +19,8 @@ export type PartyMember = Readonly<{
   syncedAt: string | null;
 }>;
 export type RaceWeek = Readonly<{ start: string; end: string; next: number }>;
-export type PartyError = 'network' | 'invite' | 'membership' | 'session' | 'data';
+// `network` is a lost connection; `unknown` is anything else, such as a server bug, and is logged.
+export type PartyError = 'network' | 'invite' | 'membership' | 'session' | 'data' | 'unknown';
 export type PartyResult<T> = Readonly<{ ok: true; value: T }> | Readonly<{ ok: false; error: PartyError }>;
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -158,6 +159,8 @@ export function partyErrorCopy(error: PartyError): string {
     case 'data':
       return 'party data could not be read. try again.';
     case 'network':
-      return 'could not connect.';
+      return 'could not connect. check your connection, then try again.';
+    case 'unknown':
+      return 'the party server hit a problem. try again in a little while.';
   }
 }

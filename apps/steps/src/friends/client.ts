@@ -31,7 +31,18 @@ export const PARTY_PAGE_SIZE = 20;
 type Client = Pick<ConvexReactClient, 'watchQuery' | 'mutation'>;
 const EMPTY: PartyIdentity = { userId: null, home: { profile: null, party: null } };
 
-function failure(error: unknown): PartyError {
+// Fetch and socket failures surface as TypeErrors or connection messages; anything else from
+// Convex (a server exception, a validator error) is a bug, not bad Wi-Fi.
+function isConnectionError(error: unknown): boolean {
+  return (
+    error instanceof TypeError ||
+    (error instanceof Error && /network|fetch|connect|offline|timed? ?out/i.test(error.message))
+  );
+}
+
+function failure(error: unknown, signal: AbortSignal): PartyError {
+  // A canceled request is never shown; it keeps the quiet `network` result it always had.
+  if (signal.aborted) return 'network';
   if (error instanceof PartyAuthError) return 'session';
   if (error instanceof ConvexError) {
     if (error.data === 'invite_not_found') return 'invite';
@@ -39,7 +50,10 @@ function failure(error: unknown): PartyError {
     if (error.data === 'sign_in_required' || error.data === 'not_in_party') return 'session';
     if (typeof error.data === 'string' && error.data.startsWith('invalid_')) return 'data';
   }
-  return 'network';
+  const reason: PartyError =
+    !(error instanceof ConvexError) && isConnectionError(error) ? 'network' : 'unknown';
+  console.warn(reason === 'network' ? 'Party request could not connect:' : 'Party request failed:', error);
+  return reason;
 }
 
 // Unsubscribe canceled reads rather than leaving a one-shot query waiting for
@@ -103,7 +117,7 @@ export function createPartyService(client: Client, session: PartySession, upload
         const result = await readPartyQuery(client, api.outside.home, {}, signal);
         return identity(result);
       } catch (error) {
-        const reason = failure(error);
+        const reason = failure(error, signal);
         if (reason === 'session' && error instanceof ConvexError && !signal.aborted && beginSessionReset()) {
           try {
             await session.signOut();
@@ -122,7 +136,7 @@ export function createPartyService(client: Client, session: PartySession, upload
         if (signal.aborted) return { ok: false, error: 'network' };
         return identity(await client.mutation(api.outside.enter, { ...entry, name: entry.name.trim() }));
       } catch (error) {
-        return { ok: false, error: failure(error) };
+        return { ok: false, error: failure(error, signal) };
       }
     },
     async board(week, offset, signal) {
@@ -139,7 +153,7 @@ export function createPartyService(client: Client, session: PartySession, upload
           ? { ok: true, value: { rows, total: page.total } }
           : { ok: false, error: 'data' };
       } catch (error) {
-        return { ok: false, error: failure(error) };
+        return { ok: false, error: failure(error, signal) };
       }
     },
     async submit(userId, days, signal) {
@@ -148,7 +162,7 @@ export function createPartyService(client: Client, session: PartySession, upload
         const result = await upload(userId, days, signal);
         return result === true ? { ok: true, value: true } : { ok: false, error: 'data' };
       } catch (error) {
-        return { ok: false, error: failure(error) };
+        return { ok: false, error: failure(error, signal) };
       }
     },
     async depart(removeAccount, signal) {
@@ -159,7 +173,7 @@ export function createPartyService(client: Client, session: PartySession, upload
         if (removeAccount) await session.signOut();
         return { ok: true, value: true };
       } catch (error) {
-        return { ok: false, error: failure(error) };
+        return { ok: false, error: failure(error, signal) };
       }
     },
     onSignedOut: session.onSignedOut,

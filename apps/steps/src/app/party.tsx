@@ -12,6 +12,7 @@ import {
   validPartyName,
 } from '../friends/model';
 import { useParty } from '../friends/PartyProvider';
+import { sharingErrorCopy } from '../friends/sharing';
 import { usePartyActionFocus } from '../friends/usePartyActionFocus';
 import { useGame } from '../game/GameProvider';
 import { getSkin } from '../game/game';
@@ -401,7 +402,7 @@ function PartyContents({
           : sharing.status === 'permission'
             ? 'step access is off. reconnect step sync.'
             : sharing.status === 'error'
-              ? 'step sharing failed. tap refresh to try again.'
+              ? sharingErrorCopy(sharing.reason)
               : 'phone steps sync when you open the app or tap refresh.';
   const weekLabel = `${new Date(`${week.start}T12:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })} – ${new Date(`${week.end}T12:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })}`;
 

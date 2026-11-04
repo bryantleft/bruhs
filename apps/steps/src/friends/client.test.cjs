@@ -204,6 +204,33 @@ test('invalid invites and membership errors retain their actionable UI meaning',
   }
 });
 
+test('server bugs are not reported as a lost connection, and their cause is logged', async () => {
+  const warn = console.warn;
+  const logged = [];
+  console.warn = (...args) => logged.push(args);
+  try {
+    for (const [error, expected] of [
+      [new Error('[CONVEX M(outside:enter)] Server Error'), 'unknown'],
+      [new ConvexError('quota_exceeded'), 'unknown'],
+      [new TypeError('Network request failed'), 'network'],
+    ]) {
+      const h = harness();
+      h.fail(error);
+      assert.deepEqual(await h.service.enter({ kind: 'create', name: 'moss', skin: 'pandan' }, signal()), {
+        ok: false,
+        error: expected,
+      });
+      assert.equal(logged.at(-1)?.[1], error);
+    }
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(
+    model.partyErrorCopy('unknown'),
+    'the party server hit a problem. try again in a little while.',
+  );
+});
+
 test('board decoding preserves the page total and rejects mismatched identities or malformed rows', async () => {
   const h = harness({
     cached: {
