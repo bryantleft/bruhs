@@ -9,11 +9,13 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 // Browser and physical-device scheduling are separate validation layers.
 function loadCompiled(name, mocks = {}, jsx = () => null) {
   const module = { exports: {} };
-  const req = (id) => {
+  const req = (raw) => {
+    const id = raw.replace(/\.tsx?$/, '');
     if (Object.hasOwn(mocks, id)) return mocks[id];
     if (id === './model') return model;
     if (id === './sharing') return sharing;
-    if (id === '../game/game.ts') return require('../game/game.ts');
+    if (id === './controller') return loadCompiled('controller', mocks);
+    if (id === '../game/game') return require('../game/game.ts');
     throw Error(`Unmocked import ${id}`);
   };
   const file = path.join(__dirname, name + (name === 'PartyProvider' ? '.tsx' : '.ts'));
@@ -180,9 +182,16 @@ function harness({ now = '2026-10-28T12:00:00Z', demo = false, read, board, home
       }
       return hooks[i].value;
     },
+    useSyncExternalStore(subscribe, getSnapshot) {
+      const i = cursor++;
+      if (!hooks[i]) {
+        hooks[i] = { cleanup: subscribe(() => (dirty = true)) };
+      }
+      return getSnapshot();
+    },
     useEffect(fn, deps) {
       const i = cursor++;
-      if (!hooks[i] || deps.some((d, n) => !Object.is(d, hooks[i].deps[n]))) {
+      if (!hooks[i] || !deps || deps.some((d, n) => !Object.is(d, hooks[i].deps[n]))) {
         const prev = hooks[i];
         hooks[i] = { deps, cleanup: prev?.cleanup };
         effects.push({ i, fn });
