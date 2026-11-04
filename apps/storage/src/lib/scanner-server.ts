@@ -35,6 +35,25 @@ export async function readSnapshot(): Promise<string | null> {
   }
 }
 
+/** Root path of the last cached scan, or `null` if there is none or it's unreadable. */
+export async function readSnapshotRoot(): Promise<string | null> {
+  const snapshot = await readSnapshot();
+  if (snapshot === null) return null;
+  try {
+    const value: unknown = JSON.parse(snapshot);
+    if (typeof value !== "object" || value === null || !("root" in value)) {
+      return null;
+    }
+    const { root } = value;
+    if (typeof root !== "object" || root === null || !("path" in root)) {
+      return null;
+    }
+    return typeof root.path === "string" ? root.path : null;
+  } catch {
+    return null; // A corrupt cache file means there's no usable scan.
+  }
+}
+
 /**
  * Spawn `storage-scanner scan` and return its stdout as a web ReadableStream of the raw
  * NDJSON bytes. The final `result` line is captured and written to the snapshot cache.

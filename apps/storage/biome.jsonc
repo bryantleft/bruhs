@@ -11,6 +11,7 @@
   "files": {
     "includes": [
       "src/**",
+      "tests/**",
       "!**/.tanstack-start",
       "!**/src/tanstack-start.d.ts",
       "!**/src/styles.css",

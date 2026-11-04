@@ -7,7 +7,8 @@
     "build": "pnpm run build:scanner && vite build",
     "build:scanner": "cargo build --release --manifest-path scanner/Cargo.toml",
     "start": "vite preview",
-    "check": "biome check ."
+    "check": "biome check . && pnpm run test",
+    "test": "node --test 'tests/*.test.ts'"
   },
   "portless": {
     "name": "storage-bruhs"
