@@ -8,8 +8,8 @@ import { palette } from '@outside/src/theme/palette.ts';
 import { root } from 'astro:config/server';
 import { HERO_TOP, HERO_WIDTH, heroParts } from './pixel';
 
-// The game's ink (apps/outside theme color.ink): outlines and shadows.
-export const INK = '#0a0a0a';
+// The game's ink (apps/outside theme color.ink, the bruh-eye token): outlines and shadows.
+export const INK = palette['bruh-eye'];
 
 function font(file: string): string {
   // From the project root: the bundled endpoint's own location changes between Astro versions.

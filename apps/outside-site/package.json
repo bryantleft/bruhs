@@ -9,7 +9,7 @@
     "dev": "portless run astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "check": "astro check && pnpm test",
+    "check": "astro check && bruhs-theme-lint src --skip type,weight && pnpm test",
     "astro": "astro",
     "test": "node --experimental-strip-types --test src/lib/*.test.ts"
   },

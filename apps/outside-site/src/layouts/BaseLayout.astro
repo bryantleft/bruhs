@@ -3,6 +3,7 @@ import pixelifyBold from '@outside/assets/fonts/PixelifySans-Bold.ttf?url';
 import pixelifyRegular from '@outside/assets/fonts/PixelifySans-Regular.ttf?url';
 import silkscreenBold from '@outside/assets/fonts/Silkscreen-Bold.ttf?url';
 import silkscreenRegular from '@outside/assets/fonts/Silkscreen-Regular.ttf?url';
+import { palette } from '@outside/src/theme/palette.ts';
 import '../styles/global.css';
 
 type Props = Readonly<{ title: string; description: string; path?: string; noindex?: boolean }>;
@@ -36,7 +37,7 @@ const fontCss = faces
     <meta name="description" content={description} />
     <link rel="canonical" href={url} />
     {noindex ? <meta name="robots" content="noindex" /> : null}
-    <meta name="theme-color" content="#15110d" />
+    <meta name="theme-color" content={palette['longan-950']} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preload" href={pixelifyBold} as="font" type="font/ttf" crossorigin />
     <link rel="preload" href={pixelifyRegular} as="font" type="font/ttf" crossorigin />
