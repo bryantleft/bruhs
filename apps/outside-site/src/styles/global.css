@@ -228,6 +228,14 @@ svg {
   translate: calc(-100% + 8px) calc(-100% - 10px);
 }
 
+/* A pin from the map, for the key under it. */
+.pin-swatch {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  outline: 2px solid #0a0a0a;
+}
+
 .place:target {
   border-color: var(--color-durian-300) var(--color-persimmon-800) var(--color-persimmon-800) var(--color-durian-300);
 }

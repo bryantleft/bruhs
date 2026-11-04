@@ -11,6 +11,7 @@ import WaitlistForm from '../components/WaitlistForm.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { itemSprite, skillSprite } from '../lib/art';
 import { MAP_HEIGHT, MAP_WIDTH, tileCenter } from '@steps/src/pixel/world.ts';
+import { palette } from '@steps/src/theme/palette.ts';
 import { heroSvg, sceneSvg, spriteSvg, worldMapSvg } from '../lib/pixel';
 import { SAMPLE_DATE, SAMPLE_STEPS, sampleDay } from '../lib/sample-day';
 
@@ -30,6 +31,13 @@ const mapSvg = worldMapSvg({
   home: START_LOCATION,
   locked: new Set(places.filter(({ blocker }) => blocker).map(({ place }) => place.id)),
 });
+// Matches worldMapSvg's pin colours.
+const pinKey: readonly Readonly<{ color: keyof typeof palette; label: string }>[] = [
+  { color: 'pandan-300', label: 'you start here' },
+  { color: 'durian-400', label: 'town with a bank' },
+  { color: 'lychee-400', label: 'wilds' },
+  { color: 'rambutan-600', label: 'locked' },
+];
 const pinCss = places
   .map(
     ({ place: { id } }) =>
@@ -70,7 +78,7 @@ const privacy = [
   <section class="hero relative" aria-labelledby="title">
     <div class="sky relative pt-[72px]">
       <Clouds />
-      <div class="relative mx-auto grid max-w-5xl items-end gap-6 px-5 pb-8 pt-2 md:gap-8 md:pb-10 md:grid-cols-[1fr_1fr] md:pt-8">
+      <div class="relative mx-auto grid max-w-5xl grid-cols-1 items-end gap-6 px-5 pb-8 pt-2 md:gap-8 md:pb-10 md:grid-cols-[1fr_1fr] md:pt-8">
         <div class="flex flex-col items-start gap-4">
           <p class="chip label text-pandan-300">coming to iPhone and Android</p>
           <h1 id="title" class="text-7xl font-bold text-durian-400 outlined-lg sm:text-8xl">outside</h1>
@@ -166,8 +174,19 @@ const privacy = [
                 }
               </div>
             </div>
-            <figcaption class="text-sm text-rambutan-500">
-              steps away are by road from {town.name}. agility levels shorten every road.
+            <figcaption class="flex flex-col gap-3 text-sm text-rambutan-500">
+              {/* The pin colours, as on the app's map tab. */}
+              <ul class="flex flex-wrap gap-x-4 gap-y-1">
+                {
+                  pinKey.map((pin) => (
+                    <li class="flex items-center gap-2">
+                      <span class="pin-swatch" style={`background: ${palette[pin.color]}`} />
+                      {pin.label}
+                    </li>
+                  ))
+                }
+              </ul>
+              <p>steps away are by road from {town.name}. agility levels shorten every road.</p>
             </figcaption>
           </figure>
           <ol class="grid gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2" aria-label="the fruitlands, nearest first">
