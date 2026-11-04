@@ -1803,3 +1803,13 @@ Applied the copy standards now written in `AGENTS.md` (UI copy section).
 - **Glyphs.** Silkscreen Bold's "%" read as "Z". `scripts/patch-fonts.py` now redraws it on Silkscreen's grid. The walk-distance readout also dropped "~".
 - **HTML head.** The meta description "Turn steps into XP and quests with bruhs." now matches the lowercase title and the glossary: "a pixel step adventure. your real steps pay for your bruh's travel, skills and quests."
 - **Character screen.** "chests found" became "chests found while working", so it no longer looks lower than "chests opened" by mistake.
+
+## Audit fixes: refusals, recovery and copy (November 3, 2026)
+
+Verified by unit tests and a web export only. Not yet checked in a browser or on a device.
+
+- Refused actions explain themselves: the session turns every rule rejection into a game-voice notice ("your bag is full. bank or drop something first."). The item sheet stays open when an action fails, and its take buttons disable on a full bag.
+- The load-error screen asks before erasing (start a new adventure, then yes, erase my journey). It only offers try again when storage failed, and a save from a newer build asks for an app update.
+- Health sync shows a clock error instead of ready when it refuses a batch. Party sharing names its failure, and the party client no longer reports server bugs as could not connect.
+- Copy follows the glossary: extra action chance and double loot chance on the home strip, extra actions and double loot on the character sheet, and bag slots. Counts go through itemCount, every percentage through one formatter, and the error copy is lowercase.
+- Remaining checks: keyboard focus on the load-error confirmation and the party screen on web, after the label constants and the component split, and on a device, the Health clock error.
