@@ -1,0 +1,241 @@
+---
+import { ITEMS, LOCATIONS, QUESTS, SKILLS, SKINS, START_LOCATION } from '@steps/src/game/content.ts';
+import { createGame, locationBlocker, route } from '@steps/src/game/game.ts';
+import { bruhArt, itemArt, SKILL_ART, UI_ART } from '@steps/src/pixel/art.ts';
+import { MAX_LEVEL } from '@steps/src/game/xp.ts';
+import Clouds from '../components/Clouds.astro';
+import Header from '../components/Header.astro';
+import Report from '../components/Report.astro';
+import Ridge from '../components/Ridge.astro';
+import WaitlistForm from '../components/WaitlistForm.astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { heroSvg, sceneSvg, spriteSvg } from '../lib/pixel';
+import { SAMPLE_STEPS, sampleDay } from '../lib/sample-day';
+
+const description =
+  "a pixel adventure that runs on walking. your real steps pay for your bruh's travel, skills and quests.";
+const town = LOCATIONS.find((place) => place.id === START_LOCATION);
+if (!town) throw new Error(`START_LOCATION ${START_LOCATION} is not a place; the hero has no town to draw.`);
+// The fruitlands nearest first, by road from the starting town at agility level 1.
+const fresh = createGame('2026-01-05');
+const places = LOCATIONS.map((place) => {
+  const road = route(START_LOCATION, place.id);
+  if (!road) throw new Error(`No road from ${START_LOCATION} to ${place.id}; the world map is disconnected.`);
+  return { place, distance: road.distance, blocker: locationBlocker(fresh, place) };
+}).sort((a, b) => a.distance - b.distance);
+const pitch =
+  'a pixel adventure that runs on walking. your daily steps sync in, and your bruh spends them travelling the fruitlands, chopping, mining, fishing, cooking and crafting.';
+const steps = [
+  {
+    art: UI_ART.steps,
+    title: 'walk like you already do',
+    body: 'your phone already counts your steps. outside reads the daily total from Apple Health or Health Connect. no workouts to start, nothing to track.',
+  },
+  {
+    art: itemArt('bronze-axe'),
+    title: 'steps pay for everything',
+    body: "every trip and every action costs steps. pick a job for your bruh, and the steps you walk keep it going. steps you don't spend wait in your pouch.",
+  },
+  {
+    art: itemArt('adventurer-chest'),
+    title: 'come back to loot',
+    body: 'open the app to a report of what your walk paid for: xp, level-ups, drops and the odd treasure chest.',
+  },
+];
+const privacy = [
+  'outside reads your step totals and never writes to Health.',
+  'your game saves on your phone.',
+  'a party sees its members’ daily step totals, nothing else.',
+  'optional GPS walks stay on your device.',
+];
+---
+
+<BaseLayout title="bruhs / outside: a pixel adventure powered by your steps" {description}>
+  <section class="hero relative" aria-labelledby="title">
+    <div class="sky relative">
+      <Clouds />
+      <Header />
+      <div class="relative mx-auto grid max-w-5xl items-end gap-6 px-5 pb-8 pt-2 md:gap-8 md:pb-10 md:grid-cols-[1fr_1fr] md:pt-8">
+        <div class="flex flex-col items-start gap-4">
+          <p class="chip label text-pandan-300">coming to iPhone and Android</p>
+          <h1 id="title" class="text-7xl font-bold text-durian-400 outlined-lg sm:text-8xl">outside</h1>
+          <p class="text-3xl font-bold text-rambutan-50 outlined sm:text-4xl">your steps are the only button.</p>
+        </div>
+        <div id="waitlist" class="panel flex scroll-mt-6 flex-col gap-4 p-5">
+          {/* Phones show this under the hero instead, so the scene still makes the first screen. */}
+          <p class="hidden leading-relaxed text-rambutan-300 md:block">{pitch}</p>
+          <WaitlistForm id="hero" stacked />
+        </div>
+      </div>
+    </div>
+    <div class="hero-ground" set:html={heroSvg(`your bruh hopping in ${town.name}, a town with houses, an anvil and trees.`)} />
+  </section>
+  <Ridge from="pandan-500" to="longan-800" />
+  <Ridge from="longan-800" to="longan-950" phase={2} />
+
+  <main>
+    <section aria-labelledby="how" class="band bg-longan-950">
+      <div class="mx-auto flex max-w-5xl flex-col gap-8 px-5">
+        <p class="text-lg leading-relaxed text-rambutan-300 md:hidden">{pitch}</p>
+        <h2 id="how" class="text-3xl font-bold text-durian-400 shadowed">how it works</h2>
+        <ol class="grid gap-6 md:grid-cols-3">
+          {
+            steps.map((step, index) => (
+              <li class="panel flex flex-col gap-3 p-5">
+                <div class="flex items-center gap-3">
+                  <span class="well grid size-14 place-items-center" set:html={spriteSvg(step.art, 40)} />
+                  <span class="label text-rambutan-500">step {index + 1}</span>
+                </div>
+                <h3 class="text-xl font-bold text-rambutan-50">{step.title}</h3>
+                <p class="leading-relaxed text-rambutan-300">{step.body}</p>
+              </li>
+            ))
+          }
+        </ol>
+      </div>
+    </section>
+
+    <Ridge from="longan-950" to="longan-900" phase={4} />
+    <section aria-labelledby="day" class="band bg-longan-900">
+      <div class="mx-auto grid max-w-5xl items-center gap-10 px-5 md:grid-cols-[1fr_380px]">
+        <div class="flex flex-col gap-4">
+          <h2 id="day" class="text-3xl font-bold text-durian-400 shadowed">a real first day</h2>
+          <p class="max-w-prose text-lg leading-relaxed text-rambutan-300">
+            a new bruh walks to {sampleDay.place} and starts chopping. you walk {SAMPLE_STEPS.toLocaleString('en')}
+            steps. this is the report you open afterwards, played out by the game's own rules when this page was
+            built.
+          </p>
+          <p class="max-w-prose leading-relaxed text-rambutan-500">
+            drops are rolled each action, so your first day will turn up different loot.
+          </p>
+        </div>
+        <Report />
+      </div>
+    </section>
+
+    <Ridge from="longan-900" to="longan-950" phase={1} />
+    <section aria-labelledby="world" class="band bg-longan-950">
+      <div class="mx-auto flex max-w-5xl flex-col gap-2 px-5">
+        <h2 id="world" class="text-3xl font-bold text-durian-400 shadowed">the fruitlands</h2>
+        <p class="max-w-prose text-lg text-rambutan-300">
+          {LOCATIONS.length} places to walk to, from a cosy town to the edge of a fallen star. far places cost
+          more steps to reach, and some open only after a quest.
+        </p>
+      </div>
+      <div class="strip mt-8" role="region" aria-label="the fruitlands, nearest first" tabindex="0">
+        <ol class="flex w-max">
+          {
+            places.map(({ place, distance, blocker }) => (
+              <li class="strip-stop flex w-72 flex-col sm:w-80">
+                <Fragment set:html={sceneSvg({ biome: place.biome, skin: 'original' }, { crop: 12 })} />
+                <div class="road" aria-hidden="true">
+                  <span class="road-marker" />
+                </div>
+                <div class="flex flex-col gap-1 px-4 pb-2">
+                  <p class="label text-durian-300">
+                    {distance === 0 ? 'you start here' : `${distance.toLocaleString('en')} steps away`}
+                  </p>
+                  <h3 class="text-lg font-bold text-rambutan-50">{place.name}</h3>
+                  <p class="text-sm leading-snug text-rambutan-500">{place.blurb}</p>
+                  {blocker ? <p class="text-sm text-lychee-400">{blocker}</p> : null}
+                </div>
+              </li>
+            ))
+          }
+        </ol>
+      </div>
+      <p class="mx-auto mt-4 max-w-5xl px-5 text-sm text-rambutan-500">
+        steps away are by road from {town.name}. agility levels shorten every road.
+      </p>
+    </section>
+
+    <Ridge from="longan-950" to="longan-900" phase={3} />
+    <section aria-labelledby="skills" class="band bg-longan-900">
+      <div class="mx-auto grid max-w-5xl gap-10 px-5 md:grid-cols-2">
+        <div class="flex flex-col gap-6">
+          <div class="flex flex-col gap-2">
+            <h2 id="skills" class="text-3xl font-bold text-durian-400 shadowed">
+              {SKILLS.length} skills to level {MAX_LEVEL}
+            </h2>
+            <p class="text-lg text-rambutan-300">
+              higher levels open better trees, rocks, fish and recipes, and every level makes work take fewer
+              steps.
+            </p>
+          </div>
+          <ul class="grid grid-cols-2 gap-3">
+            {
+              SKILLS.map((skill) => (
+                <li class="well flex items-center gap-3 p-3">
+                  <span set:html={spriteSvg(SKILL_ART[skill.id] ?? UI_ART.steps, 32)} />
+                  <span class="flex flex-col">
+                    <span class="font-bold text-rambutan-50">{skill.name}</span>
+                    <span class="text-sm text-rambutan-500">{skill.blurb}</span>
+                  </span>
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+        <div class="flex flex-col gap-6">
+          <div class="flex flex-col gap-2">
+            <h2 class="text-3xl font-bold text-durian-400 shadowed">things to collect</h2>
+            <p class="text-lg text-rambutan-300">
+              {ITEMS.length} items, {QUESTS.length} quests and {SKINS.length} outfits for your bruh. tools, gear and
+              food make every step go further.
+            </p>
+          </div>
+          <ul class="panel grid grid-cols-3 gap-4 p-5 sm:grid-cols-6" aria-label="outfits">
+            {
+              SKINS.map((skin) => (
+                <li class="flex flex-col items-center gap-2 text-center">
+                  <span set:html={spriteSvg(bruhArt(skin.id), 48, skin.name)} />
+                  <span class="label text-rambutan-500">{skin.name}</span>
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <Ridge from="longan-900" to="longan-950" phase={5} />
+    <section class="band bg-longan-950">
+      <div class="mx-auto flex max-w-5xl flex-col gap-16 px-5">
+        <section aria-labelledby="party" class="grid gap-6 md:grid-cols-2">
+          <div class="panel flex flex-col gap-3 p-6">
+            <h2 id="party" class="text-2xl font-bold text-durian-400 shadowed">walk with friends</h2>
+            <p class="leading-relaxed text-rambutan-300">
+              start a party and share its invite code. each week, members race on daily step totals.
+            </p>
+          </div>
+          <div class="panel flex flex-col gap-3 p-6">
+            <h2 class="text-2xl font-bold text-durian-400 shadowed">your steps, read-only</h2>
+            <ul class="flex flex-col gap-2 text-rambutan-300">
+              {
+                privacy.map((line) => (
+                  <li class="flex gap-3">
+                    <span aria-hidden="true" class="text-pandan-300">■</span>
+                    <span>{line}</span>
+                  </li>
+                ))
+              }
+            </ul>
+          </div>
+        </section>
+
+        <section aria-labelledby="join" class="panel grid items-center gap-8 p-6 md:grid-cols-[auto_1fr] md:p-10">
+          <span class="hidden md:block" set:html={spriteSvg(bruhArt('pandan'), 128)} />
+          <div class="flex flex-col gap-4">
+            <h2 id="join" class="text-3xl font-bold text-durian-400 shadowed">be first outside</h2>
+            <p class="text-lg text-rambutan-300">join the waitlist and we'll email you when outside launches.</p>
+            <WaitlistForm id="end" />
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+  <footer class="mx-auto flex w-full max-w-5xl flex-col gap-1 border-t-2 border-longan-800 px-5 py-8 text-sm text-rambutan-500">
+    <p>outside is in development. features may change before launch.</p>
+    <p>© {new Date().getFullYear()} bruhs</p>
+  </footer>
+</BaseLayout>

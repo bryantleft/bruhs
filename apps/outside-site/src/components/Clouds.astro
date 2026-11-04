@@ -1,0 +1,22 @@
+---
+import { cloudSvg } from '../lib/pixel';
+
+// Spread across the sky; each drifts at its own pace and rests at `x` when motion is reduced.
+const clouds = [
+  { top: '14%', x: '8vw', scale: 6, seconds: 90, delay: -20 },
+  { top: '34%', x: '62vw', scale: 5, seconds: 130, delay: -95 },
+  { top: '6%', x: '78vw', scale: 4, seconds: 160, delay: -40 },
+];
+---
+
+<div aria-hidden="true" class="pointer-events-none absolute inset-0 overflow-hidden">
+  {
+    clouds.map((cloud) => (
+      <span
+        class="cloud"
+        style={`top:${cloud.top};--x:${cloud.x};animation-duration:${cloud.seconds}s;animation-delay:${cloud.delay}s`}
+        set:html={cloudSvg(cloud.scale)}
+      />
+    ))
+  }
+</div>

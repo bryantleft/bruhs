@@ -1,0 +1,270 @@
+@import "tailwindcss";
+@import "@bruhs/theme/styles/index.css";
+
+/* The game's type: Pixelify Sans for display and body, Silkscreen for small caps labels.
+   Font files come from the game and are declared in BaseLayout. */
+@theme {
+  --font-pixel: "Pixelify Sans Outside", ui-monospace, monospace;
+  --font-pixel-label: "Silkscreen Outside", ui-monospace, monospace;
+}
+
+html {
+  background: var(--color-longan-950);
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-pixel);
+  color: var(--color-rambutan-100);
+  -webkit-font-smoothing: antialiased;
+}
+
+svg {
+  shape-rendering: crispEdges;
+}
+
+/* Pixel chrome, as in the app: a 2px ink outline around a bevelled fill. */
+.panel {
+  background: var(--color-longan-800);
+  border: 2px solid;
+  border-color: var(--color-longan-600) var(--color-longan-950) var(--color-longan-950) var(--color-longan-600);
+  outline: 2px solid #0a0a0a;
+}
+
+.well {
+  background: var(--color-longan-900);
+  border: 2px solid;
+  border-color: var(--color-longan-950) var(--color-longan-700) var(--color-longan-700) var(--color-longan-950);
+}
+
+.button {
+  display: inline-flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 20px;
+  font-family: var(--font-pixel);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--color-rambutan-50);
+  text-shadow: 2px 2px 0 #0a0a0a;
+  background: var(--color-persimmon-500);
+  border: 2px solid;
+  border-color: var(--color-durian-400) var(--color-persimmon-800) var(--color-persimmon-800) var(--color-durian-400);
+  outline: 2px solid #0a0a0a;
+  cursor: pointer;
+}
+
+.button:active {
+  border-color: var(--color-persimmon-800) var(--color-durian-400) var(--color-durian-400) var(--color-persimmon-800);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.label {
+  font-family: var(--font-pixel-label);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.shadowed {
+  text-shadow: 2px 2px 0 #0a0a0a;
+}
+
+/* Text on the sky: a 1-pixel-grid ink outline plus the usual drop. */
+.outlined {
+  text-shadow:
+    2px 0 0 #0a0a0a, -2px 0 0 #0a0a0a, 0 2px 0 #0a0a0a, 0 -2px 0 #0a0a0a,
+    2px 2px 0 #0a0a0a, -2px -2px 0 #0a0a0a, 2px -2px 0 #0a0a0a, -2px 2px 0 #0a0a0a,
+    4px 4px 0 #0a0a0a;
+}
+
+.outlined-lg {
+  text-shadow:
+    4px 0 0 #0a0a0a, -4px 0 0 #0a0a0a, 0 4px 0 #0a0a0a, 0 -4px 0 #0a0a0a,
+    4px 4px 0 #0a0a0a, -4px -4px 0 #0a0a0a, 4px -4px 0 #0a0a0a, -4px 4px 0 #0a0a0a,
+    8px 8px 0 #0a0a0a;
+}
+
+/* A small dark tag that stays legible on any background. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 10px;
+  background: var(--color-longan-900);
+  border: 2px solid #0a0a0a;
+}
+
+/* Hero sky in hard bands, ending in the scene's own top band so the two meet without a seam. */
+.sky {
+  background: linear-gradient(
+    to bottom,
+    var(--color-blueberry-500) 0 28%,
+    var(--color-blueberry-400) 28% 56%,
+    var(--color-blueberry-300) 56% 82%,
+    var(--color-blueberry-200) 82% 100%
+  );
+}
+
+/* Never wider than the scene's 6:1 frame, so slicing trims the sides and never the sky. */
+.hero-ground {
+  height: max(240px, calc(100vw / 6));
+  overflow: hidden;
+}
+
+.hero-ground svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.hop-1 {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Two frames, 380 ms each, as in the app's Scene. */
+  .hop-0 {
+    animation: hop-down 0.76s infinite;
+  }
+  .hop-1 {
+    animation: hop-up 0.76s infinite;
+  }
+  .cloud {
+    animation-name: drift;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+  }
+}
+
+@keyframes hop-down {
+  0%, 49.9% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+@keyframes hop-up {
+  0%, 49.9% { opacity: 0; }
+  50%, 100% { opacity: 1; }
+}
+
+.cloud {
+  position: absolute;
+  left: 0;
+  display: block;
+  transform: translateX(var(--x));
+}
+
+@keyframes drift {
+  from { transform: translateX(-120px); }
+  to { transform: translateX(100vw); }
+}
+
+/* Page bands. Ridges supply the edge between two of them. */
+.band {
+  padding-block: 64px 80px;
+}
+
+.ridge {
+  height: 24px;
+  background-repeat: repeat-x;
+  background-size: 384px 24px;
+  background-position: center bottom;
+}
+
+/* The fruitlands as one road: scenes edge to edge, scrolled sideways, aligned to the page column. */
+.strip {
+  --gutter: max(1.25rem, calc((100vw - 64rem) / 2 + 1.25rem));
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: var(--gutter);
+  padding-inline: var(--gutter);
+  padding-bottom: 12px;
+  scrollbar-color: var(--color-longan-600) transparent;
+}
+
+.strip ol {
+  outline: 2px solid #0a0a0a;
+  background: var(--color-longan-800);
+}
+
+.strip-stop {
+  scroll-snap-align: start;
+  border-right: 2px solid #0a0a0a;
+}
+
+.strip-stop:last-child {
+  border-right: 0;
+}
+
+.strip-stop > svg {
+  display: block;
+  border-bottom: 2px solid #0a0a0a;
+}
+
+.road {
+  position: relative;
+  height: 28px;
+}
+
+/* A dashed road through every stop, with a marker under each scene. */
+.road::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 13px;
+  border-top: 2px dashed var(--color-durian-600);
+}
+
+.road-marker {
+  position: absolute;
+  top: 8px;
+  left: 16px;
+  width: 12px;
+  height: 12px;
+  background: var(--color-durian-400);
+  outline: 2px solid #0a0a0a;
+}
+
+/* An item slot from the app: count in the top-left corner. */
+.slot {
+  position: relative;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+}
+
+.qty {
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  font-family: var(--font-pixel-label);
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 13px;
+  color: var(--color-durian-300);
+  text-shadow: 1px 1px 0 #0a0a0a;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-persimmon-400);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}

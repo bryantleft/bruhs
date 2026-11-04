@@ -1,0 +1,56 @@
+---
+// The app's end-of-walk report, drawn from a real run of the game rules (see lib/sample-day.ts).
+import { bruhArt, itemArt, SKILL_ART, UI_ART } from '@steps/src/pixel/art.ts';
+import { sampleDay } from '../lib/sample-day';
+import { spriteSvg } from '../lib/pixel';
+
+const day = sampleDay;
+---
+
+<figure class="panel mx-auto flex w-full max-w-[380px] flex-col gap-4 p-4" aria-labelledby="report-title">
+  <div class="flex flex-col items-center gap-2 text-center">
+    <span set:html={spriteSvg(bruhArt('original'), 64)} />
+    <p id="report-title" class="text-[26px] leading-8 font-bold text-durian-400 shadowed">
+      {day.levels.length ? 'level up!' : 'while you walked…'}
+    </p>
+    <p class="flex items-center gap-1 label text-rambutan-300 shadowed">
+      <span set:html={spriteSvg(UI_ART.steps, 16)} />
+      {day.steps.toLocaleString('en')} steps · {day.actions.toLocaleString('en')} actions
+    </p>
+  </div>
+  {
+    day.levels.map((level) => (
+      <div class="flex items-center gap-3">
+        <span set:html={spriteSvg(SKILL_ART[level.skill] ?? UI_ART.steps, 32)} />
+        <span class="flex flex-col gap-0.5">
+          <span class="font-bold text-blueberry-300 shadowed">{level.line}</span>
+          {level.unlocks.length ? <span class="text-sm text-durian-400">new: {level.unlocks.join(', ')}</span> : null}
+        </span>
+      </div>
+    ))
+  }
+  <ul class="flex flex-col gap-1">
+    {
+      day.xp.map(({ skill, amount }) => (
+        <li class="flex items-center gap-2">
+          <span set:html={spriteSvg(SKILL_ART[skill] ?? UI_ART.steps, 18)} />
+          <span class="flex-1 text-rambutan-100">{skill}</span>
+          <span class="label font-bold text-pandan-400 shadowed">+{amount.toLocaleString('en')} xp</span>
+        </li>
+      ))
+    }
+  </ul>
+  <ul class="flex flex-wrap justify-center gap-1.5" aria-label="loot">
+    {
+      day.loot.map((stack) => (
+        <li class="well slot" aria-label={stack.label}>
+          <span set:html={spriteSvg(itemArt(stack.item), 35)} />
+          <span class="qty" aria-hidden="true">{stack.qty}</span>
+        </li>
+      ))
+    }
+  </ul>
+  <p class="text-center text-sm text-rambutan-300">got {day.loot.map((stack) => stack.label).join(', ')}</p>
+  <p class="text-center text-sm text-rambutan-300">arrived at {day.place}.</p>
+  {day.outfit ? <p class="text-center font-bold text-durian-400 shadowed">new outfit unlocked: {day.outfit}!</p> : null}
+</figure>

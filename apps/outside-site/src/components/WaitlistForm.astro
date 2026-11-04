@@ -1,0 +1,91 @@
+---
+import { WAITLIST_URL } from '../lib/waitlist';
+
+// `stacked` keeps the field above the button, for narrow columns at any screen width.
+type Props = Readonly<{ id: string; error?: boolean; stacked?: boolean }>;
+const { id, error = false, stacked = false } = Astro.props;
+const MESSAGES = {
+  invalid: "that email doesn't look right. check it and try again.",
+} as const;
+---
+
+<form
+  method="post"
+  action={WAITLIST_URL}
+  data-waitlist
+  class="flex flex-col gap-3"
+  aria-describedby={`${id}-status ${id}-note`}
+>
+  <label for={`${id}-email`} class="label text-rambutan-300">your email</label>
+  <div class:list={['flex flex-col gap-3', !stacked && 'sm:flex-row']}>
+    <input
+      id={`${id}-email`}
+      name="email"
+      type="email"
+      autocomplete="email"
+      inputmode="email"
+      required
+      maxlength="254"
+      placeholder="you@example.com"
+      aria-invalid={error ? 'true' : undefined}
+      class="well min-h-[52px] min-w-0 flex-1 px-4 font-pixel text-lg text-rambutan-50 placeholder:text-longan-500"
+    />
+    <button type="submit" class="button">join the waitlist</button>
+  </div>
+  <!-- Hidden from people and assistive tech; bots that fill it are dropped server-side. -->
+  <div class="absolute -left-[9999px] h-px w-px overflow-hidden" aria-hidden="true">
+    <label>website <input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
+  </div>
+  <p id={`${id}-status`} role="status" class="min-h-6 text-base text-lychee-400" data-status>
+    {error ? MESSAGES.invalid : ''}
+  </p>
+  <p id={`${id}-note`} class="text-sm text-rambutan-500">we only use it to tell you when outside launches.</p>
+</form>
+
+<script>
+  // Progressive enhancement: without JavaScript the form posts and Convex redirects to a result page.
+  const MESSAGES = {
+    joined: "you're on the list. we'll email you when outside launches.",
+    invalid_email: "that email doesn't look right. check it and try again.",
+    failed: "couldn't reach the waitlist. check your connection and try again.",
+  } as const;
+  function formBody(form: HTMLFormElement): URLSearchParams {
+    const body = new URLSearchParams();
+    for (const [name, value] of new FormData(form)) if (typeof value === 'string') body.append(name, value);
+    return body;
+  }
+  for (const form of document.querySelectorAll<HTMLFormElement>('form[data-waitlist]')) {
+    const status = form.querySelector<HTMLElement>('[data-status]');
+    const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+    const input = form.querySelector<HTMLInputElement>('input[name="email"]');
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!status || !button || !input) return;
+      button.disabled = true;
+      button.textContent = 'joining…';
+      let reply: keyof typeof MESSAGES = 'failed';
+      try {
+        // A urlencoded body keeps this a simple CORS request: no preflight round trip.
+        const response = await fetch(form.action, {
+          method: 'POST',
+          headers: { Accept: 'application/json' },
+          body: formBody(form),
+        });
+        const body: unknown = await response.json().catch(() => null);
+        if (response.ok) reply = 'joined';
+        else if (body && typeof body === 'object' && 'error' in body && body.error === 'invalid_email')
+          reply = 'invalid_email';
+      } catch (error) {
+        console.error('Waitlist request failed:', error);
+      }
+      status.textContent = MESSAGES[reply];
+      status.classList.toggle('text-lychee-400', reply !== 'joined');
+      status.classList.toggle('text-pandan-300', reply === 'joined');
+      input.setAttribute('aria-invalid', String(reply === 'invalid_email'));
+      button.disabled = false;
+      button.textContent = 'join the waitlist';
+      if (reply === 'joined') form.reset();
+      else input.focus();
+    });
+  }
+</script>

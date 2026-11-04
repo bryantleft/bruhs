@@ -1,0 +1,11 @@
+---
+// A stepped pixel skyline between two page bands, instead of a straight edge.
+import { palette } from '@steps/src/theme/palette.ts';
+import { ridgeTile } from '../lib/pixel';
+
+type Shade = keyof typeof palette;
+type Props = Readonly<{ from: Shade; to: Shade; phase?: number }>;
+const { from, to, phase = 0 } = Astro.props;
+---
+
+<div aria-hidden="true" class="ridge" style={`background-image:${ridgeTile(palette[from], palette[to], phase)}`}></div>

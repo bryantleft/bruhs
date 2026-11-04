@@ -1,0 +1,12 @@
+---
+import { bruhArt } from '@steps/src/pixel/art.ts';
+import { spriteSvg } from '../lib/pixel';
+---
+
+<header class="relative mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-5 py-5">
+  <a href="/" class="flex items-center gap-3 text-durian-400 outlined" aria-label="bruhs / outside, home">
+    <Fragment set:html={spriteSvg(bruhArt('original'), 32)} />
+    <span class="text-lg font-bold">bruhs / outside</span>
+  </a>
+  <a href="/#waitlist" class="chip label text-rambutan-100 hover:text-durian-400">join the waitlist</a>
+</header>

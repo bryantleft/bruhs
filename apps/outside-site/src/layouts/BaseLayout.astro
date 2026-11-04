@@ -1,0 +1,64 @@
+---
+import pixelifyBold from '@steps/assets/fonts/PixelifySans-Bold.ttf?url';
+import pixelifyRegular from '@steps/assets/fonts/PixelifySans-Regular.ttf?url';
+import silkscreenBold from '@steps/assets/fonts/Silkscreen-Bold.ttf?url';
+import silkscreenRegular from '@steps/assets/fonts/Silkscreen-Regular.ttf?url';
+import '../styles/global.css';
+
+type Props = Readonly<{ title: string; description: string; path?: string; noindex?: boolean }>;
+const { title, description, path = '/', noindex = false } = Astro.props;
+const site = Astro.site;
+if (!site) throw new Error('Set `site` in astro.config.mjs: link previews need absolute URLs.');
+const url = new URL(path, site).href;
+const image = new URL('/og.png', site).href;
+const imageAlt = 'A pixel bruh standing in Bruhbridge, a small town with two houses, an anvil and a tree.';
+const faces = [
+  ['Pixelify Sans Outside', 400, pixelifyRegular],
+  ['Pixelify Sans Outside', 700, pixelifyBold],
+  ['Silkscreen Outside', 400, silkscreenRegular],
+  ['Silkscreen Outside', 700, silkscreenBold],
+] as const;
+const fontCss = faces
+  .map(
+    ([family, weight, src]) =>
+      `@font-face{font-family:"${family}";font-weight:${weight};font-display:swap;src:url(${src}) format("truetype")}`,
+  )
+  .join('');
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={url} />
+    {noindex ? <meta name="robots" content="noindex" /> : null}
+    <meta name="theme-color" content="#15110d" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preload" href={pixelifyBold} as="font" type="font/ttf" crossorigin />
+    <link rel="preload" href={pixelifyRegular} as="font" type="font/ttf" crossorigin />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="bruhs" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={url} />
+    <meta property="og:image" content={image} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={imageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={image} />
+    <meta name="twitter:image:alt" content={imageAlt} />
+
+    <style set:html={fontCss} />
+  </head>
+  <body class="min-h-dvh bg-longan-950 antialiased">
+    <slot />
+  </body>
+</html>

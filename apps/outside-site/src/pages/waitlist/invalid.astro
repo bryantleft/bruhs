@@ -1,0 +1,20 @@
+---
+import Header from '../../components/Header.astro';
+import WaitlistForm from '../../components/WaitlistForm.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="check your email · bruhs / outside"
+  description="that email didn't look right."
+  path="/waitlist/invalid/"
+  noindex
+>
+  <Header />
+  <main class="mx-auto flex w-full max-w-xl flex-col gap-6 px-5 py-16">
+    <h1 class="text-4xl font-bold text-durian-400 shadowed">check your email</h1>
+    <div class="panel p-5">
+      <WaitlistForm id="retry" error />
+    </div>
+  </main>
+</BaseLayout>
