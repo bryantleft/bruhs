@@ -13,6 +13,7 @@ import type * as crons from "../crons.js";
 import type * as emails from "../emails.js";
 import type * as http from "../http.js";
 import type * as limits from "../limits.js";
+import type * as mail from "../mail.js";
 import type * as outside from "../outside.js";
 import type * as validators from "../validators.js";
 import type * as waitlist from "../waitlist.js";
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   emails: typeof emails;
   http: typeof http;
   limits: typeof limits;
+  mail: typeof mail;
   outside: typeof outside;
   validators: typeof validators;
   waitlist: typeof waitlist;

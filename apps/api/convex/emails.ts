@@ -66,3 +66,31 @@ export async function sendAlreadyListed(
     idempotencyKey: `waitlist-already/${key}`,
   });
 }
+
+// The early-testing invite: a TestFlight public link, sent in waves by inviteWave.
+export async function sendInvite(
+  ctx: MutationCtx,
+  email: string,
+  site: string,
+  link: string,
+  key: string,
+): Promise<void> {
+  await resend.sendEmail(ctx, {
+    from: FROM,
+    to: email,
+    subject: "you're in: play outside early on iPhone",
+    ...message({
+      site,
+      preview: 'your invite to play outside early, through TestFlight.',
+      title: 'you can play now',
+      lines: [
+        'you joined the outside waitlist, and early testing is open on iPhone.',
+        "get Apple's free TestFlight app from the App Store, then open this email on your iPhone and tap the button to join.",
+        "it's an early build, so expect rough edges. take a screenshot in the game to send us feedback through TestFlight.",
+        "on Android? we'll email you when it's ready there too.",
+      ],
+      button: { href: link, label: 'join on TestFlight' },
+    }),
+    idempotencyKey: `waitlist-invite/${key}`,
+  });
+}

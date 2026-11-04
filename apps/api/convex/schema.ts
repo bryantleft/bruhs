@@ -26,10 +26,13 @@ export default defineSchema({
     tokenHash: v.optional(v.string()),
     sentAt: v.optional(v.number()),
     confirmedAt: v.optional(v.number()),
+    // When the early-testing invite went out (see inviteWave in waitlist.ts).
+    invitedAt: v.optional(v.number()),
   })
     .index('by_email', ['email'])
     .index('by_token', ['tokenHash'])
-    .index('by_status', ['status']),
+    .index('by_status', ['status'])
+    .index('by_status_invited', ['status', 'invitedAt']),
   outsideParties: defineTable({ invite: v.string(), members: v.number() }).index('by_invite', ['invite']),
   // Seven daily buckets per weekly row, instead of a query per member or day.
   outsideScores: defineTable({

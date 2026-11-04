@@ -1,7 +1,8 @@
-import { v } from 'convex/values';
+import { ConvexError, v } from 'convex/values';
 import { internal } from './_generated/api';
+import type { Doc } from './_generated/dataModel';
 import { type ActionCtx, httpAction, internalMutation } from './_generated/server';
-import { sendAlreadyListed, sendConfirmation } from './emails';
+import { sendAlreadyListed, sendConfirmation, sendInvite } from './emails';
 import { rateLimiter } from './limits';
 
 // RFC 5321 caps an address at 254 characters. Percent-encoding can triple that, plus field
@@ -142,6 +143,65 @@ export const expirePending = internalMutation({
     ).filter((row) => (row.sentAt ?? row._creationTime) < cutoff);
     await Promise.all(stale.map((row) => ctx.db.delete(row._id)));
     return stale.length;
+  },
+});
+
+// Resend's free plan sends 100 emails a day, so one wave stays within a day's quota.
+export const MAX_WAVE = 100;
+const TESTFLIGHT_LINK = /^https:\/\/testflight\.apple\.com\/join\/[A-Za-z0-9]+$/;
+
+// The early-testing invite, sent in waves from the CLI, never from the site:
+//   npx convex run --prod waitlist:inviteWave '{"link":"https://testflight.apple.com/join/…","count":20}'
+// Confirmed signups go out oldest first, each once, and `invitedAt` marks who has had one.
+// `dryRun` reports the wave without sending. `only` sends to one confirmed address, invited or
+// not, to try the email on yourself first.
+export const inviteWave = internalMutation({
+  args: {
+    link: v.string(),
+    count: v.optional(v.number()),
+    dryRun: v.optional(v.boolean()),
+    only: v.optional(v.string()),
+  },
+  returns: v.object({ invited: v.number(), waiting: v.number(), dryRun: v.boolean() }),
+  handler: async (ctx, { link, count = 0, dryRun = false, only }) => {
+    if (!TESTFLIGHT_LINK.test(link))
+      throw new ConvexError('link must be a TestFlight public link, https://testflight.apple.com/join/…');
+    const site = allowedOrigins()?.[0];
+    if (!site) throw new ConvexError('set WAITLIST_ORIGINS so the email can link to the landing page');
+    // Rows without a status joined before confirmation existed and count as confirmed.
+    const uninvited = (status: 'confirmed' | undefined) =>
+      ctx.db
+        .query('waitlist')
+        .withIndex('by_status_invited', (q) => q.eq('status', status).eq('invitedAt', undefined))
+        .collect();
+    const waiting = [...(await uninvited('confirmed')), ...(await uninvited(undefined))];
+    let wave: Doc<'waitlist'>[];
+    if (only !== undefined) {
+      const email = normalizeEmail(only);
+      const row = email
+        ? await ctx.db
+            .query('waitlist')
+            .withIndex('by_email', (q) => q.eq('email', email))
+            .unique()
+        : null;
+      if (!row || row.status === 'pending')
+        throw new ConvexError('only must be a confirmed address on the list');
+      wave = [row];
+    } else {
+      if (!Number.isInteger(count) || count < 1 || count > MAX_WAVE)
+        throw new ConvexError(`count must be a whole number from 1 to ${MAX_WAVE}`);
+      wave = waiting.sort((a, b) => a._creationTime - b._creationTime).slice(0, count);
+    }
+    const sending = new Set(wave.map((row) => row._id));
+    const left = waiting.filter((row) => !sending.has(row._id)).length;
+    if (dryRun) return { invited: wave.length, waiting: left, dryRun };
+    const now = Date.now();
+    for (const row of wave) {
+      await ctx.db.patch(row._id, { invitedAt: now });
+      const emailKey = (await sha256(row.email)).slice(0, 32);
+      await sendInvite(ctx, row.email, site, link, `${emailKey}/${now}`);
+    }
+    return { invited: wave.length, waiting: left, dryRun };
   },
 });
 

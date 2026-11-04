@@ -10,6 +10,7 @@ import { CONFIRM_WINDOW, normalizeEmail } from '../convex/waitlist';
 const sent = vi.hoisted(() => ({
   confirm: [] as { email: string; link: string }[],
   already: [] as string[],
+  invite: [] as { email: string; site: string; link: string }[],
 }));
 vi.mock('../convex/emails', async (original) => ({
   ...(await original<typeof import('../convex/emails')>()),
@@ -18,6 +19,9 @@ vi.mock('../convex/emails', async (original) => ({
   },
   sendAlreadyListed: async (_ctx: unknown, email: string) => {
     sent.already.push(email);
+  },
+  sendInvite: async (_ctx: unknown, email: string, site: string, link: string) => {
+    sent.invite.push({ email, site, link });
   },
 }));
 
@@ -63,6 +67,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-11-03T12:00:00Z'));
   sent.confirm.length = 0;
   sent.already.length = 0;
+  sent.invite.length = 0;
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -292,5 +297,107 @@ describe('double opt-in', () => {
     expect(errors).toHaveBeenCalledWith(expect.stringContaining('RESEND_API_KEY'));
     expect(await emails(t)).toEqual([]);
     errors.mockRestore();
+  });
+});
+
+describe('early-testing invites', () => {
+  const LINK = 'https://testflight.apple.com/join/AbC123xy';
+  // Signups a minute apart, in the order given, so "oldest first" is visible.
+  async function listed(
+    t: ReturnType<typeof create>,
+    people: Record<string, 'pending' | 'confirmed' | undefined>,
+  ) {
+    let minute = 0;
+    for (const [email, status] of Object.entries(people)) {
+      vi.setSystemTime(new Date(Date.parse('2026-11-03T12:00:00Z') + minute++ * 60_000));
+      await t.run((ctx) => ctx.db.insert('waitlist', { email, ...(status ? { status } : {}) }));
+    }
+  }
+  const invited = (t: ReturnType<typeof create>) =>
+    t.run(async (ctx) =>
+      (await ctx.db.query('waitlist').collect()).filter((row) => row.invitedAt).map((row) => row.email),
+    );
+
+  it('invites confirmed signups oldest first, each once, skipping pending ones', async () => {
+    const t = create();
+    await listed(t, {
+      'first@example.com': 'confirmed',
+      'pending@example.com': 'pending',
+      'legacy@example.com': undefined,
+      'third@example.com': 'confirmed',
+    });
+    expect(await t.mutation(internal.waitlist.inviteWave, { link: LINK, count: 2 })).toEqual({
+      invited: 2,
+      waiting: 1,
+      dryRun: false,
+    });
+    expect(sent.invite).toEqual([
+      { email: 'first@example.com', site: SITE, link: LINK },
+      { email: 'legacy@example.com', site: SITE, link: LINK },
+    ]);
+    expect(await t.mutation(internal.waitlist.inviteWave, { link: LINK, count: 5 })).toMatchObject({
+      invited: 1,
+      waiting: 0,
+    });
+    expect(sent.invite.map((mail) => mail.email)).toEqual([
+      'first@example.com',
+      'legacy@example.com',
+      'third@example.com',
+    ]);
+    expect(await t.mutation(internal.waitlist.inviteWave, { link: LINK, count: 5 })).toMatchObject({
+      invited: 0,
+    });
+    expect(sent.invite).toHaveLength(3);
+  });
+
+  it('reports a dry run without sending or marking anyone', async () => {
+    const t = create();
+    await listed(t, { 'a@example.com': 'confirmed', 'b@example.com': 'confirmed' });
+    expect(await t.mutation(internal.waitlist.inviteWave, { link: LINK, count: 1, dryRun: true })).toEqual({
+      invited: 1,
+      waiting: 1,
+      dryRun: true,
+    });
+    expect(sent.invite).toEqual([]);
+    expect(await invited(t)).toEqual([]);
+  });
+
+  it('sends a test to one confirmed address, again if asked, and never to a pending one', async () => {
+    const t = create();
+    await listed(t, {
+      'me@example.com': 'confirmed',
+      'other@example.com': 'confirmed',
+      'new@example.com': 'pending',
+    });
+    for (let round = 0; round < 2; round += 1)
+      expect(
+        await t.mutation(internal.waitlist.inviteWave, { link: LINK, only: ' Me@Example.com ' }),
+      ).toEqual({
+        invited: 1,
+        waiting: 1,
+        dryRun: false,
+      });
+    expect(sent.invite.map((mail) => mail.email)).toEqual(['me@example.com', 'me@example.com']);
+    for (const only of ['new@example.com', 'nobody@example.com', 'not an email'])
+      await expect(t.mutation(internal.waitlist.inviteWave, { link: LINK, only })).rejects.toThrow(
+        /confirmed address/,
+      );
+  });
+
+  it('refuses links that are not TestFlight invites, and waves outside 1 to 100', async () => {
+    const t = create();
+    await listed(t, { 'a@example.com': 'confirmed' });
+    for (const link of [
+      'https://testflight.apple.com/v1/app/6830522823',
+      'http://testflight.apple.com/join/abc',
+      'https://evil.example/join/abc',
+    ])
+      await expect(t.mutation(internal.waitlist.inviteWave, { link, count: 1 })).rejects.toThrow(
+        /TestFlight/,
+      );
+    for (const count of [0, 101, 1.5])
+      await expect(t.mutation(internal.waitlist.inviteWave, { link: LINK, count })).rejects.toThrow(/count/);
+    await expect(t.mutation(internal.waitlist.inviteWave, { link: LINK })).rejects.toThrow(/count/);
+    expect(sent.invite).toEqual([]);
   });
 });
