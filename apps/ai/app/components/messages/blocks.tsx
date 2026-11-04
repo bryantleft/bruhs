@@ -215,6 +215,17 @@ function ListItemBlock({ tokens, number }: ListItemBlockProps) {
         <span className="pr-1 text-mangosteen-400 text-sm">{number}.</span>
       )}
       {tokens.map((token) => {
+        // marked 17+ emits `paragraph` tokens in loose list items where marked
+        // 15 emitted inline `text` tokens; render them inline as before.
+        if (token.type === "paragraph") {
+          return (
+            <TextBlock
+              key={randomKey()}
+              tokens={token.tokens}
+              text={token.text}
+            />
+          );
+        }
         return <TokenBlock key={randomKey()} token={token} />;
       })}
     </li>

@@ -2,6 +2,12 @@ import type { ReactNode } from "react";
 import { useDisclosure } from "@/lib/hooks/use-disclosure";
 import { cn, getMetaKey } from "@/lib/utils";
 
+const KeyButton = ({ children }: { children: ReactNode }) => (
+  <kbd className="rounded border border-rambutan-600 bg-longan-700 px-2 py-1 font-semibold text-rambutan-200 text-xs shadow">
+    {children}
+  </kbd>
+);
+
 export default function ShortcutLegend() {
   const { isOpen, setIsOpen, ref } = useDisclosure();
 
@@ -25,12 +31,6 @@ export default function ShortcutLegend() {
   const toggleOpen = () => {
     setIsOpen(!isOpen);
   };
-
-  const KeyButton = ({ children }: { children: ReactNode }) => (
-    <kbd className="rounded border border-rambutan-600 bg-longan-700 px-2 py-1 font-semibold text-rambutan-200 text-xs shadow">
-      {children}
-    </kbd>
-  );
 
   return (
     <div

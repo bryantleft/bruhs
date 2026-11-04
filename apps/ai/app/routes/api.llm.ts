@@ -1,7 +1,11 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
-import { streamText } from "ai";
+import {
+  createUIMessageStreamResponse,
+  streamText,
+  toUIMessageStream,
+} from "ai";
 import type { ActionFunctionArgs } from "react-router";
 import { z } from "zod";
 import { Provider } from "@/lib/types";
@@ -9,7 +13,7 @@ import { Provider } from "@/lib/types";
 const StreamChatSchema = z.object({
   model: z.string().min(1),
   key: z.string().optional(),
-  provider: z.nativeEnum(Provider),
+  provider: z.enum(Provider),
   messages: z
     .array(
       z.object({
@@ -26,12 +30,25 @@ export async function action({ request }: ActionFunctionArgs) {
     const data = StreamChatSchema.parse(body);
     const client = await createLLMClient(data.provider, data.model, data.key);
 
-    const stream = streamText({
+    // AI SDK 7 rejects system messages inside `messages`; pass them as
+    // `instructions` instead.
+    const systemMessages = data.messages.filter((m) => m.role === "system");
+    const result = streamText({
       model: client,
-      messages: data.messages,
+      instructions: systemMessages.length
+        ? systemMessages.map((m) => ({ role: "system", content: m.content }))
+        : undefined,
+      messages: data.messages
+        .filter((m) => m.role !== "system")
+        .map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })),
     });
 
-    return stream.toDataStreamResponse();
+    return createUIMessageStreamResponse({
+      stream: toUIMessageStream({ stream: result.stream }),
+    });
   } catch (error) {
     return new Response(
       JSON.stringify({
@@ -130,7 +147,8 @@ async function createLLMClient(
     case Provider.XAI:
       return createXai({ apiKey: key })(model);
     case Provider.OPENAI:
-      return createOpenAI({ apiKey: key })(model);
+      // AI SDK 5+ defaults to the Responses API; keep Chat Completions.
+      return createOpenAI({ apiKey: key }).chat(model);
     default:
       throw new Error(`Unsupported provider: ${provider}`);
   }
