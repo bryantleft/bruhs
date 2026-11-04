@@ -7,7 +7,7 @@ Outside is a pixel-art step MMO in the spirit of RuneScape and WalkScape: steps 
 - Treat spacing, typography, alignment, safe areas, readable states, touch targets and purposeful motion as product requirements. Keep the pixel look consistent: square corners, bevelled panels, `pixel/chrome.tsx` primitives, sprites from `pixel/art.ts`, and the Pixelify Sans / Silkscreen type scale in `theme/theme.ts`.
 - Inspect the running app before choosing a polish change. Fix concrete issues and verify the result at compact phone (320), regular phone (390) and desktop preview sizes.
 - Exercise the affected interaction, including empty, ready, active, full-bag, stopped, error, larger-text and reduced-motion states, and the loot report and sheets. Distinguish browser checks from native-device checks.
-- Game numbers live in `src/game/content.ts` and rules in `src/game/game.ts`. Keep `pnpm check` green, and add a test when a polish change touches game rules.
+- Game numbers live in `src/game/content.ts` and rules in `src/game/game.ts`, which re-exports its split-out parts: `save.ts` (decoding saves), `missions.ts`, `guidance.ts` (next step, item sources, unlocks) and `dice.ts`. Import game code from `game.ts`; `apps/outside-site` relies on it. Keep `pnpm check` green, and add a test when a polish change touches game rules.
 - Keep a short dated record of verified improvements and remaining issues in `docs/ui-ux-research.md`. Do not replace useful game behaviour with decoration or expand into unrelated features during a polish pass.
 
 ## UI copy

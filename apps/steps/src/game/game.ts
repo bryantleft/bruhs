@@ -1,11 +1,9 @@
 import {
-  ACTIVITIES,
   type Activity,
   ADVENTURER_CHANCE,
   BAG_UPGRADE_SLOTS,
   BAG_UPGRADES,
   CHEST_CHANCE,
-  FIXED_MISSIONS,
   GEAR_SLOTS,
   type GearSlot,
   getActivity,
@@ -15,10 +13,6 @@ import {
   type Item,
   LOCATIONS,
   METAL_STATS,
-  MISSION_PERIODS,
-  MISSION_PICKS,
-  MISSION_POOLS,
-  type Mission,
   type MissionPeriod,
   type Place,
   QUESTS,
@@ -34,11 +28,11 @@ import {
   START_LOCATION,
   STORE_STOCK,
   slotFits,
-  TOOL_KINDS,
   TOOL_SKILL,
   type ToolKind,
   toolId,
 } from './content.ts';
+import { Dice } from './dice.ts';
 import {
   add,
   BASE_SLOTS,
@@ -57,9 +51,25 @@ import {
   takeId,
   totalsFor,
 } from './items.ts';
+import { missionClaimed, missionProgress, missionsFor, rollMissions } from './missions.ts';
+import { isDateKey, isHealthConnection } from './save.ts';
 import { levelForXp } from './xp.ts';
 
 export { SKINS, type Skin, type SkinId } from './content.ts';
+// The game is split by concern; these re-exports keep `game.ts` the one import for callers.
+export { type NextStep, nextStep, runsLeft, sourceOf, unlocksBetween } from './guidance.ts';
+export {
+  getMission,
+  missionClaimed,
+  missionProgress,
+  missionsFor,
+  periodDaysLeft,
+  periodKey,
+  periodRange,
+  readyMissions,
+  rollMissions,
+} from './missions.ts';
+export { decodeGame, migrateV1 } from './save.ts';
 
 export const GOALS = [4_000, 6_000, 8_000, 10_000] as const;
 export type Goal = (typeof GOALS)[number];
@@ -179,7 +189,7 @@ export function getDay(game: Pick<Game, 'days' | 'goal'>, date: string): Day {
   return game.days.find((day) => day.date === date) ?? { date, steps: 0, goal: game.goal };
 }
 
-const STARTER_TOOLS: Readonly<Record<ToolKind, string>> = {
+export const STARTER_TOOLS: Readonly<Record<ToolKind, string>> = {
   axe: toolId('bronze', 'axe'),
   pickaxe: toolId('bronze', 'pickaxe'),
   harpoon: toolId('bronze', 'harpoon'),
@@ -188,7 +198,7 @@ const STARTER_TOOLS: Readonly<Record<ToolKind, string>> = {
 // A small starter kit so the bag, food buffs and crafting are discoverable from minute one.
 const STARTER_INVENTORY: Bag = { minnow: 3, linen: 2, 'bird-nest': 1 };
 
-function emptyXp(): Record<SkillId, number> {
+export function emptyXp(): Record<SkillId, number> {
   return Object.fromEntries(SKILL_IDS.map((skill) => [skill, 0])) as Record<SkillId, number>;
 }
 
@@ -421,118 +431,6 @@ export function activityBlocker(game: Game, activity: Activity): string | null {
   return requirement ? requirementText(requirement) : null;
 }
 
-// --- guidance ------------------------------------------------------------------------------
-
-export type NextStep =
-  | Readonly<{ kind: 'hand-in'; quest: Quest }>
-  | Readonly<{ kind: 'start-quest'; quest: Quest }>
-  | Readonly<{ kind: 'start'; activity: Activity; quest?: Quest }>
-  | Readonly<{ kind: 'travel'; place: Place; activity?: Activity; quest?: Quest }>;
-
-// How many times an activity can run on what you hold (bank included in a bank town).
-export function runsLeft(game: Game, activity: Activity): number {
-  if (!activity.inputs?.length) return Number.POSITIVE_INFINITY;
-  return Math.min(...activity.inputs.map((input) => Math.floor(available(game, input.item) / input.qty)));
-}
-
-// Where an item can be made or gathered right now: here first, then the nearest open place.
-export function sourceOf(
-  game: Game,
-  item: string,
-): Readonly<{ activity: Activity; place: Place; distance: number }> | null {
-  let best: { activity: Activity; place: Place; distance: number } | null = null;
-  for (const activity of ACTIVITIES) {
-    if (activity.output.item !== item || skillLevel(game, activity.skill) < activity.level) continue;
-    for (const place of LOCATIONS) {
-      if (!place.activities.includes(activity.id) || locationBlocker(game, place)) continue;
-      const distance =
-        place.id === game.location ? 0 : (route(game.location, place.id)?.distance ?? Infinity);
-      if (!best || distance < best.distance) best = { activity, place, distance };
-    }
-  }
-  return best;
-}
-
-function toward(game: Game, item: string, quest: Quest | undefined, depth = 0): NextStep | null {
-  const source = sourceOf(game, item);
-  if (!source) return null;
-  // A recipe short on inputs points at its first missing input instead.
-  const missing = source.activity.inputs?.find((input) => available(game, input.item) < input.qty);
-  if (missing && depth < 2) {
-    const deeper = toward(game, missing.item, quest, depth + 1);
-    if (deeper) return deeper;
-  }
-  if (source.distance === 0 && !activityBlocker(game, source.activity))
-    return { kind: 'start', activity: source.activity, ...(quest ? { quest } : {}) };
-  if (source.distance === 0) return null;
-  return { kind: 'travel', place: source.place, activity: source.activity, ...(quest ? { quest } : {}) };
-}
-
-// The one thing to do next, for the idle panel: quests first, then steady work.
-export function nextStep(game: Game): NextStep | null {
-  if (game.travel) return null;
-  for (const quest of QUESTS) {
-    if (questState(game, quest.id) !== 'started' || questBlocker(game, quest)) continue;
-    if (canHandIn(game, quest)) {
-      if (game.location === quest.location) return { kind: 'hand-in', quest };
-      const gathered = quest.deliver.every(
-        (stack) => countOf(game.inventory, stack.item) + countOf(game.bank, stack.item) >= stack.qty,
-      );
-      const place = getLocation(quest.location);
-      if (gathered && place) return { kind: 'travel', place, quest };
-    }
-    const short = quest.deliver.find(
-      (stack) => countOf(game.inventory, stack.item) + countOf(game.bank, stack.item) < stack.qty,
-    );
-    if (short) {
-      const step = toward(game, short.item, quest);
-      if (step) return step;
-    } else {
-      const place = getLocation(quest.location);
-      if (place && place.id !== game.location) return { kind: 'travel', place, quest };
-    }
-  }
-  const here = (getLocation(game.location)?.activities ?? [])
-    .map((id) => getActivity(id))
-    .filter((activity): activity is Activity => !!activity && !activityBlocker(game, activity));
-  // Steady work beats a recipe that stops after one go.
-  const steady = here
-    .filter((activity) => runsLeft(game, activity) >= 5)
-    .sort((a, b) => b.xp / stepsPerAction(game, b) - a.xp / stepsPerAction(game, a))[0];
-  const fresh = QUESTS.find((quest) => questState(game, quest.id) === 'new' && !questBlocker(game, quest));
-  if (fresh && !Object.values(game.quests).includes('started')) return { kind: 'start-quest', quest: fresh };
-  if (steady) return { kind: 'start', activity: steady };
-  // Nothing steady here: walk to gather for the lowest gathering skill.
-  const gathering = (['woodcutting', 'mining', 'fishing', 'foraging'] as const)
-    .slice()
-    .sort((a, b) => skillLevel(game, a) - skillLevel(game, b));
-  for (const skill of gathering) {
-    const activity = ACTIVITIES.filter(
-      (entry) => entry.skill === skill && !entry.inputs && entry.level <= skillLevel(game, skill),
-    ).sort((a, b) => b.level - a.level)[0];
-    const step = activity ? toward(game, activity.output.item, undefined) : null;
-    if (step) return step;
-  }
-  const any = here.sort((a, b) => b.xp - a.xp)[0];
-  return any ? { kind: 'start', activity: any } : null;
-}
-
-// What a level-up opened: recipes and spots, tools you can now wield, places you can reach.
-export function unlocksBetween(skill: SkillId, from: number, to: number): string[] {
-  const opened = (level: number): boolean => level > from && level <= to;
-  const unlocks: string[] = [];
-  for (const activity of ACTIVITIES)
-    if (activity.skill === skill && opened(activity.level)) unlocks.push(`${activity.verb} ${activity.name}`);
-  for (const [kind, owner] of Object.entries(TOOL_SKILL))
-    if (owner === skill)
-      for (const [metal, stats] of Object.entries(METAL_STATS))
-        if (opened(stats.level)) unlocks.push(`wield ${metal} ${kind}`);
-  for (const place of LOCATIONS)
-    if (place.requires?.type === 'skill' && place.requires.skill === skill && opened(place.requires.level))
-      unlocks.push(`travel to ${place.name}`);
-  return unlocks;
-}
-
 export function travelCost(game: Pick<Game, 'xp'> & Loadout, base: number): number {
   const agility = Math.min(0.4, (skillLevel(game, 'agility') - 1) * 0.004);
   return Math.max(1, Math.ceil(base / (1 + agility + totalsFor(game, null).travel)));
@@ -597,35 +495,6 @@ export function questBlocker(game: Pick<Game, 'xp' | 'quests'>, quest: Quest): s
 
 export function canHandIn(game: Game, quest: Quest): boolean {
   return quest.deliver.every((stack) => available(game, stack.item) >= stack.qty);
-}
-
-// --- deterministic randomness ------------------------------------------------------------
-
-// mulberry32: one 32-bit state word, advanced once per roll.
-function roll(seed: number): [number, number] {
-  const next = (seed + 0x6d2b79f5) >>> 0;
-  let t = next;
-  t = Math.imul(t ^ (t >>> 15), t | 1);
-  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  return [((t ^ (t >>> 14)) >>> 0) / 4_294_967_296, next];
-}
-
-class Dice {
-  seed: number;
-  constructor(seed: number) {
-    this.seed = seed;
-  }
-  next(): number {
-    const [value, seed] = roll(this.seed);
-    this.seed = seed;
-    return value;
-  }
-  chance(probability: number): boolean {
-    return probability > 0 && this.next() < probability;
-  }
-  between(min: number, max: number): number {
-    return min + Math.floor(this.next() * (max - min + 1));
-  }
 }
 
 // --- mutable working copy for rules and the step engine ----------------------------------
@@ -1249,384 +1118,4 @@ export function actionRejection(game: Game, action: GameAction): Rejection | nul
 export function updateGame(game: Game, action: GameAction): Game {
   const result = playGame(game, action);
   return result.ok ? result.game : game;
-}
-
-// --- missions ------------------------------------------------------------------------------
-
-function shiftDate(key: string, days: number): string {
-  const date = new Date(`${key}T12:00:00`);
-  date.setDate(date.getDate() + days);
-  return dateKey(date);
-}
-
-// The first and last date of the period containing `date`. Weeks start on Monday.
-export function periodRange(period: MissionPeriod, date: string): Readonly<{ start: string; end: string }> {
-  if (period === 'daily') return { start: date, end: date };
-  if (period === 'weekly') {
-    const weekday = (new Date(`${date}T12:00:00`).getDay() + 6) % 7;
-    const start = shiftDate(date, -weekday);
-    return { start, end: shiftDate(start, 6) };
-  }
-  const start = `${date.slice(0, 7)}-01`;
-  const next = new Date(`${start}T12:00:00`);
-  next.setMonth(next.getMonth() + 1);
-  return { start, end: dayBefore(dateKey(next)) };
-}
-
-export function periodKey(period: MissionPeriod, date: string): string {
-  return `${period}:${periodRange(period, date).start}`;
-}
-
-// Whole days left in the period after today (0 on its last day).
-export function periodDaysLeft(period: MissionPeriod, date: string): number {
-  const end = new Date(`${periodRange(period, date).end}T12:00:00`).getTime();
-  return Math.round((end - new Date(`${date}T12:00:00`).getTime()) / 86_400_000);
-}
-
-function missionCounters(game: Game): Record<string, number> {
-  const counters: Record<string, number> = {
-    actions: game.actions,
-    road: game.walked,
-    chests: game.stats.chestsFound ?? 0,
-    quests: Object.values(game.quests).filter((state) => state === 'done').length,
-  };
-  for (const skill of SKILL_IDS) counters[`actions:${skill}`] = game.stats[`actions:${skill}`] ?? 0;
-  return counters;
-}
-
-// Snapshots keep only non-zero counters, matching how saves store counts.
-function snapshot(game: Game): Record<string, number> {
-  return Object.fromEntries(Object.entries(missionCounters(game)).filter(([, value]) => value > 0));
-}
-
-function hashString(text: string): number {
-  let hash = 2_166_136_261;
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 16_777_619);
-  }
-  return hash >>> 0;
-}
-
-// Draws the period's pool missions from the period alone: stable however the save's dice move,
-// and the same for everyone, so a party shares its week's missions.
-function drawMissions(game: Game, period: MissionPeriod, key: string): string[] {
-  const questsLeft = QUESTS.some((quest) => questState(game, quest.id) !== 'done');
-  const pool = MISSION_POOLS[period].filter((mission) => mission.kind !== 'quests' || questsLeft);
-  const dice = new Dice(hashString(key));
-  const picks: string[] = [];
-  const left = [...pool];
-  while (picks.length < MISSION_PICKS && left.length > 0) {
-    const [mission] = left.splice(Math.floor(dice.next() * left.length), 1);
-    if (mission) picks.push(mission.id);
-  }
-  return picks;
-}
-
-function missionState(game: Game, period: MissionPeriod, date: string): MissionState {
-  const key = periodKey(period, date);
-  const state = game.missions[period];
-  if (state?.key === key) return state;
-  return { key, picks: drawMissions(game, period, key), base: snapshot(game), claimed: [] };
-}
-
-export function rollMissions(game: Game, date: string): Game {
-  let missions = game.missions;
-  for (const period of MISSION_PERIODS) {
-    const state = missionState(game, period, date);
-    if (state !== game.missions[period]) missions = { ...missions, [period]: state };
-  }
-  return missions === game.missions ? game : { ...game, missions };
-}
-
-const MISSIONS_BY_ID = new Map(
-  MISSION_PERIODS.flatMap((period) => [FIXED_MISSIONS[period], ...MISSION_POOLS[period]]).map((mission) => [
-    mission.id,
-    mission,
-  ]),
-);
-
-export function getMission(id: string): Mission | undefined {
-  return MISSIONS_BY_ID.get(id);
-}
-
-export function missionsFor(game: Game, period: MissionPeriod, date: string): readonly Mission[] {
-  const picks = missionState(game, period, date).picks.flatMap((id) => {
-    const mission = MISSIONS_BY_ID.get(id);
-    return mission ? [mission] : [];
-  });
-  return [FIXED_MISSIONS[period], ...picks];
-}
-
-export function missionClaimed(game: Game, mission: Mission, date: string): boolean {
-  return missionState(game, mission.period, date).claimed.includes(mission.id);
-}
-
-export function missionProgress(
-  game: Game,
-  mission: Mission,
-  date: string,
-): Readonly<{ value: number; target: number }> {
-  if (mission.kind === 'steps') {
-    const { start, end } = periodRange(mission.period, date);
-    const value = game.days
-      .filter((day) => day.date >= start && day.date <= end)
-      .reduce((sum, day) => sum + day.steps, 0);
-    const goal = mission.period === 'daily' ? getDay(game, date).goal : game.goal;
-    return { value, target: mission.target * goal };
-  }
-  const key = mission.kind === 'actions' && mission.skill ? `actions:${mission.skill}` : mission.kind;
-  const base = missionState(game, mission.period, date).base[key] ?? 0;
-  return { value: Math.max(0, (missionCounters(game)[key] ?? 0) - base), target: mission.target };
-}
-
-// Missions that are complete and not yet collected, across all periods.
-export function readyMissions(game: Game, date: string): readonly Mission[] {
-  return MISSION_PERIODS.flatMap((period) =>
-    missionsFor(game, period, date).filter((mission) => {
-      if (missionClaimed(game, mission, date)) return false;
-      const { value, target } = missionProgress(game, mission, date);
-      return value >= target;
-    }),
-  );
-}
-
-// --- persistence -----------------------------------------------------------------------------
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isCount(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
-}
-
-function isGoal(value: unknown): value is Goal {
-  return GOALS.some((goal) => goal === value);
-}
-
-function isHealthConnection(value: unknown): value is HealthConnection {
-  return (
-    isRecord(value) &&
-    (value.source === 'apple-health' || value.source === 'health-connect') &&
-    typeof value.enabled === 'boolean' &&
-    isDateKey(value.startedOn) &&
-    typeof value.syncedAt === 'string' &&
-    !Number.isNaN(new Date(value.syncedAt).getTime()) &&
-    new Date(value.syncedAt).toISOString() === value.syncedAt
-  );
-}
-
-function isDateKey(value: unknown): value is string {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T12:00:00`);
-  return !Number.isNaN(date.getTime()) && dateKey(date) === value;
-}
-
-function decodeDays(value: unknown): Day[] | null {
-  if (!Array.isArray(value) || value.length === 0) return null;
-  const days: Day[] = [];
-  for (const entry of value) {
-    if (!isRecord(entry) || !isDateKey(entry.date) || !isCount(entry.steps) || !isGoal(entry.goal))
-      return null;
-    // Older saves also listed claimed daily tasks here; missions replaced them.
-    days.push({ date: entry.date, steps: entry.steps, goal: entry.goal });
-  }
-  if (new Set(days.map((day) => day.date)).size !== days.length) return null;
-  return days.sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function decodeCounts(value: unknown, known: (id: string) => boolean): Record<string, number> | null {
-  if (value === undefined) return {};
-  if (!isRecord(value)) return null;
-  const result: Record<string, number> = {};
-  for (const [key, amount] of Object.entries(value)) {
-    if (!isCount(amount)) return null;
-    // Unknown ids from a newer build are dropped instead of blocking the save.
-    if (known(key) && amount > 0) result[key] = amount;
-  }
-  return result;
-}
-
-function decodeTools(value: unknown): Record<ToolKind, string> | null {
-  if (!isRecord(value)) return null;
-  const tools = { ...STARTER_TOOLS };
-  for (const kind of TOOL_KINDS) {
-    const key = String(value[kind]);
-    const item = keyItem(key);
-    if (!isKnownKey(key) || !item?.tool || item.tool.kind !== kind) return null;
-    tools[kind] = key;
-  }
-  return tools;
-}
-
-function decodeMissions(value: unknown): Partial<Record<MissionPeriod, MissionState>> {
-  const missions: Partial<Record<MissionPeriod, MissionState>> = {};
-  if (!isRecord(value)) return missions;
-  for (const period of MISSION_PERIODS) {
-    const state = value[period];
-    if (
-      !isRecord(state) ||
-      typeof state.key !== 'string' ||
-      !state.key.startsWith(`${period}:`) ||
-      !Array.isArray(state.picks) ||
-      !Array.isArray(state.claimed)
-    )
-      continue;
-    const base = decodeCounts(state.base, () => true);
-    if (!base) continue;
-    const known = (id: unknown): id is string => typeof id === 'string' && MISSIONS_BY_ID.has(id);
-    missions[period] = {
-      key: state.key,
-      picks: state.picks.filter(known),
-      base,
-      claimed: [...new Set(state.claimed.filter(known))],
-    };
-  }
-  return missions;
-}
-
-// Shared by versions 2 and 3; version 2 had no inventory, gear, buffs or collection log.
-function decodeSave(value: Record<string, unknown>, days: Day[]): Game | null {
-  const skin = SKINS.find((entry) => entry.id === value.equipped);
-  const xpCounts = decodeCounts(value.xp, (id) => SKILL_IDS.includes(id as SkillId));
-  const bank = decodeCounts(value.bank, isKnownKey);
-  const inventory = decodeCounts(value.inventory, isKnownKey);
-  const stats = decodeCounts(value.stats, () => true);
-  const tools = decodeTools(value.tools);
-  if (!skin || !xpCounts || !bank || !inventory || !stats || !tools || !isGoal(value.goal)) return null;
-  for (const key of ['spent', 'walked', 'worked', 'seed', 'coins', 'actions'] as const)
-    if (!isCount(value[key])) return null;
-  if (typeof value.location !== 'string' || !getLocation(value.location)) return null;
-  const quests: Record<string, 'started' | 'done'> = {};
-  if (!isRecord(value.quests)) return null;
-  for (const [id, state] of Object.entries(value.quests))
-    if (getQuest(id) && (state === 'started' || state === 'done')) quests[id] = state;
-  let task: Task | null = null;
-  if (value.task !== null && value.task !== undefined) {
-    if (!isRecord(value.task) || typeof value.task.id !== 'string' || !isCount(value.task.progress))
-      return null;
-    task = getActivity(value.task.id) ? { id: value.task.id, progress: value.task.progress } : null;
-  }
-  let travel: Travel | null = null;
-  if (value.travel !== null && value.travel !== undefined) {
-    const t = value.travel;
-    if (
-      !isRecord(t) ||
-      typeof t.from !== 'string' ||
-      typeof t.to !== 'string' ||
-      !getLocation(t.from) ||
-      !getLocation(t.to) ||
-      !isCount(t.cost) ||
-      !isCount(t.progress) ||
-      t.progress > t.cost ||
-      !(t.next === null || (typeof t.next === 'string' && getActivity(t.next)))
-    )
-      return null;
-    travel = { from: t.from, to: t.to, cost: t.cost, progress: t.progress, next: t.next };
-  }
-  let stopped: StopReason | null = null;
-  if (
-    isRecord(value.stopped) &&
-    typeof value.stopped.activity === 'string' &&
-    typeof value.stopped.missing === 'string' &&
-    getActivity(value.stopped.activity)
-  )
-    stopped = { activity: value.stopped.activity, missing: value.stopped.missing };
-  const gear: Partial<Record<GearSlot, string>> = {};
-  if (isRecord(value.gear))
-    for (const slot of GEAR_SLOTS) {
-      const key = value.gear[slot];
-      const item = typeof key === 'string' && isKnownKey(key) ? keyItem(key) : undefined;
-      if (typeof key === 'string' && item?.slot && slotFits(slot, item.slot)) gear[slot] = key;
-    }
-  let buff: Buff | null = null;
-  if (isRecord(value.buff) && typeof value.buff.item === 'string' && isCount(value.buff.actions))
-    buff = getItem(value.buff.item)?.buff ? { item: value.buff.item, actions: value.buff.actions } : null;
-  const seenList = Array.isArray(value.seen)
-    ? value.seen.filter((id): id is string => typeof id === 'string')
-    : [];
-  const owned = [
-    ...Object.keys(bank),
-    ...Object.keys(inventory),
-    ...Object.values(tools),
-    ...Object.values(gear),
-  ];
-  const seen = [
-    ...new Set([...seenList.filter((id) => getItem(id)), ...owned.map((key) => parseKey(key ?? '').id)]),
-  ];
-  const xp = { ...emptyXp(), ...xpCounts } as Record<SkillId, number>;
-  const game: Game = {
-    version: 3,
-    goal: value.goal,
-    equipped: skin.id,
-    days,
-    ...(isHealthConnection(value.health) ? { health: value.health } : {}),
-    spent: value.spent as number,
-    walked: value.walked as number,
-    worked: value.worked as number,
-    seed: (value.seed as number) >>> 0,
-    location: value.location,
-    task,
-    travel,
-    stopped,
-    xp,
-    inventory,
-    bank,
-    tools,
-    gear,
-    buff,
-    coins: value.coins as number,
-    quests,
-    actions: value.actions as number,
-    seen,
-    stats,
-    bagUpgrades:
-      isCount(value.bagUpgrades) && value.bagUpgrades <= BAG_UPGRADES.length ? value.bagUpgrades : 0,
-    missions: decodeMissions(value.missions),
-  };
-  if (game.spent > totalSteps(game)) return null;
-  return totalLevel(game) >= skin.total ? game : { ...game, equipped: 'original' };
-}
-
-// Version 1 saves (single XP bar) keep their step history; today's steps start the pouch.
-export function migrateV1(value: Record<string, unknown>, days: Day[], today: string): Game | null {
-  if (!isGoal(value.goal)) return null;
-  const base = createGame(today);
-  const history = { ...base, goal: value.goal, days };
-  const todaySteps = getDay(history, today).steps;
-  return {
-    ...history,
-    ...(isHealthConnection(value.health) ? { health: value.health } : {}),
-    spent: Math.max(0, totalSteps(history) - todaySteps),
-  };
-}
-
-export function decodeGame(
-  raw: string,
-  today = dateKey(),
-): Readonly<{ ok: true; game: Game; migrated: boolean }> | Readonly<{ ok: false; reason: string }> {
-  let value: unknown;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    return { ok: false, reason: 'Saved progress is not valid JSON.' };
-  }
-  if (!isRecord(value)) return { ok: false, reason: 'Saved progress has an unsupported format.' };
-  const days = decodeDays(value.days);
-  if (!days || !Number.isSafeInteger(days.reduce((sum, day) => sum + day.steps, 0)))
-    return { ok: false, reason: 'Saved progress has an unreadable step history.' };
-  if (value.version === 3 || value.version === 2) {
-    const game = decodeSave(value, days);
-    return game
-      ? { ok: true, game, migrated: value.version === 2 }
-      : { ok: false, reason: 'Saved progress has an unsupported format.' };
-  }
-  if (value.version === 1) {
-    const game = migrateV1(value, days, today);
-    return game
-      ? { ok: true, game, migrated: true }
-      : { ok: false, reason: 'Saved progress has an unsupported format.' };
-  }
-  return { ok: false, reason: 'Saved progress has an unsupported format.' };
 }
