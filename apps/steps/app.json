@@ -9,8 +9,9 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "dev.bruhs.outside"
+      "supportsTablet": false,
+      "bundleIdentifier": "dev.bruhs.outside",
+      "config": { "usesNonExemptEncryption": false }
     },
     "android": {
       "package": "dev.bruhs.outside",
