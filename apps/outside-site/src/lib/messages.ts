@@ -2,7 +2,7 @@
 // script so the two can't drift. Errors say what failed and how to fix it (apps/outside/AGENTS.md).
 export const WAITLIST_MESSAGES = {
   joined: 'almost there. check your email for a link to confirm your spot.',
-  confirmed: "you're on the list. we'll email you when outside launches.",
+  confirmed: "you're on the list. we'll email you when you can play.",
   invalid_link: 'that link has expired or was already used. join again for a fresh one.',
   left: 'done. that email is off the list.',
   invalid_email: "that email doesn't look right. check it and try again.",

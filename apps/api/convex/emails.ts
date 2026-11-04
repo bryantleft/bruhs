@@ -56,11 +56,11 @@ export async function sendAlreadyListed(
     subject: "you're already on the outside waitlist",
     ...message({
       site,
-      preview: "your spot is already saved. we'll email you when outside launches.",
+      preview: "your spot is already saved. we'll email you when you can play.",
       title: "you're already in",
       lines: [
         "someone (hopefully you) asked to join the outside waitlist with this email, but it's already confirmed.",
-        "nothing to do. we'll email you when outside launches.",
+        "nothing to do. we'll email you when you can play.",
       ],
     }),
     idempotencyKey: `waitlist-already/${key}`,
