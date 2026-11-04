@@ -33,7 +33,7 @@ The signup form posts a urlencoded body to `POST /waitlist` on the Convex site U
 
 Emails are trimmed and lowercased, and stored once. Replies are the same whether or not an email was listed, so the forms can't reveal who signed up. A hidden honeypot field drops simple bots. A global rate limit (20 a minute, bursts of 40) caps floods; past it, the forms say to try again in a minute.
 
-Signups are double opt-in. Joining stores the email as pending and sends a confirmation link through Resend (`apps/api/convex/emails.ts`, from `send.bruhs.app`). The link opens `/waitlist/confirm/`, whose button posts the token to `POST /waitlist/confirm`. It's a button rather than an automatic confirm, because mail scanners open links but don't press buttons. Links last 7 days, and unconfirmed rows are deleted after that. The confirm page needs JavaScript to read the token from the link.
+Signups are double opt-in. Joining stores the email as pending and sends a confirmation link through Resend (`apps/api/convex/emails.ts`, from `outside@bruhs.app`). The link opens `/waitlist/confirm/`, whose button posts the token to `POST /waitlist/confirm`. It's a button rather than an automatic confirm, because mail scanners open links but don't press buttons. Links last 7 days, and unconfirmed rows are deleted after that. The confirm page needs JavaScript to read the token from the link.
 
 `/privacy/` says what the list keeps and why. Update it, and its `UPDATED` date, whenever that changes.
 

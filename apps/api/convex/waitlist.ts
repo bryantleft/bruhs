@@ -230,7 +230,7 @@ function notConfigured(): string | null {
   const origins: string | undefined = process.env.WAITLIST_ORIGINS;
   const key: string | undefined = process.env.RESEND_API_KEY;
   if (!origins) return 'set WAITLIST_ORIGINS to the landing page origin(s)';
-  if (!key) return 'set RESEND_API_KEY (a sending-only key for send.bruhs.app) so confirmations can go out';
+  if (!key) return 'set RESEND_API_KEY (a sending-only key for bruhs.app) so confirmations can go out';
   return null;
 }
 

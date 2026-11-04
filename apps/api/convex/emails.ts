@@ -3,11 +3,11 @@ import { components } from './_generated/api';
 import type { MutationCtx } from './_generated/server';
 
 // Waitlist mail goes out through Resend's Convex component: queued with the mutation that
-// asked for it, retried, and sent with idempotency keys. send.bruhs.app is a sending-only
-// subdomain, so its reputation stays apart from bruhs.app itself.
+// asked for it, retried, and sent with idempotency keys. bruhs.app is verified in Resend
+// (DKIM, plus SPF on its send. return-path subdomain); it has no inbox, so nothing else uses it.
 export const resend = new Resend(components.resend, { testMode: false });
 
-export const FROM = 'outside <outside@send.bruhs.app>';
+export const FROM = 'outside <outside@bruhs.app>';
 
 // Plain lowercase game voice, as on the site (apps/steps/AGENTS.md). Text and HTML carry the
 // same words; the HTML is only there so mail clients make the link tappable.

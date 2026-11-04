@@ -13,5 +13,7 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
   waitlistConfirm: FLOOD,
   // A new sending domain starts around 150 emails a day (Resend's warm-up guidance), so cap
   // waitlist mail below that rather than let a flood burn the domain's reputation.
-  waitlistEmail: { kind: 'fixed window', rate: 120, period: DAY },
+  // Windows start at UTC midnight (start: 0) rather than the library's random offset, so
+  // "a day" means a calendar day and the cap is predictable.
+  waitlistEmail: { kind: 'fixed window', rate: 120, period: DAY, start: 0 },
 });
