@@ -800,29 +800,41 @@ export function advance(game: Game): Game {
 
 // --- rules ---------------------------------------------------------------------------------
 
+// How far a bag runs past its capacity; 0 when everything fits.
+function overflow(game: Pick<Game, 'inventory' | 'bagUpgrades'> & Loadout): number {
+  return Math.max(0, slotsUsed(game.inventory) - capacityOf(game));
+}
+
 function wear(work: Draft, key: string, slot?: GearSlot): boolean {
   const item = keyItem(key);
   const inBag = (work.inventory[key] ?? 0) > 0;
   const inBank = atBank(work) && (work.bank[key] ?? 0) > 0;
   if (!item || (!inBag && !inBank)) return false;
-  const take = (): void => {
-    if (inBag) work.inventory = add(work.inventory, key, -1);
-    else work.bank = add(work.bank, key, -1);
-  };
-  // Swapped-out gear goes where the new piece came from.
-  const stow = (old: string): void => {
-    if (inBag) work.inventory = add(work.inventory, old, 1);
-    else work.bank = add(work.bank, old, 1);
+  const before = overflow(work);
+  // Swapped-out gear goes where the new piece came from. A smaller pack can shrink the bag, so a
+  // swap must still fit afterwards; at a bank the old piece may go there instead, as in `unwear`.
+  const swap = (old: string | undefined, equip: (next: Draft) => void): boolean => {
+    for (const stowInBag of atBank(work) && inBag ? [true, false] : [inBag]) {
+      const next: Draft = { ...work };
+      if (inBag) next.inventory = add(next.inventory, key, -1);
+      else next.bank = add(next.bank, key, -1);
+      if (old && stowInBag) next.inventory = add(next.inventory, old, 1);
+      else if (old) next.bank = add(next.bank, old, 1);
+      equip(next);
+      // A bag already over capacity (from an older build) may swap as long as it gets no worse.
+      if (overflow(next) > before) continue;
+      Object.assign(work, next);
+      return true;
+    }
+    return false;
   };
   if (item.tool) {
     const { kind, metal } = item.tool;
     if (levelForXp(work.xp[TOOL_SKILL[kind]]) < METAL_STATS[metal].level || work.tools[kind] === key)
       return false;
-    const old = work.tools[kind];
-    take();
-    stow(old);
-    work.tools = { ...work.tools, [kind]: key };
-    return true;
+    return swap(work.tools[kind], (next) => {
+      next.tools = { ...next.tools, [kind]: key };
+    });
   }
   const itemSlot = item.slot;
   if (!itemSlot) return false;
@@ -832,11 +844,9 @@ function wear(work: Draft, key: string, slot?: GearSlot): boolean {
       : (GEAR_SLOTS.find((entry) => slotFits(entry, itemSlot) && !work.gear[entry]) ??
         GEAR_SLOTS.find((entry) => slotFits(entry, itemSlot)));
   if (!target) return false;
-  const old = work.gear[target];
-  take();
-  if (old) stow(old);
-  work.gear = { ...work.gear, [target]: key };
-  return true;
+  return swap(work.gear[target], (next) => {
+    next.gear = { ...next.gear, [target]: key };
+  });
 }
 
 function applyRules(game: Game, action: GameAction): Game {

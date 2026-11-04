@@ -174,6 +174,33 @@ test('backpacks add slots and gear swaps through the inventory', () => {
   assert.equal(updateGame(crowded, { type: 'unwear', slot: 'back' }), crowded);
 });
 
+test('swapping to a smaller pack on a full bag is refused', () => {
+  // 40 of 40 slots: a starwood pack (+12) worn, a wicker pack (+4) and 39 stacks of logs carried.
+  const full = at('pandan-woods', {
+    gear: { back: 'starwood-pack' },
+    inventory: { 'wicker-pack': 1, 'pandan-logs': 25 * 39 },
+  });
+  assert.equal(capacityOf(full), 40);
+  assert.equal(slotsUsed(full.inventory), 40);
+  assert.equal(updateGame(full, { type: 'wear', item: 'wicker-pack', slot: 'back' }), full);
+  // A bank takes the old pack, but 39 slots still overflow a 32-slot bag.
+  const town = { ...full, location: 'bruhbridge' };
+  assert.equal(updateGame(town, { type: 'wear', item: 'wicker-pack', slot: 'back' }), town);
+  // With room for it, the swap goes through and the old pack lands in the bag.
+  const roomy = { ...full, inventory: { 'wicker-pack': 1, 'pandan-logs': 25 * 30 } };
+  const swapped = updateGame(roomy, { type: 'wear', item: 'wicker-pack', slot: 'back' });
+  assert.equal(swapped.gear.back, 'wicker-pack');
+  assert.equal(swapped.inventory['starwood-pack'], 1);
+  assert.ok(slotsUsed(swapped.inventory) <= capacityOf(swapped));
+  // At a bank, a swap that only fits without the old pack sends it to the bank.
+  const snug = { ...town, inventory: { 'wicker-pack': 1, 'pandan-logs': 25 * 32 } };
+  const banked = updateGame(snug, { type: 'wear', item: 'wicker-pack', slot: 'back' });
+  assert.equal(banked.gear.back, 'wicker-pack');
+  assert.equal(banked.inventory['starwood-pack'], undefined);
+  assert.equal(banked.bank['starwood-pack'], 1);
+  assert.equal(slotsUsed(banked.inventory), capacityOf(banked));
+});
+
 test('tools need a level to wield', () => {
   const game = at('pandan-woods', { inventory: { 'iron-axe': 1 } });
   assert.equal(updateGame(game, { type: 'wear', item: 'iron-axe' }), game);
