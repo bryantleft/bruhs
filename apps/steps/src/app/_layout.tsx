@@ -7,6 +7,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppStage } from '../components/AppStage';
 import { Bruh } from '../components/Bruh';
+import { ConfirmActionCore } from '../components/ConfirmAction';
 import { MotionProvider } from '../components/MotionProvider';
 import { RewardOverlay } from '../components/RewardOverlay';
 import { Button, Copy } from '../components/ui';
@@ -14,6 +15,7 @@ import { useProgressRecoveryFocus } from '../components/useProgressRecoveryFocus
 import { ExploreProvider } from '../explore/ExploreProvider';
 import { PartyBackend } from '../friends/PartyBackend';
 import { GameProvider, useGame } from '../game/GameProvider';
+import { loadFailureCopy } from '../game/session';
 import { color, space } from '../theme/theme';
 
 void SplashScreen.preventAutoHideAsync().catch((error: unknown) =>
@@ -37,6 +39,7 @@ function AdventureLoading(): React.JSX.Element {
 function GameApp(): React.JSX.Element {
   const { loading, retryLoad, reset, resetting, resetError } = useGame();
   const recovery = useProgressRecoveryFocus(loading.status);
+  const failure = loading.status === 'error' ? loadFailureCopy(loading.failure) : null;
   return (
     <AppStage>
       {loading.status === 'ready' ? (
@@ -57,24 +60,30 @@ function GameApp(): React.JSX.Element {
         >
           <Bruh size={100} />
           <Copy variant="heading">could not load your adventure</Copy>
-          <Copy variant="body">{loading.message} your saved data has been kept.</Copy>
+          <Copy variant="body">{failure?.message} your saved data has been kept.</Copy>
           <View style={styles.recoveryActions}>
-            <Button
-              buttonRef={recovery.retryRef}
-              label="try again"
-              icon="refresh"
-              disabled={resetting}
-              onPress={() => {
-                recovery.prepare();
-                retryLoad();
-              }}
-            />
+            {failure?.retry ? (
+              <Button
+                buttonRef={recovery.retryRef}
+                label="try again"
+                icon="refresh"
+                disabled={resetting}
+                onPress={() => {
+                  recovery.prepare();
+                  retryLoad();
+                }}
+              />
+            ) : null}
             <Copy variant="small">starting fresh will replace this device’s saved progress.</Copy>
-            <Button
-              label={resetting ? 'erasing…' : 'start a new adventure'}
+            <ConfirmActionCore
+              label={resetting ? 'erasing journey…' : 'start a new adventure'}
+              confirmLabel="yes, erase my journey"
+              cancelLabel="keep my journey"
+              description="erases the saved progress this device can’t read, and your walks. this can’t be undone."
               variant="outline"
+              cancelVariant="ghost"
+              onConfirm={reset}
               disabled={resetting}
-              onPress={reset}
             />
           </View>
           {resetError ? (
@@ -120,7 +129,7 @@ export default function RootLayout(): React.JSX.Element {
     return (
       <ScrollView style={styles.loading} contentContainerStyle={styles.loadingContent}>
         <Text style={{ color: color.text }}>
-          The app’s fonts could not load: {error.message}. Restart the app to try again.
+          couldn’t load the app’s fonts ({error.message}). restart the app to try again.
         </Text>
       </ScrollView>
     );

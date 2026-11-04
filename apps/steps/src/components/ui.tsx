@@ -23,7 +23,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useGame } from '../game/GameProvider';
+import { useGameFeedback } from '../game/GameProvider';
 import { adventureTab, panelId, tabId } from '../navigation/tabs';
 import { bevel } from '../pixel/chrome';
 import { palette } from '../theme/palette';
@@ -220,7 +220,7 @@ export function Screen({
 >): React.JSX.Element {
   const focused = useIsFocused();
   const route = useRoute();
-  const { notice, reward, dismissNotice, retrySave, retryingSave } = useGame();
+  const { notice, reward, dismissNotice, retrySave, retryingSave } = useGameFeedback();
   const localScroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const scroll = scrollRef ?? localScroll;
   const { footerInFlow, footerRef, onBodyLayout, onFooterLayout } = useAdaptiveFooter(

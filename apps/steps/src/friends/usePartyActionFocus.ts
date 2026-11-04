@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { Platform, type View } from 'react-native';
 import { keepFocusVisible } from '../components/keepFocusVisible';
+import { byLabel, PARTY_LABEL } from '../components/party/labels';
 
 type PreferredTarget = (container: HTMLElement) => HTMLElement | null;
 type PendingAction = {
@@ -137,7 +138,7 @@ export function usePartyActionFocus(
           ? (preferred?.(container) ?? heading)
           : opener instanceof HTMLElement && opener.isConnected
             ? opener
-            : (container.querySelector<HTMLElement>('[aria-label="try again"]') ?? heading);
+            : (byLabel(container, PARTY_LABEL.tryAgain) ?? heading);
     if (!target || target.matches(':disabled, [aria-disabled="true"]') || target.closest('[inert]')) return;
     if (success === null && document.activeElement === target) return;
     if (document.activeElement !== document.body) {

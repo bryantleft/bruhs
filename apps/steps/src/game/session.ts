@@ -1,14 +1,26 @@
-import { GEAR_SLOTS, getQuest, SKILL_IDS, type SkillId, type SkinId, type Stack } from './content.ts';
+import {
+  GEAR_SLOTS,
+  getLocation,
+  getQuest,
+  SKILL_IDS,
+  type SkillId,
+  type SkinId,
+  type Stack,
+} from './content.ts';
 import {
   capacityOf,
   type Game,
   type GameAction,
   getMission,
+  type LoadFailure,
+  orList,
+  playGame,
+  type Rejection,
   type StopReason,
+  townsWith,
   unlockedSkins,
-  updateGame,
 } from './game.ts';
-import { add, type Bag, itemCount, keyName, keyValue } from './items.ts';
+import { add, type Bag, itemCount, keyName, keyValue, pluralName } from './items.ts';
 import { levelForXp } from './xp.ts';
 
 export type Report = Readonly<{
@@ -167,6 +179,80 @@ function gainText(report: Report): string | null {
   return parts.length ? parts.join(' · ') : null;
 }
 
+// What to tell the player when the rules refuse an action: what failed and how to fix it.
+// Null when there is nothing to explain.
+export function rejectionText(reason: Rejection, game: Game): string | null {
+  switch (reason.kind) {
+    case 'no-change':
+      return null;
+    case 'invalid':
+      return 'that’s no longer possible. check your bag, then try again.';
+    case 'bag-full':
+      return 'your bag is full. bank or drop something first.';
+    case 'not-at-bank':
+      return `there’s no bank here. walk to ${orList(townsWith('bank'))} first.`;
+    case 'not-at-store':
+      return `there’s no store here. walk to ${orList(townsWith('store'))} first.`;
+    case 'travelling':
+      return 'you’re on the road. arrive or turn back first.';
+    case 'not-here':
+      return reason.place
+        ? `walk to ${getLocation(reason.place)?.name ?? reason.place} first.`
+        : 'this place doesn’t offer that. travel somewhere that does.';
+    case 'too-poor':
+      return `that costs ${reason.price.toLocaleString()} coins and you have ${game.coins.toLocaleString()}. sell something first.`;
+    case 'requires': {
+      const requirement = reason.requirement;
+      if (requirement.kind === 'level')
+        return `you need ${requirement.skill} ${requirement.level} for that. keep training ${requirement.skill}.`;
+      if (requirement.kind === 'quest')
+        return `finish the quest ${getQuest(requirement.quest)?.name ?? requirement.quest} first.`;
+      return `you need ${itemCount(requirement.qty, requirement.item)}. gather or withdraw ${requirement.qty === 1 ? 'it' : 'them'} first.`;
+    }
+    case 'mission-unfinished':
+      return 'that mission isn’t finished yet. keep going, then collect it.';
+    case 'outfit-locked':
+      return `that outfit unlocks at total level ${reason.total}. train any skill to get there.`;
+    case 'clock-behind':
+      return 'your phone’s clock is behind your last sync. check the date and time, then sync again.';
+  }
+}
+
+// Why the bruh stopped, after "stopped chopping pandan logs: ".
+export function stopReasonText(reason: StopReason): string {
+  switch (reason.kind) {
+    case 'bag-full':
+      return 'your bag is full';
+    case 'missing':
+      return `out of ${pluralName(keyName(reason.item))}`;
+    case 'level':
+      return `your ${reason.skill} level is too low`;
+  }
+}
+
+// What the load-error screen says, and whether trying again can help.
+export function loadFailureCopy(failure: LoadFailure): Readonly<{ message: string; retry: boolean }> {
+  switch (failure.kind) {
+    case 'storage':
+      return {
+        message: 'couldn’t open this device’s storage. close other apps, then try again.',
+        retry: true,
+      };
+    case 'newer-version':
+      return {
+        message: 'this save is from a newer version of outside. update the app to keep playing.',
+        retry: false,
+      };
+    case 'invalid-json':
+      return { message: 'your saved progress is damaged and can’t be read.', retry: false };
+    case 'invalid':
+      return {
+        message: `part of your saved progress (${failure.field}) is damaged and can’t be read.`,
+        retry: false,
+      };
+  }
+}
+
 function noticeFor(action: GameAction, before: Game, after: Game): string | null {
   switch (action.type) {
     case 'mission-claim': {
@@ -221,42 +307,60 @@ export function reduceSession(state: Session, event: SessionAction): Session {
   if (event.type === 'dismiss-reward')
     return { ...state, reward: null, restoreRewardFocus: event.restoreFocus ?? true };
   if (event.type === 'dismiss-gain') return state.gain?.id === event.id ? { ...state, gain: null } : state;
+  return playSession(state, event.action, event.demo).session;
+}
 
-  const game = updateGame(state.game, event.action);
-  if (game === state.game) return state;
+// Bag, bank, store and mission actions confirm with a notice instead of opening a loot report.
+const QUIET_ACTIONS: ReadonlySet<GameAction['type']> = new Set([
+  'mission-claim',
+  'upgrade-bag',
+  'sell',
+  'buy',
+  'wear',
+  'unwear',
+  'eat',
+  'deposit',
+  'deposit-all',
+  'withdraw',
+  'drop',
+]);
+
+// Plays one action on the session: the next session, plus why the rules refused the action
+// (null when it was accepted).
+export function playSession(
+  state: Session,
+  action: GameAction,
+  demo: boolean,
+): Readonly<{ session: Session; rejection: Rejection | null }> {
+  const result = playGame(state.game, action);
+  if (!result.ok) {
+    const message = rejectionText(result.reason, state.game);
+    // A refusal never replaces a save error, which needs its retry. Health tracking shows its
+    // own sync errors, so a refused batch adds no second message.
+    if (!message || state.notice?.kind === 'error' || action.type === 'health-sync')
+      return { session: state, rejection: result.reason };
+    return { session: { ...state, notice: { kind: 'status', message } }, rejection: result.reason };
+  }
+  const game = result.game;
+  if (game === state.game) return { session: state, rejection: null };
   const revision = state.revision + 1;
   const stepUpdate =
-    event.action.type === 'add-steps' ||
-    event.action.type === 'sync-steps' ||
-    event.action.type === 'health-sync';
+    action.type === 'add-steps' || action.type === 'sync-steps' || action.type === 'health-sync';
   const report = diffReport(revision, state.game, game, stepUpdate);
   let reward = state.reward;
   let gain = state.gain;
   let notice = state.notice?.kind === 'error' ? state.notice : null;
   // A small demo walk only flashes a gain; real syncs and milestones open the full loot report.
-  const quiet = stepUpdate && event.demo && !isMilestone(report) && !report.stopped;
+  const quiet = stepUpdate && demo && !isMilestone(report) && !report.stopped;
   const worthReporting = report.actions > 0 || isMilestone(report) || report.stopped !== null;
-  const quietAction = [
-    'mission-claim',
-    'upgrade-bag',
-    'sell',
-    'buy',
-    'wear',
-    'unwear',
-    'eat',
-    'deposit',
-    'deposit-all',
-    'withdraw',
-    'drop',
-  ];
-  if (worthReporting && !quiet && !quietAction.includes(event.action.type)) {
+  if (worthReporting && !quiet && !QUIET_ACTIONS.has(action.type)) {
     reward = state.reward ? mergeReports(state.reward, report) : report;
     gain = null;
   } else if (quiet) {
     const text = gainText(report);
     gain = text ? { id: revision, text } : null;
   }
-  const message = noticeFor(event.action, state.game, game);
+  const message = noticeFor(action, state.game, game);
   if (message && notice?.kind !== 'error') notice = { kind: 'status', message };
-  return { ...state, game, revision, reward, gain, notice };
+  return { session: { ...state, game, revision, reward, gain, notice }, rejection: null };
 }

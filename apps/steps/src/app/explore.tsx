@@ -14,7 +14,7 @@ import { WalkDistance } from '../components/WalkDistance';
 import { useExplore } from '../explore/ExploreProvider';
 import type { MapStatus } from '../explore/map';
 import { elapsedWalk, formatDistance, formatWalkTime, lastFix, STAMPS, type Walk } from '../explore/walk';
-import { useGame } from '../game/GameProvider';
+import { useGame, useGameFeedback } from '../game/GameProvider';
 import { backToAdventure, useScreenFocus } from '../navigation/useScreenFocus';
 import { color, layout, motion, radius, space } from '../theme/theme';
 
@@ -30,7 +30,7 @@ function WalkStats({ walk, stamps }: Readonly<{ walk: Walk | null; stamps: numbe
   const time = formatWalkTime(walk ? elapsedWalk(walk, active ? now : walk.updatedAt) : 0);
   const focused = useIsFocused();
   const reduced = useReducedMotion();
-  const { reward } = useGame();
+  const { reward } = useGameFeedback();
   const walkId = walk?.startedAt;
   const seen = useRef({ walkId, stamps });
   const stampScale = useRef(new Animated.Value(1)).current;
@@ -285,7 +285,7 @@ export default function ExploreScreen(): React.JSX.Element {
               onPress={() => {
                 void Linking.openSettings().catch(() =>
                   setSettingsError(
-                    'Settings could not open. Allow location in your phone settings, then return here.',
+                    'couldn’t open settings. allow location in your phone settings, then return here.',
                   ),
                 );
               }}

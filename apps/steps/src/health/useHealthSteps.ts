@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
-import { dateKey, type GameAction, type HealthConnection } from '../game/game';
+import { dateKey, type GameAction, type HealthConnection, type Rejection } from '../game/game';
 import { createHealthSync } from './controller';
 import type { HealthTracking } from './model';
 import { openHealthSettings, readHealthSteps } from './native';
@@ -9,7 +9,7 @@ export function useHealthSteps(
   ready: boolean,
   today: string,
   connection: HealthConnection | undefined,
-  onAction: (action: GameAction) => void,
+  onAction: (action: GameAction) => Rejection | null,
 ): Readonly<{
   tracking: HealthTracking;
   connect: () => void;
@@ -65,7 +65,7 @@ export function useHealthSteps(
       setTracking({
         status: 'error',
         message:
-          'Health settings could not open. Open Apple Health or Health Connect on your phone to manage step access.',
+          'couldn’t open Health settings. open Apple Health or Health Connect on your phone to manage step access.',
       }),
     );
   }, []);

@@ -13,7 +13,6 @@ import {
   getItem,
   getLocation,
   ITEMS,
-  LOCATIONS,
   METALS,
   SKILLS,
   STAT_IDS,
@@ -24,10 +23,11 @@ import {
   TOOL_SKILL,
 } from '../../game/content';
 import { useGame } from '../../game/GameProvider';
-import { atBank, atStore, capacityOf, nextBagUpgrade } from '../../game/game';
+import { atBank, atStore, capacityOf, nextBagUpgrade, townsWith } from '../../game/game';
 import {
   countOf,
   formatMod,
+  formatPercent,
   keyItem,
   keyMods,
   keyName,
@@ -84,7 +84,7 @@ function Inventory({ onOpen }: Readonly<{ onOpen: (open: Open) => void }>): Reac
         ) : null}
         <SlotGrid
           cells={cells}
-          label="Inventory"
+          label="Bag"
           onPress={(key) => onOpen({ key, origin: { from: 'inventory' } })}
         />
         {atBank(game) && keys.length ? (
@@ -115,9 +115,7 @@ function Inventory({ onOpen }: Readonly<{ onOpen: (open: Open) => void }>): Reac
             <Slot art={itemArt(buff.id)} size={44} />
             <Text style={[styles.body, styles.grow]}>
               {buff.name}:{' '}
-              {buff.buff?.mods
-                .map((mod) => `+${Math.round(mod.value * 100)}% ${statLabel(mod.stat)}`)
-                .join(', ')}
+              {buff.buff?.mods.map((mod) => `+${formatPercent(mod.value)} ${statLabel(mod.stat)}`).join(', ')}
             </Text>
           </View>
         ) : (
@@ -171,10 +169,7 @@ function Gear({ onOpen }: Readonly<{ onOpen: (open: Open) => void }>): React.JSX
                     onPress={() => (key ? onOpen({ key, origin: { from: 'gear', slot } }) : setPicking(slot))}
                     style={styles.dollCell}
                   >
-                    <Slot
-                      art={key ? itemArt(parseKey(key).id) : ghost(SLOT_ART[slot] ?? SLOT_ART.head)}
-                      size={60}
-                    />
+                    <Slot art={key ? itemArt(parseKey(key).id) : ghost(SLOT_ART[slot])} size={60} />
                     {key && parseKey(key).quality > 0 ? (
                       <View
                         style={[styles.qualityDot, { backgroundColor: QUALITY_TINT[parseKey(key).quality] }]}
@@ -210,7 +205,7 @@ function Gear({ onOpen }: Readonly<{ onOpen: (open: Open) => void }>): React.JSX
             <View key={stat} style={styles.statCell}>
               <Text style={styles.small}>{statLabel(stat)}</Text>
               <Text style={[styles.statValue, global[stat] > 0 && { color: color.success }]}>
-                {stat === 'slots' ? `${capacityOf(game)}` : `+${Math.round(global[stat] * 1000) / 10}%`}
+                {stat === 'slots' ? `${capacityOf(game)}` : `+${formatPercent(global[stat])}`}
               </Text>
             </View>
           ))}
@@ -222,7 +217,7 @@ function Gear({ onOpen }: Readonly<{ onOpen: (open: Open) => void }>): React.JSX
             .filter(
               (stat) => totals[stat] - global[stat] > 0.0001 || (stat === 'efficiency' && totals[stat] > 0),
             )
-            .map((stat) => `+${Math.round(totals[stat] * 1000) / 10}% ${statLabel(stat)}`);
+            .map((stat) => `+${formatPercent(totals[stat])} ${statLabel(stat)}`);
           return (
             <View key={skill.id} style={styles.skillRow}>
               <Text style={styles.skillName}>{skill.name}</Text>
@@ -273,7 +268,7 @@ function Bank({ onOpen }: Readonly<{ onOpen: (open: Open) => void }>): React.JSX
   const here = atBank(game);
   const keys = Object.keys(game.bank).sort(byOrder);
   const worth = keys.reduce((sum, key) => sum + keyValue(key) * (game.bank[key] ?? 0), 0);
-  const towns = LOCATIONS.filter((place) => place.bank).map((place) => place.name);
+  const towns = townsWith('bank');
   return (
     <Panel title="bank" aside={`${keys.length} stacks · worth ${worth.toLocaleString()}`}>
       {here ? (

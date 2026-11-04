@@ -3,11 +3,11 @@ import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { Modal, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getActivity, getItem, getLocation, getQuest } from '../game/content';
-import { useGame } from '../game/GameProvider';
+import { getActivity, getLocation, getQuest } from '../game/content';
+import { useGame, useGameFeedback } from '../game/GameProvider';
 import { getSkin, unlocksBetween } from '../game/game';
 import { itemCount, parseKey } from '../game/items';
-import type { Report } from '../game/session';
+import { type Report, stopReasonText } from '../game/session';
 import { itemArt, SKILL_ART, UI_ART } from '../pixel/art';
 import { Panel, Slot } from '../pixel/chrome';
 import { Sprite } from '../pixel/Sprite';
@@ -22,7 +22,7 @@ function headline(report: Report): string {
   if (report.levels.length) return 'level up!';
   if (report.arrived && report.actions === 0) return 'you have arrived';
   if (report.stopped && report.actions === 0)
-    return report.stopped.missing === 'inventory' ? 'your bag is full' : 'your bruh stopped';
+    return report.stopped.kind === 'bag-full' ? 'your bag is full' : 'your bruh stopped';
   return report.walked ? 'while you walked…' : 'your bruh got to work';
 }
 
@@ -32,7 +32,8 @@ function levelLine(skill: string, from: number, level: number): string {
 }
 
 export function RewardOverlay(): React.JSX.Element | null {
-  const { reward, dismissReward, game } = useGame();
+  const { game } = useGame();
+  const { reward, dismissReward } = useGameFeedback();
   const insets = useSafeAreaInsets();
   const rewardId = reward?.id;
   const celebrate = !!reward && (reward.levels.length > 0 || reward.quest !== null);
@@ -91,7 +92,7 @@ export function RewardOverlay(): React.JSX.Element | null {
                 const unlocks = unlocksBetween(skill, from, level);
                 return (
                   <View key={skill} style={styles.level}>
-                    <Sprite art={SKILL_ART[skill] ?? SKILL_ART.agility} size={32} />
+                    <Sprite art={SKILL_ART[skill]} size={32} />
                     <View style={styles.levelCopy}>
                       <Text style={styles.levelText}>{levelLine(skill, from, level)}</Text>
                       {unlocks.length ? (
@@ -108,7 +109,7 @@ export function RewardOverlay(): React.JSX.Element | null {
                 <View style={styles.rows}>
                   {reward.xp.map(({ skill, amount }) => (
                     <View key={skill} style={styles.row}>
-                      <Sprite art={SKILL_ART[skill] ?? SKILL_ART.agility} size={18} />
+                      <Sprite art={SKILL_ART[skill]} size={18} />
                       <Text style={styles.rowLabel}>{skill}</Text>
                       <Text style={styles.xp}>+{amount.toLocaleString()} xp</Text>
                     </View>
@@ -147,9 +148,9 @@ export function RewardOverlay(): React.JSX.Element | null {
               ) : null}
               {stopped ? (
                 <Text style={[styles.note, { color: color.danger }]}>
-                  {reward.stopped?.missing === 'inventory'
+                  {reward.stopped?.kind === 'bag-full'
                     ? `stopped ${stopped.verb} ${stopped.name}: your bag is full. bank, sell or drop items, then start again.`
-                    : `stopped ${stopped.verb} ${stopped.name}: out of ${getItem(reward.stopped?.missing ?? '')?.name ?? 'materials'}.`}{' '}
+                    : `stopped ${stopped.verb} ${stopped.name}: ${reward.stopped ? stopReasonText(reward.stopped) : 'out of materials'}.`}{' '}
                   leftover steps wait in your pouch.
                 </Text>
               ) : null}

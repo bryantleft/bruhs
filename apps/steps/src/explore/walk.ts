@@ -154,7 +154,7 @@ export function decodeWalk(
 ): Readonly<{ ok: true; walk: Walk }> | Readonly<{ ok: false; message: string }> {
   const failure = {
     ok: false,
-    message: 'Your saved walk could not be opened. It has been kept on this device.',
+    message: 'couldn’t open your saved walk. it has been kept on this device.',
   } as const;
   let value: unknown;
   try {

@@ -1,5 +1,6 @@
 // Pixel art for the fruitlands. Each sprite is a grid of palette keys; '.' is transparent.
 // Pure data (no React Native imports) so tests can validate every grid.
+import type { GearSlot, SkillId } from '../game/content.ts';
 import { palette } from '../theme/palette.ts';
 
 export type Art = Readonly<{
@@ -1396,7 +1397,7 @@ export function ghost(source: Art): Art {
   return result;
 }
 
-export const SLOT_ART: Readonly<Record<string, Art>> = {
+export const SLOT_ART: Readonly<Record<GearSlot, Art>> = {
   head: HAT,
   cape: CAPE,
   neck: AMULET,
@@ -1452,7 +1453,7 @@ export function itemArt(id: string): Art {
   return result;
 }
 
-export const SKILL_ART: Readonly<Record<string, Art>> = {
+export const SKILL_ART: Readonly<Record<SkillId, Art>> = {
   woodcutting: tint(AXE, METAL_COLORS.iron),
   mining: tint(PICKAXE, METAL_COLORS.bronze),
   fishing: tint(FISH, FISH_TINTS.trout ?? {}),

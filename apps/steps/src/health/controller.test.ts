@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { GameAction } from '../game/game.ts';
+import { createGame, type GameAction, playGame } from '../game/game.ts';
 import { createHealthSync } from './controller.ts';
 import type { HealthRead, HealthReader, HealthTracking } from './model.ts';
 
@@ -36,7 +36,10 @@ test('rapid sync requests share one native read and commit one batch', async () 
       return wait.promise;
     },
     (state) => states.push(state),
-    (action) => actions.push(action),
+    (action) => {
+      actions.push(action);
+      return null;
+    },
   );
   const first = sync.run(REQUEST);
   assert.equal(sync.run(REQUEST), first);
@@ -56,7 +59,10 @@ test('pausing during a native permission/read operation prevents its late result
   const sync = createHealthSync(
     () => wait.promise,
     (state) => states.push(state),
-    (action) => actions.push(action),
+    (action) => {
+      actions.push(action);
+      return null;
+    },
   );
   const pending = sync.run(REQUEST);
   await Promise.resolve();
@@ -72,7 +78,7 @@ test('empty Apple Health reads never claim that read permission was granted', as
   const sync = createHealthSync(
     async () => ({ ...READ, status: 'read', source: 'apple-health', days: [] }),
     (state) => states.push(state),
-    () => {},
+    () => null,
   );
   await sync.run(REQUEST);
   assert.equal(states.at(-1)?.status, 'no-data');
@@ -88,7 +94,10 @@ test('denied and unavailable health reads do not change XP or health connection 
     const sync = createHealthSync(
       async () => result,
       (state) => states.push(state),
-      (action) => actions.push(action),
+      (action) => {
+        actions.push(action);
+        return null;
+      },
     );
     await sync.run(REQUEST);
     assert.deepEqual(actions, []);
@@ -106,7 +115,7 @@ test('even a synchronous native failure releases the sync lock for a retry', asy
   const sync = createHealthSync(
     reader,
     (state) => states.push(state),
-    () => {},
+    () => null,
   );
   await sync.run(REQUEST);
   assert.equal(states.at(-1)?.status, 'error');
@@ -123,10 +132,38 @@ test('pausing before a queued sync starts does not read health data at all', asy
       return READ;
     },
     () => {},
-    () => {},
+    () => null,
   );
   const pending = sync.run(REQUEST);
   sync.cancel();
   await pending;
   assert.equal(reads, 0);
+});
+
+test('a batch the rules refuse reports the clock problem instead of ready', async () => {
+  const states: HealthTracking[] = [];
+  // The last sync is later than this read: the phone's clock has gone backwards.
+  let game = createGame('2026-10-21');
+  game = {
+    ...game,
+    health: {
+      source: 'apple-health',
+      enabled: true,
+      syncedAt: '2026-10-21T19:00:00.000Z',
+      startedOn: '2026-10-21',
+    },
+  };
+  const sync = createHealthSync(
+    async () => READ,
+    (state) => states.push(state),
+    (action) => {
+      const result = playGame(game, action);
+      return result.ok ? null : result.reason;
+    },
+  );
+  await sync.run(REQUEST);
+  assert.deepEqual(states.at(-1), {
+    status: 'error',
+    message: 'your phone’s clock is behind your last sync. check the date and time, then sync again.',
+  });
 });

@@ -76,7 +76,7 @@ export function ActivityList({ place }: Readonly<{ place: Place }>): React.JSX.E
                   bevel(selected ? 'gold' : 'panel', pressed || selected),
                 ]}
               >
-                <Sprite art={SKILL_ART[entry.id] ?? SKILL_ART.agility} size={14} />
+                <Sprite art={SKILL_ART[entry.id]} size={14} />
                 <Text numberOfLines={1} style={[styles.chipText, selected && { color: color.text }]}>
                   {entry.name}
                 </Text>
@@ -86,7 +86,7 @@ export function ActivityList({ place }: Readonly<{ place: Place }>): React.JSX.E
         </View>
       ) : (
         <View style={styles.groupTitle}>
-          <Sprite art={SKILL_ART[skill] ?? SKILL_ART.agility} size={18} />
+          <Sprite art={SKILL_ART[skill]} size={18} />
           <Text accessibilityRole="header" style={styles.groupText}>
             {SKILLS.find((entry) => entry.id === skill)?.name}
           </Text>

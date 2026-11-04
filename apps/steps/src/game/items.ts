@@ -181,13 +181,23 @@ export function totalsFor(loadout: Loadout, skill: SkillId | null): Totals {
   return totals;
 }
 
+// The bag's size before packs and upgrades; `capacityOf` in game.ts adds those.
 export const BASE_SLOTS = 28;
-export function capacity(loadout: Loadout): number {
-  return BASE_SLOTS + totalsFor(loadout, null).slots;
+
+// The one way the game writes a chance or bonus: one decimal at most ("12.5%", "4%").
+export function formatPercent(value: number): string {
+  return `${Math.round(value * 1000) / 10}%`;
+}
+
+// A loot range, "2–4 raw minnows", or a fixed count through `itemCount`.
+export function itemRange(min: number, max: number, key: string): string {
+  return min === max
+    ? itemCount(min, key)
+    : `${min.toLocaleString()}–${max.toLocaleString()} ${pluralName(keyName(key))}`;
 }
 
 export function formatMod(mod: Mod): string {
-  const value = mod.stat === 'slots' ? `+${mod.value}` : `+${Math.round(mod.value * 1000) / 10}%`;
+  const value = mod.stat === 'slots' ? `+${mod.value}` : `+${formatPercent(mod.value)}`;
   return `${value} ${statLabel(mod.stat)}${mod.skill ? ` (${mod.skill})` : ''}`;
 }
 

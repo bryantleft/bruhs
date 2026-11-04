@@ -3,7 +3,7 @@ import test from 'node:test';
 import type { HealthDay } from '../game/game.ts';
 import type { HealthRead, HealthRequest } from '../health/model.ts';
 import { raceWeek } from './model.ts';
-import { createStepSharing, type SharingState } from './sharing.ts';
+import { createStepSharing, type SharingState, sharingErrorCopy } from './sharing.ts';
 
 const week = raceWeek(new Date('2026-10-28T12:00:00Z'));
 const connection = {
@@ -165,4 +165,43 @@ test('a canceled upload is aborted and a fresh sync can recover', async () => {
   );
   await share.run({ week, connection, demo: false });
   assert.equal(states.at(-1)?.status, 'shared');
+});
+
+test('a failed share says why, and retrying is only offered where it can help', async () => {
+  const day = { date: '2026-10-28', steps: 500 };
+  const cases: readonly (readonly [HealthRead | Error, string])[] = [
+    [{ status: 'unavailable', reason: 'device' }, 'unavailable'],
+    [{ status: 'unavailable', reason: 'update-required' }, 'update-required'],
+    [{ status: 'read', source: 'health-connect', at: '2026-10-28T12:00:00Z', days: [day] }, 'source-changed'],
+    [
+      { status: 'read', source: 'apple-health', at: '2026-10-28T12:00:00Z', days: [day, { ...day }] },
+      'invalid-total',
+    ],
+    [new Error('native crash'), 'unknown'],
+  ];
+  for (const [result, reason] of cases) {
+    const states: SharingState[] = [];
+    const warned: unknown[] = [];
+    const share = createStepSharing(
+      async () => {
+        if (result instanceof Error) throw result;
+        return result;
+      },
+      async () => ({ ok: true, value: true }),
+      (state) => states.push(state),
+      (_message, error) => warned.push(error),
+    );
+    await share.run({ week, connection, demo: false });
+    assert.deepEqual(states.at(-1), { status: 'error', reason });
+    assert.deepEqual(warned, result instanceof Error ? [result] : []);
+  }
+  const states: SharingState[] = [];
+  await createStepSharing(
+    async () => ({ status: 'read', source: 'apple-health', at: '2026-10-28T12:00:00Z', days: [day] }),
+    async () => ({ ok: false, error: 'unknown' }),
+    (state) => states.push(state),
+  ).run({ week, connection, demo: false });
+  assert.deepEqual(states.at(-1), { status: 'error', reason: 'submit' });
+  assert.equal(sharingErrorCopy('submit'), 'couldn’t send your steps. tap refresh to try again.');
+  assert.match(sharingErrorCopy('update-required'), /^Health Connect needs an update/);
 });

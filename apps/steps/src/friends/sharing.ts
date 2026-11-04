@@ -2,9 +2,34 @@ import type { HealthConnection, HealthDay } from '../game/game.ts';
 import type { HealthReader } from '../health/model.ts';
 import type { PartyResult, RaceWeek } from './model.ts';
 
-export type SharingState = Readonly<{
-  status: 'idle' | 'syncing' | 'shared' | 'preview' | 'paused' | 'no-data' | 'permission' | 'error';
-}>;
+// Why sharing failed: only `submit` and `unknown` can succeed on a plain retry.
+export type SharingFailure =
+  | 'unavailable'
+  | 'update-required'
+  | 'source-changed'
+  | 'invalid-total'
+  | 'submit'
+  | 'unknown';
+export type SharingState =
+  | Readonly<{ status: 'idle' | 'syncing' | 'shared' | 'preview' | 'paused' | 'no-data' | 'permission' }>
+  | Readonly<{ status: 'error'; reason: SharingFailure }>;
+
+export function sharingErrorCopy(reason: SharingFailure): string {
+  switch (reason) {
+    case 'unavailable':
+      return 'this device can’t read Health steps, so there are none to share.';
+    case 'update-required':
+      return 'Health Connect needs an update. update it, then tap refresh.';
+    case 'source-changed':
+      return 'your step source changed. reconnect step sync, then tap refresh.';
+    case 'invalid-total':
+      return 'your Health app sent a step total that can’t be shared. check Steps there, then tap refresh.';
+    case 'submit':
+      return 'couldn’t send your steps. tap refresh to try again.';
+    case 'unknown':
+      return 'step sharing failed. tap refresh to try again.';
+  }
+}
 export type SharingRequest = Readonly<{
   week: RaceWeek;
   connection: HealthConnection | undefined;
@@ -16,6 +41,7 @@ export function createStepSharing(
   read: HealthReader,
   submit: (days: readonly HealthDay[], signal: AbortSignal) => Promise<PartyResult<true>>,
   publish: (state: SharingState) => void,
+  warn: (message: string, error: unknown) => void = (message, error) => console.warn(message, error),
 ): StepSharing {
   let generation = 0;
   let pending: Promise<void> | null = null;
@@ -45,11 +71,21 @@ export function createStepSharing(
             requestPermission: false,
           });
           if (generation !== current) return;
-          if (result.status !== 'read') {
-            publish({ status: result.status === 'permission-required' ? 'permission' : 'error' });
+          if (result.status === 'permission-required') {
+            publish({ status: 'permission' });
             return;
           }
-          if (result.source !== connection.source) throw new Error('Health source changed');
+          if (result.status === 'unavailable') {
+            publish({
+              status: 'error',
+              reason: result.reason === 'update-required' ? 'update-required' : 'unavailable',
+            });
+            return;
+          }
+          if (result.source !== connection.source) {
+            publish({ status: 'error', reason: 'source-changed' });
+            return;
+          }
           const days = result.days.filter(
             (day) => day.date >= request.week.start && day.date <= request.week.end,
           );
@@ -64,15 +100,19 @@ export function createStepSharing(
               !Number.isSafeInteger(day.steps) ||
               day.steps < 0 ||
               day.steps > 2147483647
-            )
-              throw new Error('Invalid Health total');
+            ) {
+              publish({ status: 'error', reason: 'invalid-total' });
+              return;
+            }
             dates.add(day.date);
           }
           const submitted = await submit(days, controller.signal);
           if (generation !== current) return;
-          publish({ status: submitted.ok ? 'shared' : 'error' });
-        } catch {
-          if (generation === current) publish({ status: 'error' });
+          publish(submitted.ok ? { status: 'shared' } : { status: 'error', reason: 'submit' });
+        } catch (error: unknown) {
+          if (generation !== current) return;
+          warn('Step sharing failed:', error);
+          publish({ status: 'error', reason: 'unknown' });
         } finally {
           if (generation === current) {
             pending = null;

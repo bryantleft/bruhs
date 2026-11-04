@@ -61,6 +61,11 @@ export type Recorder = Readonly<{
   dispose: () => void;
 }>;
 
+// While recording, the route is written every few fixes instead of on each one: a whole-walk
+// write per fix grows with the walk. Pause, finish, backgrounding and dispose always write.
+export const SAVE_EVERY_FIXES = 10;
+export const SAVE_EVERY_MS = 30_000;
+
 export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerState) => void): Recorder {
   let state = EMPTY_EXPLORER;
   let alive = true;
@@ -71,11 +76,16 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
   let pending: Readonly<{ id: number; walk: Walk }> | null = null;
   let writeId = 0;
   let loadId = 0;
+  // Fixes recorded since the last write, and the walk time that write covered.
+  let unsaved = 0;
+  let savedAt = 0;
   const publish = (next: ExplorerState): void => {
     state = next;
     if (alive) changed(state);
   };
   const persist = (walk: Walk): void => {
+    unsaved = 0;
+    savedAt = walk.updatedAt;
     const id = ++writeId;
     pending = { id, walk };
     publish({ ...state, save: { status: 'saving' } });
@@ -89,13 +99,14 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
         try {
           await ports.write(JSON.stringify(next.walk));
           if (next.id === writeId) publish({ ...state, save: { status: 'saved' } });
-        } catch {
+        } catch (error: unknown) {
+          console.warn('Walk could not be saved:', error);
           if (next.id === writeId)
             publish({
               ...state,
               save: {
                 status: 'error',
-                message: 'Your walk could not be saved. Free up device storage, then retry.',
+                message: 'couldn’t save your walk. free up space on this device, then retry.',
               },
             });
         }
@@ -135,12 +146,13 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
           return;
         }
         publish({ ...state, loading: 'ready', loadError: null, walk: decoded?.ok ? decoded.walk : null });
-      } catch {
+      } catch (error: unknown) {
+        console.warn('Walk could not be read:', error);
         if (alive && request === loadId)
           publish({
             ...state,
             loading: 'error',
-            loadError: 'Device storage could not be opened. Try opening your walk again.',
+            loadError: 'couldn’t open this device’s storage. try opening your walk again.',
           });
       }
     },
@@ -158,18 +170,18 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
         const availability = await ports.availability();
         if (!alive || request !== epoch) return;
         if (availability === 'unsupported') {
-          locationError('Location is not available here. Try another browser or the mobile app.');
+          locationError('location isn’t available here. try another browser or the mobile app.');
           return;
         }
         if (availability === 'disabled') {
-          locationError('Location services are off. Turn them on, then start your walk again.', true);
+          locationError('location services are off. turn them on, then start your walk again.', true);
           return;
         }
         const permission = await ports.requestPermission();
         if (!alive || request !== epoch) return;
         if (permission.status === 'denied') {
           locationError(
-            'Allow location access to draw your route. Your step progress is safe.',
+            'allow location access to draw your route. your step progress is safe.',
             !permission.canAskAgain,
           );
           return;
@@ -193,20 +205,28 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
                   ? { status: 'weak', accuracy: fix.accuracy }
                   : { status: 'watching' },
             });
+            // A segment's first point is written at once, so a new or resumed walk is never
+            // only in memory; later points wait for the next batch.
+            const first = (state.walk.segments.at(-1)?.length ?? 0) === 0;
             const walk = recordFix(state.walk, fix);
-            if (walk !== state.walk) commit(walk);
+            if (walk === state.walk) return;
+            unsaved += 1;
+            if (first || unsaved >= SAVE_EVERY_FIXES || walk.updatedAt - savedAt >= SAVE_EVERY_MS)
+              commit(walk);
+            else publish({ ...state, walk });
           },
           (reason) => {
             if (!alive || request !== epoch) return;
             if (reason === 'permission')
-              locationError('Allow location access to draw your route. Your step progress is safe.', true);
-            else locationError('GPS could not find your location. Try again.');
+              locationError('allow location access to draw your route. your step progress is safe.', true);
+            else locationError('GPS couldn’t find your location. try again.');
           },
         );
         if (!alive || request !== epoch) watcher.remove();
         else subscription = watcher;
-      } catch {
-        if (alive && request === epoch) locationError('Location could not start. Try again.');
+      } catch (error: unknown) {
+        console.warn('Location could not start:', error);
+        if (alive && request === epoch) locationError('couldn’t start location. try again.');
       }
     },
     pause,
@@ -221,7 +241,7 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
     },
     async clear(): Promise<ClearWalkResult> {
       if (!alive || state.loading === 'loading')
-        return { ok: false, message: 'Your walk is still opening. Try erasing it again.' };
+        return { ok: false, message: 'your walk is still opening. try erasing it again.' };
       pause();
       loadId += 1;
       publish({ ...state, loading: 'loading', location: { status: 'idle' } });
@@ -230,8 +250,9 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
         await ports.remove();
         if (alive) publish({ ...EMPTY_EXPLORER, loading: 'ready' });
         return { ok: true };
-      } catch {
-        const message = 'This walk could not be deleted. Try deleting it again.';
+      } catch (error: unknown) {
+        console.warn('Walk could not be deleted:', error);
+        const message = 'couldn’t delete this walk. try deleting it again.';
         if (alive)
           publish({
             ...state,

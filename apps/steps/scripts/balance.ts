@@ -248,7 +248,7 @@ for (const [place, id] of SPOTS) {
     .map((gem) => countOf(hoard, gem))
     .reduce((a, b) => a + b, 0);
   console.log(
-    `${id.padEnd(16)} level ${level} (${activity ? game.xp[activity.skill] : 0} xp), ${game.actions} actions, ${chests}, ${rare} rare finds, ${trips} bank trips, agility ${skillLevel(game, 'agility')}${game.stopped ? `, stopped: ${game.stopped.missing}` : ''}`,
+    `${id.padEnd(16)} level ${level} (${activity ? game.xp[activity.skill] : 0} xp), ${game.actions} actions, ${chests}, ${rare} rare finds, ${trips} bank trips, agility ${skillLevel(game, 'agility')}${game.stopped ? `, stopped: ${game.stopped.kind}` : ''}`,
   );
 }
 console.log(`\nlevel check: 13,034,431 xp is level ${levelForXp(13_034_431)}`);

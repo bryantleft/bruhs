@@ -4,11 +4,9 @@ import { Hud } from '../../components/Hud';
 import { Icon } from '../../components/Icon';
 import { Button, Screen } from '../../components/ui';
 import {
-  ACTIVITIES,
   getItem,
   getLocation,
   getQuest,
-  LOCATIONS,
   MISSION_PERIODS,
   type Mission,
   type MissionPeriod,
@@ -19,9 +17,12 @@ import { useGame } from '../../game/GameProvider';
 import {
   atBank,
   canHandIn,
+  itemSource,
+  itemSourceText,
   missionClaimed,
   missionProgress,
   missionsFor,
+  ownedCount,
   periodDaysLeft,
   questBlocker,
   questPoints,
@@ -121,24 +122,6 @@ function Missions(): React.JSX.Element {
   );
 }
 
-// Where an item comes from, in words: the easiest activity that makes it and where to do it.
-function howToGet(item: string): string {
-  const maker = ACTIVITIES.filter((activity) => activity.output.item === item).sort(
-    (a, b) => a.level - b.level,
-  )[0];
-  if (maker) {
-    const places = LOCATIONS.filter((place) => place.activities.includes(maker.id)).map(
-      (place) => place.name,
-    );
-    const from = maker.inputs?.length
-      ? ` from ${maker.inputs.map((input) => getItem(input.item)?.name ?? input.item).join(' and ')}`
-      : '';
-    return `${maker.verb} ${maker.name}${from} at ${places.join(' or ')} (${maker.skill} ${maker.level})`;
-  }
-  const finder = ACTIVITIES.find((activity) => activity.finds?.some((find) => find.item === item));
-  return finder ? `a rare find while ${finder.verb}` : 'found in chests';
-}
-
 function QuestDetail({ quest }: Readonly<{ quest: Quest }>): React.JSX.Element {
   const { game, act } = useGame();
   const state = questState(game, quest.id);
@@ -148,9 +131,7 @@ function QuestDetail({ quest }: Readonly<{ quest: Quest }>): React.JSX.Element {
   const place = getLocation(quest.location);
   // Items in the bank only count when the hand-in town has one; otherwise carry them.
   const carried = quest.deliver.every((stack) => countOf(game.inventory, stack.item) >= stack.qty);
-  const gathered = quest.deliver.every(
-    (stack) => countOf(game.inventory, stack.item) + countOf(game.bank, stack.item) >= stack.qty,
-  );
+  const gathered = quest.deliver.every((stack) => ownedCount(game, stack.item) >= stack.qty);
   return (
     <View style={styles.detail}>
       <Text style={styles.giver}>
@@ -198,7 +179,7 @@ function QuestDetail({ quest }: Readonly<{ quest: Quest }>): React.JSX.Element {
             <Text style={styles.small}>bring</Text>
             <View style={styles.slots}>
               {quest.deliver.map((stack) => {
-                const have = countOf(game.inventory, stack.item) + countOf(game.bank, stack.item);
+                const have = ownedCount(game, stack.item);
                 return (
                   <View key={stack.item} style={styles.deliver}>
                     <Slot art={itemArt(stack.item)} size={44} />
@@ -212,12 +193,10 @@ function QuestDetail({ quest }: Readonly<{ quest: Quest }>): React.JSX.Element {
               })}
             </View>
             {quest.deliver
-              .filter(
-                (stack) => countOf(game.inventory, stack.item) + countOf(game.bank, stack.item) < stack.qty,
-              )
+              .filter((stack) => ownedCount(game, stack.item) < stack.qty)
               .map((stack) => (
                 <Text key={stack.item} style={styles.where}>
-                  {getItem(stack.item)?.name}: {howToGet(stack.item)}
+                  {getItem(stack.item)?.name}: {itemSourceText(itemSource(game, stack.item))}
                 </Text>
               ))}
           </View>

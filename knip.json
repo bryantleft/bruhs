@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreExportsUsedInFile": true,
+  "workspaces": {
+    "apps/steps": {
+      "entry": [
+        "src/app/**/*.{ts,tsx}",
+        "src/**/*.{web,ios,android,native}.{ts,tsx}",
+        "src/**/*.test.{ts,cjs}",
+        "scripts/*.{ts,mjs,cjs}",
+        "plugins/*.{js,cjs,ts}"
+      ],
+      "project": ["src/**/*.{ts,tsx,cjs}", "scripts/**/*.{ts,mjs,cjs}", "plugins/**/*.{js,cjs,ts}"]
+    },
+    "apps/outside-site": {}
+  }
+}

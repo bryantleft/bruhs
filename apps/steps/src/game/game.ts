@@ -1,11 +1,9 @@
 import {
-  ACTIVITIES,
   type Activity,
   ADVENTURER_CHANCE,
   BAG_UPGRADE_SLOTS,
   BAG_UPGRADES,
   CHEST_CHANCE,
-  FIXED_MISSIONS,
   GEAR_SLOTS,
   type GearSlot,
   getActivity,
@@ -15,10 +13,6 @@ import {
   type Item,
   LOCATIONS,
   METAL_STATS,
-  MISSION_PERIODS,
-  MISSION_PICKS,
-  MISSION_POOLS,
-  type Mission,
   type MissionPeriod,
   type Place,
   QUESTS,
@@ -34,11 +28,11 @@ import {
   START_LOCATION,
   STORE_STOCK,
   slotFits,
-  TOOL_KINDS,
   TOOL_SKILL,
   type ToolKind,
   toolId,
 } from './content.ts';
+import { Dice } from './dice.ts';
 import {
   add,
   BASE_SLOTS,
@@ -46,6 +40,7 @@ import {
   countOf,
   fits,
   isKnownKey,
+  itemCount,
   itemKey,
   keyItem,
   keyValue,
@@ -56,9 +51,39 @@ import {
   takeId,
   totalsFor,
 } from './items.ts';
+import { missionClaimed, missionProgress, missionsFor, rollMissions } from './missions.ts';
+import { isDateKey, isHealthConnection, type SAVE_VERSION } from './save.ts';
 import { levelForXp } from './xp.ts';
 
 export { SKINS, type Skin, type SkinId } from './content.ts';
+// The game is split by concern; these re-exports keep `game.ts` the one import for callers.
+export {
+  type ItemSource,
+  itemSource,
+  itemSourceText,
+  type NextStep,
+  nearestBank,
+  nextStep,
+  orList,
+  ownedCount,
+  questsNeeding,
+  runsLeft,
+  sourceOf,
+  townsWith,
+  unlocksBetween,
+} from './guidance.ts';
+export {
+  getMission,
+  missionClaimed,
+  missionProgress,
+  missionsFor,
+  periodDaysLeft,
+  periodKey,
+  periodRange,
+  readyMissions,
+  rollMissions,
+} from './missions.ts';
+export { decodeGame, type LoadFailure, migrateV1, SAVE_VERSION } from './save.ts';
 
 export const GOALS = [4_000, 6_000, 8_000, 10_000] as const;
 export type Goal = (typeof GOALS)[number];
@@ -86,8 +111,30 @@ export type Travel = Readonly<{
   next: string | null;
 }>;
 export type Task = Readonly<{ id: string; progress: number }>;
-// `missing` is an item id, "inventory" when the bag is full, or "<skill>-level".
-export type StopReason = Readonly<{ activity: string; missing: string }>;
+// Why the current task stopped: the bag filled, an input ran out, or the skill level is too low
+// (only reachable from an edited save).
+export type StopReason = Readonly<
+  { activity: string } & (
+    | { kind: 'bag-full' }
+    | { kind: 'missing'; item: string }
+    | { kind: 'level'; skill: SkillId }
+  )
+>;
+// Lifetime counters on the character sheet; mission counters read the chest and action ones.
+export const STAT_KEYS = [
+  'chestsFound',
+  'chestsOpened',
+  'crafted',
+  'finds',
+  'doubleActions',
+  'doubleResults',
+  'preserved',
+  'eaten',
+  'burnt',
+  'missions',
+  ...SKILL_IDS.map((skill) => `actions:${skill}` as const),
+] as const;
+export type StatKey = (typeof STAT_KEYS)[number];
 export type Buff = Readonly<{ item: string; actions: number }>;
 // One period's missions: which were drawn, the counters when the period began, and claims.
 export type MissionState = Readonly<{
@@ -98,7 +145,7 @@ export type MissionState = Readonly<{
 }>;
 
 export type Game = Readonly<{
-  version: 3;
+  version: typeof SAVE_VERSION;
   days: readonly Day[];
   goal: Goal;
   equipped: SkinId;
@@ -125,7 +172,7 @@ export type Game = Readonly<{
   // Collection log: every item id ever obtained.
   seen: readonly string[];
   // Lifetime counters (chests opened, items crafted, doubles, actions per skill, ...).
-  stats: Readonly<Record<string, number>>;
+  stats: Readonly<Partial<Record<StatKey, number>>>;
   // Backpack upgrades bought at a bank, two slots each.
   bagUpgrades: number;
   missions: Readonly<Partial<Record<MissionPeriod, MissionState>>>;
@@ -178,7 +225,7 @@ export function getDay(game: Pick<Game, 'days' | 'goal'>, date: string): Day {
   return game.days.find((day) => day.date === date) ?? { date, steps: 0, goal: game.goal };
 }
 
-const STARTER_TOOLS: Readonly<Record<ToolKind, string>> = {
+export const STARTER_TOOLS: Readonly<Record<ToolKind, string>> = {
   axe: toolId('bronze', 'axe'),
   pickaxe: toolId('bronze', 'pickaxe'),
   harpoon: toolId('bronze', 'harpoon'),
@@ -187,7 +234,7 @@ const STARTER_TOOLS: Readonly<Record<ToolKind, string>> = {
 // A small starter kit so the bag, food buffs and crafting are discoverable from minute one.
 const STARTER_INVENTORY: Bag = { minnow: 3, linen: 2, 'bird-nest': 1 };
 
-function emptyXp(): Record<SkillId, number> {
+export function emptyXp(): Record<SkillId, number> {
   return Object.fromEntries(SKILL_IDS.map((skill) => [skill, 0])) as Record<SkillId, number>;
 }
 
@@ -304,20 +351,12 @@ export function nextBagUpgrade(game: Pick<Game, 'bagUpgrades'>): number | null {
   return BAG_UPGRADES[game.bagUpgrades] ?? null;
 }
 
-export function inventoryFull(game: Game): boolean {
-  return slotsUsed(game.inventory) >= capacityOf(game);
-}
-
 // What you can use right now: the inventory, plus the bank when standing in a bank town.
 export function available(
   game: Pick<Game, 'inventory' | 'bank' | 'location' | 'travel'>,
   id: string,
 ): number {
   return countOf(game.inventory, id) + (atBank(game) ? countOf(game.bank, id) : 0);
-}
-
-export function toolFor(game: Pick<Game, 'tools'>, kind: ToolKind): Item | undefined {
-  return keyItem(game.tools[kind]);
 }
 
 // --- action math ---------------------------------------------------------------------------
@@ -383,135 +422,49 @@ export function actionPreview(game: Game, activity: Activity): Preview {
   };
 }
 
-export function locationBlocker(game: Pick<Game, 'xp' | 'quests'>, place: Place): string | null {
+// What stands between the player and a place, activity, quest or tool. Typed, so rules can
+// refuse with a reason and screens can explain it in the same words.
+export type Requirement =
+  | Readonly<{ kind: 'level'; skill: SkillId; level: number }>
+  | Readonly<{ kind: 'quest'; quest: string }>
+  | Readonly<{ kind: 'item'; item: string; qty: number }>;
+
+export function requirementText(requirement: Requirement): string {
+  switch (requirement.kind) {
+    case 'level':
+      return `needs ${requirement.skill} ${requirement.level}`;
+    case 'quest':
+      return `needs quest: ${getQuest(requirement.quest)?.name ?? requirement.quest}`;
+    case 'item':
+      return `needs ${itemCount(requirement.qty, requirement.item)}`;
+  }
+}
+
+export function locationRequirement(game: Pick<Game, 'xp' | 'quests'>, place: Place): Requirement | null {
   const requirement = place.requires;
   if (!requirement) return null;
   if (requirement.type === 'skill')
     return skillLevel(game, requirement.skill) >= requirement.level
       ? null
-      : `needs ${requirement.skill} ${requirement.level}`;
-  return game.quests[requirement.quest] === 'done'
-    ? null
-    : `needs quest: ${getQuest(requirement.quest)?.name ?? requirement.quest}`;
+      : { kind: 'level', skill: requirement.skill, level: requirement.level };
+  return game.quests[requirement.quest] === 'done' ? null : { kind: 'quest', quest: requirement.quest };
+}
+
+export function locationBlocker(game: Pick<Game, 'xp' | 'quests'>, place: Place): string | null {
+  const requirement = locationRequirement(game, place);
+  return requirement ? requirementText(requirement) : null;
+}
+
+export function activityRequirement(game: Game, activity: Activity): Requirement | null {
+  if (skillLevel(game, activity.skill) < activity.level)
+    return { kind: 'level', skill: activity.skill, level: activity.level };
+  const missing = activity.inputs?.find((input) => available(game, input.item) < input.qty);
+  return missing ? { kind: 'item', item: missing.item, qty: missing.qty } : null;
 }
 
 export function activityBlocker(game: Game, activity: Activity): string | null {
-  if (skillLevel(game, activity.skill) < activity.level) return `needs ${activity.skill} ${activity.level}`;
-  const missing = activity.inputs?.find((input) => available(game, input.item) < input.qty);
-  if (missing) return `needs ${getItem(missing.item)?.name ?? missing.item} ×${missing.qty}`;
-  return null;
-}
-
-// --- guidance ------------------------------------------------------------------------------
-
-export type NextStep =
-  | Readonly<{ kind: 'hand-in'; quest: Quest }>
-  | Readonly<{ kind: 'start-quest'; quest: Quest }>
-  | Readonly<{ kind: 'start'; activity: Activity; quest?: Quest }>
-  | Readonly<{ kind: 'travel'; place: Place; activity?: Activity; quest?: Quest }>;
-
-// How many times an activity can run on what you hold (bank included in a bank town).
-export function runsLeft(game: Game, activity: Activity): number {
-  if (!activity.inputs?.length) return Number.POSITIVE_INFINITY;
-  return Math.min(...activity.inputs.map((input) => Math.floor(available(game, input.item) / input.qty)));
-}
-
-// Where an item can be made or gathered right now: here first, then the nearest open place.
-export function sourceOf(
-  game: Game,
-  item: string,
-): Readonly<{ activity: Activity; place: Place; distance: number }> | null {
-  let best: { activity: Activity; place: Place; distance: number } | null = null;
-  for (const activity of ACTIVITIES) {
-    if (activity.output.item !== item || skillLevel(game, activity.skill) < activity.level) continue;
-    for (const place of LOCATIONS) {
-      if (!place.activities.includes(activity.id) || locationBlocker(game, place)) continue;
-      const distance =
-        place.id === game.location ? 0 : (route(game.location, place.id)?.distance ?? Infinity);
-      if (!best || distance < best.distance) best = { activity, place, distance };
-    }
-  }
-  return best;
-}
-
-function toward(game: Game, item: string, quest: Quest | undefined, depth = 0): NextStep | null {
-  const source = sourceOf(game, item);
-  if (!source) return null;
-  // A recipe short on inputs points at its first missing input instead.
-  const missing = source.activity.inputs?.find((input) => available(game, input.item) < input.qty);
-  if (missing && depth < 2) {
-    const deeper = toward(game, missing.item, quest, depth + 1);
-    if (deeper) return deeper;
-  }
-  if (source.distance === 0 && !activityBlocker(game, source.activity))
-    return { kind: 'start', activity: source.activity, ...(quest ? { quest } : {}) };
-  if (source.distance === 0) return null;
-  return { kind: 'travel', place: source.place, activity: source.activity, ...(quest ? { quest } : {}) };
-}
-
-// The one thing to do next, for the idle panel: quests first, then steady work.
-export function nextStep(game: Game): NextStep | null {
-  if (game.travel) return null;
-  for (const quest of QUESTS) {
-    if (questState(game, quest.id) !== 'started' || questBlocker(game, quest)) continue;
-    if (canHandIn(game, quest)) {
-      if (game.location === quest.location) return { kind: 'hand-in', quest };
-      const gathered = quest.deliver.every(
-        (stack) => countOf(game.inventory, stack.item) + countOf(game.bank, stack.item) >= stack.qty,
-      );
-      const place = getLocation(quest.location);
-      if (gathered && place) return { kind: 'travel', place, quest };
-    }
-    const short = quest.deliver.find(
-      (stack) => countOf(game.inventory, stack.item) + countOf(game.bank, stack.item) < stack.qty,
-    );
-    if (short) {
-      const step = toward(game, short.item, quest);
-      if (step) return step;
-    } else {
-      const place = getLocation(quest.location);
-      if (place && place.id !== game.location) return { kind: 'travel', place, quest };
-    }
-  }
-  const here = (getLocation(game.location)?.activities ?? [])
-    .map((id) => getActivity(id))
-    .filter((activity): activity is Activity => !!activity && !activityBlocker(game, activity));
-  // Steady work beats a recipe that stops after one go.
-  const steady = here
-    .filter((activity) => runsLeft(game, activity) >= 5)
-    .sort((a, b) => b.xp / stepsPerAction(game, b) - a.xp / stepsPerAction(game, a))[0];
-  const fresh = QUESTS.find((quest) => questState(game, quest.id) === 'new' && !questBlocker(game, quest));
-  if (fresh && !Object.values(game.quests).includes('started')) return { kind: 'start-quest', quest: fresh };
-  if (steady) return { kind: 'start', activity: steady };
-  // Nothing steady here: walk to gather for the lowest gathering skill.
-  const gathering = (['woodcutting', 'mining', 'fishing', 'foraging'] as const)
-    .slice()
-    .sort((a, b) => skillLevel(game, a) - skillLevel(game, b));
-  for (const skill of gathering) {
-    const activity = ACTIVITIES.filter(
-      (entry) => entry.skill === skill && !entry.inputs && entry.level <= skillLevel(game, skill),
-    ).sort((a, b) => b.level - a.level)[0];
-    const step = activity ? toward(game, activity.output.item, undefined) : null;
-    if (step) return step;
-  }
-  const any = here.sort((a, b) => b.xp - a.xp)[0];
-  return any ? { kind: 'start', activity: any } : null;
-}
-
-// What a level-up opened: recipes and spots, tools you can now wield, places you can reach.
-export function unlocksBetween(skill: SkillId, from: number, to: number): string[] {
-  const opened = (level: number): boolean => level > from && level <= to;
-  const unlocks: string[] = [];
-  for (const activity of ACTIVITIES)
-    if (activity.skill === skill && opened(activity.level)) unlocks.push(`${activity.verb} ${activity.name}`);
-  for (const [kind, owner] of Object.entries(TOOL_SKILL))
-    if (owner === skill)
-      for (const [metal, stats] of Object.entries(METAL_STATS))
-        if (opened(stats.level)) unlocks.push(`wield ${metal} ${kind}`);
-  for (const place of LOCATIONS)
-    if (place.requires?.type === 'skill' && place.requires.skill === skill && opened(place.requires.level))
-      unlocks.push(`travel to ${place.name}`);
-  return unlocks;
+  const requirement = activityRequirement(game, activity);
+  return requirement ? requirementText(requirement) : null;
 }
 
 export function travelCost(game: Pick<Game, 'xp'> & Loadout, base: number): number {
@@ -561,45 +514,23 @@ export function questState(game: Pick<Game, 'quests'>, id: string): 'new' | 'sta
   return game.quests[id] ?? 'new';
 }
 
-export function questBlocker(game: Pick<Game, 'xp' | 'quests'>, quest: Quest): string | null {
+export function questRequirement(game: Pick<Game, 'xp' | 'quests'>, quest: Quest): Requirement | null {
   for (const required of quest.requires.quests ?? [])
-    if (game.quests[required] !== 'done') return `complete ${getQuest(required)?.name ?? required}`;
+    if (game.quests[required] !== 'done') return { kind: 'quest', quest: required };
   for (const { skill, level } of quest.requires.skills ?? [])
-    if (skillLevel(game, skill) < level) return `needs ${skill} ${level}`;
+    if (skillLevel(game, skill) < level) return { kind: 'level', skill, level };
   return null;
+}
+
+export function questBlocker(game: Pick<Game, 'xp' | 'quests'>, quest: Quest): string | null {
+  const requirement = questRequirement(game, quest);
+  if (requirement?.kind === 'quest')
+    return `complete ${getQuest(requirement.quest)?.name ?? requirement.quest}`;
+  return requirement ? requirementText(requirement) : null;
 }
 
 export function canHandIn(game: Game, quest: Quest): boolean {
   return quest.deliver.every((stack) => available(game, stack.item) >= stack.qty);
-}
-
-// --- deterministic randomness ------------------------------------------------------------
-
-// mulberry32: one 32-bit state word, advanced once per roll.
-function roll(seed: number): [number, number] {
-  const next = (seed + 0x6d2b79f5) >>> 0;
-  let t = next;
-  t = Math.imul(t ^ (t >>> 15), t | 1);
-  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  return [((t ^ (t >>> 14)) >>> 0) / 4_294_967_296, next];
-}
-
-class Dice {
-  seed: number;
-  constructor(seed: number) {
-    this.seed = seed;
-  }
-  next(): number {
-    const [value, seed] = roll(this.seed);
-    this.seed = seed;
-    return value;
-  }
-  chance(probability: number): boolean {
-    return probability > 0 && this.next() < probability;
-  }
-  between(min: number, max: number): number {
-    return min + Math.floor(this.next() * (max - min + 1));
-  }
 }
 
 // --- mutable working copy for rules and the step engine ----------------------------------
@@ -614,7 +545,7 @@ function freeze(work: Draft): Game {
   return { ...work, seen: [...new Set(work.seen)] };
 }
 
-function count(work: Draft, stat: string, amount = 1): void {
+function count(work: Draft, stat: StatKey, amount = 1): void {
   work.stats = { ...work.stats, [stat]: (work.stats[stat] ?? 0) + amount };
 }
 
@@ -772,10 +703,11 @@ export function advance(game: Game): Game {
     const missing = activity.inputs?.find((input) => available(work, input.item) < input.qty);
     const full = !fits(work.inventory, activity.output.item, activity.output.qty, capacityOf(work));
     if (missing || full || levelForXp(work.xp[activity.skill]) < activity.level) {
-      work.stopped = {
-        activity: activity.id,
-        missing: missing?.item ?? (full ? 'inventory' : `${activity.skill}-level`),
-      };
+      work.stopped = missing
+        ? { activity: activity.id, kind: 'missing', item: missing.item }
+        : full
+          ? { activity: activity.id, kind: 'bag-full' }
+          : { activity: activity.id, kind: 'level', skill: activity.skill };
       work.task = null;
       break;
     }
@@ -800,77 +732,131 @@ export function advance(game: Game): Game {
 
 // --- rules ---------------------------------------------------------------------------------
 
-function wear(work: Draft, key: string, slot?: GearSlot): boolean {
+// Why the rules refused an action. `no-change` is a request already satisfied (stop while idle,
+// re-equip the worn outfit, re-read the same step total) and needs no explanation; `invalid`
+// is a malformed or unknown action that no screen should send. Everything else is the
+// player's to fix, and the session explains it.
+export type Rejection =
+  | Readonly<{ kind: 'no-change' }>
+  | Readonly<{ kind: 'invalid' }>
+  | Readonly<{ kind: 'bag-full' }>
+  | Readonly<{ kind: 'not-at-bank' }>
+  | Readonly<{ kind: 'not-at-store' }>
+  | Readonly<{ kind: 'travelling' }>
+  | Readonly<{ kind: 'not-here'; place: string | null }>
+  | Readonly<{ kind: 'too-poor'; price: number }>
+  | Readonly<{ kind: 'requires'; requirement: Requirement }>
+  | Readonly<{ kind: 'mission-unfinished' }>
+  | Readonly<{ kind: 'outfit-locked'; total: number }>
+  | Readonly<{ kind: 'clock-behind' }>;
+
+export type RuleResult = Readonly<{ ok: true; game: Game }> | Readonly<{ ok: false; reason: Rejection }>;
+
+function accept(game: Game): RuleResult {
+  return { ok: true, game };
+}
+
+function refuse(reason: Rejection): RuleResult {
+  return { ok: false, reason };
+}
+
+const NO_CHANGE: RuleResult = refuse({ kind: 'no-change' });
+const INVALID: RuleResult = refuse({ kind: 'invalid' });
+
+function isQty(value: number, max: number): boolean {
+  return Number.isSafeInteger(value) && value >= 1 && value <= max;
+}
+
+// How far a bag runs past its capacity; 0 when everything fits.
+function overflow(game: Pick<Game, 'inventory' | 'bagUpgrades'> & Loadout): number {
+  return Math.max(0, slotsUsed(game.inventory) - capacityOf(game));
+}
+
+function wear(game: Game, key: string, slot?: GearSlot): RuleResult {
   const item = keyItem(key);
-  const inBag = (work.inventory[key] ?? 0) > 0;
-  const inBank = atBank(work) && (work.bank[key] ?? 0) > 0;
-  if (!item || (!inBag && !inBank)) return false;
-  const take = (): void => {
-    if (inBag) work.inventory = add(work.inventory, key, -1);
-    else work.bank = add(work.bank, key, -1);
-  };
-  // Swapped-out gear goes where the new piece came from.
-  const stow = (old: string): void => {
-    if (inBag) work.inventory = add(work.inventory, old, 1);
-    else work.bank = add(work.bank, old, 1);
+  if (!item || !isKnownKey(key)) return INVALID;
+  const inBag = (game.inventory[key] ?? 0) > 0;
+  const inBank = atBank(game) && (game.bank[key] ?? 0) > 0;
+  if (!inBag && !inBank)
+    return refuse({ kind: 'requires', requirement: { kind: 'item', item: key, qty: 1 } });
+  const before = overflow(game);
+  // Swapped-out gear goes where the new piece came from. A smaller pack can shrink the bag, so a
+  // swap must still fit afterwards; at a bank the old piece may go there instead, as in `unwear`.
+  const swap = (old: string | undefined, equip: (next: Draft) => void): RuleResult => {
+    for (const stowInBag of atBank(game) && inBag ? [true, false] : [inBag]) {
+      const next = draft(game);
+      if (inBag) next.inventory = add(next.inventory, key, -1);
+      else next.bank = add(next.bank, key, -1);
+      if (old && stowInBag) next.inventory = add(next.inventory, old, 1);
+      else if (old) next.bank = add(next.bank, old, 1);
+      equip(next);
+      // A bag already over capacity (from an older build) may swap as long as it gets no worse.
+      if (overflow(next) <= before) return accept(freeze(next));
+    }
+    return refuse({ kind: 'bag-full' });
   };
   if (item.tool) {
     const { kind, metal } = item.tool;
-    if (levelForXp(work.xp[TOOL_SKILL[kind]]) < METAL_STATS[metal].level || work.tools[kind] === key)
-      return false;
-    const old = work.tools[kind];
-    take();
-    stow(old);
-    work.tools = { ...work.tools, [kind]: key };
-    return true;
+    if (game.tools[kind] === key) return NO_CHANGE;
+    const level = METAL_STATS[metal].level;
+    if (levelForXp(game.xp[TOOL_SKILL[kind]]) < level)
+      return refuse({ kind: 'requires', requirement: { kind: 'level', skill: TOOL_SKILL[kind], level } });
+    return swap(game.tools[kind], (next) => {
+      next.tools = { ...next.tools, [kind]: key };
+    });
   }
   const itemSlot = item.slot;
-  if (!itemSlot) return false;
+  if (!itemSlot) return INVALID;
   const target =
     slot && slotFits(slot, itemSlot)
       ? slot
-      : (GEAR_SLOTS.find((entry) => slotFits(entry, itemSlot) && !work.gear[entry]) ??
+      : (GEAR_SLOTS.find((entry) => slotFits(entry, itemSlot) && !game.gear[entry]) ??
         GEAR_SLOTS.find((entry) => slotFits(entry, itemSlot)));
-  if (!target) return false;
-  const old = work.gear[target];
-  take();
-  if (old) stow(old);
-  work.gear = { ...work.gear, [target]: key };
-  return true;
+  if (!target) return INVALID;
+  return swap(game.gear[target], (next) => {
+    next.gear = { ...next.gear, [target]: key };
+  });
 }
 
-function applyRules(game: Game, action: GameAction): Game {
+function applyRules(game: Game, action: GameAction): RuleResult {
   switch (action.type) {
     case 'health-pause':
-      return game.health?.enabled ? { ...game, health: { ...game.health, enabled: false } } : game;
+      return game.health?.enabled
+        ? accept({ ...game, health: { ...game.health, enabled: false } })
+        : NO_CHANGE;
     case 'health-sync':
       return healthSync(game, action);
     case 'equip': {
       const skin = getSkin(action.skin);
-      if (game.equipped === skin.id || skin.id !== action.skin) return game;
-      return totalLevel(game) >= skin.total ? { ...game, equipped: skin.id } : game;
+      if (skin.id !== action.skin) return INVALID;
+      if (game.equipped === skin.id) return NO_CHANGE;
+      return totalLevel(game) >= skin.total
+        ? accept({ ...game, equipped: skin.id })
+        : refuse({ kind: 'outfit-locked', total: skin.total });
     }
     case 'start': {
       const activity = getActivity(action.activity);
-      if (
-        !activity ||
-        game.travel ||
-        !placeOffers(game.location, activity.id) ||
-        activityBlocker(game, activity) ||
-        game.task?.id === activity.id
-      )
-        return game;
-      return { ...game, task: { id: activity.id, progress: 0 }, stopped: null };
+      if (!activity) return INVALID;
+      if (game.travel) return refuse({ kind: 'travelling' });
+      if (!placeOffers(game.location, activity.id)) return refuse({ kind: 'not-here', place: null });
+      const requirement = activityRequirement(game, activity);
+      if (requirement) return refuse({ kind: 'requires', requirement });
+      if (game.task?.id === activity.id) return NO_CHANGE;
+      return accept({ ...game, task: { id: activity.id, progress: 0 }, stopped: null });
     }
     case 'stop':
-      return game.task || game.stopped ? { ...game, task: null, stopped: null } : game;
+      return game.task || game.stopped ? accept({ ...game, task: null, stopped: null }) : NO_CHANGE;
     case 'travel': {
       const place = getLocation(action.to);
-      if (!place || game.travel || place.id === game.location || locationBlocker(game, place)) return game;
+      if (!place) return INVALID;
+      if (game.travel) return refuse({ kind: 'travelling' });
+      if (place.id === game.location) return NO_CHANGE;
+      const requirement = locationRequirement(game, place);
+      if (requirement) return refuse({ kind: 'requires', requirement });
       const path = route(game.location, place.id);
-      if (!path) return game;
+      if (!path) return INVALID;
       const next = action.next && placeOffers(place.id, action.next) ? action.next : null;
-      return {
+      return accept({
         ...game,
         task: null,
         stopped: null,
@@ -881,99 +867,99 @@ function applyRules(game: Game, action: GameAction): Game {
           progress: 0,
           next,
         },
-      };
+      });
     }
     case 'cancel-travel':
-      return game.travel ? { ...game, travel: null } : game;
-    case 'wear': {
-      const work = draft(game);
-      return wear(work, action.item, action.slot) ? freeze(work) : game;
-    }
+      return game.travel ? accept({ ...game, travel: null }) : NO_CHANGE;
+    case 'wear':
+      return wear(game, action.item, action.slot);
     case 'unwear': {
       const key = game.gear[action.slot];
-      if (!key) return game;
+      if (!key) return NO_CHANGE;
       const gear = { ...game.gear };
       delete gear[action.slot];
       // Taking off a pack shrinks the bag, so check space without it.
       if (fits(game.inventory, key, 1, capacityOf({ ...game, gear })))
-        return { ...game, gear, inventory: add(game.inventory, key, 1) };
-      if (atBank(game)) return { ...game, gear, bank: add(game.bank, key, 1) };
-      return game;
+        return accept({ ...game, gear, inventory: add(game.inventory, key, 1) });
+      if (atBank(game)) return accept({ ...game, gear, bank: add(game.bank, key, 1) });
+      return refuse({ kind: 'bag-full' });
     }
     case 'eat': {
       const item = getItem(action.item);
-      if (!item?.buff) return game;
+      if (!item?.buff) return INVALID;
       const work = draft(game);
-      if (!spend(work, item.id, 1)) return game;
+      if (!spend(work, item.id, 1))
+        return refuse({ kind: 'requires', requirement: { kind: 'item', item: item.id, qty: 1 } });
       work.buff = { item: item.id, actions: item.buff.actions };
       count(work, 'eaten');
-      return freeze(work);
+      return accept(freeze(work));
     }
     case 'open': {
       const item = getItem(action.item);
-      const owned = game.inventory[action.item] ?? 0;
-      if (!item?.loot || !Number.isSafeInteger(action.count) || action.count < 1 || action.count > owned)
-        return game;
+      if (!item?.loot || !isQty(action.count, game.inventory[action.item] ?? 0)) return INVALID;
       const work = draft(game);
       const dice = new Dice(game.seed);
       work.inventory = add(work.inventory, item.id, -action.count);
       for (let index = 0; index < action.count; index += 1) rollLoot(work, dice, item);
       count(work, 'chestsOpened', action.count);
       work.seed = dice.seed;
-      return freeze(work);
+      return accept(freeze(work));
     }
     case 'deposit': {
-      const qty = game.inventory[action.item] ?? 0;
-      if (!atBank(game) || !Number.isSafeInteger(action.qty) || action.qty < 1 || action.qty > qty)
-        return game;
-      return {
+      if (!atBank(game)) return refuse({ kind: 'not-at-bank' });
+      if (!isQty(action.qty, game.inventory[action.item] ?? 0)) return INVALID;
+      return accept({
         ...game,
         inventory: add(game.inventory, action.item, -action.qty),
         bank: add(game.bank, action.item, action.qty),
-      };
+      });
     }
     case 'deposit-all': {
+      if (!atBank(game)) return refuse({ kind: 'not-at-bank' });
       // Chests stay in the bag: they take no slots there, and they open from the bag.
       const keep = (key: string): boolean => keyItem(key)?.kind === 'chest';
       const moving = Object.entries(game.inventory).filter(([key]) => !keep(key));
-      if (!atBank(game) || moving.length === 0) return game;
+      if (moving.length === 0) return NO_CHANGE;
       let bank: Bag = game.bank;
       for (const [key, qty] of moving) bank = add(bank, key, qty);
       const inventory = Object.fromEntries(Object.entries(game.inventory).filter(([key]) => keep(key)));
-      return { ...game, inventory, bank };
+      return accept({ ...game, inventory, bank });
     }
     case 'withdraw': {
-      const qty = game.bank[action.item] ?? 0;
-      if (!atBank(game) || !Number.isSafeInteger(action.qty) || action.qty < 1 || action.qty > qty)
-        return game;
-      if (!fits(game.inventory, action.item, action.qty, capacityOf(game))) return game;
-      return {
+      if (!atBank(game)) return refuse({ kind: 'not-at-bank' });
+      if (!isQty(action.qty, game.bank[action.item] ?? 0)) return INVALID;
+      if (!fits(game.inventory, action.item, action.qty, capacityOf(game)))
+        return refuse({ kind: 'bag-full' });
+      return accept({
         ...game,
         inventory: add(game.inventory, action.item, action.qty),
         bank: add(game.bank, action.item, -action.qty),
-      };
+      });
     }
     case 'drop': {
-      const qty = game.inventory[action.item] ?? 0;
-      if (!Number.isSafeInteger(action.qty) || action.qty < 1 || action.qty > qty) return game;
-      return { ...game, inventory: add(game.inventory, action.item, -action.qty) };
+      if (!isQty(action.qty, game.inventory[action.item] ?? 0)) return INVALID;
+      return accept({ ...game, inventory: add(game.inventory, action.item, -action.qty) });
     }
     case 'sell': {
-      if (!atStore(game) || !isKnownKey(action.item)) return game;
+      if (!isKnownKey(action.item)) return INVALID;
+      if (!atStore(game)) return refuse({ kind: 'not-at-store' });
       const inBag = game.inventory[action.item] ?? 0;
-      const inBank = game.bank[action.item] ?? 0;
-      if (!Number.isSafeInteger(action.qty) || action.qty < 1 || action.qty > inBag + inBank) return game;
+      // The bank only sells from a town that also has one.
+      const inBank = atBank(game) ? (game.bank[action.item] ?? 0) : 0;
+      if (!isQty(action.qty, inBag + inBank)) return INVALID;
       const fromBag = Math.min(inBag, action.qty);
-      return {
+      return accept({
         ...game,
         inventory: add(game.inventory, action.item, -fromBag),
         bank: add(game.bank, action.item, -(action.qty - fromBag)),
         coins: game.coins + keyValue(action.item) * action.qty,
-      };
+      });
     }
     case 'buy': {
       const offer = STORE_STOCK.find((entry) => entry.item === action.item);
-      if (!offer || !atStore(game) || game.coins < offer.price) return game;
+      if (!offer) return INVALID;
+      if (!atStore(game)) return refuse({ kind: 'not-at-store' });
+      if (game.coins < offer.price) return refuse({ kind: 'too-poor', price: offer.price });
       const work = draft(game);
       work.coins -= offer.price;
       if (fits(work.inventory, offer.item, 1, capacityOf(work))) gain(work, offer.item, 1);
@@ -981,23 +967,26 @@ function applyRules(game: Game, action: GameAction): Game {
         work.bank = add(work.bank, offer.item, 1);
         if (!work.seen.includes(offer.item)) work.seen.push(offer.item);
       }
-      return freeze(work);
+      return accept(freeze(work));
     }
     case 'upgrade-bag': {
       const price = nextBagUpgrade(game);
-      if (price === null || !atBank(game) || game.coins < price) return game;
-      return { ...game, coins: game.coins - price, bagUpgrades: game.bagUpgrades + 1 };
+      if (price === null) return NO_CHANGE;
+      if (!atBank(game)) return refuse({ kind: 'not-at-bank' });
+      if (game.coins < price) return refuse({ kind: 'too-poor', price });
+      return accept({ ...game, coins: game.coins - price, bagUpgrades: game.bagUpgrades + 1 });
     }
     case 'mission-claim': {
       const mission = missionsFor(game, action.period, action.date).find(
         (entry) => entry.id === action.mission,
       );
-      if (!mission || missionClaimed(game, mission, action.date)) return game;
+      if (!mission) return INVALID;
+      if (missionClaimed(game, mission, action.date)) return NO_CHANGE;
       const { value, target } = missionProgress(game, mission, action.date);
-      if (value < target) return game;
+      if (value < target) return refuse({ kind: 'mission-unfinished' });
       const work = draft(game);
       const state = work.missions[mission.period];
-      if (!state) return game;
+      if (!state) return INVALID;
       work.missions = {
         ...work.missions,
         [mission.period]: { ...state, claimed: [...state.claimed, mission.id] },
@@ -1005,24 +994,26 @@ function applyRules(game: Game, action: GameAction): Game {
       work.coins += mission.coins;
       for (const stack of mission.items ?? []) gain(work, stack.item, stack.qty);
       count(work, 'missions');
-      return freeze(work);
+      return accept(freeze(work));
     }
     case 'quest-start': {
       const quest = getQuest(action.quest);
-      if (!quest || questState(game, quest.id) !== 'new' || questBlocker(game, quest)) return game;
-      return { ...game, quests: { ...game.quests, [quest.id]: 'started' } };
+      if (!quest) return INVALID;
+      if (questState(game, quest.id) !== 'new') return NO_CHANGE;
+      const requirement = questRequirement(game, quest);
+      if (requirement) return refuse({ kind: 'requires', requirement });
+      return accept({ ...game, quests: { ...game.quests, [quest.id]: 'started' } });
     }
     case 'quest-complete': {
       const quest = getQuest(action.quest);
-      if (
-        !quest ||
-        questState(game, quest.id) !== 'started' ||
-        game.travel ||
-        game.location !== quest.location ||
-        questBlocker(game, quest) ||
-        !canHandIn(game, quest)
-      )
-        return game;
+      if (!quest) return INVALID;
+      if (questState(game, quest.id) !== 'started') return NO_CHANGE;
+      if (game.travel) return refuse({ kind: 'travelling' });
+      if (game.location !== quest.location) return refuse({ kind: 'not-here', place: quest.location });
+      const requirement = questRequirement(game, quest);
+      if (requirement) return refuse({ kind: 'requires', requirement });
+      const short = quest.deliver.find((stack) => available(game, stack.item) < stack.qty);
+      if (short) return refuse({ kind: 'requires', requirement: { kind: 'item', ...short } });
       const work = draft(game);
       for (const stack of quest.deliver) spend(work, stack.item, stack.qty);
       for (const stack of quest.rewards.items ?? []) gain(work, stack.item, stack.qty);
@@ -1031,7 +1022,7 @@ function applyRules(game: Game, action: GameAction): Game {
       work.xp = xp;
       work.coins += quest.rewards.coins ?? 0;
       work.quests = { ...work.quests, [quest.id]: 'done' };
-      return freeze(work);
+      return accept(freeze(work));
     }
     default:
       return dayRules(game, action);
@@ -1041,13 +1032,13 @@ function applyRules(game: Game, action: GameAction): Game {
 function dayRules(
   game: Game,
   action: Extract<GameAction, { type: 'new-day' | 'add-steps' | 'sync-steps' | 'goal' }>,
-): Game {
+): RuleResult {
   const day = getDay(game, action.date);
   let updated = day;
   let goal = game.goal;
   switch (action.type) {
     case 'new-day':
-      if (game.days.some((entry) => entry.date === action.date)) return game;
+      if (game.days.some((entry) => entry.date === action.date)) return NO_CHANGE;
       break;
     case 'add-steps':
       if (
@@ -1055,35 +1046,40 @@ function dayRules(
         action.steps <= 0 ||
         !Number.isSafeInteger(day.steps + action.steps)
       )
-        return game;
+        return INVALID;
       updated = { ...day, steps: day.steps + action.steps };
       break;
     case 'sync-steps':
-      if (!Number.isSafeInteger(action.steps) || action.steps <= day.steps) return game;
+      if (!Number.isSafeInteger(action.steps)) return INVALID;
+      if (action.steps <= day.steps) return NO_CHANGE;
       updated = { ...day, steps: action.steps };
       break;
     case 'goal':
-      if (!GOALS.includes(action.goal)) return game;
+      if (!GOALS.includes(action.goal)) return INVALID;
       if (
         action.goal === game.goal &&
         day.goal === action.goal &&
         game.days.some((entry) => entry.date === action.date)
       )
-        return game;
+        return NO_CHANGE;
       goal = action.goal;
       updated = { ...day, goal };
       break;
   }
-  return {
+  return accept({
     ...game,
     goal,
     days: [...game.days.filter((entry) => entry.date !== action.date), updated].sort((a, b) =>
       a.date.localeCompare(b.date),
     ),
-  };
+  });
 }
 
-function healthSync(game: Game, action: Extract<GameAction, { type: 'health-sync' }>): Game {
+// Why a Health batch would be refused, or null when it can be applied.
+export function healthSyncRejection(
+  game: Pick<Game, 'health'>,
+  action: Extract<GameAction, { type: 'health-sync' }>,
+): Rejection | null {
   if (
     !isHealthConnection({
       source: action.source,
@@ -1099,8 +1095,16 @@ function healthSync(game: Game, action: Extract<GameAction, { type: 'health-sync
         !isDateKey(day.date) || day.date > action.date || !Number.isSafeInteger(day.steps) || day.steps < 0,
     )
   )
-    return game;
-  if (game.health?.source === action.source && game.health.syncedAt > action.at) return game;
+    return { kind: 'invalid' };
+  // A clock set back behind the last sync would replay an older snapshot.
+  if (game.health?.source === action.source && game.health.syncedAt > action.at)
+    return { kind: 'clock-behind' };
+  return null;
+}
+
+function healthSync(game: Game, action: Extract<GameAction, { type: 'health-sync' }>): RuleResult {
+  const rejection = healthSyncRejection(game, action);
+  if (rejection) return refuse(rejection);
   const days = new Map(game.days.map((day) => [day.date, day]));
   for (const sample of action.days) {
     const previous = getDay(game, sample.date);
@@ -1121,395 +1125,35 @@ function healthSync(game: Game, action: Extract<GameAction, { type: 'health-sync
           : action.days.reduce((first, day) => (day.date < first ? day.date : first), action.date),
     },
   };
-  return Number.isSafeInteger(totalSteps(updated)) ? updated : game;
+  return Number.isSafeInteger(totalSteps(updated)) ? accept(updated) : INVALID;
 }
 
-export function updateGame(game: Game, action: GameAction): Game {
-  // Any dated action first opens the current mission periods, so their counters start
-  // before the action's own steps or work count.
-  const rolled = 'date' in action && isDateKey(action.date) ? rollMissions(game, action.date) : game;
+// Any dated action first opens the current mission periods, so their counters start before the
+// action's own steps or work count.
+function rolledFor(game: Game, action: GameAction): Game {
+  return 'date' in action && isDateKey(action.date) ? rollMissions(game, action.date) : game;
+}
+
+// Applies one action and spends any waiting steps, or says why the rules refused it. A refused
+// action changes nothing, not even the mission periods; a new day always rolls them.
+export function playGame(game: Game, action: GameAction): RuleResult {
+  const rolled = rolledFor(game, action);
   const ruled = applyRules(rolled, action);
-  // A rejected action changes nothing, not even the mission periods.
-  if (ruled === rolled && action.type !== 'new-day') return game;
-  return advance(ruled);
+  if (ruled.ok) return accept(advance(ruled.game));
+  // A new day the save already has still opens the periods and spends any waiting steps.
+  if (action.type === 'new-day') return accept(advance(rolled));
+  return ruled;
 }
 
-// --- missions ------------------------------------------------------------------------------
-
-function shiftDate(key: string, days: number): string {
-  const date = new Date(`${key}T12:00:00`);
-  date.setDate(date.getDate() + days);
-  return dateKey(date);
+// Why the rules would refuse an action right now, or null if they would accept it. Screens use
+// this to disable buttons from the same source as the rules.
+export function actionRejection(game: Game, action: GameAction): Rejection | null {
+  const ruled = applyRules(rolledFor(game, action), action);
+  return ruled.ok ? null : ruled.reason;
 }
 
-// The first and last date of the period containing `date`. Weeks start on Monday.
-export function periodRange(period: MissionPeriod, date: string): Readonly<{ start: string; end: string }> {
-  if (period === 'daily') return { start: date, end: date };
-  if (period === 'weekly') {
-    const weekday = (new Date(`${date}T12:00:00`).getDay() + 6) % 7;
-    const start = shiftDate(date, -weekday);
-    return { start, end: shiftDate(start, 6) };
-  }
-  const start = `${date.slice(0, 7)}-01`;
-  const next = new Date(`${start}T12:00:00`);
-  next.setMonth(next.getMonth() + 1);
-  return { start, end: dayBefore(dateKey(next)) };
-}
-
-export function periodKey(period: MissionPeriod, date: string): string {
-  return `${period}:${periodRange(period, date).start}`;
-}
-
-// Whole days left in the period after today (0 on its last day).
-export function periodDaysLeft(period: MissionPeriod, date: string): number {
-  const end = new Date(`${periodRange(period, date).end}T12:00:00`).getTime();
-  return Math.round((end - new Date(`${date}T12:00:00`).getTime()) / 86_400_000);
-}
-
-function missionCounters(game: Game): Record<string, number> {
-  const counters: Record<string, number> = {
-    actions: game.actions,
-    road: game.walked,
-    chests: game.stats.chestsFound ?? 0,
-    quests: Object.values(game.quests).filter((state) => state === 'done').length,
-  };
-  for (const skill of SKILL_IDS) counters[`actions:${skill}`] = game.stats[`actions:${skill}`] ?? 0;
-  return counters;
-}
-
-// Snapshots keep only non-zero counters, matching how saves store counts.
-function snapshot(game: Game): Record<string, number> {
-  return Object.fromEntries(Object.entries(missionCounters(game)).filter(([, value]) => value > 0));
-}
-
-function hashString(text: string): number {
-  let hash = 2_166_136_261;
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 16_777_619);
-  }
-  return hash >>> 0;
-}
-
-// Draws the period's pool missions from the period alone: stable however the save's dice move,
-// and the same for everyone, so a party shares its week's missions.
-function drawMissions(game: Game, period: MissionPeriod, key: string): string[] {
-  const questsLeft = QUESTS.some((quest) => questState(game, quest.id) !== 'done');
-  const pool = MISSION_POOLS[period].filter((mission) => mission.kind !== 'quests' || questsLeft);
-  const dice = new Dice(hashString(key));
-  const picks: string[] = [];
-  const left = [...pool];
-  while (picks.length < MISSION_PICKS && left.length > 0) {
-    const [mission] = left.splice(Math.floor(dice.next() * left.length), 1);
-    if (mission) picks.push(mission.id);
-  }
-  return picks;
-}
-
-function missionState(game: Game, period: MissionPeriod, date: string): MissionState {
-  const key = periodKey(period, date);
-  const state = game.missions[period];
-  if (state?.key === key) return state;
-  return { key, picks: drawMissions(game, period, key), base: snapshot(game), claimed: [] };
-}
-
-export function rollMissions(game: Game, date: string): Game {
-  let missions = game.missions;
-  for (const period of MISSION_PERIODS) {
-    const state = missionState(game, period, date);
-    if (state !== game.missions[period]) missions = { ...missions, [period]: state };
-  }
-  return missions === game.missions ? game : { ...game, missions };
-}
-
-const MISSIONS_BY_ID = new Map(
-  MISSION_PERIODS.flatMap((period) => [FIXED_MISSIONS[period], ...MISSION_POOLS[period]]).map((mission) => [
-    mission.id,
-    mission,
-  ]),
-);
-
-export function getMission(id: string): Mission | undefined {
-  return MISSIONS_BY_ID.get(id);
-}
-
-export function missionsFor(game: Game, period: MissionPeriod, date: string): readonly Mission[] {
-  const picks = missionState(game, period, date).picks.flatMap((id) => {
-    const mission = MISSIONS_BY_ID.get(id);
-    return mission ? [mission] : [];
-  });
-  return [FIXED_MISSIONS[period], ...picks];
-}
-
-export function missionClaimed(game: Game, mission: Mission, date: string): boolean {
-  return missionState(game, mission.period, date).claimed.includes(mission.id);
-}
-
-export function missionProgress(
-  game: Game,
-  mission: Mission,
-  date: string,
-): Readonly<{ value: number; target: number }> {
-  if (mission.kind === 'steps') {
-    const { start, end } = periodRange(mission.period, date);
-    const value = game.days
-      .filter((day) => day.date >= start && day.date <= end)
-      .reduce((sum, day) => sum + day.steps, 0);
-    const goal = mission.period === 'daily' ? getDay(game, date).goal : game.goal;
-    return { value, target: mission.target * goal };
-  }
-  const key = mission.kind === 'actions' && mission.skill ? `actions:${mission.skill}` : mission.kind;
-  const base = missionState(game, mission.period, date).base[key] ?? 0;
-  return { value: Math.max(0, (missionCounters(game)[key] ?? 0) - base), target: mission.target };
-}
-
-// Missions that are complete and not yet collected, across all periods.
-export function readyMissions(game: Game, date: string): readonly Mission[] {
-  return MISSION_PERIODS.flatMap((period) =>
-    missionsFor(game, period, date).filter((mission) => {
-      if (missionClaimed(game, mission, date)) return false;
-      const { value, target } = missionProgress(game, mission, date);
-      return value >= target;
-    }),
-  );
-}
-
-// --- persistence -----------------------------------------------------------------------------
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isCount(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
-}
-
-function isGoal(value: unknown): value is Goal {
-  return GOALS.some((goal) => goal === value);
-}
-
-function isHealthConnection(value: unknown): value is HealthConnection {
-  return (
-    isRecord(value) &&
-    (value.source === 'apple-health' || value.source === 'health-connect') &&
-    typeof value.enabled === 'boolean' &&
-    isDateKey(value.startedOn) &&
-    typeof value.syncedAt === 'string' &&
-    !Number.isNaN(new Date(value.syncedAt).getTime()) &&
-    new Date(value.syncedAt).toISOString() === value.syncedAt
-  );
-}
-
-function isDateKey(value: unknown): value is string {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T12:00:00`);
-  return !Number.isNaN(date.getTime()) && dateKey(date) === value;
-}
-
-function decodeDays(value: unknown): Day[] | null {
-  if (!Array.isArray(value) || value.length === 0) return null;
-  const days: Day[] = [];
-  for (const entry of value) {
-    if (!isRecord(entry) || !isDateKey(entry.date) || !isCount(entry.steps) || !isGoal(entry.goal))
-      return null;
-    // Older saves also listed claimed daily tasks here; missions replaced them.
-    days.push({ date: entry.date, steps: entry.steps, goal: entry.goal });
-  }
-  if (new Set(days.map((day) => day.date)).size !== days.length) return null;
-  return days.sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function decodeCounts(value: unknown, known: (id: string) => boolean): Record<string, number> | null {
-  if (value === undefined) return {};
-  if (!isRecord(value)) return null;
-  const result: Record<string, number> = {};
-  for (const [key, amount] of Object.entries(value)) {
-    if (!isCount(amount)) return null;
-    // Unknown ids from a newer build are dropped instead of blocking the save.
-    if (known(key) && amount > 0) result[key] = amount;
-  }
-  return result;
-}
-
-function decodeTools(value: unknown): Record<ToolKind, string> | null {
-  if (!isRecord(value)) return null;
-  const tools = { ...STARTER_TOOLS };
-  for (const kind of TOOL_KINDS) {
-    const key = String(value[kind]);
-    const item = keyItem(key);
-    if (!isKnownKey(key) || !item?.tool || item.tool.kind !== kind) return null;
-    tools[kind] = key;
-  }
-  return tools;
-}
-
-function decodeMissions(value: unknown): Partial<Record<MissionPeriod, MissionState>> {
-  const missions: Partial<Record<MissionPeriod, MissionState>> = {};
-  if (!isRecord(value)) return missions;
-  for (const period of MISSION_PERIODS) {
-    const state = value[period];
-    if (
-      !isRecord(state) ||
-      typeof state.key !== 'string' ||
-      !state.key.startsWith(`${period}:`) ||
-      !Array.isArray(state.picks) ||
-      !Array.isArray(state.claimed)
-    )
-      continue;
-    const base = decodeCounts(state.base, () => true);
-    if (!base) continue;
-    const known = (id: unknown): id is string => typeof id === 'string' && MISSIONS_BY_ID.has(id);
-    missions[period] = {
-      key: state.key,
-      picks: state.picks.filter(known),
-      base,
-      claimed: [...new Set(state.claimed.filter(known))],
-    };
-  }
-  return missions;
-}
-
-// Shared by versions 2 and 3; version 2 had no inventory, gear, buffs or collection log.
-function decodeSave(value: Record<string, unknown>, days: Day[]): Game | null {
-  const skin = SKINS.find((entry) => entry.id === value.equipped);
-  const xpCounts = decodeCounts(value.xp, (id) => SKILL_IDS.includes(id as SkillId));
-  const bank = decodeCounts(value.bank, isKnownKey);
-  const inventory = decodeCounts(value.inventory, isKnownKey);
-  const stats = decodeCounts(value.stats, () => true);
-  const tools = decodeTools(value.tools);
-  if (!skin || !xpCounts || !bank || !inventory || !stats || !tools || !isGoal(value.goal)) return null;
-  for (const key of ['spent', 'walked', 'worked', 'seed', 'coins', 'actions'] as const)
-    if (!isCount(value[key])) return null;
-  if (typeof value.location !== 'string' || !getLocation(value.location)) return null;
-  const quests: Record<string, 'started' | 'done'> = {};
-  if (!isRecord(value.quests)) return null;
-  for (const [id, state] of Object.entries(value.quests))
-    if (getQuest(id) && (state === 'started' || state === 'done')) quests[id] = state;
-  let task: Task | null = null;
-  if (value.task !== null && value.task !== undefined) {
-    if (!isRecord(value.task) || typeof value.task.id !== 'string' || !isCount(value.task.progress))
-      return null;
-    task = getActivity(value.task.id) ? { id: value.task.id, progress: value.task.progress } : null;
-  }
-  let travel: Travel | null = null;
-  if (value.travel !== null && value.travel !== undefined) {
-    const t = value.travel;
-    if (
-      !isRecord(t) ||
-      typeof t.from !== 'string' ||
-      typeof t.to !== 'string' ||
-      !getLocation(t.from) ||
-      !getLocation(t.to) ||
-      !isCount(t.cost) ||
-      !isCount(t.progress) ||
-      t.progress > t.cost ||
-      !(t.next === null || (typeof t.next === 'string' && getActivity(t.next)))
-    )
-      return null;
-    travel = { from: t.from, to: t.to, cost: t.cost, progress: t.progress, next: t.next };
-  }
-  let stopped: StopReason | null = null;
-  if (
-    isRecord(value.stopped) &&
-    typeof value.stopped.activity === 'string' &&
-    typeof value.stopped.missing === 'string' &&
-    getActivity(value.stopped.activity)
-  )
-    stopped = { activity: value.stopped.activity, missing: value.stopped.missing };
-  const gear: Partial<Record<GearSlot, string>> = {};
-  if (isRecord(value.gear))
-    for (const slot of GEAR_SLOTS) {
-      const key = value.gear[slot];
-      const item = typeof key === 'string' && isKnownKey(key) ? keyItem(key) : undefined;
-      if (typeof key === 'string' && item?.slot && slotFits(slot, item.slot)) gear[slot] = key;
-    }
-  let buff: Buff | null = null;
-  if (isRecord(value.buff) && typeof value.buff.item === 'string' && isCount(value.buff.actions))
-    buff = getItem(value.buff.item)?.buff ? { item: value.buff.item, actions: value.buff.actions } : null;
-  const seenList = Array.isArray(value.seen)
-    ? value.seen.filter((id): id is string => typeof id === 'string')
-    : [];
-  const owned = [
-    ...Object.keys(bank),
-    ...Object.keys(inventory),
-    ...Object.values(tools),
-    ...Object.values(gear),
-  ];
-  const seen = [
-    ...new Set([...seenList.filter((id) => getItem(id)), ...owned.map((key) => parseKey(key ?? '').id)]),
-  ];
-  const xp = { ...emptyXp(), ...xpCounts } as Record<SkillId, number>;
-  const game: Game = {
-    version: 3,
-    goal: value.goal,
-    equipped: skin.id,
-    days,
-    ...(isHealthConnection(value.health) ? { health: value.health } : {}),
-    spent: value.spent as number,
-    walked: value.walked as number,
-    worked: value.worked as number,
-    seed: (value.seed as number) >>> 0,
-    location: value.location,
-    task,
-    travel,
-    stopped,
-    xp,
-    inventory,
-    bank,
-    tools,
-    gear,
-    buff,
-    coins: value.coins as number,
-    quests,
-    actions: value.actions as number,
-    seen,
-    stats,
-    bagUpgrades:
-      isCount(value.bagUpgrades) && value.bagUpgrades <= BAG_UPGRADES.length ? value.bagUpgrades : 0,
-    missions: decodeMissions(value.missions),
-  };
-  if (game.spent > totalSteps(game)) return null;
-  return totalLevel(game) >= skin.total ? game : { ...game, equipped: 'original' };
-}
-
-// Version 1 saves (single XP bar) keep their step history; today's steps start the pouch.
-export function migrateV1(value: Record<string, unknown>, days: Day[], today: string): Game | null {
-  if (!isGoal(value.goal)) return null;
-  const base = createGame(today);
-  const history = { ...base, goal: value.goal, days };
-  const todaySteps = getDay(history, today).steps;
-  return {
-    ...history,
-    ...(isHealthConnection(value.health) ? { health: value.health } : {}),
-    spent: Math.max(0, totalSteps(history) - todaySteps),
-  };
-}
-
-export function decodeGame(
-  raw: string,
-  today = dateKey(),
-): Readonly<{ ok: true; game: Game; migrated: boolean }> | Readonly<{ ok: false; reason: string }> {
-  let value: unknown;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    return { ok: false, reason: 'Saved progress is not valid JSON.' };
-  }
-  if (!isRecord(value)) return { ok: false, reason: 'Saved progress has an unsupported format.' };
-  const days = decodeDays(value.days);
-  if (!days || !Number.isSafeInteger(days.reduce((sum, day) => sum + day.steps, 0)))
-    return { ok: false, reason: 'Saved progress has an unreadable step history.' };
-  if (value.version === 3 || value.version === 2) {
-    const game = decodeSave(value, days);
-    return game
-      ? { ok: true, game, migrated: value.version === 2 }
-      : { ok: false, reason: 'Saved progress has an unsupported format.' };
-  }
-  if (value.version === 1) {
-    const game = migrateV1(value, days, today);
-    return game
-      ? { ok: true, game, migrated: true }
-      : { ok: false, reason: 'Saved progress has an unsupported format.' };
-  }
-  return { ok: false, reason: 'Saved progress has an unsupported format.' };
+// The same rules, for callers that only need the next state: a refused action returns `game`.
+export function updateGame(game: Game, action: GameAction): Game {
+  const result = playGame(game, action);
+  return result.ok ? result.game : game;
 }

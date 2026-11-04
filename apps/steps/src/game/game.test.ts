@@ -3,16 +3,23 @@ import test from 'node:test';
 import {
   ACTIVITIES,
   BAG_UPGRADES,
+  FIXED_MISSIONS,
   getActivity,
   getItem,
   getQuest,
   ITEMS,
   LOCATIONS,
+  MISSION_PERIODS,
   MISSION_POOLS,
   QUESTS,
+  ROADS,
+  SKILL_CHEST,
+  START_LOCATION,
+  STORE_STOCK,
 } from './content.ts';
 import {
   actionPreview,
+  activityBlocker,
   advance,
   capacityOf,
   createDemoGame,
@@ -21,24 +28,32 @@ import {
   decodeGame,
   type Game,
   getDay,
+  itemSource,
+  itemSourceText,
   missionProgress,
   missionsFor,
+  nearestBank,
   nextBagUpgrade,
   nextStep,
+  ownedCount,
   periodDaysLeft,
   periodRange,
+  questsNeeding,
   readyMissions,
   route,
   runsLeft,
   skillLevel,
+  sourceOf,
   stepsPerAction,
   streak,
   totalLevel,
+  townsWith,
   travelCost,
   unspentSteps,
   updateGame,
 } from './game.ts';
-import { countOf, keyMods, parseKey, slotsUsed } from './items.ts';
+import { countOf, formatPercent, itemCount, itemRange, keyMods, parseKey, slotsUsed } from './items.ts';
+import { loadFailureCopy } from './session.ts';
 import { levelForXp, XP_TABLE, xpForLevel } from './xp.ts';
 
 const TODAY = '2026-11-02';
@@ -141,7 +156,7 @@ test('production uses the inventory, and the bank when standing at one', () => {
   game = walk(updateGame(game, { type: 'start', activity: 'smelt-bronze' }), 60 * 5);
   assert.equal(game.inventory['bronze-bar'], 2);
   assert.equal(game.inventory['tin-ore'], 1);
-  assert.deepEqual(game.stopped, { activity: 'smelt-bronze', missing: 'copper-ore' });
+  assert.deepEqual(game.stopped, { activity: 'smelt-bronze', kind: 'missing', item: 'copper-ore' });
   assert.equal(unspentSteps(game), 180);
   let banked = at('bruhbridge', { bank: { 'copper-ore': 2, 'tin-ore': 2 } });
   banked = walk(updateGame(banked, { type: 'start', activity: 'smelt-bronze' }), 120);
@@ -153,7 +168,7 @@ test('a full inventory stops gathering and keeps the steps', () => {
   let game = at('pandan-woods', { inventory: { 'pandan-logs': 25 * 27 + 24 } });
   game = walk(updateGame(game, { type: 'start', activity: 'chop-pandan' }), 1_000);
   assert.equal(game.inventory['pandan-logs'], 700);
-  assert.deepEqual(game.stopped, { activity: 'chop-pandan', missing: 'inventory' });
+  assert.deepEqual(game.stopped, { activity: 'chop-pandan', kind: 'bag-full' });
   assert.ok(unspentSteps(game) > 900);
 });
 
@@ -172,6 +187,33 @@ test('backpacks add slots and gear swaps through the inventory', () => {
   // Taking the pack off with 30 slots in use would overflow a 28-slot bag away from a bank.
   const crowded = { ...game, inventory: { ...game.inventory, 'pandan-logs': 25 * 28 } };
   assert.equal(updateGame(crowded, { type: 'unwear', slot: 'back' }), crowded);
+});
+
+test('swapping to a smaller pack on a full bag is refused', () => {
+  // 40 of 40 slots: a starwood pack (+12) worn, a wicker pack (+4) and 39 stacks of logs carried.
+  const full = at('pandan-woods', {
+    gear: { back: 'starwood-pack' },
+    inventory: { 'wicker-pack': 1, 'pandan-logs': 25 * 39 },
+  });
+  assert.equal(capacityOf(full), 40);
+  assert.equal(slotsUsed(full.inventory), 40);
+  assert.equal(updateGame(full, { type: 'wear', item: 'wicker-pack', slot: 'back' }), full);
+  // A bank takes the old pack, but 39 slots still overflow a 32-slot bag.
+  const town = { ...full, location: 'bruhbridge' };
+  assert.equal(updateGame(town, { type: 'wear', item: 'wicker-pack', slot: 'back' }), town);
+  // With room for it, the swap goes through and the old pack lands in the bag.
+  const roomy = { ...full, inventory: { 'wicker-pack': 1, 'pandan-logs': 25 * 30 } };
+  const swapped = updateGame(roomy, { type: 'wear', item: 'wicker-pack', slot: 'back' });
+  assert.equal(swapped.gear.back, 'wicker-pack');
+  assert.equal(swapped.inventory['starwood-pack'], 1);
+  assert.ok(slotsUsed(swapped.inventory) <= capacityOf(swapped));
+  // At a bank, a swap that only fits without the old pack sends it to the bank.
+  const snug = { ...town, inventory: { 'wicker-pack': 1, 'pandan-logs': 25 * 32 } };
+  const banked = updateGame(snug, { type: 'wear', item: 'wicker-pack', slot: 'back' });
+  assert.equal(banked.gear.back, 'wicker-pack');
+  assert.equal(banked.inventory['starwood-pack'], undefined);
+  assert.equal(banked.bank['starwood-pack'], 1);
+  assert.equal(slotsUsed(banked.inventory), capacityOf(banked));
 });
 
 test('tools need a level to wield', () => {
@@ -520,6 +562,57 @@ test('saves round-trip and reject tampering', () => {
   assert.deepEqual(odd.ok && [odd.game.inventory, odd.game.gear], [{}, {}]);
 });
 
+test('a failed load says why, and a save from a newer build is not called corrupt', () => {
+  const game = createGame(TODAY);
+  assert.deepEqual(decodeGame('nope'), { ok: false, failure: { kind: 'invalid-json' } });
+  assert.deepEqual(decodeGame(JSON.stringify({ ...game, version: 4, days: 'changed' })), {
+    ok: false,
+    failure: { kind: 'newer-version', version: 4 },
+  });
+  assert.deepEqual(decodeGame(JSON.stringify({ ...game, coins: -1 })), {
+    ok: false,
+    failure: { kind: 'invalid', field: 'coins' },
+  });
+  assert.deepEqual(decodeGame(JSON.stringify({ ...game, version: 'three' })), {
+    ok: false,
+    failure: { kind: 'invalid', field: 'version' },
+  });
+  // Only a storage failure offers a retry; the copy stays in the lowercase game voice.
+  assert.equal(loadFailureCopy({ kind: 'storage' }).retry, true);
+  const newer = loadFailureCopy({ kind: 'newer-version', version: 4 });
+  assert.deepEqual(newer, {
+    message: 'this save is from a newer version of outside. update the app to keep playing.',
+    retry: false,
+  });
+  for (const failure of [{ kind: 'invalid-json' }, { kind: 'invalid', field: 'coins' }] as const) {
+    const copy = loadFailureCopy(failure);
+    assert.equal(copy.retry, false);
+    assert.equal(copy.message, copy.message.toLowerCase());
+  }
+});
+
+test('older stop reasons and unknown counters still decode', () => {
+  const game = { ...createGame(TODAY), stats: { chestsFound: 2, 'actions:mining': 5 } };
+  const decode = (patch: Record<string, unknown>) => {
+    const decoded = decodeGame(JSON.stringify({ ...game, ...patch }), TODAY);
+    assert.ok(decoded.ok);
+    return decoded.ok ? decoded.game : game;
+  };
+  const stop = (missing: string) => decode({ stopped: { activity: 'chop-pandan', missing } }).stopped;
+  assert.deepEqual(stop('inventory'), { activity: 'chop-pandan', kind: 'bag-full' });
+  assert.deepEqual(stop('woodcutting-level'), {
+    activity: 'chop-pandan',
+    kind: 'level',
+    skill: 'woodcutting',
+  });
+  assert.deepEqual(stop('copper-ore'), { activity: 'chop-pandan', kind: 'missing', item: 'copper-ore' });
+  assert.equal(stop('moon-rock'), null);
+  // The new shape round-trips, and counters from a newer build are dropped.
+  const typed = { activity: 'chop-pandan', kind: 'missing', item: 'copper-ore' } as const;
+  assert.deepEqual(decode({ stopped: typed }).stopped, typed);
+  assert.deepEqual(decode({ stats: { ...game.stats, dancesDone: 3 } }).stats, game.stats);
+});
+
 test('version 2 saves move into the bank; version 1 saves keep their history', () => {
   const v2 = {
     ...createGame(TODAY),
@@ -562,7 +655,7 @@ test('the demo starts with today’s sample steps in the pouch', () => {
 test('a huge backlog stops when the bag fills and stays consistent', () => {
   let game = at('pandan-woods');
   game = walk(updateGame(game, { type: 'start', activity: 'chop-pandan' }), 1_000_000);
-  assert.equal(game.stopped?.missing, 'inventory');
+  assert.equal(game.stopped?.kind, 'bag-full');
   assert.ok(unspentSteps(game) > 900_000);
   assert.equal(advance(game), game);
 });
@@ -574,4 +667,102 @@ test('every item id is unique and every loot and recipe item exists', () => {
     for (const entry of item.loot?.table ?? [])
       assert.ok(ids.includes(entry.item), `${item.id} drops ${entry.item}`);
   for (const quest of QUESTS) for (const stack of quest.deliver) assert.ok(ids.includes(stack.item));
+});
+
+test('every content reference points at something that exists', () => {
+  const items = new Set(ITEMS.map((item) => item.id));
+  const activities = new Set(ACTIVITIES.map((activity) => activity.id));
+  const places = new Set(LOCATIONS.map((place) => place.id));
+  const quests = new Set(QUESTS.map((quest) => quest.id));
+  const item = (id: string, where: string) => assert.ok(items.has(id), `${where} names item ${id}`);
+  assert.equal(activities.size, ACTIVITIES.length, 'activity ids are unique');
+  assert.equal(places.size, LOCATIONS.length, 'place ids are unique');
+  assert.equal(quests.size, QUESTS.length, 'quest ids are unique');
+  for (const activity of ACTIVITIES) {
+    item(activity.output.item, `${activity.id} output`);
+    for (const input of activity.inputs ?? []) item(input.item, `${activity.id} input`);
+    for (const find of activity.finds ?? []) item(find.item, `${activity.id} find`);
+    if (activity.burn) item(activity.burn.item, `${activity.id} burn`);
+  }
+  for (const place of LOCATIONS) {
+    for (const id of place.activities) assert.ok(activities.has(id), `${place.id} offers ${id}`);
+    if (place.requires?.type === 'quest')
+      assert.ok(quests.has(place.requires.quest), `${place.id} needs quest ${place.requires.quest}`);
+  }
+  for (const [from, to, cost] of ROADS) {
+    assert.ok(places.has(from) && places.has(to), `road ${from} to ${to}`);
+    assert.ok(Number.isSafeInteger(cost) && cost > 0, `road ${from} to ${to} costs ${cost}`);
+  }
+  for (const place of LOCATIONS) assert.ok(route(START_LOCATION, place.id), `${place.id} is reachable`);
+  for (const quest of QUESTS) {
+    assert.ok(places.has(quest.location), `${quest.id} is handed in at ${quest.location}`);
+    for (const stack of quest.rewards.items ?? []) item(stack.item, `${quest.id} reward`);
+    for (const id of quest.requires.quests ?? []) assert.ok(quests.has(id), `${quest.id} needs ${id}`);
+  }
+  for (const offer of STORE_STOCK) item(offer.item, 'store stock');
+  for (const chest of Object.values(SKILL_CHEST)) if (chest) item(chest, 'skill chest');
+  for (const period of MISSION_PERIODS)
+    for (const mission of [FIXED_MISSIONS[period], ...MISSION_POOLS[period]])
+      for (const stack of mission.items ?? []) item(stack.item, `${mission.id} reward`);
+});
+
+test('screens read item sources, banks and quest needs from the rules', () => {
+  const game = at('pandan-woods', { inventory: { 'pandan-logs': 3 }, bank: { 'pandan-logs': 4 } });
+  assert.equal(ownedCount(game, 'pandan-logs'), 7);
+  // The hint names the same place the next-step button would walk to.
+  const open = itemSource(game, 'pandan-logs');
+  assert.equal(open.kind, 'make');
+  assert.equal(itemSourceText(open), 'chopping pandan tree here');
+  const source = sourceOf(game, 'longan-logs');
+  const longan = itemSource(withLevel(game, 'woodcutting', 15), 'longan-logs');
+  assert.ok(
+    longan.kind === 'make' &&
+      longan.place.id === sourceOf(withLevel(game, 'woodcutting', 15), 'longan-logs')?.place.id,
+  );
+  // Without the level there is no open source, so the hint names the requirement.
+  assert.equal(source, null);
+  assert.match(itemSourceText(itemSource(game, 'longan-logs')), /\(woodcutting 15\)$/);
+  assert.equal(itemSourceText(itemSource(game, 'adventurer-chest')), 'found in chests');
+  const bank = nearestBank(game);
+  assert.ok(bank?.place.bank);
+  for (const place of LOCATIONS)
+    if (place.bank)
+      assert.ok((route(game.location, place.id)?.distance ?? Infinity) >= (bank?.distance ?? 0));
+  assert.deepEqual(
+    townsWith('bank'),
+    LOCATIONS.filter((place) => place.bank).map((place) => place.name),
+  );
+  const quest = QUESTS[0];
+  assert.ok(quest);
+  const stack = quest.deliver[0];
+  assert.ok(stack);
+  assert.deepEqual(questsNeeding(game, stack.item), []);
+  const started = { ...game, quests: { [quest.id]: 'started' as const } };
+  assert.deepEqual(questsNeeding(started, stack.item)[0], { quest, qty: stack.qty });
+});
+
+test('percents, loot ranges and requirement hints follow the copy rules', () => {
+  assert.equal(formatPercent(0.125), '12.5%');
+  assert.equal(formatPercent(0.04), '4%');
+  assert.equal(itemRange(1, 1, 'minnow'), itemCount(1, 'minnow'));
+  assert.equal(itemRange(2, 4, 'minnow'), `2–4 ${itemCount(2, 'minnow').slice(2)}`);
+  const smelt = getActivity('smelt-bronze');
+  assert.ok(smelt);
+  assert.equal(activityBlocker(at('bruhbridge'), smelt), `needs ${itemCount(1, 'copper-ore')}`);
+});
+
+test('a store without a bank sells only what you carry', () => {
+  // Today every store town has a bank. Close one town's bank for this test to stand in for a
+  // future store-only outpost, which must not sell from a bank far away.
+  const town = LOCATIONS.find((place) => place.store && place.bank);
+  assert.ok(town);
+  Reflect.set(town, 'bank', false);
+  try {
+    const game = at(town.id, { inventory: { 'pandan-logs': 2 }, bank: { 'pandan-logs': 5 }, coins: 0 });
+    assert.equal(updateGame(game, { type: 'sell', item: 'pandan-logs', qty: 3 }), game);
+    const sold = updateGame(game, { type: 'sell', item: 'pandan-logs', qty: 2 });
+    assert.deepEqual([sold.inventory, sold.bank], [{}, { 'pandan-logs': 5 }]);
+  } finally {
+    Reflect.set(town, 'bank', true);
+  }
 });

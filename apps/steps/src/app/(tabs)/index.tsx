@@ -7,12 +7,13 @@ import { Hud } from '../../components/Hud';
 import { Scene } from '../../components/Scene';
 import { TrackingControl } from '../../components/TrackingControl';
 import { Button, Screen } from '../../components/ui';
-import { getActivity, getItem, getLocation, LOCATIONS, START_LOCATION } from '../../game/content';
+import { getActivity, getItem, getLocation, START_LOCATION } from '../../game/content';
 import { useGame } from '../../game/GameProvider';
 import {
   atBank,
   capacityOf,
   type NextStep,
+  nearestBank,
   nextStep,
   readyMissions,
   route,
@@ -22,23 +23,13 @@ import {
   travelCost,
   unspentSteps,
 } from '../../game/game';
-import { keyItem, keyName, slotsUsed, totalsFor } from '../../game/items';
+import { formatPercent, keyItem, keyName, slotsUsed, statLabel, totalsFor } from '../../game/items';
+import { stopReasonText } from '../../game/session';
 import { useScreenFocus } from '../../navigation/useScreenFocus';
 import { SKILL_ART } from '../../pixel/art';
 import { Bar, Panel, Tag } from '../../pixel/chrome';
 import { Sprite } from '../../pixel/Sprite';
 import { color, font, shadow, space } from '../../theme/theme';
-
-function nearestBank(from: string): Readonly<{ id: string; name: string; distance: number }> | null {
-  let best: Readonly<{ id: string; name: string; distance: number }> | null = null;
-  for (const place of LOCATIONS) {
-    if (!place.bank) continue;
-    const path = route(from, place.id);
-    if (path && (!best || path.distance < best.distance))
-      best = { id: place.id, name: place.name, distance: path.distance };
-  }
-  return best;
-}
 
 function BagStrip(): React.JSX.Element {
   const { game } = useGame();
@@ -108,7 +99,7 @@ function StatusPanel({ onDetails }: Readonly<{ onDetails: () => void }>): React.
         aside={<Tag tint={color.success}>{`${activity.skill} ${skillLevel(game, activity.skill)}`}</Tag>}
       >
         <View style={styles.row}>
-          <Sprite art={SKILL_ART[activity.skill] ?? SKILL_ART.agility} size={28} />
+          <Sprite art={SKILL_ART[activity.skill]} size={28} />
           <View style={styles.grow}>
             <Bar value={game.task.progress / cost} />
           </View>
@@ -121,10 +112,14 @@ function StatusPanel({ onDetails }: Readonly<{ onDetails: () => void }>): React.
         {totals.doubleAction + totals.doubleResult + totals.preserve > 0 ? (
           <Text style={[styles.detail, { color: color.success }]}>
             {[
-              totals.doubleAction > 0 ? `${Math.round(totals.doubleAction * 100)}% double action` : null,
-              totals.doubleResult > 0 ? `${Math.round(totals.doubleResult * 100)}% double result` : null,
+              totals.doubleAction > 0
+                ? `${formatPercent(totals.doubleAction)} ${statLabel('doubleAction')}`
+                : null,
+              totals.doubleResult > 0
+                ? `${formatPercent(totals.doubleResult)} ${statLabel('doubleResult')}`
+                : null,
               totals.preserve > 0 && activity.inputs
-                ? `${Math.round(totals.preserve * 100)}% save materials`
+                ? `${formatPercent(totals.preserve)} ${statLabel('preserve')}`
                 : null,
             ]
               .filter(Boolean)
@@ -143,8 +138,8 @@ function StatusPanel({ onDetails }: Readonly<{ onDetails: () => void }>): React.
     );
   }
   const stopped = game.stopped ? getActivity(game.stopped.activity) : undefined;
-  const full = game.stopped?.missing === 'inventory';
-  const bank = full ? nearestBank(game.location) : null;
+  const full = game.stopped?.kind === 'bag-full';
+  const bank = full ? nearestBank(game)?.place : null;
   // One clear next step: quests first, then steady work here, then a walk to somewhere useful.
   const next = nextStep(game);
   return (
@@ -166,8 +161,7 @@ function StatusPanel({ onDetails }: Readonly<{ onDetails: () => void }>): React.
         </>
       ) : stopped ? (
         <Text style={[styles.detail, { color: color.danger }]}>
-          stopped {stopped.verb} {stopped.name}: out of{' '}
-          {getItem(game.stopped?.missing ?? '')?.name ?? 'materials'}.
+          stopped {stopped.verb} {stopped.name}: {game.stopped ? stopReasonText(game.stopped) : null}.
         </Text>
       ) : null}
       {full ? null : next ? (
