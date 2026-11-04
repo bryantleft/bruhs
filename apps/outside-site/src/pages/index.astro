@@ -7,9 +7,10 @@ import {
   QUESTS,
   SKILLS,
   SKINS,
+  type SkinId,
   START_LOCATION,
 } from '@outside/src/game/content.ts';
-import { createGame, locationBlocker, route } from '@outside/src/game/game.ts';
+import { createGame, getSkin, locationBlocker, route } from '@outside/src/game/game.ts';
 import { MAX_LEVEL } from '@outside/src/game/xp.ts';
 import { bruhArt, UI_ART } from '@outside/src/pixel/art.ts';
 import { MAP_HEIGHT, MAP_WIDTH, tileCenter } from '@outside/src/pixel/world.ts';
@@ -101,6 +102,8 @@ const steps = [
     body: 'open the app to a report of what your walk paid for: xp, level-ups, drops and the odd treasure chest.',
   },
 ];
+// The party panel's members: four outfits, so it reads as friends, not one bruh.
+const PARTY = ['original', 'pandan', 'dragonfruit', 'blueberry'] as const satisfies readonly SkinId[];
 const privacy = [
   'outside reads your step totals and never writes to Health.',
   'your game saves on your phone.',
@@ -114,7 +117,7 @@ const privacy = [
   <Header overlay />
   <main>
   <section class="hero relative" aria-labelledby="title">
-    <div class="sky relative pt-[72px]">
+    <div class="sky relative pt-[84px]">
       <Clouds />
       <div class="relative mx-auto grid max-w-5xl grid-cols-1 items-end gap-6 px-5 pb-8 pt-2 md:gap-8 md:pb-10 md:grid-cols-[1fr_1fr] md:pt-8">
         <div class="flex flex-col items-start gap-4">
@@ -290,7 +293,7 @@ const privacy = [
               steps.
             </p>
           </div>
-          <ul class="grid grid-cols-2 gap-3">
+          <ul class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {
               SKILLS.map((skill) => (
                 <li class="well flex items-center gap-3 p-3">
@@ -335,6 +338,13 @@ const privacy = [
             <p class="leading-relaxed text-rambutan-300">
               start a party and share its invite code. each week, members race on daily step totals.
             </p>
+            <ul class="mt-auto flex items-end gap-3 pt-2" aria-label="a party of bruhs">
+              {
+                PARTY.map((skin) => (
+                  <li set:html={spriteSvg(bruhArt(skin), 48, getSkin(skin).name)} />
+                ))
+              }
+            </ul>
           </div>
           <div class="panel flex flex-col gap-3 p-6">
             <h2 class="text-2xl font-bold text-durian-400 shadowed">your steps, read-only</h2>
@@ -342,7 +352,8 @@ const privacy = [
               {
                 privacy.map((line) => (
                   <li class="flex gap-3">
-                    <span aria-hidden="true" class="text-pandan-300">■</span>
+                    {/* A pixel square, since the game fonts have no ■ glyph. */}
+                    <span aria-hidden="true" class="mt-2 size-2 shrink-0 bg-pandan-300 outline-2 outline-[#0a0a0a]" />
                     <span>{line}</span>
                   </li>
                 ))
@@ -365,7 +376,8 @@ const privacy = [
   <footer class="mx-auto flex w-full max-w-5xl flex-col gap-1 border-t-2 border-longan-800 px-5 py-8 text-sm text-rambutan-500">
     <p>outside is in development. features may change before launch.</p>
     <p>
-      © {new Date().getFullYear()} bruhs ·{' '}
+      {/* No ©: the pixel font draws it like a degree sign. */}
+      bruhs {new Date().getFullYear()} ·{' '}
       <a href="/privacy/" class="underline underline-offset-4 hover:text-durian-400">privacy</a>
     </p>
   </footer>

@@ -15,7 +15,10 @@ const { overlay = false } = Astro.props;
 >
   <a href="/" class="flex items-center gap-3 text-durian-400 outlined" aria-label="bruhs / outside, home">
     <Fragment set:html={spriteSvg(bruhArt('original'), 32)} />
-    <span class="text-lg font-bold">bruhs / outside</span>
+    <span class="whitespace-nowrap text-lg font-bold">bruhs / outside</span>
   </a>
-  <a href="/#waitlist" class="chip label text-rambutan-100 hover:text-durian-400">join the waitlist</a>
+  {/* Under 400px the long label would wrap beside the logo, so it shortens. */}
+  <a href="/#waitlist" aria-label="join the waitlist" class="chip label whitespace-nowrap text-rambutan-100 hover:text-durian-400">
+    <span class="min-[400px]:hidden">join</span><span class="hidden min-[400px]:inline">join the waitlist</span>
+  </a>
 </header>

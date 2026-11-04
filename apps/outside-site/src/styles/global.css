@@ -103,6 +103,11 @@ svg {
   border: 2px solid #0a0a0a;
 }
 
+/* A chip that's a link is a tap target, so it gets the 44px minimum. */
+a.chip {
+  min-height: 44px;
+}
+
 /* Hero sky in hard bands, ending in the scene's own top band so the two meet without a seam. */
 .sky {
   background: linear-gradient(
