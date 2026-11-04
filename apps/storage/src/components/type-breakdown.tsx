@@ -9,15 +9,13 @@ export function TypeBreakdown({ node }: { node: TreeNode }) {
 
   return (
     <section className="shrink-0 space-y-3">
-      <h2 className="text-rambutan-500 text-[0.6875rem] font-medium tracking-wide uppercase">
-        By type
-      </h2>
+      <h2 className="text-eyebrow text-rambutan-500">By type</h2>
       <ul className="space-y-2.5">
         {rows.map((r) => {
           const pct = (r.bytes / total) * 100;
           return (
             <li key={r.category}>
-              <div className="flex items-center justify-between gap-2 text-sm">
+              <div className="text-body-sm flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
                   <span
                     aria-hidden="true"
@@ -29,10 +27,10 @@ export function TypeBreakdown({ node }: { node: TreeNode }) {
                   </span>
                 </div>
                 <div className="flex shrink-0 items-baseline gap-1.5">
-                  <span className="text-rambutan-200 font-mono text-xs tabular-nums">
+                  <span className="text-code-sm text-rambutan-200 tabular-nums">
                     {formatBytes(r.bytes)}
                   </span>
-                  <span className="text-rambutan-500 w-9 text-right text-[0.6875rem] tabular-nums">
+                  <span className="text-code-sm text-rambutan-500 w-9 text-right tabular-nums">
                     {pct.toFixed(0)}%
                   </span>
                 </div>

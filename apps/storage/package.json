@@ -7,7 +7,7 @@
     "build": "pnpm run build:scanner && bruhs-theme-fonts && vite build",
     "build:scanner": "cargo build --release --manifest-path scanner/Cargo.toml",
     "start": "vite preview",
-    "check": "biome check . && pnpm run test",
+    "check": "biome check . && bruhs-theme-lint src && pnpm run test",
     "test": "node --test 'tests/*.test.ts'"
   },
   "portless": {

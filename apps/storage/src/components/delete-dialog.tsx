@@ -1,4 +1,4 @@
-import { Loader2, Trash2, TriangleAlert } from "lucide-react";
+import { Trash2, TriangleAlert } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { formatBytes } from "~/lib/format";
 import { parseTrashResult } from "~/lib/protocol";
@@ -82,7 +82,8 @@ export function DeleteDialog({ target, onClose, onTrashed }: Props) {
         // A click on the dialog element itself (not its content) hit the backdrop.
         if (e.target === e.currentTarget) close();
       }}
-      className="rounded-mango bg-longan-800 text-rambutan-100 backdrop:bg-longan-950/70 m-auto w-full max-w-md p-0 inset-ring inset-ring-white/20 backdrop:backdrop-blur-sm"
+      // No padding on the dialog itself: clicks on it count as backdrop clicks above.
+      className="dialog max-w-md p-0"
     >
       <div className="p-6">
         <div className="flex items-start gap-3">
@@ -90,24 +91,21 @@ export function DeleteDialog({ target, onClose, onTrashed }: Props) {
             <TriangleAlert className="size-4 shrink-0" />
           </span>
           <div className="min-w-0 flex-1">
-            <h2
-              id={titleId}
-              className="text-rambutan-50 text-base font-semibold tracking-tight"
-            >
+            <h2 id={titleId} className="text-h4 text-rambutan-50 text-balance">
               Move to Trash?
             </h2>
             <p
-              className="text-rambutan-100 mt-2 truncate font-mono text-sm font-medium"
+              className="text-code text-rambutan-100 mt-2 truncate"
               title={target.name}
             >
               {target.name}
             </p>
-            <p className="text-rambutan-500 mt-0.5 text-[0.6875rem] leading-4 break-all">
+            <p className="text-code-sm text-rambutan-500 mt-0.5 break-all">
               {target.path}
             </p>
-            <p className="text-rambutan-300 mt-3 text-sm text-pretty">
+            <p className="text-body-sm text-rambutan-300 mt-3 text-pretty">
               Frees{" "}
-              <span className="text-persimmon-300 font-mono font-medium tabular-nums">
+              <span className="text-persimmon-300 font-medium tabular-nums">
                 {formatBytes(target.size)}
               </span>
               . It goes to the macOS Trash and can be restored with Put Back.
@@ -118,7 +116,7 @@ export function DeleteDialog({ target, onClose, onTrashed }: Props) {
         {error && (
           <p
             role="alert"
-            className="rounded-grape bg-lychee-500/10 text-lychee-200 ring-lychee-500/20 mt-4 px-3 py-2 text-sm ring-1 ring-inset"
+            className="text-body-sm rounded-grape bg-lychee-500/10 text-lychee-200 ring-lychee-500/20 mt-4 px-3 py-2 ring-1 ring-inset"
           >
             {error}
           </p>
@@ -130,7 +128,7 @@ export function DeleteDialog({ target, onClose, onTrashed }: Props) {
             onClick={close}
             // biome-ignore lint/a11y/noAutofocus: safest default for a destructive dialog.
             autoFocus
-            className="rounded-grape bg-longan-700 text-rambutan-200 ring-longan-600 hover:bg-longan-600 focus-visible:outline-persimmon-400 px-3 py-2 text-sm font-medium ring-1 ring-inset focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="btn btn-outline"
           >
             Cancel
           </button>
@@ -138,10 +136,10 @@ export function DeleteDialog({ target, onClose, onTrashed }: Props) {
             type="button"
             onClick={confirm}
             disabled={busy}
-            className="rounded-grape bg-lychee-600 text-rambutan-50 hover:bg-lychee-500 focus-visible:outline-lychee-400 flex items-center gap-1.5 py-2 pr-3 pl-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60"
+            className="btn btn-danger pl-2"
           >
             {busy ? (
-              <Loader2 className="size-4 shrink-0 animate-spin" />
+              <span aria-hidden="true" className="spinner size-4" />
             ) : (
               <Trash2 className="size-4 shrink-0" />
             )}

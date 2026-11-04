@@ -10,18 +10,16 @@ export function LargestFiles({ files, onSelect }: Props) {
   if (files.length === 0) return null;
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-3">
-      <h2 className="text-rambutan-500 shrink-0 text-[0.6875rem] font-medium tracking-wide uppercase">
-        Largest files
-      </h2>
+      <h2 className="text-eyebrow text-rambutan-500 shrink-0">Largest files</h2>
       <ul className="-mx-2 min-h-0 flex-1 space-y-px overflow-y-auto">
         {files.map((f, i) => (
           <li key={f.path}>
             <button
               type="button"
               onClick={() => onSelect(f)}
-              className="rounded-grape hover:bg-longan-800 focus-visible:outline-persimmon-400 flex w-full items-center gap-2.5 px-2 py-1.5 text-left text-sm focus-visible:outline-2"
+              className="menu-item gap-2.5 px-2"
             >
-              <span className="text-rambutan-600 w-4 shrink-0 text-right font-mono text-[0.6875rem] tabular-nums">
+              <span className="text-code-sm text-rambutan-600 w-4 shrink-0 text-right tabular-nums">
                 {i + 1}
               </span>
               <span
@@ -37,7 +35,7 @@ export function LargestFiles({ files, onSelect }: Props) {
               >
                 {f.name}
               </span>
-              <span className="text-rambutan-400 shrink-0 font-mono text-xs tabular-nums">
+              <span className="text-code-sm text-rambutan-400 shrink-0 tabular-nums">
                 {formatBytes(f.size)}
               </span>
             </button>

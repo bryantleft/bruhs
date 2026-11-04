@@ -37,13 +37,9 @@ function Home() {
           <span className="rounded-grape bg-blueberry-500/15 text-blueberry-300 flex size-7 items-center justify-center">
             <HardDrive className="size-4 shrink-0" />
           </span>
-          <div className="leading-none">
-            <h1 className="text-rambutan-50 text-base font-semibold tracking-tight">
-              Storage
-            </h1>
-            <p className="text-rambutan-500 mt-1 text-[0.6875rem] tracking-wide uppercase">
-              Disk profiler
-            </p>
+          <div>
+            <h1 className="text-h4 text-rambutan-50">Storage</h1>
+            <p className="text-eyebrow text-rambutan-500">Disk profiler</p>
           </div>
         </div>
         <div className="ml-auto">
@@ -147,14 +143,14 @@ function ScanView({ result }: { result: ResultEvent }) {
                 onClick={() => breadcrumbTo(stack.length - 2)}
                 aria-label="Go up one level"
                 title="Go up one level"
-                className="rounded-grape text-rambutan-400 hover:bg-longan-800 hover:text-rambutan-100 focus-visible:outline-persimmon-400 flex size-7 shrink-0 items-center justify-center focus-visible:outline-2"
+                className="rounded-grape text-rambutan-400 hover:bg-longan-800 hover:text-rambutan-100 flex size-7 shrink-0 items-center justify-center"
               >
                 <CornerLeftUp className="size-4 shrink-0" />
               </button>
             )}
             <nav
               aria-label="Folder path"
-              className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-sm"
+              className="text-code flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
             >
               {stack.map((p, i) => {
                 const node = findByPath(tree, p);
@@ -172,7 +168,7 @@ function ScanView({ result }: { result: ResultEvent }) {
                       type="button"
                       onClick={() => breadcrumbTo(i)}
                       aria-current={isLast ? "location" : undefined}
-                      className={`rounded-seed focus-visible:outline-persimmon-400 max-w-[15rem] truncate px-1.5 py-1 font-mono focus-visible:outline-2 ${
+                      className={`rounded-seed max-w-[15rem] truncate px-1.5 py-1 ${
                         isLast
                           ? "bg-blueberry-500/15 text-blueberry-200"
                           : "text-rambutan-400 hover:bg-longan-800 hover:text-rambutan-100"
@@ -184,11 +180,12 @@ function ScanView({ result }: { result: ResultEvent }) {
                 );
               })}
             </nav>
-            <span className="text-rambutan-400 shrink-0 font-mono text-sm tabular-nums">
+            <span className="text-code text-rambutan-400 shrink-0 tabular-nums">
               {formatBytes(current.size)}
             </span>
           </div>
-          <div className="rounded-lychee bg-longan-900/40 relative min-h-0 flex-1 overflow-hidden ring-1 ring-white/5">
+          {/* p-px keeps the well's inset ring visible around the edge-to-edge canvas. */}
+          <div className="surface-well relative min-h-0 flex-1 overflow-hidden p-px">
             <TreemapCanvas
               root={current}
               onEnterDir={enterDir}
@@ -206,7 +203,7 @@ function ScanView({ result }: { result: ResultEvent }) {
               onTrash={() => setDeleteTarget(selected)}
             />
           ) : (
-            <div className="rounded-lychee bg-longan-900/50 text-rambutan-400 flex shrink-0 items-start gap-2 p-3 text-sm ring-1 ring-white/5">
+            <div className="surface-well text-body-sm text-rambutan-400 flex shrink-0 items-start gap-2 p-3">
               <Info className="text-rambutan-500 mt-0.5 size-4 shrink-0" />
               <p className="text-pretty">
                 Click a block to inspect or delete it. Double-click a folder to
@@ -264,17 +261,15 @@ function Stat({
   return (
     <div className="px-6 py-3.5 first:pl-6 sm:px-6">
       <div className="flex items-center gap-2">
-        <p className="text-rambutan-500 truncate text-[0.6875rem] tracking-wide uppercase">
-          {label}
-        </p>
+        <p className="text-eyebrow text-rambutan-500 truncate">{label}</p>
         {badge && (
-          <span className="rounded-seed bg-longan-800 text-rambutan-400 px-1.5 py-0.5 font-mono text-[0.625rem] tracking-wide uppercase">
+          <span className="text-eyebrow rounded-seed bg-longan-800 text-rambutan-400 px-1.5 py-0.5">
             {badge}
           </span>
         )}
       </div>
       <p
-        className={`mt-1 font-mono text-2xl tracking-tight tabular-nums ${
+        className={`text-h2 mt-1 tabular-nums ${
           accent ? "text-persimmon-300" : "text-rambutan-50"
         }`}
       >
@@ -300,7 +295,7 @@ function Banner({
   return (
     <div
       role={tone === "danger" ? "alert" : "status"}
-      className={`flex shrink-0 items-start gap-2.5 px-6 py-2.5 text-sm ring-1 ring-inset ${styles}`}
+      className={`text-body-sm flex shrink-0 items-start gap-2.5 px-6 py-2.5 ring-1 ring-inset ${styles}`}
     >
       <span className="mt-0.5">{icon}</span>
       <p className="text-pretty">{children}</p>
@@ -320,7 +315,7 @@ function SelectedCard({
       ? "var(--color-rambutan-500)"
       : `var(${CATEGORY_VAR[categoryForNode(node)]})`;
   return (
-    <div className="rounded-lychee bg-longan-900 shrink-0 p-4 ring-1 ring-white/5">
+    <div className="surface-panel shrink-0 p-4">
       <div className="flex items-start gap-2.5">
         <span
           aria-hidden="true"
@@ -328,24 +323,21 @@ function SelectedCard({
           style={{ background: color }}
         />
         <div className="min-w-0 flex-1">
-          <p
-            className="text-rambutan-50 truncate font-mono text-sm font-medium"
-            title={node.name}
-          >
+          <p className="text-code text-rambutan-50 truncate" title={node.name}>
             {node.name}
           </p>
           {!isAggregate(node) && (
-            <p className="text-rambutan-500 mt-0.5 text-[0.6875rem] leading-4 break-all">
+            <p className="text-code-sm text-rambutan-500 mt-0.5 break-all">
               {node.path}
             </p>
           )}
         </div>
       </div>
-      <p className="text-persimmon-300 mt-3 font-mono text-2xl tracking-tight tabular-nums">
+      <p className="text-h2 text-persimmon-300 mt-3 tabular-nums">
         {formatBytes(node.size)}
       </p>
       {isAggregate(node) ? (
-        <p className="text-rambutan-400 mt-3 text-sm text-pretty">
+        <p className="text-body-sm text-rambutan-400 mt-3 text-pretty">
           Many small items folded together. Zoom in to pick a real file or
           folder.
         </p>
@@ -353,7 +345,8 @@ function SelectedCard({
         <button
           type="button"
           onClick={onTrash}
-          className="rounded-grape bg-lychee-500/10 text-lychee-200 ring-lychee-500/25 hover:bg-lychee-500/20 focus-visible:outline-lychee-400 mt-3 flex w-full items-center justify-center gap-1.5 py-2 text-sm font-medium ring-1 ring-inset focus-visible:outline-2 focus-visible:outline-offset-2"
+          // No soft danger tone in the theme yet; restyle btn with the lychee soft-badge recipe.
+          className="btn btn-soft-danger mt-3 w-full"
         >
           <Trash2 className="size-4 shrink-0" /> Move to Trash
         </button>
@@ -370,14 +363,14 @@ function EmptyState({
   onScan: () => void;
 }) {
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center px-6 text-center">
+    <div className="empty-state size-full">
       <span className="rounded-mango bg-blueberry-500/10 text-blueberry-300 ring-blueberry-500/20 flex size-14 items-center justify-center ring-1">
         <HardDrive className="size-6 shrink-0" />
       </span>
-      <h2 className="text-rambutan-100 mt-5 text-xl font-semibold tracking-tight text-balance">
+      <h2 className="text-h3 text-rambutan-100 mt-3 text-balance">
         {scanning ? "Scanning your disk…" : "Profile your disk"}
       </h2>
-      <p className="text-rambutan-400 mt-2 max-w-sm text-sm text-pretty">
+      <p className="text-body-sm text-rambutan-400 max-w-sm text-pretty">
         {scanning
           ? "Reading the filesystem — the treemap will appear the moment it's done."
           : "See exactly what's eating your space as a treemap. Double-click a folder to drill in, and move space-hogs to the Trash."}
@@ -386,7 +379,7 @@ function EmptyState({
         <button
           type="button"
           onClick={onScan}
-          className="rounded-grape bg-longan-800/80 text-rambutan-100 ring-longan-700 hover:bg-longan-800 focus-visible:outline-persimmon-400 mt-6 flex items-center gap-1.5 py-2 pr-4 pl-3 text-sm font-medium ring-1 ring-inset focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="btn btn-outline mt-4 pl-2"
         >
           <HardDrive className="size-4 shrink-0" /> Scan whole disk
         </button>

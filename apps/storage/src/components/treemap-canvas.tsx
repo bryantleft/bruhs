@@ -35,19 +35,42 @@ const CATEGORIES: Category[] = [
   "other",
 ];
 
-/** Resolve the fruit-palette CSS variables to concrete color strings for canvas use. */
-function resolvePalette(): Record<Category, string> {
-  const cs = getComputedStyle(document.documentElement);
-  const out = {} as Record<Category, string>;
-  for (const c of CATEGORIES) {
-    const v = cs.getPropertyValue(CATEGORY_VAR[c]).trim();
-    out[c] = v || "#888";
-  }
-  return out;
+/** Concrete colour strings for canvas drawing, read from the theme at runtime. */
+interface Palette {
+  category: Record<Category, string>;
+  /** Cushion highlight, labels and the selection outline. */
+  light: string;
+  /** Cushion shade, folder frames and the label halo. */
+  dark: string;
+  /** Font family for folder labels (Monaspace Argon, like the label roles). */
+  labelFont: string;
 }
 
-function colorFor(node: TreeNode, palette: Record<Category, string>): string {
-  return palette[categoryForNode(node)];
+/**
+ * Resolve the fruit-palette CSS variables to concrete colour strings for canvas use.
+ * Theme colours are OKLCH values, which canvas accepts in current browsers.
+ */
+function resolvePalette(): Palette {
+  const cs = getComputedStyle(document.documentElement);
+  const token = (name: string) => cs.getPropertyValue(name).trim();
+  const fallback = token("--color-rambutan-500");
+  const category = {} as Record<Category, string>;
+  for (const c of CATEGORIES) category[c] = token(CATEGORY_VAR[c]) || fallback;
+  return {
+    category,
+    light: token("--color-rambutan-50"),
+    dark: token("--color-longan-950"),
+    labelFont: token("--font-argon") || "ui-monospace, monospace",
+  };
+}
+
+/** Add an alpha channel to a resolved theme colour: `…(18% .01 65)` → `…(18% .01 65 / 0.3)`. */
+function withAlpha(color: string, alpha: number): string {
+  return color.replace(/\)\s*$/, ` / ${alpha})`);
+}
+
+function colorFor(node: TreeNode, palette: Palette): string {
+  return palette.category[categoryForNode(node)];
 }
 
 const childrenOf = (d: TreeNode): readonly TreeNode[] | undefined =>
@@ -74,7 +97,7 @@ export function TreemapCanvas({
     y: number;
     node: RNode;
   } | null>(null);
-  const paletteRef = useRef<Record<Category, string> | null>(null);
+  const paletteRef = useRef<Palette | null>(null);
 
   // Track container size.
   useEffect(() => {
@@ -118,7 +141,7 @@ export function TreemapCanvas({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.w, size.h);
 
-    // Leaf rectangles with softly rounded corners and cushion shading.
+    // Leaf rectangles with soft corners and cushion shading.
     for (const leaf of leaves) {
       const w = leaf.x1 - leaf.x0;
       const h = leaf.y1 - leaf.y0;
@@ -131,9 +154,9 @@ export function TreemapCanvas({
       // Cushion: light top-left, dark bottom-right.
       if (w > 3 && h > 3) {
         const g = ctx.createLinearGradient(leaf.x0, leaf.y0, leaf.x1, leaf.y1);
-        g.addColorStop(0, "rgba(255,255,255,0.22)");
-        g.addColorStop(0.5, "rgba(255,255,255,0.0)");
-        g.addColorStop(1, "rgba(0,0,0,0.3)");
+        g.addColorStop(0, withAlpha(palette.light, 0.22));
+        g.addColorStop(0.5, withAlpha(palette.light, 0));
+        g.addColorStop(1, withAlpha(palette.dark, 0.3));
         ctx.fillStyle = g;
         ctx.fill();
       }
@@ -141,13 +164,13 @@ export function TreemapCanvas({
 
     // Directory frames + labels for the top two levels.
     ctx.textBaseline = "middle";
-    ctx.font = "600 11px ui-monospace, monospace";
+    ctx.font = `600 11px ${palette.labelFont}, ui-monospace, monospace`;
     for (const d of layout.descendants() as RNode[]) {
       if (d.depth === 0 || !d.children) continue;
       const w = d.x1 - d.x0;
       const h = d.y1 - d.y0;
       if (w < 6 || h < 6) continue;
-      ctx.strokeStyle = d.depth === 1 ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.25)";
+      ctx.strokeStyle = withAlpha(palette.dark, d.depth === 1 ? 0.55 : 0.25);
       ctx.lineWidth = d.depth === 1 ? 1.5 : 0.75;
       ctx.beginPath();
       ctx.roundRect(d.x0 + 0.5, d.y0 + 0.5, w - 1, h - 1, LEAF_RADIUS);
@@ -159,9 +182,9 @@ export function TreemapCanvas({
         ctx.rect(d.x0 + 3, d.y0, w - 6, 14);
         ctx.clip();
         // Subtle dark halo keeps labels legible over any color.
-        ctx.shadowColor = "rgba(0,0,0,0.55)";
+        ctx.shadowColor = withAlpha(palette.dark, 0.55);
         ctx.shadowBlur = 2;
-        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.fillStyle = withAlpha(palette.light, 0.95);
         ctx.fillText(label, d.x0 + 4, d.y0 + 7.5);
         ctx.restore();
       }
@@ -176,7 +199,7 @@ export function TreemapCanvas({
         );
       // Never outline the root (depth 0) — that would frame the whole map.
       if (sel && sel.depth > 0) {
-        ctx.strokeStyle = "#fff";
+        ctx.strokeStyle = palette.light;
         ctx.lineWidth = 2;
         ctx.strokeRect(
           sel.x0 + 1,
@@ -263,19 +286,19 @@ export function TreemapCanvas({
             }}
           />
           <div
-            className="rounded-grape bg-longan-700/95 pointer-events-none absolute z-10 max-w-xs px-2.5 py-2 inset-ring inset-ring-white/15 backdrop-blur-sm"
+            className="tooltip absolute max-w-xs px-2.5 py-2"
             style={{
               left: Math.min(hover.x + 14, size.w - 224),
               top: Math.min(hover.y + 14, size.h - 60),
             }}
           >
-            <div className="text-rambutan-50 truncate font-mono text-sm font-medium">
+            <div className="text-code text-rambutan-50 truncate">
               {hover.node.data.name}
             </div>
-            <div className="text-persimmon-300 font-mono text-xs tabular-nums">
+            <div className="text-code-sm text-persimmon-300 tabular-nums">
               {formatBytes(hover.node.value ?? hover.node.data.size)}
             </div>
-            <div className="text-rambutan-400 mt-0.5 max-w-56 truncate text-[0.625rem]">
+            <div className="text-code-sm text-rambutan-400 mt-0.5 max-w-56 truncate">
               {hover.node.data.path}
             </div>
           </div>
@@ -300,7 +323,7 @@ function TreemapItems({ root, selectedPath, onSelect, onEnterDir }: Props) {
   return (
     <ul
       aria-label={`Items in ${root.name || root.path}`}
-      className="rounded-lychee bg-longan-700 sr-only max-h-[calc(100%-1rem)] overflow-y-auto p-2 inset-ring inset-ring-white/15 focus-within:not-sr-only focus-within:absolute focus-within:top-2 focus-within:left-2 focus-within:z-20 focus-within:w-80"
+      className="surface-floating focus-within:z-popover sr-only max-h-[calc(100%-1rem)] overflow-y-auto p-2 focus-within:not-sr-only focus-within:absolute focus-within:top-2 focus-within:left-2 focus-within:w-80"
     >
       {root.children.map((child) => (
         <li key={child.path} className="flex items-center gap-1">
@@ -308,10 +331,10 @@ function TreemapItems({ root, selectedPath, onSelect, onEnterDir }: Props) {
             type="button"
             aria-pressed={child.path === selectedPath}
             onClick={() => onSelect(child)}
-            className="rounded-grape text-rambutan-100 hover:bg-longan-600 focus-visible:outline-persimmon-400 aria-pressed:bg-blueberry-500/15 min-w-0 flex-1 truncate px-2 py-1 text-left text-sm focus-visible:outline-2"
+            className="menu-item text-rambutan-100 aria-pressed:bg-blueberry-500/15 block min-w-0 flex-1 truncate px-2 py-1"
           >
             {child.name}{" "}
-            <span className="text-rambutan-400 font-mono text-xs tabular-nums">
+            <span className="text-code-sm text-rambutan-400 tabular-nums">
               {formatBytes(child.size)}
             </span>
           </button>
@@ -320,7 +343,7 @@ function TreemapItems({ root, selectedPath, onSelect, onEnterDir }: Props) {
               type="button"
               onClick={() => onEnterDir(child)}
               aria-label={`Open ${child.name}`}
-              className="rounded-grape text-rambutan-300 hover:bg-longan-600 focus-visible:outline-persimmon-400 shrink-0 px-2 py-1 text-sm focus-visible:outline-2"
+              className="menu-item text-rambutan-300 w-auto shrink-0 px-2 py-1"
             >
               Open
             </button>
