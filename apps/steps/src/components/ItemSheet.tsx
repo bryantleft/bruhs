@@ -1,14 +1,16 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { type GearSlot, getItem, QUALITIES, QUESTS, stackSize } from '../game/content';
+import { type GearSlot, getItem, QUALITIES, stackSize } from '../game/content';
 import { useGame } from '../game/GameProvider';
 import {
   actionRejection,
   atBank,
   atStore,
   type GameAction,
-  questState,
+  orList,
+  questsNeeding,
   type Rejection,
   requirementText,
+  townsWith,
 } from '../game/game';
 import { formatMod, keyItem, keyMods, keyName, keyValue, parseKey } from '../game/items';
 import { itemArt } from '../pixel/art';
@@ -43,11 +45,13 @@ export function ItemSheet({
   const owned = origin.from === 'bank' ? inBank : inBag;
   const mods = keyMods(itemKey);
   // Warn before eating, selling or dropping something an active quest is waiting for.
-  const neededBy = QUESTS.filter((entry) => questState(game, entry.id) === 'started').flatMap((entry) =>
-    entry.deliver
-      .filter((stack) => stack.item === item.id)
-      .map((stack) => ({ quest: entry, qty: stack.qty })),
-  )[0];
+  const neededBy = questsNeeding(game, item.id)[0];
+  const banks = townsWith('bank');
+  const stores = townsWith('store');
+  const townsHint =
+    orList(banks) === orList(stores)
+      ? `bank and sell in ${orList(banks)}.`
+      : `bank in ${orList(banks)}. sell in ${orList(stores)}.`;
   // Buttons ask the rules themselves, so they never offer what the rules would refuse.
   const wearRejection = actionRejection(game, { type: 'wear', item: itemKey });
   const wearBlocker = wearRejection?.kind === 'requires' ? requirementText(wearRejection.requirement) : null;
@@ -252,7 +256,7 @@ export function ItemSheet({
           />
         ) : null}
         {!bank && origin.from === 'inventory' && !store ? (
-          <Text style={styles.small}>bank and sell in bruhbridge or blueberry bay.</Text>
+          <Text style={styles.small}>{townsHint}</Text>
         ) : null}
       </View>
     </Sheet>

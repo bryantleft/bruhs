@@ -57,7 +57,21 @@ import { levelForXp } from './xp.ts';
 
 export { SKINS, type Skin, type SkinId } from './content.ts';
 // The game is split by concern; these re-exports keep `game.ts` the one import for callers.
-export { type NextStep, nextStep, runsLeft, sourceOf, unlocksBetween } from './guidance.ts';
+export {
+  type ItemSource,
+  itemSource,
+  itemSourceText,
+  type NextStep,
+  nearestBank,
+  nextStep,
+  orList,
+  ownedCount,
+  questsNeeding,
+  runsLeft,
+  sourceOf,
+  townsWith,
+  unlocksBetween,
+} from './guidance.ts';
 export {
   getMission,
   missionClaimed,

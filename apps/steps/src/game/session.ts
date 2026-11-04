@@ -2,7 +2,6 @@ import {
   GEAR_SLOTS,
   getLocation,
   getQuest,
-  LOCATIONS,
   SKILL_IDS,
   type SkillId,
   type SkinId,
@@ -14,9 +13,11 @@ import {
   type GameAction,
   getMission,
   type LoadFailure,
+  orList,
   playGame,
   type Rejection,
   type StopReason,
+  townsWith,
   unlockedSkins,
 } from './game.ts';
 import { add, type Bag, itemCount, keyName, keyValue, pluralName } from './items.ts';
@@ -178,11 +179,6 @@ function gainText(report: Report): string | null {
   return parts.length ? parts.join(' · ') : null;
 }
 
-function townList(names: readonly string[]): string {
-  if (names.length <= 1) return names[0] ?? '';
-  return `${names.slice(0, -1).join(', ')} or ${names.at(-1)}`;
-}
-
 // What to tell the player when the rules refuse an action: what failed and how to fix it.
 // Null when there is nothing to explain.
 export function rejectionText(reason: Rejection, game: Game): string | null {
@@ -194,9 +190,9 @@ export function rejectionText(reason: Rejection, game: Game): string | null {
     case 'bag-full':
       return 'your bag is full. bank or drop something first.';
     case 'not-at-bank':
-      return `there’s no bank here. walk to ${townList(LOCATIONS.filter((place) => place.bank).map((place) => place.name))} first.`;
+      return `there’s no bank here. walk to ${orList(townsWith('bank'))} first.`;
     case 'not-at-store':
-      return `there’s no store here. walk to ${townList(LOCATIONS.filter((place) => place.store).map((place) => place.name))} first.`;
+      return `there’s no store here. walk to ${orList(townsWith('store'))} first.`;
     case 'travelling':
       return 'you’re on the road. arrive or turn back first.';
     case 'not-here':

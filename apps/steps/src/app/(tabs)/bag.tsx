@@ -13,7 +13,6 @@ import {
   getItem,
   getLocation,
   ITEMS,
-  LOCATIONS,
   METALS,
   SKILLS,
   STAT_IDS,
@@ -24,7 +23,7 @@ import {
   TOOL_SKILL,
 } from '../../game/content';
 import { useGame } from '../../game/GameProvider';
-import { atBank, atStore, capacityOf, nextBagUpgrade } from '../../game/game';
+import { atBank, atStore, capacityOf, nextBagUpgrade, townsWith } from '../../game/game';
 import {
   countOf,
   formatMod,
@@ -273,7 +272,7 @@ function Bank({ onOpen }: Readonly<{ onOpen: (open: Open) => void }>): React.JSX
   const here = atBank(game);
   const keys = Object.keys(game.bank).sort(byOrder);
   const worth = keys.reduce((sum, key) => sum + keyValue(key) * (game.bank[key] ?? 0), 0);
-  const towns = LOCATIONS.filter((place) => place.bank).map((place) => place.name);
+  const towns = townsWith('bank');
   return (
     <Panel title="bank" aside={`${keys.length} stacks · worth ${worth.toLocaleString()}`}>
       {here ? (

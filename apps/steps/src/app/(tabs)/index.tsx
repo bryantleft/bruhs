@@ -7,12 +7,13 @@ import { Hud } from '../../components/Hud';
 import { Scene } from '../../components/Scene';
 import { TrackingControl } from '../../components/TrackingControl';
 import { Button, Screen } from '../../components/ui';
-import { getActivity, getItem, getLocation, LOCATIONS, START_LOCATION } from '../../game/content';
+import { getActivity, getItem, getLocation, START_LOCATION } from '../../game/content';
 import { useGame } from '../../game/GameProvider';
 import {
   atBank,
   capacityOf,
   type NextStep,
+  nearestBank,
   nextStep,
   readyMissions,
   route,
@@ -29,17 +30,6 @@ import { SKILL_ART } from '../../pixel/art';
 import { Bar, Panel, Tag } from '../../pixel/chrome';
 import { Sprite } from '../../pixel/Sprite';
 import { color, font, shadow, space } from '../../theme/theme';
-
-function nearestBank(from: string): Readonly<{ id: string; name: string; distance: number }> | null {
-  let best: Readonly<{ id: string; name: string; distance: number }> | null = null;
-  for (const place of LOCATIONS) {
-    if (!place.bank) continue;
-    const path = route(from, place.id);
-    if (path && (!best || path.distance < best.distance))
-      best = { id: place.id, name: place.name, distance: path.distance };
-  }
-  return best;
-}
 
 function BagStrip(): React.JSX.Element {
   const { game } = useGame();
@@ -145,7 +135,7 @@ function StatusPanel({ onDetails }: Readonly<{ onDetails: () => void }>): React.
   }
   const stopped = game.stopped ? getActivity(game.stopped.activity) : undefined;
   const full = game.stopped?.kind === 'bag-full';
-  const bank = full ? nearestBank(game.location) : null;
+  const bank = full ? nearestBank(game)?.place : null;
   // One clear next step: quests first, then steady work here, then a walk to somewhere useful.
   const next = nextStep(game);
   return (

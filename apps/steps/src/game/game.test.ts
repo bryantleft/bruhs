@@ -27,19 +27,26 @@ import {
   decodeGame,
   type Game,
   getDay,
+  itemSource,
+  itemSourceText,
   missionProgress,
   missionsFor,
+  nearestBank,
   nextBagUpgrade,
   nextStep,
+  ownedCount,
   periodDaysLeft,
   periodRange,
+  questsNeeding,
   readyMissions,
   route,
   runsLeft,
   skillLevel,
+  sourceOf,
   stepsPerAction,
   streak,
   totalLevel,
+  townsWith,
   travelCost,
   unspentSteps,
   updateGame,
@@ -696,4 +703,39 @@ test('every content reference points at something that exists', () => {
   for (const period of MISSION_PERIODS)
     for (const mission of [FIXED_MISSIONS[period], ...MISSION_POOLS[period]])
       for (const stack of mission.items ?? []) item(stack.item, `${mission.id} reward`);
+});
+
+test('screens read item sources, banks and quest needs from the rules', () => {
+  const game = at('pandan-woods', { inventory: { 'pandan-logs': 3 }, bank: { 'pandan-logs': 4 } });
+  assert.equal(ownedCount(game, 'pandan-logs'), 7);
+  // The hint names the same place the next-step button would walk to.
+  const open = itemSource(game, 'pandan-logs');
+  assert.equal(open.kind, 'make');
+  assert.equal(itemSourceText(open), 'chopping pandan tree here');
+  const source = sourceOf(game, 'longan-logs');
+  const longan = itemSource(withLevel(game, 'woodcutting', 15), 'longan-logs');
+  assert.ok(
+    longan.kind === 'make' &&
+      longan.place.id === sourceOf(withLevel(game, 'woodcutting', 15), 'longan-logs')?.place.id,
+  );
+  // Without the level there is no open source, so the hint names the requirement.
+  assert.equal(source, null);
+  assert.match(itemSourceText(itemSource(game, 'longan-logs')), /\(woodcutting 15\)$/);
+  assert.equal(itemSourceText(itemSource(game, 'adventurer-chest')), 'found in chests');
+  const bank = nearestBank(game);
+  assert.ok(bank?.place.bank);
+  for (const place of LOCATIONS)
+    if (place.bank)
+      assert.ok((route(game.location, place.id)?.distance ?? Infinity) >= (bank?.distance ?? 0));
+  assert.deepEqual(
+    townsWith('bank'),
+    LOCATIONS.filter((place) => place.bank).map((place) => place.name),
+  );
+  const quest = QUESTS[0];
+  assert.ok(quest);
+  const stack = quest.deliver[0];
+  assert.ok(stack);
+  assert.deepEqual(questsNeeding(game, stack.item), []);
+  const started = { ...game, quests: { [quest.id]: 'started' as const } };
+  assert.deepEqual(questsNeeding(started, stack.item)[0], { quest, qty: stack.qty });
 });

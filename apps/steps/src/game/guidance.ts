@@ -24,7 +24,7 @@ import {
   skillLevel,
   stepsPerAction,
 } from './game.ts';
-import { countOf } from './items.ts';
+import { countOf, keyName } from './items.ts';
 
 export type NextStep =
   | Readonly<{ kind: 'hand-in'; quest: Quest }>
@@ -36,6 +36,45 @@ export type NextStep =
 export function runsLeft(game: Game, activity: Activity): number {
   if (!activity.inputs?.length) return Number.POSITIVE_INFINITY;
   return Math.min(...activity.inputs.map((input) => Math.floor(available(game, input.item) / input.qty)));
+}
+
+// Everything you own of an item: the bag plus the bank, wherever you stand.
+export function ownedCount(game: Pick<Game, 'inventory' | 'bank'>, item: string): number {
+  return countOf(game.inventory, item) + countOf(game.bank, item);
+}
+
+// Started quests waiting on this item, with how many each needs.
+export function questsNeeding(
+  game: Pick<Game, 'quests'>,
+  item: string,
+): readonly Readonly<{ quest: Quest; qty: number }>[] {
+  return QUESTS.filter((quest) => questState(game, quest.id) === 'started').flatMap((quest) =>
+    quest.deliver.filter((stack) => stack.item === item).map((stack) => ({ quest, qty: stack.qty })),
+  );
+}
+
+// The names of towns with a bank or a store, in map order.
+export function townsWith(service: 'bank' | 'store'): readonly string[] {
+  return LOCATIONS.filter((place) => place[service]).map((place) => place.name);
+}
+
+// "bruhbridge", "bruhbridge or blueberry bay", "a, b or c".
+export function orList(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  return `${names.slice(0, -1).join(', ')} or ${names.at(-1)}`;
+}
+
+// The closest bank town by road from where you stand.
+export function nearestBank(
+  game: Pick<Game, 'location'>,
+): Readonly<{ place: Place; distance: number }> | null {
+  let best: Readonly<{ place: Place; distance: number }> | null = null;
+  for (const place of LOCATIONS) {
+    if (!place.bank) continue;
+    const path = route(game.location, place.id);
+    if (path && (!best || path.distance < best.distance)) best = { place, distance: path.distance };
+  }
+  return best;
 }
 
 // Where an item can be made or gathered right now: here first, then the nearest open place.
@@ -78,15 +117,11 @@ export function nextStep(game: Game): NextStep | null {
     if (questState(game, quest.id) !== 'started' || questBlocker(game, quest)) continue;
     if (canHandIn(game, quest)) {
       if (game.location === quest.location) return { kind: 'hand-in', quest };
-      const gathered = quest.deliver.every(
-        (stack) => countOf(game.inventory, stack.item) + countOf(game.bank, stack.item) >= stack.qty,
-      );
+      const gathered = quest.deliver.every((stack) => ownedCount(game, stack.item) >= stack.qty);
       const place = getLocation(quest.location);
       if (gathered && place) return { kind: 'travel', place, quest };
     }
-    const short = quest.deliver.find(
-      (stack) => countOf(game.inventory, stack.item) + countOf(game.bank, stack.item) < stack.qty,
-    );
+    const short = quest.deliver.find((stack) => ownedCount(game, stack.item) < stack.qty);
     if (short) {
       const step = toward(game, short.item, quest);
       if (step) return step;
@@ -134,4 +169,40 @@ export function unlocksBetween(skill: SkillId, from: number, to: number): string
     if (place.requires?.type === 'skill' && place.requires.skill === skill && opened(place.requires.level))
       unlocks.push(`travel to ${place.name}`);
   return unlocks;
+}
+
+// Where an item comes from, for hints: the nearest open source (the one the next-step button
+// walks to), else the easiest maker still locked, else a rare find or a chest.
+export type ItemSource =
+  | Readonly<{ kind: 'make'; activity: Activity; place: Place; distance: number }>
+  | Readonly<{ kind: 'locked'; activity: Activity; places: readonly Place[] }>
+  | Readonly<{ kind: 'find'; activity: Activity }>
+  | Readonly<{ kind: 'chest' }>;
+
+export function itemSource(game: Game, item: string): ItemSource {
+  const open = sourceOf(game, item);
+  if (open) return { kind: 'make', ...open };
+  const maker = ACTIVITIES.filter((activity) => activity.output.item === item).sort(
+    (a, b) => a.level - b.level,
+  )[0];
+  if (maker)
+    return {
+      kind: 'locked',
+      activity: maker,
+      places: LOCATIONS.filter((place) => place.activities.includes(maker.id)),
+    };
+  const finder = ACTIVITIES.find((activity) => activity.finds?.some((find) => find.item === item));
+  return finder ? { kind: 'find', activity: finder } : { kind: 'chest' };
+}
+
+export function itemSourceText(source: ItemSource): string {
+  if (source.kind === 'chest') return 'found in chests';
+  const { activity } = source;
+  if (source.kind === 'find') return `a rare find while ${activity.verb}`;
+  const from = activity.inputs?.length
+    ? ` from ${activity.inputs.map((input) => keyName(input.item)).join(' and ')}`
+    : '';
+  if (source.kind === 'make')
+    return `${activity.verb} ${activity.name}${from} ${source.distance === 0 ? 'here' : `at ${source.place.name}`}`;
+  return `${activity.verb} ${activity.name}${from} at ${source.places.map((place) => place.name).join(' or ')} (${activity.skill} ${activity.level})`;
 }
