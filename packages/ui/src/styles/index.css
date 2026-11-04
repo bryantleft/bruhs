@@ -1,3 +1,5 @@
+@import "./components.css";
+
 @theme {
   /* Bruh Colors */
   --color-bruh-eye: oklch(0.146 0.000 0);
@@ -137,6 +139,11 @@
   --font-radon: "MonaspaceRadonVariable";
   --font-xenon: "MonaspaceXenonVariable";
 
+  /* Tailwind's own families point at Monaspace too, so unstyled text and font-mono
+   * stay in the system instead of falling back to the platform sans. */
+  --font-sans: var(--font-neon), ui-monospace, Menlo, monospace;
+  --font-mono: var(--font-neon), ui-monospace, Menlo, monospace;
+
   /* Fruit-named Radius Scale — sole vocabulary in Bruhs */
   --radius-seed: 0.25rem;
   --radius-grape: 0.5rem;
@@ -154,6 +161,14 @@
   --duration-standard: 250ms;
   --duration-slow: 400ms;
   --duration-bloom: 600ms;
+
+  /* Tailwind builds duration-* from this namespace, not --duration-*. Without these
+   * aliases duration-fast and friends generate no CSS. */
+  --transition-duration-blink: var(--duration-blink);
+  --transition-duration-fast: var(--duration-fast);
+  --transition-duration-standard: var(--duration-standard);
+  --transition-duration-slow: var(--duration-slow);
+  --transition-duration-bloom: var(--duration-bloom);
 
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-entrance: cubic-bezier(0, 0, 0, 1);
@@ -214,6 +229,39 @@
   font-display: swap;
   src: url("/fonts/MonaspaceXenonVariable.woff2") format("woff2"),
     url("/fonts/MonaspaceXenonVariable.woff") format("woff");
+}
+
+/*
+ * Document defaults, so an app gets the system without restating it on <body>.
+ * Stacking layers are ordering only: overlay sits under modal, popovers and tooltips
+ * stay above a modal so they still work inside one.
+ */
+@layer base {
+  :root {
+    --z-raised: 10;
+    --z-sticky: 20;
+    --z-overlay: 40;
+    --z-modal: 50;
+    --z-popover: 60;
+    --z-toast: 70;
+    --z-tooltip: 80;
+  }
+
+  html {
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--color-longan-950);
+    color: var(--color-rambutan-100);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-persimmon-400);
+    outline-offset: 2px;
+  }
 }
 
 /* Bruhs Scrollbar — warm-dark, thin, neutral throughout */
@@ -423,3 +471,22 @@
   letter-spacing: 0;
   font-family: var(--font-radon), ui-monospace, Menlo, monospace;
 }
+
+/* Eyebrow — small uppercase label above a heading or group. Argon, like the labels. */
+@utility text-eyebrow {
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: var(--font-argon), ui-monospace, Menlo, monospace;
+}
+
+/* Stacking layers — use these instead of z-10 … z-50. Values live in :root above. */
+@utility z-raised { z-index: var(--z-raised); }
+@utility z-sticky { z-index: var(--z-sticky); }
+@utility z-overlay { z-index: var(--z-overlay); }
+@utility z-modal { z-index: var(--z-modal); }
+@utility z-popover { z-index: var(--z-popover); }
+@utility z-toast { z-index: var(--z-toast); }
+@utility z-tooltip { z-index: var(--z-tooltip); }

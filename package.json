@@ -18,7 +18,8 @@
 		"check:storage": "turbo run check --filter=storage",
 		"check:outside": "turbo run check --filter=outside",
 		"check:outside-site": "turbo run check --filter=outside-site",
-		"check:api": "turbo run check --filter=bruhs-api"
+		"check:api": "turbo run check --filter=bruhs-api",
+		"check:theme": "turbo run check --filter=@bruhs/theme"
 	},
 	"devDependencies": {
 		"turbo": "2.11.10"

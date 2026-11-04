@@ -1,0 +1,428 @@
+/*
+ * Bruhs component classes.
+ *
+ * Plain classes in the `components` layer, so any Tailwind utility on the same element
+ * overrides them (`btn btn-primary w-full`, `surface-card rounded-mango`). Written as raw
+ * CSS rather than @apply so hover rules can skip disabled controls and links alike.
+ */
+
+@layer components {
+  /* Buttons — `btn` plus one tone, optionally `btn-sm` or `btn-icon`. */
+  .btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: --spacing(1.5);
+    padding: --spacing(2) --spacing(3);
+    border-radius: var(--radius-grape);
+    font-family: var(--font-argon), ui-monospace, Menlo, monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    font-weight: 500;
+    white-space: nowrap;
+    user-select: none;
+    text-decoration: none;
+    cursor: pointer;
+    transition-property: color, background-color, box-shadow, opacity;
+    transition-duration: var(--duration-fast);
+    transition-timing-function: var(--ease-standard);
+  }
+  .btn:disabled,
+  .btn[aria-disabled="true"] {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .btn-sm {
+    padding: --spacing(1.5) --spacing(2.5);
+    font-size: 0.75rem;
+    letter-spacing: 0.025em;
+  }
+
+  /* Square, icon-only. Coarse pointers get an invisible 48px hit area. */
+  .btn-icon {
+    padding: --spacing(2);
+  }
+  @media (pointer: coarse) {
+    .btn-icon::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, 3rem);
+      height: max(100%, 3rem);
+      translate: -50% -50%;
+    }
+  }
+
+  .btn-primary {
+    background-color: var(--color-persimmon-500);
+    color: var(--color-longan-950);
+    box-shadow: 0 0 0 1px var(--color-persimmon-500);
+  }
+  .btn-soft {
+    background-color: color-mix(in oklab, var(--color-persimmon-500) 15%, transparent);
+    color: var(--color-persimmon-200);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-persimmon-400) 20%, transparent);
+  }
+  .btn-outline {
+    background-color: transparent;
+    color: var(--color-rambutan-100);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-rambutan-100) 15%, transparent);
+  }
+  .btn-ghost {
+    background-color: transparent;
+    color: var(--color-rambutan-200);
+  }
+  .btn-danger {
+    background-color: var(--color-lychee-600);
+    color: var(--color-lychee-50);
+    box-shadow: 0 0 0 1px var(--color-lychee-600);
+  }
+  /* Destructive but not the page's main action — the default for delete buttons. */
+  .btn-soft-danger {
+    background-color: color-mix(in oklab, var(--color-lychee-500) 15%, transparent);
+    color: var(--color-lychee-200);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-lychee-400) 20%, transparent);
+  }
+  .btn-danger:focus-visible,
+  .btn-soft-danger:focus-visible {
+    outline-color: var(--color-lychee-400);
+  }
+
+  @media (hover: hover) {
+    .btn-primary:hover:not(:disabled, [aria-disabled="true"]) {
+      background-color: var(--color-persimmon-400);
+      box-shadow: 0 0 0 1px var(--color-persimmon-400);
+    }
+    .btn-soft:hover:not(:disabled, [aria-disabled="true"]) {
+      background-color: color-mix(in oklab, var(--color-persimmon-500) 25%, transparent);
+    }
+    .btn-outline:hover:not(:disabled, [aria-disabled="true"]),
+    .btn-ghost:hover:not(:disabled, [aria-disabled="true"]) {
+      background-color: var(--color-longan-800);
+      color: var(--color-rambutan-100);
+    }
+    .btn-soft-danger:hover:not(:disabled, [aria-disabled="true"]) {
+      background-color: color-mix(in oklab, var(--color-lychee-500) 25%, transparent);
+    }
+    .btn-danger:hover:not(:disabled, [aria-disabled="true"]) {
+      background-color: var(--color-lychee-500);
+      box-shadow: 0 0 0 1px var(--color-lychee-500);
+    }
+  }
+  .btn-primary:active:not(:disabled, [aria-disabled="true"]) {
+    background-color: var(--color-persimmon-600);
+    box-shadow: 0 0 0 1px var(--color-persimmon-600);
+  }
+
+  /* Text input, textarea and bare select. */
+  .input {
+    display: block;
+    width: 100%;
+    padding: --spacing(2) --spacing(3);
+    border: 0;
+    border-radius: var(--radius-grape);
+    background-color: color-mix(in oklab, white 5%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, white 10%, transparent);
+    color: var(--color-rambutan-100);
+    font-family: var(--font-neon), ui-monospace, Menlo, monospace;
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+  .input::placeholder {
+    color: var(--color-rambutan-500);
+  }
+  .input:focus-visible {
+    outline: 2px solid var(--color-persimmon-400);
+    outline-offset: -1px;
+  }
+  .input[aria-invalid="true"] {
+    background-color: color-mix(in oklab, var(--color-lychee-500) 5%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-lychee-400) 40%, transparent);
+  }
+  .input[aria-invalid="true"]:focus-visible {
+    outline-color: var(--color-lychee-400);
+  }
+  .input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  textarea.input {
+    resize: vertical;
+  }
+
+  /*
+   * Surfaces — the elevation ladder as classes. Each sets a tone and a white inset ring;
+   * `surface-interactive` lifts the ring one step on hover for clickable surfaces.
+   */
+  .surface-panel,
+  .surface-card,
+  .surface-floating,
+  .surface-modal,
+  .surface-well {
+    border-radius: var(--radius-lychee);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, white var(--surface-ring), transparent);
+    transition-property: background-color, box-shadow;
+    transition-duration: var(--duration-fast);
+    transition-timing-function: var(--ease-standard);
+  }
+  .surface-panel {
+    --surface-ring: 5%;
+    background-color: var(--color-longan-900);
+  }
+  .surface-card {
+    --surface-ring: 10%;
+    background-color: var(--color-longan-800);
+  }
+  .surface-floating {
+    --surface-ring: 15%;
+    background-color: var(--color-longan-700);
+  }
+  .surface-modal {
+    --surface-ring: 20%;
+    background-color: var(--color-longan-800);
+  }
+  .surface-well {
+    --surface-ring: 5%;
+    background-color: color-mix(in oklab, var(--color-longan-900) 60%, transparent);
+  }
+  @media (hover: hover) {
+    .surface-interactive:hover {
+      --surface-ring: 15%;
+    }
+    .surface-panel.surface-interactive:hover {
+      background-color: var(--color-longan-800);
+    }
+  }
+
+  /* Native <dialog>. Opens with `showModal()`; the top layer makes z-index irrelevant. */
+  .dialog {
+    width: min(32rem, 100% - --spacing(8));
+    max-height: calc(100dvh - --spacing(8));
+    margin: auto;
+    padding: --spacing(6);
+    border: 0;
+    border-radius: var(--radius-mango);
+    background-color: var(--color-longan-800);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, white 20%, transparent);
+    color: var(--color-rambutan-100);
+  }
+  .dialog::backdrop {
+    background-color: color-mix(in oklab, var(--color-longan-950) 70%, transparent);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .dialog,
+    .dialog::backdrop {
+      transition-property: opacity, scale, display, overlay;
+      transition-duration: var(--duration-standard);
+      transition-timing-function: var(--ease-entrance);
+      transition-behavior: allow-discrete;
+    }
+    .dialog:not([open]),
+    .dialog:not([open])::backdrop {
+      opacity: 0;
+      transition-timing-function: var(--ease-exit);
+    }
+    .dialog:not([open]) {
+      scale: 0.96;
+    }
+    @starting-style {
+      .dialog[open],
+      .dialog[open]::backdrop {
+        opacity: 0;
+      }
+      .dialog[open] {
+        scale: 0.96;
+      }
+    }
+  }
+
+  /* Menus, listboxes and command palettes. Works on a native [popover] or a positioned div. */
+  .popover {
+    min-width: 12rem;
+    padding: --spacing(1);
+    border: 0;
+    border-radius: var(--radius-lychee);
+    background-color: var(--color-longan-700);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, white 15%, transparent);
+    color: var(--color-rambutan-100);
+    z-index: var(--z-popover);
+  }
+
+  /* A row in a menu or list. Highlight with aria-selected, aria-pressed, aria-current or
+   * data-highlighted. */
+  .menu-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: --spacing(2);
+    padding: --spacing(1.5) --spacing(2.5);
+    border-radius: var(--radius-grape);
+    color: var(--color-rambutan-200);
+    font-family: var(--font-neon), ui-monospace, Menlo, monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    transition-property: color, background-color;
+    transition-duration: var(--duration-blink);
+    transition-timing-function: var(--ease-standard);
+  }
+  .menu-item:focus-visible {
+    outline-offset: -2px;
+  }
+  .menu-item[aria-selected="true"],
+  .menu-item[aria-pressed="true"],
+  .menu-item[aria-current]:not([aria-current="false"]),
+  .menu-item[data-highlighted] {
+    background-color: color-mix(in oklab, white 10%, transparent);
+    color: var(--color-rambutan-50);
+  }
+  @media (hover: hover) {
+    .menu-item:hover:not([aria-disabled="true"]) {
+      background-color: color-mix(in oklab, white 10%, transparent);
+      color: var(--color-rambutan-50);
+    }
+  }
+  .menu-item[aria-disabled="true"] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* The tooltip bubble. Show it from the trigger (group-hover, popover or JS); keep an
+   * aria-label or aria-describedby on the trigger, since screen readers skip hover. */
+  .tooltip {
+    width: max-content;
+    max-width: 20rem;
+    padding: --spacing(1) --spacing(2);
+    border-radius: var(--radius-grape);
+    background-color: var(--color-longan-700);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, white 15%, transparent);
+    color: var(--color-rambutan-50);
+    font-family: var(--font-argon), ui-monospace, Menlo, monospace;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    font-weight: 500;
+    pointer-events: none;
+    z-index: var(--z-tooltip);
+  }
+
+  .kbd {
+    display: inline-flex;
+    min-width: 1.75em;
+    height: 1.75em;
+    align-items: center;
+    justify-content: center;
+    padding: 0 --spacing(1.5);
+    border-radius: var(--radius-seed);
+    background-color: var(--color-longan-800);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in oklab, white 10%, transparent),
+      inset 0 -1px 0 color-mix(in oklab, white 10%, transparent);
+    color: var(--color-rambutan-200);
+    font-family: var(--font-argon), ui-monospace, Menlo, monospace;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1;
+  }
+
+  .code-block {
+    display: block;
+    overflow-x: auto;
+    padding: --spacing(4);
+    border-radius: var(--radius-lychee);
+    background-color: var(--color-longan-900);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, white 5%, transparent);
+    color: var(--color-rambutan-200);
+    font-family: var(--font-neon), ui-monospace, Menlo, monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    tab-size: 2;
+  }
+  .code-inline {
+    padding: 0.125em 0.375em;
+    border-radius: var(--radius-seed);
+    background-color: color-mix(in oklab, white 5%, transparent);
+    color: var(--color-rambutan-200);
+    font-family: var(--font-neon), ui-monospace, Menlo, monospace;
+    font-size: 0.875em;
+  }
+
+  /* Inherits its size from font-size or a size-* utility and its colour from currentColor.
+   * Set --spinner-width for a finer or heavier stroke. */
+  .spinner {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+    border: var(--spinner-width, 2px) solid currentColor;
+    border-right-color: transparent;
+    border-radius: var(--radius-orb);
+    animation: bruhs-spin 0.75s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .spinner {
+      animation-duration: 1.5s;
+    }
+  }
+
+  /* Segmented control. Mark the active item with aria-pressed, aria-selected or aria-checked. */
+  .segmented {
+    display: inline-flex;
+    gap: --spacing(1);
+    padding: --spacing(1);
+    border-radius: var(--radius-grape);
+    background-color: color-mix(in oklab, white 5%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, white 10%, transparent);
+  }
+  .segmented-item {
+    display: inline-flex;
+    align-items: center;
+    gap: --spacing(1.5);
+    padding: --spacing(1.5) --spacing(3);
+    border-radius: var(--radius-seed);
+    color: var(--color-rambutan-300);
+    font-family: var(--font-argon), ui-monospace, Menlo, monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    font-weight: 500;
+    cursor: pointer;
+    transition-property: color, background-color, box-shadow;
+    transition-duration: var(--duration-fast);
+    transition-timing-function: var(--ease-standard);
+  }
+  @media (hover: hover) {
+    .segmented-item:hover {
+      color: var(--color-rambutan-100);
+    }
+  }
+  .segmented-item:is([aria-pressed="true"], [aria-selected="true"], [aria-checked="true"]) {
+    background-color: var(--color-longan-700);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, white 10%, transparent);
+    color: var(--color-rambutan-50);
+  }
+
+  /* Empty, error and 404 states: a centred column. Bring your own heading and action. */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: --spacing(2);
+    padding: --spacing(16) --spacing(6);
+    text-align: center;
+  }
+  .empty-state p {
+    max-width: 45ch;
+    color: var(--color-rambutan-400);
+  }
+}
+
+@keyframes bruhs-spin {
+  to {
+    rotate: 360deg;
+  }
+}

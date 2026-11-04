@@ -28,6 +28,13 @@ Copy `node_modules/@bruhs/theme/fonts/*` into your `public/fonts/` so the `@font
 
 Drop into any HTML document. All utilities are pre-compiled; fonts load from the same CDN path.
 
+### What you get
+
+- **Tokens:** fruit-named OKLCH colours, the fruit radius scale, motion durations and easings, stacking layers.
+- **Type roles:** `text-h1`, `text-body`, `text-label` and the rest, each bound to one Monaspace variant.
+- **Document defaults:** canvas and text colours, Monaspace as the default family, and the focus ring, set in the base layer.
+- **Component classes:** `btn`, `input`, `surface-*`, `dialog`, `popover`, `menu-item`, `tooltip`, `segmented`, `kbd`, `code-block`, `spinner`, `empty-state`.
+
 ### Mascot geometry
 
 `@bruhs/theme/logo` exports `bruhGeometry`: the viewBox, base circle, eye and mouth sizes, and the face position for each variant (`left`, `original`, `right`). It's plain TypeScript data, so draw the mascot with whatever renders SVG.

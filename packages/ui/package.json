@@ -44,7 +44,8 @@
     "build": "tailwindcss -i ./src/styles/bundle.css -o ./dist/bruhs.css --minify && pnpm run copy-fonts",
     "copy-fonts": "rm -rf ./dist/fonts && cp -r ./fonts ./dist/fonts",
     "build:unminified": "tailwindcss -i ./src/styles/bundle.css -o ./dist/bruhs.css && pnpm run copy-fonts",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "pnpm run build",
+    "check": "pnpm run build && node scripts/verify-bundle.mjs"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.4",

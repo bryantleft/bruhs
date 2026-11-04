@@ -101,4 +101,11 @@
 @source inline("font-{argon,krypton,neon,radon,xenon}");
 
 /* Typography role utilities */
-@source inline("text-{display-lg,display-md,display-sm,h1,h2,h3,h4,body-lg,body,body-sm,label-lg,label,label-sm,code-lg,code,code-sm,button-lg,button,button-sm,callout}");
+@source inline("text-{display-lg,display-md,display-sm,h1,h2,h3,h4,body-lg,body,body-sm,label-lg,label,label-sm,code-lg,code,code-sm,button-lg,button,button-sm,callout,eyebrow}");
+
+/* Stacking layers */
+@source inline("z-{raised,sticky,overlay,modal,popover,toast,tooltip}");
+
+/* Motion tokens */
+@source inline("duration-{blink,fast,standard,slow,bloom}");
+@source inline("ease-{standard,entrance,exit,bloom}");
