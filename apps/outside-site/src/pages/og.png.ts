@@ -3,6 +3,7 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import type { APIRoute } from 'astro';
+import { root } from 'astro:config/server';
 import opentype from 'opentype.js';
 import sharp from 'sharp';
 import { sceneSvg } from '../lib/pixel';
@@ -13,7 +14,8 @@ const BAND = 190;
 const SVG = 'xmlns="http://www.w3.org/2000/svg"';
 
 async function loadFont(file: string): Promise<opentype.Font> {
-  const path = fileURLToPath(new URL(`../../../steps/assets/fonts/${file}`, import.meta.url));
+  // From the project root: the bundled endpoint's own location changes between Astro versions.
+  const path = fileURLToPath(new URL(`../steps/assets/fonts/${file}`, root));
   const bytes = await readFile(path);
   return opentype.parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
 }
