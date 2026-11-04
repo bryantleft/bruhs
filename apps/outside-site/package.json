@@ -2,6 +2,9 @@
   "name": "outside-site",
   "type": "module",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "portless run astro dev",
     "build": "astro build",

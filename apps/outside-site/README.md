@@ -37,18 +37,18 @@ Emails are trimmed and lowercased, and stored once. Repeats get the same reply, 
 
 Live at https://outside.bruhs.app: Vercel project `bnle/bruhs-outside`, linked in `.vercel/`. `PUBLIC_WAITLIST_URL` is set for production and preview. The waitlist route runs on the hosted Convex beta (`earnest-wren-707`), with `WAITLIST_ORIGINS=https://outside.bruhs.app`.
 
-Deploys are prebuilt here and upload only the static output. A remote build would need the whole monorepo, including the Expo app's local native build folders.
+Vercel deploys from git: the project is connected to `bryantleft/bruhs`, with root directory `apps/outside-site`, the Astro preset and Node 22.x (also pinned in `package.json` `engines`).
+- **Production:** every push to `main`.
+- **Preview:** every other branch.
+
+`vercel.json` skips the build unless the push changes this app, the game sources and fonts it imports (`apps/steps/src`, `apps/steps/assets`), `packages/` or the lockfile. Vercel clones the repo, so ignored local folders such as the Expo app's native builds never reach it.
+
+To deploy by hand, without git, use Vercel CLI 47.2.2 or later:
 
 ```sh
 npx vercel@latest pull --yes --environment=production
-# pull resets the local settings: keep the Astro preset and Node 22 (the project defaults to 26.x)
-python3 -c "import json;p='.vercel/project.json';d=json.load(open(p));d['settings'].update(framework='astro',nodeVersion='22.x');json.dump(d,open(p,'w'),indent=2)"
 npx vercel@latest build --prod
 npx vercel@latest deploy --prebuilt --prod --scope bnle
 ```
-
-The deploy endpoint needs Vercel CLI 47.2.2 or later.
-
-To deploy from git later, connect the repository in Vercel and set the root directory to `apps/outside-site`, the Astro preset and Node 22.x, as `bruhs-www` does.
 
 After changing `apps/api/convex/waitlist.ts`, deploy the API with `CONVEX_DEPLOYMENT=prod:earnest-wren-707 pnpm --filter bruhs-api deploy`.
