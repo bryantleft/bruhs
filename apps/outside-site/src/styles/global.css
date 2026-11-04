@@ -179,8 +179,10 @@ svg {
   background-position: center bottom;
 }
 
-/* The fruitlands: the app's world map beside the places, nearest first. */
+/* The fruitlands: the app's world map, where picking a place shows it beside the map. */
 .world-map {
+  container-type: inline-size;
+  min-width: 0;
   outline: 2px solid #0a0a0a;
   background: var(--color-blueberry-800);
 }
@@ -202,10 +204,36 @@ svg {
   color: var(--color-rambutan-100);
   background: rgb(10 8 6 / 0.72);
   text-shadow: 1px 1px 0 #0a0a0a;
+  cursor: pointer;
 }
 
-.map-name:hover {
+/* On a narrow map, the app's own plate size, so neighbouring plates never touch. */
+@container (max-width: 360px) {
+  .map-name {
+    font-size: 9px;
+    line-height: 12px;
+  }
+}
+
+/* A bigger target than the plate draws. */
+.map-name::after {
+  content: "";
+  position: absolute;
+  inset: -6px -2px;
+}
+
+.map-name:hover,
+.pick:checked + .map-name {
   color: var(--color-durian-300);
+}
+
+.pick:checked + .map-name {
+  background: #0a0a0a;
+}
+
+.pick:focus-visible + .map-name {
+  outline: 2px solid var(--color-persimmon-400);
+  outline-offset: 2px;
 }
 
 .map-name-above {
@@ -228,6 +256,14 @@ svg {
   translate: calc(-100% + 8px) calc(-100% - 10px);
 }
 
+.pin-hit {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  translate: -50% -50%;
+  cursor: pointer;
+}
+
 /* A pin from the map, for the key under it. */
 .pin-swatch {
   width: 12px;
@@ -236,18 +272,27 @@ svg {
   outline: 2px solid #0a0a0a;
 }
 
-.place:target {
-  border-color: var(--color-durian-300) var(--color-persimmon-800) var(--color-persimmon-800) var(--color-durian-300);
+/* Without :has(), every place shows, one after another. With it, the panels share one cell, so
+   the tallest sets the height and picking a place never moves the page. */
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-/* The place's scene in a fixed square, so every card shows it at the same zoom. */
-.place-scene {
-  overflow: hidden;
+@supports selector(:has(*)) {
+  .details {
+    display: grid;
+  }
+  .detail {
+    grid-area: 1 / 1;
+    visibility: hidden;
+  }
 }
 
-.place-scene svg {
+.detail-scene svg {
   display: block;
-  height: 100%;
+  border-bottom: 2px solid #0a0a0a;
 }
 
 /* An item slot from the app: count in the top-left corner. */

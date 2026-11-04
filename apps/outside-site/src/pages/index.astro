@@ -1,8 +1,19 @@
 ---
-import { ITEMS, LOCATIONS, QUESTS, SKILLS, SKINS, START_LOCATION } from '@steps/src/game/content.ts';
+import {
+  getActivity,
+  getItem,
+  ITEMS,
+  LOCATIONS,
+  QUESTS,
+  SKILLS,
+  SKINS,
+  START_LOCATION,
+} from '@steps/src/game/content.ts';
 import { createGame, locationBlocker, route } from '@steps/src/game/game.ts';
-import { bruhArt, UI_ART } from '@steps/src/pixel/art.ts';
 import { MAX_LEVEL } from '@steps/src/game/xp.ts';
+import { bruhArt, UI_ART } from '@steps/src/pixel/art.ts';
+import { MAP_HEIGHT, MAP_WIDTH, tileCenter } from '@steps/src/pixel/world.ts';
+import { palette } from '@steps/src/theme/palette.ts';
 import Clouds from '../components/Clouds.astro';
 import Header from '../components/Header.astro';
 import Report from '../components/Report.astro';
@@ -10,8 +21,6 @@ import Ridge from '../components/Ridge.astro';
 import WaitlistForm from '../components/WaitlistForm.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { itemSprite, skillSprite } from '../lib/art';
-import { MAP_HEIGHT, MAP_WIDTH, tileCenter } from '@steps/src/pixel/world.ts';
-import { palette } from '@steps/src/theme/palette.ts';
 import { heroSvg, sceneSvg, spriteSvg, worldMapSvg } from '../lib/pixel';
 import { SAMPLE_DATE, SAMPLE_STEPS, sampleDay } from '../lib/sample-day';
 
@@ -19,12 +28,38 @@ const description =
   "a pixel adventure that runs on walking. your real steps pay for your bruh's travel, skills and quests.";
 const town = LOCATIONS.find((place) => place.id === START_LOCATION);
 if (!town) throw new Error(`START_LOCATION ${START_LOCATION} is not a place; the hero has no town to draw.`);
-// The fruitlands nearest first, by road from the starting town at agility level 1.
+// The fruitlands nearest first, by road from the starting town at agility level 1. That is also
+// the order the map's places take for keyboard and screen reader users.
 const fresh = createGame(SAMPLE_DATE);
+const STATIONS = { forge: 'forge: smelt & smith', range: 'range: cook', workbench: 'workbench: craft' } as const;
 const places = LOCATIONS.map((place) => {
   const road = route(START_LOCATION, place.id);
   if (!road) throw new Error(`No road from ${START_LOCATION} to ${place.id}; the world map is disconnected.`);
-  return { place, distance: road.distance, blocker: locationBlocker(fresh, place) };
+  const activities = place.activities.map((id) => {
+    const activity = getActivity(id);
+    if (!activity) throw new Error(`${place.id} lists activity "${id}", which is not in the game content.`);
+    return activity;
+  });
+  // What a bruh can gather here, as the app's map panel shows it: the item, its skill and level.
+  const finds = activities
+    .filter((activity) => !activity.station)
+    .map((activity) => {
+      const skill = SKILLS.find((entry) => entry.id === activity.skill);
+      const item = getItem(activity.output.item);
+      return {
+        id: activity.id,
+        art: itemSprite(activity.output.item),
+        skillArt: skillSprite(activity.skill),
+        level: activity.level,
+        label: `${item?.name}, ${skill?.name ?? activity.skill} level ${activity.level}`,
+      };
+    });
+  const stations = [
+    ...new Set(activities.flatMap((activity) => (activity.station ? [STATIONS[activity.station]] : []))),
+    ...(place.bank ? ['bank'] : []),
+    ...(place.store ? ['general store'] : []),
+  ];
+  return { place, distance: road.distance, blocker: locationBlocker(fresh, place), finds, stations };
 }).sort((a, b) => a.distance - b.distance);
 const mapSvg = worldMapSvg({
   label: `map of the fruitlands: ${places.map(({ place }) => place.name).join(', ')}, joined by roads.`,
@@ -38,10 +73,13 @@ const pinKey: readonly Readonly<{ color: keyof typeof palette; label: string }>[
   { color: 'lychee-400', label: 'wilds' },
   { color: 'rambutan-600', label: 'locked' },
 ];
-const pinCss = places
+// The picked place's pin and panel. CSS only: each place is a radio button, so the map works
+// without JavaScript and with arrow keys.
+const pickCss = places
   .map(
     ({ place: { id } }) =>
-      `.fruitlands:has(#place-${id}:hover, #place-${id}:target) .pin-${id} .pin-ring { fill: var(--color-rambutan-50); }`,
+      `.fruitlands:has(#pick-${id}:checked) .pin-${id} .pin-ring, .fruitlands:has(.pin-hit-${id}:hover) .pin-${id} .pin-ring { fill: ${palette['rambutan-50']}; }\n` +
+      `.fruitlands:has(#pick-${id}:checked) #detail-${id} { visibility: visible; }`,
   )
   .join('\n');
 const pitch =
@@ -143,73 +181,100 @@ const privacy = [
             {LOCATIONS.length} places to walk to, from a cosy town to the edge of a fallen star. far places cost
             more steps to reach, and some open only after a quest.
           </p>
+          <p class="text-rambutan-500">pick a place on the map to look around.</p>
         </div>
         <div class="grid items-start gap-6 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-          <figure class="flex flex-col gap-3 md:sticky md:top-6">
-            <div class="world-map relative">
+          <div class="flex flex-col gap-3">
+            <fieldset class="world-map relative">
+              <legend class="sr-only">pick a place on the map, nearest first</legend>
               <Fragment set:html={mapSvg} />
-              {/* Names over the pins, as on the app's map tab. The list below says the same to
-                  assistive tech, so these are pointer shortcuts to each place's entry. */}
-              <div aria-hidden="true">
-                {
-                  places.map(({ place }) => {
-                    const { x, y } = tileCenter(place.id);
-                    const left = (x / MAP_WIDTH) * 100;
-                    const top = (y / MAP_HEIGHT) * 100;
-                    return (
-                      <a
-                        href={`#place-${place.id}`}
-                        tabindex="-1"
+              {
+                places.map(({ place }) => {
+                  const { x, y } = tileCenter(place.id);
+                  const left = (x / MAP_WIDTH) * 100;
+                  const top = (y / MAP_HEIGHT) * 100;
+                  const at = `left: ${left}%; top: ${top}%`;
+                  return (
+                    <>
+                      <input
+                        type="radio"
+                        name="fruitland"
+                        id={`pick-${place.id}`}
+                        class="pick sr-only"
+                        checked={place.id === START_LOCATION}
+                        aria-label={place.name}
+                        aria-describedby={`detail-${place.id}`}
+                      />
+                      <label
+                        for={`pick-${place.id}`}
                         class:list={[
                           'map-name label',
                           top > 80 && 'map-name-above',
                           left > 75 ? 'map-name-end' : left < 20 ? 'map-name-start' : null,
                         ]}
-                        style={`left: ${left}%; top: ${top}%`}
+                        style={at}
                       >
                         {place.name}
-                      </a>
-                    );
-                  })
-                }
-              </div>
-            </div>
-            <figcaption class="flex flex-col gap-3 text-sm text-rambutan-500">
-              {/* The pin colours, as on the app's map tab. */}
-              <ul class="flex flex-wrap gap-x-4 gap-y-1">
-                {
-                  pinKey.map((pin) => (
-                    <li class="flex items-center gap-2">
-                      <span class="pin-swatch" style={`background: ${palette[pin.color]}`} />
-                      {pin.label}
-                    </li>
-                  ))
-                }
-              </ul>
-              <p>steps away are by road from {town.name}. agility levels shorten every road.</p>
-            </figcaption>
-          </figure>
-          <ol class="grid gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2" aria-label="the fruitlands, nearest first">
+                      </label>
+                      {/* A second label over the pin itself, so the pin is a target too. */}
+                      <label for={`pick-${place.id}`} class={`pin-hit pin-hit-${place.id}`} style={at} aria-hidden="true" />
+                    </>
+                  );
+                })
+              }
+            </fieldset>
+            <ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-rambutan-500">
+              {
+                pinKey.map((pin) => (
+                  <li class="flex items-center gap-2">
+                    <span class="pin-swatch" style={`background: ${palette[pin.color]}`} />
+                    {pin.label}
+                  </li>
+                ))
+              }
+            </ul>
+          </div>
+          <div class="details">
             {
-              places.map(({ place, distance, blocker }) => (
-                <li id={`place-${place.id}`} class="place panel flex scroll-mt-6 items-start gap-3 p-3">
-                  <div class="place-scene well size-20 shrink-0" set:html={sceneSvg({ biome: place.biome, skin: 'original' }, { crop: 12 })} />
-                  <div class="flex min-w-0 flex-col gap-1">
-                    <p class:list={['label', distance === 0 ? 'text-pandan-300' : 'text-durian-300']}>
-                      {distance === 0 ? 'you start here' : `${distance.toLocaleString('en')} steps away`}
-                    </p>
-                    <h3 class="text-lg font-bold leading-tight text-rambutan-50">{place.name}</h3>
-                    <p class="text-sm leading-snug text-rambutan-500">{place.blurb}</p>
-                    {blocker ? <p class="text-sm leading-snug text-lychee-400">{blocker}</p> : null}
+              places.map(({ place, distance, blocker, finds, stations }) => (
+                <article id={`detail-${place.id}`} class="detail panel flex flex-col" aria-labelledby={`detail-${place.id}-name`}>
+                  <div class="detail-scene" set:html={sceneSvg({ biome: place.biome, skin: 'original' }, { crop: 8 })} />
+                  <div class="flex flex-col gap-4 p-5">
+                    <div class="flex flex-col gap-1">
+                      <p class:list={['label', distance === 0 ? 'text-pandan-300' : 'text-durian-300']}>
+                        {distance === 0 ? 'you start here' : `${distance.toLocaleString('en')} steps from ${town.name}`}
+                      </p>
+                      <h3 id={`detail-${place.id}-name`} class="text-2xl font-bold text-rambutan-50">{place.name}</h3>
+                      <p class="leading-relaxed text-rambutan-300">{place.blurb}</p>
+                      {blocker ? <p class="leading-relaxed text-lychee-400">{blocker}</p> : null}
+                    </div>
+                    {finds.length ? (
+                      <ul class="flex flex-wrap gap-3">
+                        <li class="sr-only">to gather here:</li>
+                        {finds.map((find) => (
+                          <li class="flex flex-col items-center gap-1" title={find.label}>
+                            <span class="sr-only">{find.label}.</span>
+                            <span class="well slot" aria-hidden="true" set:html={spriteSvg(find.art, 36)} />
+                            <span class="flex items-center gap-1" aria-hidden="true">
+                              <Fragment set:html={spriteSvg(find.skillArt, 12)} />
+                              <span class="label text-rambutan-500">{find.level}</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {stations.length ? <p class="text-sm text-rambutan-500">{stations.join(' · ')}</p> : null}
                   </div>
-                </li>
+                </article>
               ))
             }
-          </ol>
+          </div>
         </div>
+        <p class="text-sm text-rambutan-500">
+          steps are by road from {town.name}. agility levels shorten every road.
+        </p>
       </div>
-      {/* Pointing at a place lights its pin on the map. */}
-      <style is:inline set:html={pinCss} />
+      <style is:inline set:html={pickCss} />
     </section>
 
     <Ridge from="longan-950" to="longan-900" phase={3} />
