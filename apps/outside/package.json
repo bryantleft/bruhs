@@ -53,7 +53,7 @@
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test src/game/*.test.ts src/pixel/*.test.ts src/health/*.test.ts src/explore/*.test.ts src/friends/*.test.ts src/friends/*.test.cjs",
-    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && python3 scripts/sync-brand.py --check",
     "balance": "node --experimental-strip-types --no-warnings scripts/balance.ts",
     "sync:brand": "python3 scripts/sync-brand.py",
     "sync:map": "node scripts/sync-map-assets.mjs",

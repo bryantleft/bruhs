@@ -1,6 +1,7 @@
 """Convert the shared Bruhs OKLCH tokens to sRGB for native React Native views."""
 import math
 import re
+import sys
 from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1]
@@ -28,4 +29,12 @@ output += 'export const palette = {\n'
 for name, lightness, chroma, hue in tokens:
     output += f"  '{name}': '{srgb(float(lightness), float(chroma), float(hue))}',\n"
 output += '} as const;\n'
-(APP / 'src/theme/palette.ts').write_text(output)
+
+TARGET = APP / 'src/theme/palette.ts'
+if '--check' in sys.argv:
+    # CI tripwire: the game's palette must match the theme it was generated from.
+    if TARGET.read_text() != output:
+        sys.exit(f'{TARGET.relative_to(APP)} is out of date with {SOURCE.name}; run `pnpm sync:brand` in apps/outside.')
+    print(f'sync-brand: {TARGET.relative_to(APP)} matches {len(tokens)} theme colours')
+else:
+    TARGET.write_text(output)
