@@ -28,6 +28,14 @@ Copy `node_modules/@bruhs/theme/fonts/*` into your `public/fonts/` so the `@font
 
 Drop into any HTML document. All utilities are pre-compiled; fonts load from the same CDN path.
 
+### Mascot geometry
+
+`@bruhs/theme/logo` exports `bruhGeometry`: the viewBox, base circle, eye and mouth sizes, and the face position for each variant (`left`, `original`, `right`). It's plain TypeScript data, so draw the mascot with whatever renders SVG.
+
+```ts
+import { bruhGeometry } from "@bruhs/theme/logo";
+```
+
 ## Documentation
 
 The full adoption guide lives in [`AGENTS.md`](./AGENTS.md) — vocabulary, every component pattern, accessibility checklist, and the hard bans. It's the canonical reference; agents should read it once and implement.
