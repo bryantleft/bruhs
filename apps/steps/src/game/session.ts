@@ -13,6 +13,7 @@ import {
   type Game,
   type GameAction,
   getMission,
+  type LoadFailure,
   playGame,
   type Rejection,
   type StopReason,
@@ -218,6 +219,29 @@ export function rejectionText(reason: Rejection, game: Game): string | null {
       return `that outfit unlocks at total level ${reason.total}. train any skill to get there.`;
     case 'clock-behind':
       return 'your phone’s clock is behind your last sync. check the date and time, then sync again.';
+  }
+}
+
+// What the load-error screen says, and whether trying again can help.
+export function loadFailureCopy(failure: LoadFailure): Readonly<{ message: string; retry: boolean }> {
+  switch (failure.kind) {
+    case 'storage':
+      return {
+        message: 'couldn’t open this device’s storage. close other apps, then try again.',
+        retry: true,
+      };
+    case 'newer-version':
+      return {
+        message: 'this save is from a newer version of outside. update the app to keep playing.',
+        retry: false,
+      };
+    case 'invalid-json':
+      return { message: 'your saved progress is damaged and can’t be read.', retry: false };
+    case 'invalid':
+      return {
+        message: `part of your saved progress (${failure.field}) is damaged and can’t be read.`,
+        retry: false,
+      };
   }
 }
 

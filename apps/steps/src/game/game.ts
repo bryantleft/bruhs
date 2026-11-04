@@ -52,7 +52,7 @@ import {
   totalsFor,
 } from './items.ts';
 import { missionClaimed, missionProgress, missionsFor, rollMissions } from './missions.ts';
-import { isDateKey, isHealthConnection } from './save.ts';
+import { isDateKey, isHealthConnection, type SAVE_VERSION } from './save.ts';
 import { levelForXp } from './xp.ts';
 
 export { SKINS, type Skin, type SkinId } from './content.ts';
@@ -69,7 +69,7 @@ export {
   readyMissions,
   rollMissions,
 } from './missions.ts';
-export { decodeGame, migrateV1 } from './save.ts';
+export { decodeGame, type LoadFailure, migrateV1, SAVE_VERSION } from './save.ts';
 
 export const GOALS = [4_000, 6_000, 8_000, 10_000] as const;
 export type Goal = (typeof GOALS)[number];
@@ -109,7 +109,7 @@ export type MissionState = Readonly<{
 }>;
 
 export type Game = Readonly<{
-  version: 3;
+  version: typeof SAVE_VERSION;
   days: readonly Day[];
   goal: Goal;
   equipped: SkinId;

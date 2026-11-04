@@ -11,7 +11,6 @@ import {
   type MissionPeriod,
   SKILL_IDS,
   SKINS,
-  type SkillId,
   slotFits,
   TOOL_KINDS,
   type ToolKind,
@@ -131,26 +130,54 @@ function decodeMissions(value: unknown): Partial<Record<MissionPeriod, MissionSt
   return missions;
 }
 
+// The newest save format this build writes and reads.
+export const SAVE_VERSION = 3;
+
+// Why saved progress could not be loaded. Only `storage` can succeed on a retry; a save from a
+// newer build needs an app update, and the rest are damaged data.
+export type LoadFailure =
+  | Readonly<{ kind: 'storage' }>
+  | Readonly<{ kind: 'invalid-json' }>
+  | Readonly<{ kind: 'newer-version'; version: number }>
+  | Readonly<{ kind: 'invalid'; field: string }>;
+
+type Invalid = Extract<LoadFailure, { kind: 'invalid' }>;
+
+function invalid(field: string): Invalid {
+  return { kind: 'invalid', field };
+}
+
 // Shared by versions 2 and 3; version 2 had no inventory, gear, buffs or collection log.
-function decodeSave(value: Record<string, unknown>, days: Day[]): Game | null {
+function decodeSave(value: Record<string, unknown>, days: Day[]): Game | Invalid {
   const skin = SKINS.find((entry) => entry.id === value.equipped);
-  const xpCounts = decodeCounts(value.xp, (id) => SKILL_IDS.includes(id as SkillId));
+  const xpCounts = decodeCounts(value.xp, (id) => SKILL_IDS.some((skill) => skill === id));
   const bank = decodeCounts(value.bank, isKnownKey);
   const inventory = decodeCounts(value.inventory, isKnownKey);
   const stats = decodeCounts(value.stats, () => true);
   const tools = decodeTools(value.tools);
-  if (!skin || !xpCounts || !bank || !inventory || !stats || !tools || !isGoal(value.goal)) return null;
-  for (const key of ['spent', 'walked', 'worked', 'seed', 'coins', 'actions'] as const)
-    if (!isCount(value[key])) return null;
-  if (typeof value.location !== 'string' || !getLocation(value.location)) return null;
+  if (!skin) return invalid('equipped');
+  if (!xpCounts) return invalid('xp');
+  if (!bank) return invalid('bank');
+  if (!inventory) return invalid('inventory');
+  if (!stats) return invalid('stats');
+  if (!tools) return invalid('tools');
+  const { goal, spent, walked, worked, seed, coins, actions, location } = value;
+  if (!isGoal(goal)) return invalid('goal');
+  if (!isCount(spent)) return invalid('spent');
+  if (!isCount(walked)) return invalid('walked');
+  if (!isCount(worked)) return invalid('worked');
+  if (!isCount(seed)) return invalid('seed');
+  if (!isCount(coins)) return invalid('coins');
+  if (!isCount(actions)) return invalid('actions');
+  if (typeof location !== 'string' || !getLocation(location)) return invalid('location');
   const quests: Record<string, 'started' | 'done'> = {};
-  if (!isRecord(value.quests)) return null;
+  if (!isRecord(value.quests)) return invalid('quests');
   for (const [id, state] of Object.entries(value.quests))
     if (getQuest(id) && (state === 'started' || state === 'done')) quests[id] = state;
   let task: Task | null = null;
   if (value.task !== null && value.task !== undefined) {
     if (!isRecord(value.task) || typeof value.task.id !== 'string' || !isCount(value.task.progress))
-      return null;
+      return invalid('task');
     task = getActivity(value.task.id) ? { id: value.task.id, progress: value.task.progress } : null;
   }
   let travel: Travel | null = null;
@@ -167,7 +194,7 @@ function decodeSave(value: Record<string, unknown>, days: Day[]): Game | null {
       t.progress > t.cost ||
       !(t.next === null || (typeof t.next === 'string' && getActivity(t.next)))
     )
-      return null;
+      return invalid('travel');
     travel = { from: t.from, to: t.to, cost: t.cost, progress: t.progress, next: t.next };
   }
   let stopped: StopReason | null = null;
@@ -200,18 +227,19 @@ function decodeSave(value: Record<string, unknown>, days: Day[]): Game | null {
   const seen = [
     ...new Set([...seenList.filter((id) => getItem(id)), ...owned.map((key) => parseKey(key ?? '').id)]),
   ];
-  const xp = { ...emptyXp(), ...xpCounts } as Record<SkillId, number>;
+  const xp = emptyXp();
+  for (const skill of SKILL_IDS) xp[skill] = xpCounts[skill] ?? 0;
   const game: Game = {
     version: 3,
-    goal: value.goal,
+    goal,
     equipped: skin.id,
     days,
     ...(isHealthConnection(value.health) ? { health: value.health } : {}),
-    spent: value.spent as number,
-    walked: value.walked as number,
-    worked: value.worked as number,
-    seed: (value.seed as number) >>> 0,
-    location: value.location,
+    spent,
+    walked,
+    worked,
+    seed: seed >>> 0,
+    location,
     task,
     travel,
     stopped,
@@ -221,16 +249,16 @@ function decodeSave(value: Record<string, unknown>, days: Day[]): Game | null {
     tools,
     gear,
     buff,
-    coins: value.coins as number,
+    coins,
     quests,
-    actions: value.actions as number,
+    actions,
     seen,
     stats,
     bagUpgrades:
       isCount(value.bagUpgrades) && value.bagUpgrades <= BAG_UPGRADES.length ? value.bagUpgrades : 0,
     missions: decodeMissions(value.missions),
   };
-  if (game.spent > totalSteps(game)) return null;
+  if (game.spent > totalSteps(game)) return invalid('spent');
   return totalLevel(game) >= skin.total ? game : { ...game, equipped: 'original' };
 }
 
@@ -250,28 +278,26 @@ export function migrateV1(value: Record<string, unknown>, days: Day[], today: st
 export function decodeGame(
   raw: string,
   today = dateKey(),
-): Readonly<{ ok: true; game: Game; migrated: boolean }> | Readonly<{ ok: false; reason: string }> {
+): Readonly<{ ok: true; game: Game; migrated: boolean }> | Readonly<{ ok: false; failure: LoadFailure }> {
   let value: unknown;
   try {
     value = JSON.parse(raw);
   } catch {
-    return { ok: false, reason: 'Saved progress is not valid JSON.' };
+    return { ok: false, failure: { kind: 'invalid-json' } };
   }
-  if (!isRecord(value)) return { ok: false, reason: 'Saved progress has an unsupported format.' };
+  if (!isRecord(value)) return { ok: false, failure: invalid('save') };
+  // Checked first: a newer build may have changed any field, so nothing else is trusted.
+  const version = value.version;
+  if (typeof version === 'number' && Number.isSafeInteger(version) && version > SAVE_VERSION)
+    return { ok: false, failure: { kind: 'newer-version', version } };
+  if (version !== 1 && version !== 2 && version !== 3) return { ok: false, failure: invalid('version') };
   const days = decodeDays(value.days);
   if (!days || !Number.isSafeInteger(days.reduce((sum, day) => sum + day.steps, 0)))
-    return { ok: false, reason: 'Saved progress has an unreadable step history.' };
-  if (value.version === 3 || value.version === 2) {
-    const game = decodeSave(value, days);
-    return game
-      ? { ok: true, game, migrated: value.version === 2 }
-      : { ok: false, reason: 'Saved progress has an unsupported format.' };
-  }
-  if (value.version === 1) {
+    return { ok: false, failure: invalid('days') };
+  if (version === 1) {
     const game = migrateV1(value, days, today);
-    return game
-      ? { ok: true, game, migrated: true }
-      : { ok: false, reason: 'Saved progress has an unsupported format.' };
+    return game ? { ok: true, game, migrated: true } : { ok: false, failure: invalid('goal') };
   }
-  return { ok: false, reason: 'Saved progress has an unsupported format.' };
+  const game = decodeSave(value, days);
+  return 'kind' in game ? { ok: false, failure: game } : { ok: true, game, migrated: version === 2 };
 }

@@ -24,6 +24,7 @@ import {
   type Game,
   type GameAction,
   type Goal,
+  type LoadFailure,
   type Rejection,
   updateGame,
 } from './game';
@@ -33,7 +34,9 @@ const IS_DEMO = Platform.OS === 'web';
 export const STORAGE_KEY = `bruhs-outside-v2-${IS_DEMO ? 'demo' : 'device'}`;
 // Earlier single-XP-bar saves are read once and migrated; the old key is left untouched.
 const LEGACY_STORAGE_KEY = `bruhs-outside-v1-${IS_DEMO ? 'demo' : 'device'}`;
-type Loading = Readonly<{ status: 'loading' | 'ready' }> | Readonly<{ status: 'error'; message: string }>;
+type Loading =
+  | Readonly<{ status: 'loading' | 'ready' }>
+  | Readonly<{ status: 'error'; failure: LoadFailure }>;
 
 type GameContextValue = Readonly<{
   game: Game;
@@ -163,7 +166,7 @@ export function GameProvider({ children }: PropsWithChildren): React.JSX.Element
           const decoded = decodeGame(raw);
           if (!decoded.ok) {
             loadPending.current = false;
-            setLoading({ status: 'error', message: decoded.reason });
+            setLoading({ status: 'error', failure: decoded.failure });
             return;
           }
           dispatch({ type: 'restore', game: updateGame(decoded.game, { type: 'new-day', date: dateKey() }) });
@@ -180,11 +183,9 @@ export function GameProvider({ children }: PropsWithChildren): React.JSX.Element
       })
       .catch((error: unknown) => {
         if (version !== loadVersion.current) return;
+        console.warn('Progress could not be read:', error);
         loadPending.current = false;
-        setLoading({
-          status: 'error',
-          message: error instanceof Error ? error.message : 'Device storage could not be opened.',
-        });
+        setLoading({ status: 'error', failure: { kind: 'storage' } });
       });
   }, []);
 

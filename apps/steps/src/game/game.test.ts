@@ -39,6 +39,7 @@ import {
   updateGame,
 } from './game.ts';
 import { countOf, keyMods, parseKey, slotsUsed } from './items.ts';
+import { loadFailureCopy } from './session.ts';
 import { levelForXp, XP_TABLE, xpForLevel } from './xp.ts';
 
 const TODAY = '2026-11-02';
@@ -545,6 +546,35 @@ test('saves round-trip and reject tampering', () => {
   );
   assert.ok(odd.ok);
   assert.deepEqual(odd.ok && [odd.game.inventory, odd.game.gear], [{}, {}]);
+});
+
+test('a failed load says why, and a save from a newer build is not called corrupt', () => {
+  const game = createGame(TODAY);
+  assert.deepEqual(decodeGame('nope'), { ok: false, failure: { kind: 'invalid-json' } });
+  assert.deepEqual(decodeGame(JSON.stringify({ ...game, version: 4, days: 'changed' })), {
+    ok: false,
+    failure: { kind: 'newer-version', version: 4 },
+  });
+  assert.deepEqual(decodeGame(JSON.stringify({ ...game, coins: -1 })), {
+    ok: false,
+    failure: { kind: 'invalid', field: 'coins' },
+  });
+  assert.deepEqual(decodeGame(JSON.stringify({ ...game, version: 'three' })), {
+    ok: false,
+    failure: { kind: 'invalid', field: 'version' },
+  });
+  // Only a storage failure offers a retry; the copy stays in the lowercase game voice.
+  assert.equal(loadFailureCopy({ kind: 'storage' }).retry, true);
+  const newer = loadFailureCopy({ kind: 'newer-version', version: 4 });
+  assert.deepEqual(newer, {
+    message: 'this save is from a newer version of outside. update the app to keep playing.',
+    retry: false,
+  });
+  for (const failure of [{ kind: 'invalid-json' }, { kind: 'invalid', field: 'coins' }] as const) {
+    const copy = loadFailureCopy(failure);
+    assert.equal(copy.retry, false);
+    assert.equal(copy.message, copy.message.toLowerCase());
+  }
 });
 
 test('version 2 saves move into the bank; version 1 saves keep their history', () => {

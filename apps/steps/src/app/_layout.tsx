@@ -15,6 +15,7 @@ import { useProgressRecoveryFocus } from '../components/useProgressRecoveryFocus
 import { ExploreProvider } from '../explore/ExploreProvider';
 import { PartyBackend } from '../friends/PartyBackend';
 import { GameProvider, useGame } from '../game/GameProvider';
+import { loadFailureCopy } from '../game/session';
 import { color, space } from '../theme/theme';
 
 void SplashScreen.preventAutoHideAsync().catch((error: unknown) =>
@@ -38,6 +39,7 @@ function AdventureLoading(): React.JSX.Element {
 function GameApp(): React.JSX.Element {
   const { loading, retryLoad, reset, resetting, resetError } = useGame();
   const recovery = useProgressRecoveryFocus(loading.status);
+  const failure = loading.status === 'error' ? loadFailureCopy(loading.failure) : null;
   return (
     <AppStage>
       {loading.status === 'ready' ? (
@@ -58,18 +60,20 @@ function GameApp(): React.JSX.Element {
         >
           <Bruh size={100} />
           <Copy variant="heading">could not load your adventure</Copy>
-          <Copy variant="body">{loading.message} your saved data has been kept.</Copy>
+          <Copy variant="body">{failure?.message} your saved data has been kept.</Copy>
           <View style={styles.recoveryActions}>
-            <Button
-              buttonRef={recovery.retryRef}
-              label="try again"
-              icon="refresh"
-              disabled={resetting}
-              onPress={() => {
-                recovery.prepare();
-                retryLoad();
-              }}
-            />
+            {failure?.retry ? (
+              <Button
+                buttonRef={recovery.retryRef}
+                label="try again"
+                icon="refresh"
+                disabled={resetting}
+                onPress={() => {
+                  recovery.prepare();
+                  retryLoad();
+                }}
+              />
+            ) : null}
             <Copy variant="small">starting fresh will replace this device’s saved progress.</Copy>
             <ConfirmActionCore
               label={resetting ? 'erasing journey…' : 'start a new adventure'}
