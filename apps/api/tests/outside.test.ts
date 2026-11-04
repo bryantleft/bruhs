@@ -4,8 +4,8 @@ import { makeFunctionReference } from 'convex/server';
 import type { Value } from 'convex/values';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../convex/_generated/api';
-import { rankMembers } from '../convex/outside';
+import { api, internal } from '../convex/_generated/api';
+import { IDLE_GUEST, rankMembers } from '../convex/outside';
 import schema from '../convex/schema';
 import { MAX_PARTY } from '../convex/validators';
 
@@ -399,5 +399,63 @@ describe('anonymous sign-in', () => {
       expect(await t.action(api.auth.signIn, { provider: 'anonymous' })).toHaveProperty('tokens');
     await expect(t.action(api.auth.signIn, { provider: 'anonymous' })).rejects.toThrow('rate_limited');
     expect(await t.run((ctx) => ctx.db.query('users').collect())).toHaveLength(40);
+  });
+});
+
+describe('idle guests', () => {
+  const DAY = 86400000;
+  it('deletes profiles idle for 90 days with their scores and login, keeping active ones', async () => {
+    const t = create();
+    const idle = await party(t);
+    const active = await guest(t);
+    await active.client.mutation(api.outside.enter, {
+      ...entry,
+      kind: 'join',
+      invite: idle.party.invite_code,
+    });
+    const lurker = await guest(t);
+    await lurker.client.mutation(api.outside.enter, { ...entry, kind: 'profile' });
+    const now = Date.now();
+    await t.run(async (ctx) => {
+      const profiles = await ctx.db.query('outsideProfiles').collect();
+      const of = (userId: unknown) => profiles.find((row) => row.userId === userId);
+      const idleRow = of(idle.userId);
+      const activeRow = of(active.userId);
+      if (!idleRow?.partyId || !activeRow) throw new Error('profiles missing');
+      await ctx.db.patch(idleRow._id, { syncedAt: now - 10 * DAY });
+      await ctx.db.patch(activeRow._id, { syncedAt: now - 10 * DAY });
+      await ctx.db.insert('outsideScores', {
+        userId: idle.userId,
+        partyId: idleRow.partyId,
+        week: '2026-10-26',
+        days: [{ date: '2026-10-27', steps: 4000 }],
+      });
+    });
+    // 85 days on, the idle guest last synced 95 days ago, the active one synced yesterday, and
+    // the lurker (a profile with no party, never synced) was made 85 days ago.
+    vi.setSystemTime(new Date(now + 85 * DAY));
+    await t.run(async (ctx) => {
+      const activeRow = (await ctx.db.query('outsideProfiles').collect()).find(
+        (row) => row.userId === active.userId,
+      );
+      if (activeRow) await ctx.db.patch(activeRow._id, { syncedAt: Date.now() - DAY });
+    });
+    expect(await t.mutation(internal.outside.expireIdleGuests, {})).toBe(1);
+    const left = await t.run(async (ctx) => ({
+      users: (await ctx.db.query('users').collect()).map((row) => row._id),
+      sessions: (await ctx.db.query('authSessions').collect()).map((row) => row.userId),
+      scores: await ctx.db.query('outsideScores').collect(),
+      party: (await ctx.db.query('outsideParties').collect()).map((row) => row.members),
+    }));
+    expect(left.users).toEqual([active.userId, lurker.userId]);
+    expect(left.sessions).not.toContain(idle.userId);
+    expect(left.scores).toEqual([]);
+    expect(left.party).toEqual([1]);
+    // Past 90 days since it was made, the never-synced lurker goes too.
+    vi.setSystemTime(new Date(now + IDLE_GUEST + DAY));
+    expect(await t.mutation(internal.outside.expireIdleGuests, {})).toBe(1);
+    expect(await t.run(async (ctx) => (await ctx.db.query('users').collect()).map((row) => row._id))).toEqual(
+      [active.userId],
+    );
   });
 });

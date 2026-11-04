@@ -1,7 +1,7 @@
 import { getAuthSessionId, getAuthUserId } from '@convex-dev/auth/server';
 import { type Infer, v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
-import { type MutationCtx, mutation, type QueryCtx, query } from './_generated/server';
+import { internalMutation, type MutationCtx, mutation, type QueryCtx, query } from './_generated/server';
 import {
   day,
   fail,
@@ -315,6 +315,49 @@ async function leave(ctx: MutationCtx, saved: Doc<'outsideProfiles'> | null): Pr
   else await ctx.db.patch(partyId, { members: remaining });
 }
 
+// Deletes a guest's login and profile: sessions with their refresh tokens and verifiers,
+// accounts with their codes, then the profile and the user. Call leave() first.
+async function removeGuest(ctx: MutationCtx, userId: Id<'users'>, saved: Doc<'outsideProfiles'> | null) {
+  const [sessions, accounts] = await Promise.all([
+    ctx.db
+      .query('authSessions')
+      .withIndex('userId', (q) => q.eq('userId', userId))
+      .collect(),
+    ctx.db
+      .query('authAccounts')
+      .withIndex('userIdAndProvider', (q) => q.eq('userId', userId))
+      .collect(),
+  ]);
+  await Promise.all(
+    sessions.map(async (session) => {
+      const [tokens, verifiers] = await Promise.all([
+        ctx.db
+          .query('authRefreshTokens')
+          .withIndex('sessionId', (q) => q.eq('sessionId', session._id))
+          .collect(),
+        ctx.db
+          .query('authVerifiers')
+          .withIndex('by_session', (q) => q.eq('sessionId', session._id))
+          .collect(),
+      ]);
+      await Promise.all([...tokens, ...verifiers].map((row) => ctx.db.delete(row._id)));
+      await ctx.db.delete(session._id);
+    }),
+  );
+  await Promise.all(
+    accounts.map(async (account) => {
+      const codes = await ctx.db
+        .query('authVerificationCodes')
+        .withIndex('accountId', (q) => q.eq('accountId', account._id))
+        .collect();
+      await Promise.all(codes.map((code) => ctx.db.delete(code._id)));
+      await ctx.db.delete(account._id);
+    }),
+  );
+  if (saved) await ctx.db.delete(saved._id);
+  if (await ctx.db.get(userId)) await ctx.db.delete(userId);
+}
+
 export const depart = mutation({
   args: { removeAccount: v.boolean() },
   returns: v.literal(true),
@@ -322,46 +365,37 @@ export const depart = mutation({
     const userId = await actor(ctx);
     const saved = await profile(ctx, userId);
     await leave(ctx, saved);
-    if (removeAccount) {
-      const [sessions, accounts] = await Promise.all([
-        ctx.db
-          .query('authSessions')
-          .withIndex('userId', (q) => q.eq('userId', userId))
-          .collect(),
-        ctx.db
-          .query('authAccounts')
-          .withIndex('userIdAndProvider', (q) => q.eq('userId', userId))
-          .collect(),
-      ]);
-      await Promise.all(
-        sessions.map(async (session) => {
-          const [tokens, verifiers] = await Promise.all([
-            ctx.db
-              .query('authRefreshTokens')
-              .withIndex('sessionId', (q) => q.eq('sessionId', session._id))
-              .collect(),
-            ctx.db
-              .query('authVerifiers')
-              .withIndex('by_session', (q) => q.eq('sessionId', session._id))
-              .collect(),
-          ]);
-          await Promise.all([...tokens, ...verifiers].map((row) => ctx.db.delete(row._id)));
-          await ctx.db.delete(session._id);
-        }),
-      );
-      await Promise.all(
-        accounts.map(async (account) => {
-          const codes = await ctx.db
-            .query('authVerificationCodes')
-            .withIndex('accountId', (q) => q.eq('accountId', account._id))
-            .collect();
-          await Promise.all(codes.map((code) => ctx.db.delete(code._id)));
-          await ctx.db.delete(account._id);
-        }),
-      );
-      if (saved) await ctx.db.delete(saved._id);
-      await ctx.db.delete(userId);
-    }
+    if (removeAccount) await removeGuest(ctx, userId, saved);
     return true;
+  },
+});
+
+// The privacy policy promises this: a profile that hasn't synced steps for 90 days is deleted
+// with its shared totals and guest login, so a lost login doesn't keep data forever. Its last
+// activity is the last sync, else when it joined a party, else when it was made.
+export const IDLE_GUEST = 90 * DAY;
+const IDLE_BATCH = 200;
+export const expireIdleGuests = internalMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx): Promise<number> => {
+    const cutoff = Date.now() - IDLE_GUEST;
+    const [stale, unsynced] = await Promise.all([
+      ctx.db
+        .query('outsideProfiles')
+        .withIndex('by_synced', (q) => q.gte('syncedAt', 0).lt('syncedAt', cutoff))
+        .take(IDLE_BATCH),
+      // Never synced (or left a party): oldest first, so the idle ones come before the rest.
+      ctx.db
+        .query('outsideProfiles')
+        .withIndex('by_synced', (q) => q.eq('syncedAt', undefined))
+        .take(IDLE_BATCH),
+    ]);
+    const idle = [...stale, ...unsynced.filter((row) => (row.joinedAt ?? row._creationTime) < cutoff)];
+    for (const row of idle) {
+      await leave(ctx, row);
+      await removeGuest(ctx, row.userId, row);
+    }
+    return idle.length;
   },
 });

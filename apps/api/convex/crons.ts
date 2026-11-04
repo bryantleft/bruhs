@@ -9,6 +9,9 @@ const WEEK = 7 * 24 * 60 * 60 * 1000;
 // Unconfirmed waitlist signups expire with their link.
 crons.interval('expire unconfirmed waitlist signups', { hours: 6 }, internal.waitlist.expirePending);
 
+// Party profiles idle for 90 days go, with their guest logins (the privacy policy says so).
+crons.interval('delete idle party guests', { hours: 24 }, internal.outside.expireIdleGuests);
+
 // The Resend component keeps finished emails until told otherwise (its README's cron).
 crons.interval('remove old emails from the resend component', { hours: 1 }, internal.crons.cleanupResend);
 

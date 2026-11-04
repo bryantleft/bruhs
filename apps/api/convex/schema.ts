@@ -15,7 +15,8 @@ export default defineSchema({
     syncedAt: v.optional(v.number()),
   })
     .index('by_user', ['userId'])
-    .index('by_party', ['partyId']),
+    .index('by_party', ['partyId'])
+    .index('by_synced', ['syncedAt']),
   // Outside's launch waitlist: one row per normalised email, written only by the HTTP routes.
   // A signup is pending until its owner confirms from the emailed link (double opt-in). Rows
   // without a status joined before confirmation existed and count as confirmed.
