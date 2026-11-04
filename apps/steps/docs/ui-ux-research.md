@@ -1813,3 +1813,18 @@ Verified by unit tests and a web export only. Not yet checked in a browser or on
 - Health sync shows a clock error instead of ready when it refuses a batch. Party sharing names its failure, and the party client no longer reports server bugs as could not connect.
 - Copy follows the glossary: extra action chance and double loot chance on the home strip, extra actions and double loot on the character sheet, and bag slots. Counts go through itemCount, every percentage through one formatter, and the error copy is lowercase.
 - Remaining checks: keyboard focus on the load-error confirmation and the party screen on web, after the label constants and the component split, and on a device, the Health clock error.
+
+## Party login in SecureStore (November 3, 2026)
+
+Resolves audit finding M4. Verified on an iOS 26.5 simulator (iPhone 17 Pro) dev build against the local Convex backend. Not checked on a physical phone or on Android.
+
+- Native builds keep the party login in `expo-secure-store`, as [Convex Auth's React Native setup](https://labs.convex.dev/auth/setup) does. The web build keeps AsyncStorage (localStorage), because [SecureStore](https://docs.expo.dev/versions/v58.0.0/sdk/securestore/) has no web support.
+- The iOS keychain items use `AFTER_FIRST_UNLOCK`. Party sharing runs only in the foreground, but a token refresh can land in the seconds after the phone locks, and a refresh token that can't be saved strands the guest.
+- On first launch, each saved login key moves out of AsyncStorage: copy, read back, then delete. Twenty unit tests cover each crash point, each failed step and the size limit. The JWT measured 570 bytes and the refresh token 65, well under SecureStore's 2048-byte warning.
+- Simulator checks (screenshots in `/tmp/m4shots`, not kept):
+  - The `main` build created a party, with its tokens in plaintext in AsyncStorage's `manifest.json`. This build, installed over it, moved both keys into two keychain items (`ck` protection class) and kept the party.
+  - The party login survived an app restart and a simulator reboot, and joining a party by invite also survived a restart.
+  - Leave keeps the login, by design. Delete party profile removed both keychain items, and a restart stayed signed out.
+  - After an uninstall and reinstall, the keychain kept the login, which came back to its party with a fresh local adventure.
+  - With the account deleted on the server while its token stayed in the keychain, the next launch signed out, cleared the keychain and showed create and join.
+- Remaining checks: launching on a locked phone, an hour-long session that refreshes the token, a SecureStore failure on hardware (covered only by unit tests), and Android.
