@@ -7,7 +7,7 @@
     "build": "bruhs-theme-fonts && astro build",
     "preview": "astro preview",
     "start": "bruhs-theme-fonts && astro build && astro preview",
-    "check": "astro check",
+    "check": "astro check && bruhs-theme-lint src",
     "astro": "astro"
   },
   "portless": {
