@@ -8,30 +8,29 @@ import { fonts, typographyScale, typographyCategories } from "@/data";
 <BaseLayout title="Typography">
 	<div class="p-6 md:p-8 flex flex-col gap-12 md:gap-16">
 		<section>
-			<h2 class="text-h1 font-bold mb-6 tracking-tight">
-			  Monaspace Roles
-			</h2>
-			<p class="text-body-lg text-rambutan-400 mb-8 max-w-[65ch] text-pretty">
-				Bruhs is all mono. Every pixel of text — prose, headings, buttons, code — is set in a
-				<a href="https://monaspace.githubnext.com/" target="_blank" rel="noopener noreferrer" class="font-semibold text-rambutan-100 hover:text-rambutan-50 underline decoration-rambutan-100/20 hover:decoration-rambutan-100/40 transition">Monaspace</a>
-				variant. Each variant has one job.
+			<h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Typography</h1>
+			<p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
+				Bruhs is all mono. Every piece of text, from prose to headings, buttons and code, is set in a
+				<a href="https://monaspace.githubnext.com/" target="_blank" rel="noopener noreferrer" class="font-semibold text-rambutan-100 hover:text-rambutan-50 underline decoration-rambutan-100/20 hover:decoration-rambutan-100/40 transition-colors">Monaspace</a>
+				variant, and each variant has one job. Click a row to copy its class.
 			</p>
-			<div class="grid grid-cols-1 gap-6 md:gap-8">
-				{fonts.map(font => (
-					<FontSample name={font.name} variable={font.var} className={font.className} />
-				))}
-			</div>
 		</section>
 
 		<section>
-			<div class="mb-8">
-				<h2 class="text-h1 font-bold mb-4 tracking-tight">Typography Scale</h2>
-				<p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
-					Seven semantic categories — each bound to a specific Monaspace variant. Decisions are already made; reach for the class that matches the role.
-				</p>
-			</div>
+			<h2 class="text-h1 font-semibold mb-6 tracking-tight">Families</h2>
+			<ul role="list" class="divide-y divide-rambutan-100/5 overflow-hidden rounded-lychee bg-longan-900 inset-ring inset-ring-rambutan-100/5">
+				{fonts.map(font => (
+					<li><FontSample name={font.name} variable={font.var} className={font.className} /></li>
+				))}
+			</ul>
+		</section>
 
-			<div class="flex flex-col gap-10 md:gap-12">
+		<section>
+			<h2 class="text-h1 font-semibold mb-2 tracking-tight">Scale</h2>
+			<p class="text-body text-rambutan-400 mb-8 max-w-[65ch] text-pretty">
+				Seven roles, each bound to one variant. Reach for the class that matches the role.
+			</p>
+			<div class="flex flex-col gap-10">
 				{typographyCategories.map(category => (
 					<TypographyScale
 						items={typographyScale[category.key]}
@@ -41,26 +40,5 @@ import { fonts, typographyScale, typographyCategories } from "@/data";
 				))}
 			</div>
 		</section>
-
-		<section>
-			<h2 class="text-h1 font-bold mb-6 tracking-tight">References</h2>
-			<div class="grid gap-5 md:gap-6">
-				<div class="bg-longan-900 rounded-grape p-5 md:p-6 border border-rambutan-100/5">
-					<h3 class="text-h3 font-semibold text-rambutan-100 mb-3">Typography Foundation</h3>
-					<p class="text-body-lg text-rambutan-300 mb-4">
-						Built upon the innovative
-						<a 
-							href="https://monaspace.githubnext.com/" 
-							target="_blank" 
-							rel="noopener noreferrer"
-							class="font-semibold text-rambutan-100 hover:text-rambutan-50 underline decoration-rambutan-100/20 hover:decoration-rambutan-100/40 transition"
-						>
-							Monaspace superfamily
-						</a>
-						from GitHub, offering unprecedented flexibility for technical and creative typography.
-					</p>
-				</div>
-			</div>
-		</section>
 	</div>
-</BaseLayout> 
+</BaseLayout>
