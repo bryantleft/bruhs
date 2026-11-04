@@ -2,11 +2,12 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 
 const steps = [
-  { name: "Canvas", bg: "bg-longan-950", ring: "", note: "The page itself. Zero elevation." },
-  { name: "Panel", bg: "bg-longan-900", ring: "inset-ring inset-ring-white/5", note: "Ambient containers: nav, sidebar, hero frames." },
-  { name: "Card", bg: "bg-longan-800", ring: "inset-ring inset-ring-white/10", note: "Independently interactive — one step above canvas." },
-  { name: "Floating", bg: "bg-longan-700", ring: "inset-ring inset-ring-white/15", note: "Popovers, menus, tooltips. Lifted two steps." },
-  { name: "Modal", bg: "bg-longan-800", ring: "inset-ring inset-ring-white/20", note: "Full-screen dialogs against a longan-950/70 scrim." },
+  { name: "Canvas", cls: "bg-longan-950 rounded-lychee inset-ring inset-ring-white/5", label: "body", note: "The page itself. Zero elevation; the theme sets it on <body>." },
+  { name: "Panel", cls: "surface-panel", label: "surface-panel", note: "Ambient containers: nav, sidebar, hero frames." },
+  { name: "Card", cls: "surface-card", label: "surface-card", note: "Independently interactive, one step above canvas." },
+  { name: "Floating", cls: "surface-floating", label: "surface-floating", note: "Popovers, menus, tooltips. Lifted two steps." },
+  { name: "Modal", cls: "surface-modal", label: "surface-modal", note: "Dialogs, against a longan-950/70 scrim." },
+  { name: "Well", cls: "surface-well", label: "surface-well", note: "Recessed: nested or secondary content." },
 ];
 ---
 
@@ -15,18 +16,25 @@ const steps = [
     <section>
       <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Elevation</h1>
       <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
-        Bruhs has no <code class="text-rambutan-200">shadow-*</code>. Elevation is expressed with two levers:
-        a tone step in the <span class="text-rambutan-200">longan</span> neutral and a matching
-        <code class="text-rambutan-200">inset-ring</code>.
+        Bruhs has no <code class="code-inline">shadow-*</code>. Elevation is expressed with two levers:
+        a tone step in the <span class="code-inline">longan</span> neutral and a matching
+        <code class="code-inline">inset-ring</code>. The <code class="code-inline">surface-*</code> classes bundle both, so you pick a
+        rung instead of a pair of values.
       </p>
     </section>
 
     <section>
-      <h2 class="text-h1 font-semibold tracking-tight mb-6">Ladder</h2>
+      <h2 class="text-h1 font-semibold tracking-tight mb-2">Ladder</h2>
+      <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
+        Add <code class="code-inline">surface-interactive</code> to a clickable surface and its ring lifts one step on hover.
+      </p>
       <ul role="list" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {steps.map(s => (
-          <li class={`rounded-lychee p-6 ${s.bg} ${s.ring}`}>
-            <p class="text-label text-rambutan-100">{s.name}</p>
+          <li class={`p-6 ${s.cls}`}>
+            <p class="flex items-baseline justify-between gap-3">
+              <span class="text-label text-rambutan-100">{s.name}</span>
+              <code class="text-code-sm text-rambutan-400">{s.label}</code>
+            </p>
             <p class="text-body-sm text-rambutan-400 mt-1">{s.note}</p>
           </li>
         ))}
@@ -49,10 +57,11 @@ const steps = [
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-6">Rules</h2>
       <ul role="list" class="flex flex-col gap-3 max-w-[72ch]">
-        <li class="text-body text-rambutan-300 text-pretty">Never use <code class="text-rambutan-200">shadow-xs</code> through <code class="text-rambutan-200">shadow-2xl</code>. They are not defined in Bruhs.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Elevate by stepping the background tone (<code class="text-rambutan-200">longan-950 → 900 → 800 → 700</code>) and widening the inset-ring in parallel (<code class="text-rambutan-200">white/5 → /10 → /15 → /20</code>).</li>
-        <li class="text-body text-rambutan-300 text-pretty"><code class="text-rambutan-200">--shadow-bloom</code> is allowed only for focus states, active triggers, or deliberate attention accents.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Modals use a <code class="text-rambutan-200">longan-950/70</code> scrim — never pure <code class="text-rambutan-200">black/*</code>.</li>
+        <!-- bruhs-theme-ignore: this rule names the banned shadow classes -->
+        <li class="text-body text-rambutan-300 text-pretty">Never use <code class="code-inline">shadow-xs</code> through <code class="code-inline">shadow-2xl</code>. They are not defined in Bruhs.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Elevate by stepping the background tone (<code class="code-inline">longan-950 → 900 → 800 → 700</code>) and widening the inset-ring in parallel (<code class="code-inline">white/5 → /10 → /15 → /20</code>).</li>
+        <li class="text-body text-rambutan-300 text-pretty"><code class="code-inline">--shadow-bloom</code> is allowed only for focus states, active triggers, or deliberate attention accents.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Modals use a <code class="code-inline">longan-950/70</code> scrim — never pure <code class="code-inline">black/*</code>.</li>
       </ul>
     </section>
   </div>

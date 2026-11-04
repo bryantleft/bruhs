@@ -79,18 +79,14 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
         {/* View Mode Toggle */}
         <div className="px-4 sm:px-6 md:px-8 pb-4 sm:pb-6 md:pb-8">
           <div className="flex justify-center">
-            <div className="inline-flex rounded-grape bg-longan-800/50 p-1 border border-rambutan-100/10">
+            <div className="segmented" role="group" aria-label="View">
               <button
                 type="button"
                 aria-pressed={viewMode === "preview"}
-                onClick={() => setViewMode('preview')}
-                className={`px-4 py-2 rounded-grape text-sm font-medium transition-colors ${
-                  viewMode === 'preview'
-                    ? 'bg-persimmon-500 text-longan-950'
-                    : 'text-rambutan-300 hover:text-rambutan-100 hover:bg-longan-800/50'
-                }`}
+                onClick={() => setViewMode("preview")}
+                className="segmented-item pl-2"
               >
-                <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
@@ -99,14 +95,10 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
               <button
                 type="button"
                 aria-pressed={viewMode === "code"}
-                onClick={() => setViewMode('code')}
-                className={`px-4 py-2 rounded-grape text-sm font-medium transition-colors ${
-                  viewMode === 'code'
-                    ? 'bg-persimmon-500 text-longan-950'
-                    : 'text-rambutan-300 hover:text-rambutan-100 hover:bg-longan-800/50'
-                }`}
+                onClick={() => setViewMode("code")}
+                className="segmented-item pl-2"
               >
-                <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
                 </svg>
                 Code
@@ -189,7 +181,7 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
                 key={variant.id}
                 onClick={() => setActiveVariantIndex(index)}
                 aria-current={index === activeVariantIndex ? "true" : undefined}
-                className={`w-3 h-3 rounded-orb transition-[background-color,scale] duration-200 ${
+                className={`w-3 h-3 rounded-orb transition-[background-color,scale] ${
                   index === activeVariantIndex
                     ? 'bg-persimmon-500 scale-125'
                     : 'bg-rambutan-100/30 hover:bg-rambutan-100/60'

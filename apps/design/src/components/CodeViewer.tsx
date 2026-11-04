@@ -22,14 +22,14 @@ export default function CodeViewer({ code, html, title }: CodeViewerProps) {
   };
 
   return (
-    <div className="overflow-hidden rounded-grape border border-rambutan-100/10 bg-longan-900">
+    <div className="surface-panel overflow-hidden">
       <div className="flex items-center justify-between border-b border-rambutan-100/10 px-4 py-3">
-        {title && <span className="font-mono text-sm text-rambutan-300">{title}</span>}
+        {title && <span className="text-code text-rambutan-300">{title}</span>}
         <button
           type="button"
           onClick={copyToClipboard}
           aria-live="polite"
-          className="flex items-center gap-2 rounded-grape border border-rambutan-100/10 bg-longan-800/50 px-3 py-1.5 text-xs text-rambutan-300 transition-colors duration-200 hover:bg-longan-800 hover:text-rambutan-100 focus-visible:outline-2 focus-visible:outline-persimmon-400"
+          className="btn btn-outline btn-sm pl-2"
         >
           <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             {copied ? (
@@ -44,7 +44,7 @@ export default function CodeViewer({ code, html, title }: CodeViewerProps) {
 
       <div className="max-h-96 overflow-auto">
         <div
-          className="text-sm leading-relaxed [&_code]:!bg-transparent [&_code]:!p-0 [&>pre]:!m-0 [&>pre]:!overflow-visible [&>pre]:!border-0 [&>pre]:!bg-transparent [&>pre]:!p-4"
+          className="text-code [&_code]:!bg-transparent [&_code]:!p-0 [&>pre]:!m-0 [&>pre]:!overflow-visible [&>pre]:!border-0 [&>pre]:!bg-transparent [&>pre]:!p-4"
           // Highlighted by shiki at build time from the app's own template (not user input);
           // the only substituted values are HTML-escaped by `fillLogoCode`.
           dangerouslySetInnerHTML={{ __html: html }}

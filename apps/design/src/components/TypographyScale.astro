@@ -22,7 +22,7 @@ const { items, title, description } = Astro.props;
           type="button"
           data-copy={item.className}
           aria-label={`Copy ${item.className}`}
-          class="group/copy relative grid w-full cursor-copy gap-x-6 gap-y-2 px-5 py-4 text-left transition-colors hover:bg-longan-800/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-persimmon-400 md:grid-cols-[12rem_minmax(0,1fr)] md:items-center"
+          class="group/copy relative grid w-full cursor-copy gap-x-6 gap-y-2 px-5 py-4 text-left transition-colors hover:bg-longan-800/60 focus-visible:-outline-offset-2 md:grid-cols-[12rem_minmax(0,1fr)] md:items-center"
         >
           <span class="flex flex-col gap-0.5">
             <code class="text-code text-rambutan-100">{item.className}</code>

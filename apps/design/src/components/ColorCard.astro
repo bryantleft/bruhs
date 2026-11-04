@@ -13,9 +13,10 @@ const mainSwatch = color.swatches.find((s) => s.name.endsWith("500"));
 // Dark text on light 500s (Durian), light text on dark ones. Read from the token so a
 // palette change can't leave a title unreadable.
 const mainToken = colorToken(`${color.prefix}-500`);
+// bruhs-theme-ignore: parses the token value, not a colour literal
 const lightness = Number(mainToken.match(/^oklch\(([\d.]+)/)?.[1]);
 if (Number.isNaN(lightness)) {
-  throw new Error(`--color-${color.prefix}-500 is "${mainToken}", expected an oklch() value`);
+  throw new Error(`--color-${color.prefix}-500 is "${mainToken}", expected an OKLCH value`);
 }
 const titleClass = lightness >= 0.6 ? "text-longan-950" : "text-rambutan-50";
 ---
@@ -34,11 +35,11 @@ const titleClass = lightness >= 0.6 ? "text-longan-950" : "text-rambutan-50";
             type="button"
             data-copy={swatch.variable}
             aria-label={`Copy ${swatch.variable}`}
-            class="group/copy flex min-w-0 flex-1 cursor-copy flex-col items-center gap-1.5 rounded-seed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-persimmon-400"
+            class="group/copy flex min-w-0 flex-1 cursor-copy flex-col items-center gap-1.5 rounded-seed"
           >
             <span
               class:list={[
-                "relative block h-10 w-full transition-[filter] duration-150 group-first/copy:rounded-l-grape group-last/copy:rounded-r-grape group-hover/copy:brightness-110",
+                "relative block h-10 w-full transition-[filter] duration-fast group-first/copy:rounded-l-grape group-last/copy:rounded-r-grape group-hover/copy:brightness-110",
                 swatch.className,
               ]}
             >

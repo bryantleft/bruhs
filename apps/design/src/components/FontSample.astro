@@ -4,22 +4,22 @@ import CopiedOverlay from "@/components/CopiedOverlay.astro";
 interface Props {
   name: string;
   variable: string;
-  className: string;
 }
 
-const { name, variable, className } = Astro.props;
+const { name, variable } = Astro.props;
 ---
 
 <button
   type="button"
   data-copy={variable}
   aria-label={`Copy ${variable}`}
-  class="group/copy relative grid w-full cursor-copy gap-x-6 gap-y-1 px-5 py-4 text-left transition-colors hover:bg-longan-800/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-persimmon-400 md:grid-cols-[12rem_minmax(0,1fr)] md:items-center"
+  class="group/copy relative grid w-full cursor-copy gap-x-6 gap-y-1 px-5 py-4 text-left transition-colors hover:bg-longan-800/60 focus-visible:-outline-offset-2 md:grid-cols-[12rem_minmax(0,1fr)] md:items-center"
 >
   <span class="flex flex-col gap-0.5">
     <span class="text-label text-rambutan-100">{name}</span>
     <code class="text-code-sm text-rambutan-500">{variable}</code>
   </span>
-  <span class:list={["block truncate text-2xl font-light text-rambutan-100", className]}>The quick brown fox jumps over the lazy dog</span>
+  <!-- A role class would set its own family, so the specimen sets only the family it shows. -->
+  <span class="block truncate text-h2 text-rambutan-100" style={`font-family: var(${variable})`}>The quick brown fox jumps over the lazy dog</span>
   <CopiedOverlay />
 </button>
