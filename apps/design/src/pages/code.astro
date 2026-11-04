@@ -1,0 +1,56 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import Example from "@/components/Example.astro";
+---
+
+<BaseLayout title="Code">
+  <div class="p-6 md:p-8 flex flex-col gap-12 md:gap-16">
+    <section>
+      <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Code and keys</h1>
+      <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
+        Code shares Neon with body text, so prose and code read as one voice. These classes give it a surface.
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-2">Code block</h2>
+      <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
+        <code class="code-inline">code-block</code> goes on the <code class="code-inline">&lt;pre&gt;</code>: well tone, scrolls
+        sideways instead of wrapping. With a syntax highlighter, drop the theme's own background so the block's shows.
+      </p>
+      <Example previewClass="" code={`<pre class="code-block"><code>import "@bruhs/theme/styles/index.css";
+
+const fruit = ["lychee", "persimmon", "durian"];</code></pre>`}>
+        <pre class="code-block"><code>import "@bruhs/theme/styles/index.css";
+
+const fruit = ["lychee", "persimmon", "durian"];</code></pre>
+      </Example>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-2">Inline code</h2>
+      <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
+        <code class="code-inline">code-inline</code> sizes itself to the surrounding text, so it works in any paragraph.
+      </p>
+      <Example previewClass="" code={`<p class="text-body text-rambutan-300">
+  Run <code class="code-inline">pnpm check</code> before you push.
+</p>`}>
+        <p class="text-body text-rambutan-300">Run <code class="code-inline">pnpm check</code> before you push.</p>
+      </Example>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-2">Keys</h2>
+      <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
+        <code class="code-inline">kbd</code> on a <code class="code-inline">&lt;kbd&gt;</code>, one per key.
+      </p>
+      <Example code={`<span class="flex items-center gap-1 text-body-sm text-rambutan-400">
+  <kbd class="kbd">⌘</kbd><kbd class="kbd">K</kbd> to search
+</span>`}>
+        <span class="flex items-center gap-1 text-body-sm text-rambutan-400">
+          <kbd class="kbd">⌘</kbd><kbd class="kbd">K</kbd> to search
+        </span>
+      </Example>
+    </section>
+  </div>
+</BaseLayout>

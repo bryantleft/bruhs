@@ -1,0 +1,53 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+
+const patterns = [
+  { context: "Inline gap: button to icon, badge to text", cls: "gap-1.5", px: 6 },
+  { context: "Form label to field", cls: "gap-2", px: 8 },
+  { context: "Card padding, compact", cls: "p-4", px: 16 },
+  { context: "Form field to field", cls: "gap-6", px: 24 },
+  { context: "Card padding, default", cls: "p-6", px: 24 },
+  { context: "Page padding", cls: "p-6 md:p-8", px: 32 },
+  { context: "Section to section", cls: "gap-12 md:gap-16", px: 64 },
+];
+---
+
+<BaseLayout title="Spacing">
+  <div class="p-6 md:p-8 flex flex-col gap-12 md:gap-16">
+    <section>
+      <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Spacing</h1>
+      <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
+        Tailwind's 4px grid is the only rhythm. Every gap, padding and margin is a multiple of 4px, and these are the
+        values each context reaches for.
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Common values</h2>
+      <ul role="list" class="surface-panel divide-y divide-rambutan-100/5 overflow-hidden">
+        {patterns.map((p) => (
+          <li class="grid gap-x-6 gap-y-3 px-5 py-4 md:grid-cols-[18rem_minmax(0,1fr)] md:items-center">
+            <span class="flex flex-col gap-0.5">
+              <span class="text-body-sm text-rambutan-200">{p.context}</span>
+              <code class="text-code-sm text-rambutan-400">{p.cls}</code>
+            </span>
+            <span class="flex items-center gap-3">
+              <span class="h-4 rounded-seed bg-persimmon-500/30 inset-ring inset-ring-persimmon-400/40" style={`width: ${p.px}px`}></span>
+              <span class="text-code-sm text-rambutan-500 tabular-nums">{p.px}px</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Rules</h2>
+      <ul role="list" class="flex flex-col gap-3 max-w-[72ch]">
+        <li class="text-body text-rambutan-300 text-pretty">Space flex and grid children with <code class="code-inline">gap-*</code> on the parent, not margins on the children.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Prefer shorthand: <code class="code-inline">p-4</code>, not <code class="code-inline">px-4 py-4</code>. Split axes only when a breakpoint overrides one.</li>
+        <li class="text-body text-rambutan-300 text-pretty">For an arbitrary value use <code class="code-inline">--spacing(3)</code>, not <code class="code-inline">12px</code> or <code class="code-inline">calc(var(--spacing) * 3)</code>.</li>
+        <li class="text-body text-rambutan-300 text-pretty">When separation is still unclear, step up the surface (divider, well, card) rather than adding more space.</li>
+      </ul>
+    </section>
+  </div>
+</BaseLayout>

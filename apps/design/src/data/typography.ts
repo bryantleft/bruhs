@@ -41,7 +41,8 @@ export const typographyScale: Record<TypographyCategory, TypographyItem[]> = {
   labels: [
     { name: "Label Large", className: "text-label-lg", usage: "Form labels, menu items", size: "16px", weight: "500", lineHeight: "1.5", font: "Argon" },
     { name: "Label Default", className: "text-label", usage: "UI labels, metadata", size: "14px", weight: "500", lineHeight: "1.5", font: "Argon" },
-    { name: "Label Small", className: "text-label-sm", usage: "Captions, annotations", size: "12px", weight: "500", lineHeight: "1.5", font: "Argon" }
+    { name: "Label Small", className: "text-label-sm", usage: "Captions, annotations", size: "12px", weight: "500", lineHeight: "1.5", font: "Argon" },
+    { name: "Eyebrow", className: "text-eyebrow", usage: "Uppercase label above a heading or group", size: "11px", weight: "500", lineHeight: "1.5", font: "Argon" }
   ],
 
   code: [

@@ -1,0 +1,29 @@
+---
+/**
+ * A live demo with the markup that produced it underneath, copyable in one click.
+ * `code` is shown verbatim, so keep it in sync with the slot by hand.
+ */
+interface Props {
+  code: string;
+  /** Classes for the preview area; defaults to a wrapping row. */
+  previewClass?: string;
+}
+
+const { code, previewClass = "flex flex-wrap items-center gap-3" } = Astro.props;
+---
+
+<div class="surface-panel overflow-hidden">
+  <div class:list={["p-6", previewClass]}>
+    <slot />
+  </div>
+  <div class="border-t border-rambutan-100/5">
+    <div class="flex items-center justify-between py-1 pr-2 pl-4">
+      <span class="text-eyebrow text-rambutan-500">HTML</span>
+      <button type="button" data-copy={code} aria-label="Copy markup" class="group/copy btn btn-ghost btn-sm">
+        <span class="group-data-copied/copy:hidden">Copy</span>
+        <span class="hidden group-data-copied/copy:inline">Copied</span>
+      </button>
+    </div>
+    <pre class="overflow-x-auto px-4 pb-4 text-code-sm text-rambutan-300"><code>{code}</code></pre>
+  </div>
+</div>

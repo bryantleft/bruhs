@@ -2,7 +2,7 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 
 const tile =
-  "group block rounded-lychee bg-longan-900 p-5 inset-ring inset-ring-rambutan-100/5 transition-colors duration-200 hover:bg-longan-800 hover:inset-ring-rambutan-100/15 focus-visible:outline-2 focus-visible:outline-persimmon-400";
+  "group block rounded-lychee bg-longan-900 p-5 inset-ring inset-ring-rambutan-100/5 transition-colors hover:bg-longan-800 hover:inset-ring-rambutan-100/15 focus-visible:outline-2 focus-visible:outline-persimmon-400";
 ---
 
 <BaseLayout>
@@ -36,11 +36,11 @@ const tile =
       </a>
       <a href="/typography" class={tile}>
         <div class="mb-4 h-8 flex items-end gap-2 overflow-hidden">
-          <span class="text-2xl font-light font-krypton text-rambutan-300 leading-none">Kr</span>
-          <span class="text-xl font-normal font-xenon text-rambutan-400 leading-none">Xe</span>
-          <span class="text-lg font-normal font-neon text-rambutan-500 leading-none">Ne</span>
-          <span class="text-base font-medium font-argon text-rambutan-500 leading-none">Ar</span>
-          <span class="text-base font-normal font-radon text-rambutan-600 leading-none">Ra</span>
+          <span class="text-h2 leading-none text-rambutan-300" style="font-family: var(--font-krypton)">Kr</span>
+          <span class="text-h3 leading-none text-rambutan-400" style="font-family: var(--font-xenon)">Xe</span>
+          <span class="text-h4 leading-none text-rambutan-500" style="font-family: var(--font-neon)">Ne</span>
+          <span class="text-body leading-none text-rambutan-500" style="font-family: var(--font-argon)">Ar</span>
+          <span class="text-body leading-none text-rambutan-600" style="font-family: var(--font-radon)">Ra</span>
         </div>
         <h3 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Typography</h3>
         <p class="text-body-sm text-rambutan-400">All-mono system — one Monaspace variant per role</p>
@@ -74,6 +74,26 @@ const tile =
         <h3 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Surfaces</h3>
         <p class="text-body-sm text-rambutan-400">Whitespace, dividers, wells, and cards</p>
       </a>
+      <a href="/spacing" class={tile}>
+        <div class="mb-4 h-8 flex items-center gap-1" aria-hidden="true">
+          <span class="h-4 w-1.5 rounded-seed bg-persimmon-500/40"></span>
+          <span class="h-4 w-2 rounded-seed bg-persimmon-500/40"></span>
+          <span class="h-4 w-4 rounded-seed bg-persimmon-500/40"></span>
+          <span class="h-4 w-6 rounded-seed bg-persimmon-500/40"></span>
+          <span class="h-4 w-8 rounded-seed bg-persimmon-500/40"></span>
+        </div>
+        <h3 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Spacing</h3>
+        <p class="text-body-sm text-rambutan-400">One 4px rhythm and the value each context uses</p>
+      </a>
+      <a href="/motion" class={tile}>
+        <div class="mb-4 h-8 flex items-center" aria-hidden="true">
+          <span class="relative h-2 w-full rounded-orb bg-white/5">
+            <span class="absolute inset-y-0 left-0 w-3 rounded-orb bg-persimmon-500 transition-[left] duration-standard ease-standard motion-safe:group-hover:left-[calc(100%-0.75rem)]"></span>
+          </span>
+        </div>
+        <h3 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Motion</h3>
+        <p class="text-body-sm text-rambutan-400">Five durations, four easings</p>
+      </a>
       </div>
     </section>
     <section>
@@ -106,6 +126,30 @@ const tile =
         <h3 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Forms</h3>
         <p class="text-body-sm text-rambutan-400">Inputs, selects, checkboxes, radios, toggles</p>
       </a>
+      <a href="/overlays" class={tile}>
+        <div class="mb-4 h-8 flex items-center" aria-hidden="true">
+          <span class="surface-floating flex w-24 flex-col gap-1 rounded-grape p-1">
+            <span class="h-1.5 rounded-orb bg-white/10"></span>
+            <span class="h-1.5 w-2/3 rounded-orb bg-white/10"></span>
+          </span>
+        </div>
+        <h3 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Overlays</h3>
+        <p class="text-body-sm text-rambutan-400">Dialog, menu, tooltip and stacking layers</p>
+      </a>
+      <a href="/feedback" class={tile}>
+        <div class="mb-4 h-8 flex items-center gap-3 text-persimmon-300" aria-hidden="true">
+          <span class="spinner size-5"></span>
+        </div>
+        <h3 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Feedback</h3>
+        <p class="text-body-sm text-rambutan-400">Spinners and empty states</p>
+      </a>
+      <a href="/code" class={tile}>
+        <div class="mb-4 h-8 flex items-center gap-1" aria-hidden="true">
+          <kbd class="kbd">⌘</kbd><kbd class="kbd">K</kbd>
+        </div>
+        <h3 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Code</h3>
+        <p class="text-body-sm text-rambutan-400">Code blocks, inline code and keys</p>
+      </a>
       <a href="/icons" class={tile}>
         <div class="mb-4 h-8 flex items-center gap-3 text-persimmon-300">
           <svg viewBox="0 0 16 16" fill="currentColor" class="size-4"><path d="M8 2.5a.75.75 0 0 1 .75.75v4h4a.75.75 0 0 1 0 1.5h-4v4a.75.75 0 0 1-1.5 0v-4h-4a.75.75 0 0 1 0-1.5h4v-4A.75.75 0 0 1 8 2.5Z" /></svg>
@@ -123,10 +167,10 @@ const tile =
       <a href="/bruhs" class={tile}>
         <div class="mb-4 h-8 flex items-center">
           <svg viewBox="0 0 600 600" fill="none" xmlns="http://www.w3.org/2000/svg" class="h-8 w-8">
-            <circle cx="300" cy="300" r="300" fill="oklch(0.8924 0.1454 94.78)" />
-            <ellipse cx="198" cy="223" rx="40" ry="10" fill="oklch(0.146 0.000 0)" />
-            <ellipse cx="401" cy="223" rx="40" ry="10" fill="oklch(0.146 0.000 0)" />
-            <ellipse cx="307" cy="378" rx="120" ry="10" fill="oklch(0.666 0.175 27.34)" />
+            <circle cx="300" cy="300" r="300" class="fill-bruh-base" />
+            <ellipse cx="198" cy="223" rx="40" ry="10" class="fill-bruh-eye" />
+            <ellipse cx="401" cy="223" rx="40" ry="10" class="fill-bruh-eye" />
+            <ellipse cx="307" cy="378" rx="120" ry="10" class="fill-bruh-mouth" />
           </svg>
         </div>
         <h3 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Logo</h3>
@@ -134,10 +178,10 @@ const tile =
       </a>
       <a href="/agents" class={tile}>
         <div class="mb-4 h-8 flex items-end gap-1 font-neon text-rambutan-300 leading-none">
-          <span class="text-base">&gt;</span>
-          <span class="text-base">adopt</span>
-          <span class="text-base text-persimmon-400">bruhs</span>
-          <span class="text-base animate-pulse motion-reduce:animate-none">_</span>
+          <span class="text-code-lg">&gt;</span>
+          <span class="text-code-lg">adopt</span>
+          <span class="text-code-lg text-persimmon-400">bruhs</span>
+          <span class="text-code-lg animate-pulse motion-reduce:animate-none">_</span>
         </div>
         <h3 class="text-h3 font-semibold text-rambutan-100 mb-1 group-hover:text-rambutan-50 transition-colors">Agents</h3>
         <p class="text-body-sm text-rambutan-400">Full adoption guide + one-click LLM copy</p>

@@ -1,0 +1,79 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+
+const durations = [
+  { name: "duration-blink", ms: "80ms", cls: "duration-blink", use: "Instant feedback: radio select, keyboard nav, typeahead" },
+  { name: "duration-fast", ms: "150ms", cls: "duration-fast", use: "Hover, press, small state changes. The default for a bare transition" },
+  { name: "duration-standard", ms: "250ms", cls: "duration-standard", use: "Expand, fade, slide" },
+  { name: "duration-slow", ms: "400ms", cls: "duration-slow", use: "Page-level transitions, large panel moves" },
+  { name: "duration-bloom", ms: "600ms", cls: "duration-bloom", use: "Deliberate attention moments and bloom accents" },
+];
+
+const easings = [
+  { name: "ease-standard", curve: "cubic-bezier(0.2, 0, 0, 1)", cls: "ease-standard", use: "Most UI transitions" },
+  { name: "ease-entrance", curve: "cubic-bezier(0, 0, 0, 1)", cls: "ease-entrance", use: "Content arriving: slide-in, fade-in" },
+  { name: "ease-exit", curve: "cubic-bezier(0.4, 0, 1, 1)", cls: "ease-exit", use: "Content leaving: slide-out, fade-out" },
+  { name: "ease-bloom", curve: "cubic-bezier(0.34, 1.56, 0.64, 1)", cls: "ease-bloom", use: "Playful overshoot, brand moments only" },
+];
+---
+
+<BaseLayout title="Motion">
+  <div class="p-6 md:p-8 flex flex-col gap-12 md:gap-16">
+    <section>
+      <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Motion</h1>
+      <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
+        Five durations and four easings, so transitions across apps feel like one system. A bare
+        <code class="code-inline">transition</code> already uses <code class="code-inline">duration-fast</code> and
+        <code class="code-inline">ease-standard</code>. Hover a row to play it.
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Durations</h2>
+      <ul role="list" class="surface-panel divide-y divide-rambutan-100/5 overflow-hidden">
+        {durations.map((d) => (
+          <li class="group grid gap-x-6 gap-y-3 px-5 py-4 md:grid-cols-[14rem_minmax(0,1fr)] md:items-center">
+            <span class="flex flex-col gap-0.5">
+              <code class="text-code text-rambutan-100">{d.name}</code>
+              <span class="text-body-sm text-rambutan-400 tabular-nums">{d.ms} · {d.use}</span>
+            </span>
+            <span class="relative h-2 rounded-orb bg-white/5">
+              <span class:list={["absolute inset-y-0 left-0 w-3 rounded-orb bg-persimmon-500 transition-[left] ease-standard motion-safe:group-hover:left-[calc(100%-0.75rem)]", d.cls]}></span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Easings</h2>
+      <ul role="list" class="surface-panel divide-y divide-rambutan-100/5 overflow-hidden">
+        {easings.map((e) => (
+          <li class="group grid gap-x-6 gap-y-3 px-5 py-4 md:grid-cols-[14rem_minmax(0,1fr)] md:items-center">
+            <span class="flex flex-col gap-0.5">
+              <code class="text-code text-rambutan-100">{e.name}</code>
+              <span class="text-body-sm text-rambutan-400">{e.use}</span>
+              <code class="text-code-sm text-rambutan-500">{e.curve}</code>
+            </span>
+            <span class="relative h-2 rounded-orb bg-white/5">
+              <span class:list={["absolute inset-y-0 left-0 w-3 rounded-orb bg-blueberry-400 transition-[left] duration-slow motion-safe:group-hover:left-[calc(100%-0.75rem)]", e.cls]}></span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-6">Rules</h2>
+      <ul role="list" class="flex flex-col gap-3 max-w-[72ch]">
+        <!-- bruhs-theme-ignore: names the classes this rule bans -->
+        <li class="text-body text-rambutan-300 text-pretty">Name what transitions: <code class="code-inline">transition-colors</code> or <code class="code-inline">transition-[translate]</code>, never <code class="code-inline">transition-all</code>.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Pair a duration with its easing: <code class="code-inline">duration-standard ease-entrance</code> to open, <code class="code-inline">ease-exit</code> to close.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Wrap decorative motion in <code class="code-inline">motion-safe:</code>. Feedback such as a spinner may keep moving, more slowly.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Don't animate keyboard-driven or very frequent actions, and keep UI motion under 400ms.</li>
+        <!-- bruhs-theme-ignore: names the classes this rule bans -->
+        <li class="text-body text-rambutan-300 text-pretty">Raw values like <code class="code-inline">duration-300</code> or <code class="code-inline">ease-in-out</code> fail <code class="code-inline">bruhs-theme-lint</code>.</li>
+      </ul>
+    </section>
+  </div>
+</BaseLayout>

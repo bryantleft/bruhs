@@ -1,5 +1,6 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
+import Example from "@/components/Example.astro";
 ---
 
 <BaseLayout title="Forms">
@@ -12,41 +13,76 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
     </section>
 
     <section>
-      <h2 class="text-h1 font-semibold tracking-tight mb-6">Text input</h2>
-      <div class="rounded-lychee border border-rambutan-100/5 bg-longan-900 p-6">
-        <div class="max-w-xs flex flex-col gap-2">
+      <h2 class="text-h1 font-semibold tracking-tight mb-2">Text input</h2>
+      <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
+        <code class="code-inline">input</code> works on inputs and textareas. Set <code class="code-inline">aria-invalid="true"</code> for the
+        error state; the focus ring insets so it never spills outside the field.
+      </p>
+      <Example previewClass="grid gap-6 sm:grid-cols-2" code={`<div class="flex flex-col gap-2">
+  <label for="email" class="text-label text-rambutan-200">Email</label>
+  <input id="email" name="email" type="email" placeholder="you@bruhs.dev" class="input" />
+</div>
+<div class="flex flex-col gap-2">
+  <label for="handle" class="text-label text-rambutan-200">Handle</label>
+  <input id="handle" name="handle" value="bruh" aria-invalid="true" aria-describedby="handle-error" class="input" />
+  <p id="handle-error" class="text-body-sm text-lychee-300">That handle is taken.</p>
+</div>
+<div class="flex flex-col gap-2 sm:col-span-2">
+  <label for="bio" class="text-label text-rambutan-200">Bio</label>
+  <textarea id="bio" name="bio" rows="3" placeholder="A short bio" class="input"></textarea>
+</div>`}>
+        <div class="flex flex-col gap-2">
           <label for="demo-email" class="text-label text-rambutan-200">Email</label>
-          <input
-            id="demo-email"
-            name="email"
-            type="email"
-            placeholder="you@bruhs.dev"
-            class="block w-full rounded-grape bg-white/5 px-3 py-2 text-body text-rambutan-100 placeholder:text-rambutan-500 inset-ring inset-ring-white/10 focus-visible:outline-2 -outline-offset-1 focus-visible:outline-persimmon-400 max-sm:text-base/6"
-          />
+          <input id="demo-email" name="email" type="email" placeholder="you@bruhs.dev" class="input" />
         </div>
-      </div>
+        <div class="flex flex-col gap-2">
+          <label for="demo-handle" class="text-label text-rambutan-200">Handle</label>
+          <input id="demo-handle" name="handle" value="bruh" aria-invalid="true" aria-describedby="demo-handle-error" class="input" />
+          <p id="demo-handle-error" class="text-body-sm text-lychee-300">That handle is taken.</p>
+        </div>
+        <div class="flex flex-col gap-2 sm:col-span-2">
+          <label for="demo-bio" class="text-label text-rambutan-200">Bio</label>
+          <textarea id="demo-bio" name="bio" rows="3" placeholder="A short bio" class="input"></textarea>
+        </div>
+      </Example>
     </section>
 
     <section>
-      <h2 class="text-h1 font-semibold tracking-tight mb-6">Textarea</h2>
-      <div class="rounded-lychee border border-rambutan-100/5 bg-longan-900 p-6">
-        <div class="max-w-md flex flex-col gap-2">
-          <label for="demo-bio" class="text-label text-rambutan-200">Bio</label>
-          <textarea
-            id="demo-bio"
-            name="bio"
-            rows="3"
-            placeholder="A short bio..."
-            class="block w-full rounded-grape bg-white/5 px-3 py-2 text-body text-rambutan-100 placeholder:text-rambutan-500 inset-ring inset-ring-white/10 focus-visible:outline-2 -outline-offset-1 focus-visible:outline-persimmon-400 max-sm:text-base/6"
-          ></textarea>
+      <h2 class="text-h1 font-semibold tracking-tight mb-2">Segmented control</h2>
+      <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
+        For two to four mutually exclusive views. Mark the active item with <code class="code-inline">aria-pressed</code>,
+        <code class="code-inline">aria-selected</code> or <code class="code-inline">aria-checked</code>; the class reads whichever you use.
+      </p>
+      <Example code={`<div class="segmented" role="group" aria-label="View">
+  <button type="button" class="segmented-item" aria-pressed="true">Preview</button>
+  <button type="button" class="segmented-item" aria-pressed="false">Code</button>
+</div>`}>
+        <div class="segmented" role="group" aria-label="View" data-segmented>
+          <button type="button" class="segmented-item" aria-pressed="true">Preview</button>
+          <button type="button" class="segmented-item" aria-pressed="false">Code</button>
         </div>
-      </div>
+      </Example>
     </section>
+
+    <script>
+      // Demo only: flip aria-pressed so the segmented control responds.
+      document.addEventListener("astro:page-load", () => {
+        for (const group of document.querySelectorAll("[data-segmented]")) {
+          group.addEventListener("click", (event) => {
+            const item = event.target instanceof Element ? event.target.closest(".segmented-item") : null;
+            if (!item) return;
+            for (const other of group.querySelectorAll(".segmented-item")) {
+              other.setAttribute("aria-pressed", String(other === item));
+            }
+          });
+        }
+      });
+    </script>
 
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-6">Select</h2>
       <p class="text-body-sm text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
-        Native <code class="text-rambutan-200">&lt;select&gt;</code> with a custom chevron. Two sizes, support for
+        Native <code class="code-inline">&lt;select&gt;</code> with a custom chevron. Two sizes, support for
         leading icons, error and disabled states. Wrapper gets the focus ring so it reads as one surface.
       </p>
 
@@ -166,7 +202,7 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
                   checked={checked}
                   disabled={disabled}
                   data-indeterminate={indeterminate ? "true" : undefined}
-                  class="col-start-1 row-start-1 appearance-none rounded-seed border border-white/10 bg-white/5 checked:border-persimmon-500 checked:bg-persimmon-500 indeterminate:border-persimmon-500 indeterminate:bg-persimmon-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-persimmon-400 disabled:border-white/5 disabled:bg-white/10 disabled:checked:bg-white/10 forced-colors:appearance-auto"
+                  class="col-start-1 row-start-1 appearance-none rounded-seed border border-white/10 bg-white/5 checked:border-persimmon-500 checked:bg-persimmon-500 indeterminate:border-persimmon-500 indeterminate:bg-persimmon-500 disabled:border-white/5 disabled:bg-white/10 disabled:checked:bg-white/10 forced-colors:appearance-auto"
                 />
                 <svg viewBox="0 0 14 14" fill="none" class="pointer-events-none col-start-1 row-start-1 size-7/8 self-center justify-self-center stroke-longan-950 group-has-disabled:stroke-white/25">
                   <path d="M3 8L6 11L11 3.5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-not-has-checked:opacity-0" />
@@ -179,8 +215,8 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
         ))}
       </div>
       <p class="text-body-sm text-rambutan-400 mt-3 max-w-[65ch] text-pretty">
-        The indeterminate state is a DOM property, not an HTML attribute — set <code class="text-rambutan-200">input.indeterminate = true</code> in JavaScript.
-        Styling is pure CSS via the <code class="text-rambutan-200">:indeterminate</code> pseudo-class and <code class="text-rambutan-200">group-not-has-indeterminate</code>.
+        The indeterminate state is a DOM property, not an HTML attribute — set <code class="code-inline">input.indeterminate = true</code> in JavaScript.
+        Styling is pure CSS via the <code class="code-inline">:indeterminate</code> pseudo-class and <code class="code-inline">group-not-has-indeterminate</code>.
       </p>
     </section>
 
@@ -205,7 +241,7 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
                   type="radio"
                   value={value}
                   checked={value === "original"}
-                  class="col-start-1 row-start-1 appearance-none rounded-orb border border-white/10 bg-white/5 checked:border-persimmon-500 checked:bg-persimmon-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-persimmon-400 disabled:border-white/5 disabled:bg-white/10 disabled:checked:bg-white/10 forced-colors:appearance-auto"
+                  class="col-start-1 row-start-1 appearance-none rounded-orb border border-white/10 bg-white/5 checked:border-persimmon-500 checked:bg-persimmon-500 disabled:border-white/5 disabled:bg-white/10 disabled:checked:bg-white/10 forced-colors:appearance-auto"
                 />
                 <span class="pointer-events-none col-start-1 row-start-1 size-[round(down,40%,1px)] self-center justify-self-center rounded-orb bg-longan-950 group-not-has-checked:opacity-0 group-has-disabled:bg-white/25"></span>
               </span>
@@ -219,8 +255,8 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-6">Toggle</h2>
       <div class="rounded-lychee border border-rambutan-100/5 bg-longan-900 p-6 flex items-center gap-3">
-        <div class="group relative inline-flex w-11 sm:w-9 shrink-0 rounded-orb bg-white/5 p-0.5 inset-ring inset-ring-white/10 outline-persimmon-500 outline-offset-2 has-checked:bg-persimmon-500 has-focus-visible:outline-2 transition-colors duration-200 ease-in-out">
-          <span class="aspect-square w-1/2 rounded-orb bg-white ring-1 ring-white/10 transition-transform duration-200 ease-in-out group-has-checked:translate-x-full"></span>
+        <div class="group relative inline-flex w-11 sm:w-9 shrink-0 rounded-orb bg-white/5 p-0.5 inset-ring inset-ring-white/10 outline-persimmon-500 outline-offset-2 has-checked:bg-persimmon-500 has-focus-visible:outline-2 transition-colors">
+          <span class="aspect-square w-1/2 rounded-orb bg-white ring-1 ring-white/10 transition-transform group-has-checked:translate-x-full"></span>
           <input id="toggle-demo" name="toggle" type="checkbox" aria-label="Enable fruit mode" class="absolute inset-0 size-full appearance-none focus:outline-hidden" />
         </div>
         <label for="toggle-demo" class="text-body text-rambutan-200">Enable fruit mode</label>
@@ -230,9 +266,9 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-6">Rules</h2>
       <ul role="list" class="flex flex-col gap-3 max-w-[72ch]">
-        <li class="text-body text-rambutan-300 text-pretty">Every control has a <code class="text-rambutan-200">name</code> and either a <code class="text-rambutan-200">&lt;label&gt;</code> or <code class="text-rambutan-200">aria-label</code>.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Controls use <code class="text-rambutan-200">inset-ring</code> not solid borders; focus rings use <code class="text-rambutan-200">-outline-offset-1</code> so they don't spill outside the field.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Checkboxes, radios, toggles are bigger on mobile (<code class="text-rambutan-200">size-5 sm:size-4</code>) for touch targets.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Every control has a <code class="code-inline">name</code> and either a <code class="code-inline">&lt;label&gt;</code> or <code class="code-inline">aria-label</code>.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Controls use <code class="code-inline">inset-ring</code>, not solid borders. Text fields take the <code class="code-inline">input</code> class rather than restating it.</li>
+        <li class="text-body text-rambutan-300 text-pretty">Checkboxes, radios, toggles are bigger on mobile (<code class="code-inline">size-5 sm:size-4</code>) for touch targets.</li>
         <li class="text-body text-rambutan-300 text-pretty">Never use the conjoined input+button pattern — leave a gap or nest the button visually.</li>
       </ul>
     </section>

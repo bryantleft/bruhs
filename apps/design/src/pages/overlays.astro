@@ -1,0 +1,133 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import Example from "@/components/Example.astro";
+
+const layers = [
+  { name: "z-raised", value: 10, use: "Lifted above siblings: a focused card, a sticky table cell" },
+  { name: "z-sticky", value: 20, use: "Sticky headers and toolbars" },
+  { name: "z-overlay", value: 40, use: "Scrims and off-canvas backdrops" },
+  { name: "z-modal", value: 50, use: "Drawers and modals that aren't a native <dialog>" },
+  { name: "z-popover", value: 60, use: "Menus and command palettes, above a modal" },
+  { name: "z-toast", value: 70, use: "Toasts and live notifications" },
+  { name: "z-tooltip", value: 80, use: "Tooltips, always on top" },
+];
+---
+
+<BaseLayout title="Overlays">
+  <div class="p-6 md:p-8 flex flex-col gap-12 md:gap-16">
+    <section>
+      <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Overlays</h1>
+      <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
+        Dialogs, menus and tooltips. Prefer the platform: a native <code class="code-inline">&lt;dialog&gt;</code> and the
+        <code class="code-inline">popover</code> attribute render in the top layer, so they never fight over z-index.
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-2">Dialog</h2>
+      <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
+        <code class="code-inline">dialog</code> styles a native <code class="code-inline">&lt;dialog&gt;</code> opened with
+        <code class="code-inline">showModal()</code>: modal surface, longan scrim, and a short fade and scale that's skipped
+        when the user prefers reduced motion. Escape and the form's <code class="code-inline">method="dialog"</code> close it.
+      </p>
+      <Example code={`<button type="button" class="btn btn-outline" onclick="trash.showModal()">Delete file</button>
+<dialog id="trash" class="dialog" aria-labelledby="trash-title">
+  <form method="dialog" class="flex flex-col gap-4">
+    <h2 id="trash-title" class="text-h3">Move to Trash?</h2>
+    <p class="text-body-sm text-rambutan-400">You can restore it from the Trash for 30 days.</p>
+    <div class="flex justify-end gap-3">
+      <button value="cancel" class="btn btn-ghost">Cancel</button>
+      <button value="confirm" class="btn btn-danger">Move to Trash</button>
+    </div>
+  </form>
+</dialog>`}>
+        <button type="button" class="btn btn-outline" data-open-dialog="demo-dialog">Delete file</button>
+        <dialog id="demo-dialog" class="dialog" aria-labelledby="demo-dialog-title">
+          <form method="dialog" class="flex flex-col gap-4">
+            <h2 id="demo-dialog-title" class="text-h3">Move to Trash?</h2>
+            <p class="text-body-sm text-rambutan-400">You can restore it from the Trash for 30 days.</p>
+            <div class="flex justify-end gap-3">
+              <button value="cancel" class="btn btn-ghost">Cancel</button>
+              <button value="confirm" class="btn btn-danger">Move to Trash</button>
+            </div>
+          </form>
+        </dialog>
+      </Example>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-2">Menu</h2>
+      <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
+        <code class="code-inline">popover</code> is the floating surface; <code class="code-inline">menu-item</code> is each row.
+        Rows highlight on hover and when marked <code class="code-inline">aria-selected</code>, <code class="code-inline">aria-pressed</code>,
+        <code class="code-inline">aria-current</code> or <code class="code-inline">data-highlighted</code>, which is what cmdk
+        and most listbox libraries set. Shown inline here; in an app, put it on a <code class="code-inline">[popover]</code> element.
+      </p>
+      <Example previewClass="flex" code={`<div class="popover w-64" role="menu" aria-label="File">
+  <button type="button" class="menu-item" role="menuitem">Rename</button>
+  <button type="button" class="menu-item" role="menuitem" data-highlighted>Duplicate</button>
+  <button type="button" class="menu-item" role="menuitem" aria-disabled="true">Share</button>
+  <div class="my-1 border-t border-rambutan-100/10" role="separator"></div>
+  <button type="button" class="menu-item text-lychee-300" role="menuitem">Move to Trash</button>
+</div>`}>
+        <div class="popover w-64" role="menu" aria-label="File">
+          <button type="button" class="menu-item" role="menuitem">Rename</button>
+          <button type="button" class="menu-item" role="menuitem" data-highlighted>Duplicate</button>
+          <button type="button" class="menu-item" role="menuitem" aria-disabled="true">Share</button>
+          <div class="my-1 border-t border-rambutan-100/10" role="separator"></div>
+          <button type="button" class="menu-item text-lychee-300" role="menuitem">Move to Trash</button>
+        </div>
+      </Example>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-2">Tooltip</h2>
+      <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
+        <code class="code-inline">tooltip</code> is only the bubble; show it from the trigger. Screen readers don't see hover,
+        so the trigger keeps an <code class="code-inline">aria-label</code> or <code class="code-inline">aria-describedby</code>.
+      </p>
+      <Example previewClass="flex pt-14" code={`<button type="button" class="group relative btn btn-ghost btn-icon" aria-describedby="tip-copy">
+  <svg viewBox="0 0 16 16" fill="currentColor" class="size-4" aria-hidden="true">…</svg>
+  <span id="tip-copy" role="tooltip" class="tooltip absolute bottom-full left-1/2 mb-2 -translate-x-1/2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+    Copy link
+  </span>
+</button>`}>
+        <button type="button" class="group relative btn btn-ghost btn-icon" aria-describedby="demo-tip">
+          <svg viewBox="0 0 16 16" fill="currentColor" class="size-4" aria-hidden="true">
+            <path d="M8.914 6.025a.75.75 0 0 1 1.06 0 3.5 3.5 0 0 1 0 4.95l-2 2a3.5 3.5 0 0 1-5.396-4.402.75.75 0 0 1 1.251.827 2 2 0 0 0 3.085 2.514l2-2a2 2 0 0 0 0-2.828.75.75 0 0 1 0-1.06Z" />
+            <path d="M7.086 9.975a.75.75 0 0 1-1.06 0 3.5 3.5 0 0 1 0-4.95l2-2a3.5 3.5 0 0 1 5.396 4.402.75.75 0 0 1-1.251-.827 2 2 0 0 0-3.085-2.514l-2 2a2 2 0 0 0 0 2.828.75.75 0 0 1 0 1.06Z" />
+          </svg>
+          <span id="demo-tip" role="tooltip" class="tooltip absolute bottom-full left-1/2 mb-2 -translate-x-1/2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+            Copy link
+          </span>
+        </button>
+      </Example>
+    </section>
+
+    <section>
+      <h2 class="text-h1 font-semibold tracking-tight mb-2">Layers</h2>
+      <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
+        When something can't use the top layer, pick a named layer instead of a number. The values are an order, not a
+        scale; the CSS variables (<code class="code-inline">--z-popover</code>) are there for plain CSS.
+      </p>
+      <ul role="list" class="surface-panel divide-y divide-rambutan-100/5 overflow-hidden">
+        {layers.map((l) => (
+          <li class="grid gap-x-6 gap-y-1 px-5 py-3 md:grid-cols-[10rem_3rem_minmax(0,1fr)] md:items-center">
+            <code class="text-code text-rambutan-100">{l.name}</code>
+            <span class="text-code-sm text-rambutan-500 tabular-nums">{l.value}</span>
+            <span class="text-body-sm text-rambutan-400">{l.use}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  </div>
+</BaseLayout>
+
+<script>
+  document.addEventListener("astro:page-load", () => {
+    for (const trigger of document.querySelectorAll<HTMLElement>("[data-open-dialog]")) {
+      const dialog = document.getElementById(trigger.dataset.openDialog ?? "");
+      if (dialog instanceof HTMLDialogElement) trigger.addEventListener("click", () => dialog.showModal());
+    }
+  });
+</script>

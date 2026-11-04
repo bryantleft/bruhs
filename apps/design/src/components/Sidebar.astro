@@ -15,6 +15,8 @@ const groups = [
       { label: "Radius", href: "/radius" },
       { label: "Elevation", href: "/elevation" },
       { label: "Surfaces", href: "/surfaces" },
+      { label: "Spacing", href: "/spacing" },
+      { label: "Motion", href: "/motion" },
     ],
   },
   {
@@ -23,6 +25,9 @@ const groups = [
       { label: "Buttons", href: "/buttons" },
       { label: "Badges", href: "/badges" },
       { label: "Forms", href: "/forms" },
+      { label: "Overlays", href: "/overlays" },
+      { label: "Feedback", href: "/feedback" },
+      { label: "Code", href: "/code" },
       { label: "Icons", href: "/icons" },
     ],
   },
@@ -41,21 +46,21 @@ const currentLabel = groups.flatMap((g) => g.links).find((l) => l.href === path)
   Below `lg` the sidebar is an off-canvas panel opened from the top bar. While closed it
   is `invisible`, which also takes its links out of the tab order.
 -->
-<header class="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-rambutan-100/5 bg-longan-950/90 px-3 backdrop-blur lg:hidden">
+<header class="fixed inset-x-0 top-0 z-sticky flex h-14 items-center gap-3 border-b border-rambutan-100/5 bg-longan-950/90 px-3 backdrop-blur lg:hidden">
   <button
     type="button"
     data-nav-toggle
     aria-controls="site-nav"
     aria-expanded="false"
     aria-label="Open menu"
-    class="relative rounded-grape p-2 text-rambutan-200 transition-colors hover:bg-longan-800 hover:text-rambutan-100 focus-visible:outline-2 focus-visible:outline-persimmon-400"
+    class="relative rounded-grape p-2 text-rambutan-200 transition-colors hover:bg-longan-800 hover:text-rambutan-100"
   >
     <span class="absolute top-1/2 left-1/2 size-12 -translate-1/2" aria-hidden="true"></span>
     <svg class="size-6" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
       <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"></path>
     </svg>
   </button>
-  <a href="/" class="flex items-center gap-2 rounded-grape focus-visible:outline-2 focus-visible:outline-persimmon-400">
+  <a href="/" class="flex items-center gap-2 rounded-grape">
     <BruhLogo class="size-6 shrink-0" />
     <span class="sr-only">Bruhs home</span>
   </a>
@@ -67,16 +72,16 @@ const currentLabel = groups.flatMap((g) => g.links).find((l) => l.href === path)
   data-nav-backdrop
   tabindex="-1"
   aria-hidden="true"
-  class="fixed inset-0 z-40 hidden bg-longan-950/70 lg:hidden"
+  class="fixed inset-0 z-overlay hidden bg-longan-950/70 lg:hidden"
 ></button>
 
 <aside
   id="site-nav"
   data-nav
-  class="invisible fixed top-0 left-0 z-50 flex h-dvh w-64 -translate-x-full flex-col border-r border-rambutan-100/5 bg-longan-950 transition-[translate,visibility] duration-300 ease-out data-open:visible data-open:translate-x-0 data-open:transition-[translate] motion-reduce:transition-none lg:visible lg:translate-x-0"
+  class="invisible fixed top-0 left-0 z-modal flex h-dvh w-64 -translate-x-full flex-col border-r border-rambutan-100/5 bg-longan-950 transition-[translate,visibility] duration-standard ease-entrance data-open:visible data-open:translate-x-0 data-open:transition-[translate] motion-reduce:transition-none lg:visible lg:translate-x-0"
 >
   <div class="flex h-14 items-center justify-between border-b border-rambutan-100/5 px-5 lg:h-auto lg:py-5">
-    <a href="/" class="flex items-center gap-3 rounded-grape focus-visible:outline-2 focus-visible:outline-persimmon-400">
+    <a href="/" class="flex items-center gap-3 rounded-grape">
       <BruhLogo class="size-7 shrink-0" />
       <span
         class:list={[
@@ -91,7 +96,7 @@ const currentLabel = groups.flatMap((g) => g.links).find((l) => l.href === path)
       type="button"
       data-nav-close
       aria-label="Close menu"
-      class="rounded-grape p-2 text-rambutan-300 transition-colors hover:bg-longan-800 hover:text-rambutan-100 focus-visible:outline-2 focus-visible:outline-persimmon-400 lg:hidden"
+      class="rounded-grape p-2 text-rambutan-300 transition-colors hover:bg-longan-800 hover:text-rambutan-100 lg:hidden"
     >
       <svg class="size-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"></path>
@@ -112,7 +117,7 @@ const currentLabel = groups.flatMap((g) => g.links).find((l) => l.href === path)
                   href={link.href}
                   aria-current={isActive ? "page" : undefined}
                   class:list={[
-                    "relative flex items-center rounded-grape px-3 py-1.5 text-body transition-colors focus-visible:outline-2 focus-visible:outline-persimmon-400",
+                    "relative flex items-center rounded-grape px-3 py-1.5 text-body transition-colors",
                     isActive
                       ? "bg-longan-900 text-rambutan-50 before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-orb before:bg-persimmon-500"
                       : "text-rambutan-300 hover:bg-longan-900/60 hover:text-rambutan-100",
