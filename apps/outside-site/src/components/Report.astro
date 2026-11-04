@@ -1,6 +1,7 @@
 ---
 // The app's end-of-walk report, drawn from a real run of the game rules (see lib/sample-day.ts).
-import { bruhArt, itemArt, SKILL_ART, UI_ART } from '@steps/src/pixel/art.ts';
+import { bruhArt, UI_ART } from '@steps/src/pixel/art.ts';
+import { itemSprite, skillSprite } from '../lib/art';
 import { sampleDay } from '../lib/sample-day';
 import { spriteSvg } from '../lib/pixel';
 
@@ -21,7 +22,7 @@ const day = sampleDay;
   {
     day.levels.map((level) => (
       <div class="flex items-center gap-3">
-        <span set:html={spriteSvg(SKILL_ART[level.skill] ?? UI_ART.steps, 32)} />
+        <span set:html={spriteSvg(skillSprite(level.skill), 32)} />
         <span class="flex flex-col gap-0.5">
           <span class="font-bold text-blueberry-300 shadowed">{level.line}</span>
           {level.unlocks.length ? <span class="text-sm text-durian-400">new: {level.unlocks.join(', ')}</span> : null}
@@ -33,7 +34,7 @@ const day = sampleDay;
     {
       day.xp.map(({ skill, amount }) => (
         <li class="flex items-center gap-2">
-          <span set:html={spriteSvg(SKILL_ART[skill] ?? UI_ART.steps, 18)} />
+          <span set:html={spriteSvg(skillSprite(skill), 18)} />
           <span class="flex-1 text-rambutan-100">{skill}</span>
           <span class="label font-bold text-pandan-400 shadowed">+{amount.toLocaleString('en')} xp</span>
         </li>
@@ -44,7 +45,7 @@ const day = sampleDay;
     {
       day.loot.map((stack) => (
         <li class="well slot" aria-label={stack.label}>
-          <span set:html={spriteSvg(itemArt(stack.item), 35)} />
+          <span set:html={spriteSvg(itemSprite(stack.item), 35)} />
           <span class="qty" aria-hidden="true">{stack.qty}</span>
         </li>
       ))

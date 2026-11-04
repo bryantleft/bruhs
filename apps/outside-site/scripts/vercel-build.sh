@@ -9,6 +9,9 @@ if [ "${VERCEL_ENV:-}" = "production" ]; then
     echo "Create one with: npx convex deployment token create <name> --deployment earnest-wren-707" >&2
     exit 1
   fi
+  # Vercel doesn't wait for GitHub CI, so run the API's own checks here: a failing test must
+  # never reach production.
+  pnpm --filter bruhs-api check
   pnpm --filter bruhs-api exec convex deploy
 fi
 

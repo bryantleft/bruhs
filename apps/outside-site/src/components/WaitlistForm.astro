@@ -1,14 +1,12 @@
 ---
+import { WAITLIST_MESSAGES } from '../lib/messages';
 import { LEAVE_URL, WAITLIST_URL } from '../lib/waitlist';
 
 // `stacked` keeps the field above the button, for narrow columns at any screen width.
 // `leave` turns the form into the privacy page's "remove my email" form.
 type Props = Readonly<{ id: string; error?: 'invalid' | 'busy'; stacked?: boolean; leave?: boolean }>;
 const { id, error, stacked = false, leave = false } = Astro.props;
-const MESSAGES = {
-  invalid: "that email doesn't look right. check it and try again.",
-  busy: 'lots of people are signing up right now. try again in a minute.',
-} as const;
+const ERRORS = { invalid: 'invalid_email', busy: 'rate_limited' } as const;
 const label = leave ? 'remove my email' : 'join the waitlist';
 ---
 
@@ -17,7 +15,6 @@ const label = leave ? 'remove my email' : 'join the waitlist';
   action={leave ? LEAVE_URL : WAITLIST_URL}
   data-waitlist={leave ? 'leave' : 'join'}
   class="flex flex-col gap-3"
-  aria-describedby={`${id}-status ${id}-note`}
 >
   <label for={`${id}-email`} class="label text-rambutan-300">your email</label>
   <div class:list={['flex flex-col gap-3', !stacked && 'sm:flex-row']}>
@@ -31,6 +28,7 @@ const label = leave ? 'remove my email' : 'join the waitlist';
       maxlength="254"
       placeholder="you@example.com"
       aria-invalid={error === 'invalid' ? 'true' : undefined}
+      aria-describedby={`${id}-status ${id}-note`}
       class="well min-h-[52px] min-w-0 flex-1 px-4 font-pixel text-lg text-rambutan-50 placeholder:text-longan-500"
     />
     <button type="submit" class="button" data-label={label}>{label}</button>
@@ -40,7 +38,7 @@ const label = leave ? 'remove my email' : 'join the waitlist';
     <label>website <input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
   </div>
   <p id={`${id}-status`} role="status" class="min-h-6 text-base text-lychee-400" data-status>
-    {error ? MESSAGES[error] : ''}
+    {error ? WAITLIST_MESSAGES[ERRORS[error]] : ''}
   </p>
   <p id={`${id}-note`} class="text-sm text-rambutan-500">
     {
@@ -58,14 +56,9 @@ const label = leave ? 'remove my email' : 'join the waitlist';
 
 <script>
   // Progressive enhancement: without JavaScript the form posts and Convex redirects to a result page.
-  const MESSAGES = {
-    joined: "you're on the list. we'll email you when outside launches.",
-    left: 'done. that email is off the list.',
-    invalid_email: "that email doesn't look right. check it and try again.",
-    rate_limited: 'lots of people are signing up right now. try again in a minute.',
-    failed: "couldn't reach the waitlist. check your connection and try again.",
-  } as const;
-  type Reply = keyof typeof MESSAGES;
+  import { WAITLIST_MESSAGES as MESSAGES, type WaitlistMessage as Reply } from '../lib/messages';
+
+  // Replies the server names; anything else it refuses is its problem, not the visitor's.
   const SERVER_ERRORS: readonly Reply[] = ['invalid_email', 'rate_limited'];
   function formBody(form: HTMLFormElement): URLSearchParams {
     const body = new URLSearchParams();
@@ -75,7 +68,7 @@ const label = leave ? 'remove my email' : 'join the waitlist';
   function replyOf(response: Response, body: unknown, done: Reply): Reply {
     if (response.ok) return done;
     const error = body && typeof body === 'object' && 'error' in body ? body.error : null;
-    return SERVER_ERRORS.find((reply) => reply === error) ?? 'failed';
+    return SERVER_ERRORS.find((reply) => reply === error) ?? 'server';
   }
   for (const form of document.querySelectorAll<HTMLFormElement>('form[data-waitlist]')) {
     const status = form.querySelector<HTMLElement>('[data-status]');
@@ -87,7 +80,7 @@ const label = leave ? 'remove my email' : 'join the waitlist';
       if (!status || !button || !input) return;
       button.disabled = true;
       button.textContent = done === 'left' ? 'removing…' : 'joining…';
-      let reply: Reply = 'failed';
+      let reply: Reply = 'offline';
       try {
         // A urlencoded body keeps this a simple CORS request: no preflight round trip.
         const response = await fetch(form.action, {

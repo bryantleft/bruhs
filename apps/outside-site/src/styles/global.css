@@ -47,8 +47,9 @@ svg {
   font-family: var(--font-pixel);
   font-weight: 700;
   font-size: 18px;
-  color: var(--color-rambutan-50);
-  text-shadow: 2px 2px 0 #0a0a0a;
+  /* Ink on persimmon-500 is 6.3:1; light text on it was 2.9:1 and failed WCAG AA. */
+  color: #0a0a0a;
+  text-shadow: 1px 1px 0 var(--color-durian-300);
   background: var(--color-persimmon-500);
   border: 2px solid;
   border-color: var(--color-durian-400) var(--color-persimmon-800) var(--color-persimmon-800) var(--color-durian-400);

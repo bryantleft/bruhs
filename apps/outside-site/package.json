@@ -9,8 +9,9 @@
     "dev": "portless run astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "check": "astro check",
-    "astro": "astro"
+    "check": "astro check && pnpm test",
+    "astro": "astro",
+    "test": "node --experimental-strip-types --test src/lib/*.test.ts"
   },
   "portless": {
     "name": "outside-bruhs"

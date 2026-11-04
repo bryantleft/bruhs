@@ -13,6 +13,9 @@ import {
 } from '@steps/src/pixel/scene.ts';
 import { palette } from '@steps/src/theme/palette.ts';
 
+// Always declared, so the same markup works inline and as a standalone .svg file or sharp input.
+const XMLNS = 'xmlns="http://www.w3.org/2000/svg"';
+
 function escape(value: string): string {
   return value.replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`);
 }
@@ -22,7 +25,7 @@ export function spriteSvg(art: Art, size: number, label?: string): string {
   const paths = artPaths(art)
     .map(([fill, d]) => `<path fill="${fill}" d="${d}"/>`)
     .join('');
-  return `<svg ${role} width="${size}" height="${size}" viewBox="0 0 ${art.w} ${art.h}" shape-rendering="crispEdges">${paths}</svg>`;
+  return `<svg ${XMLNS} ${role} width="${size}" height="${size}" viewBox="0 0 ${art.w} ${art.h}" shape-rendering="crispEdges">${paths}</svg>`;
 }
 
 const STILL = { skin: 'original', night: false, frame: 0, working: false, walking: false } as const;
@@ -39,7 +42,7 @@ export function sceneSvg(
     : 'width="100%"';
   const role = options.label ? `role="img" aria-label="${escape(options.label)}"` : 'aria-hidden="true"';
   const body = shapePaths(sceneShapes({ ...STILL, ...input }));
-  return `<svg ${role} ${size} viewBox="0 ${crop} ${SCENE_WIDTH} ${viewHeight}" preserveAspectRatio="xMidYMid slice" shape-rendering="crispEdges">${body}</svg>`;
+  return `<svg ${XMLNS} ${role} ${size} viewBox="0 ${crop} ${SCENE_WIDTH} ${viewHeight}" preserveAspectRatio="xMidYMid slice" shape-rendering="crispEdges">${body}</svg>`;
 }
 
 const shapePaths = (shapes: readonly SceneShape[]): string =>

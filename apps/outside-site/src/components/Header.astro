@@ -1,9 +1,18 @@
 ---
 import { bruhArt } from '@steps/src/pixel/art.ts';
 import { spriteSvg } from '../lib/pixel';
+
+// `overlay` floats the bar over the page's first section (the home hero) instead of taking space.
+type Props = Readonly<{ overlay?: boolean }>;
+const { overlay = false } = Astro.props;
 ---
 
-<header class="relative mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-5 py-5">
+<header
+  class:list={[
+    'mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-5 py-5',
+    overlay ? 'absolute inset-x-0 top-0 z-10' : 'relative',
+  ]}
+>
   <a href="/" class="flex items-center gap-3 text-durian-400 outlined" aria-label="bruhs / outside, home">
     <Fragment set:html={spriteSvg(bruhArt('original'), 32)} />
     <span class="text-lg font-bold">bruhs / outside</span>
