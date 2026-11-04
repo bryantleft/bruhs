@@ -27,6 +27,7 @@ import { atBank, atStore, capacityOf, nextBagUpgrade, townsWith } from '../../ga
 import {
   countOf,
   formatMod,
+  formatPercent,
   keyItem,
   keyMods,
   keyName,
@@ -83,7 +84,7 @@ function Inventory({ onOpen }: Readonly<{ onOpen: (open: Open) => void }>): Reac
         ) : null}
         <SlotGrid
           cells={cells}
-          label="Inventory"
+          label="Bag"
           onPress={(key) => onOpen({ key, origin: { from: 'inventory' } })}
         />
         {atBank(game) && keys.length ? (
@@ -114,9 +115,7 @@ function Inventory({ onOpen }: Readonly<{ onOpen: (open: Open) => void }>): Reac
             <Slot art={itemArt(buff.id)} size={44} />
             <Text style={[styles.body, styles.grow]}>
               {buff.name}:{' '}
-              {buff.buff?.mods
-                .map((mod) => `+${Math.round(mod.value * 100)}% ${statLabel(mod.stat)}`)
-                .join(', ')}
+              {buff.buff?.mods.map((mod) => `+${formatPercent(mod.value)} ${statLabel(mod.stat)}`).join(', ')}
             </Text>
           </View>
         ) : (
@@ -209,7 +208,7 @@ function Gear({ onOpen }: Readonly<{ onOpen: (open: Open) => void }>): React.JSX
             <View key={stat} style={styles.statCell}>
               <Text style={styles.small}>{statLabel(stat)}</Text>
               <Text style={[styles.statValue, global[stat] > 0 && { color: color.success }]}>
-                {stat === 'slots' ? `${capacityOf(game)}` : `+${Math.round(global[stat] * 1000) / 10}%`}
+                {stat === 'slots' ? `${capacityOf(game)}` : `+${formatPercent(global[stat])}`}
               </Text>
             </View>
           ))}
@@ -221,7 +220,7 @@ function Gear({ onOpen }: Readonly<{ onOpen: (open: Open) => void }>): React.JSX
             .filter(
               (stat) => totals[stat] - global[stat] > 0.0001 || (stat === 'efficiency' && totals[stat] > 0),
             )
-            .map((stat) => `+${Math.round(totals[stat] * 1000) / 10}% ${statLabel(stat)}`);
+            .map((stat) => `+${formatPercent(totals[stat])} ${statLabel(stat)}`);
           return (
             <View key={skill.id} style={styles.skillRow}>
               <Text style={styles.skillName}>{skill.name}</Text>

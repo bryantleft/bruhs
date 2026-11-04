@@ -23,7 +23,7 @@ import {
   travelCost,
   unspentSteps,
 } from '../../game/game';
-import { keyItem, keyName, slotsUsed, totalsFor } from '../../game/items';
+import { formatPercent, keyItem, keyName, slotsUsed, statLabel, totalsFor } from '../../game/items';
 import { stopReasonText } from '../../game/session';
 import { useScreenFocus } from '../../navigation/useScreenFocus';
 import { SKILL_ART } from '../../pixel/art';
@@ -112,10 +112,14 @@ function StatusPanel({ onDetails }: Readonly<{ onDetails: () => void }>): React.
         {totals.doubleAction + totals.doubleResult + totals.preserve > 0 ? (
           <Text style={[styles.detail, { color: color.success }]}>
             {[
-              totals.doubleAction > 0 ? `${Math.round(totals.doubleAction * 100)}% double action` : null,
-              totals.doubleResult > 0 ? `${Math.round(totals.doubleResult * 100)}% double result` : null,
+              totals.doubleAction > 0
+                ? `${formatPercent(totals.doubleAction)} ${statLabel('doubleAction')}`
+                : null,
+              totals.doubleResult > 0
+                ? `${formatPercent(totals.doubleResult)} ${statLabel('doubleResult')}`
+                : null,
               totals.preserve > 0 && activity.inputs
-                ? `${Math.round(totals.preserve * 100)}% save materials`
+                ? `${formatPercent(totals.preserve)} ${statLabel('preserve')}`
                 : null,
             ]
               .filter(Boolean)

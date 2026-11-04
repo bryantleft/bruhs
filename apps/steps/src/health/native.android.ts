@@ -13,7 +13,7 @@ export async function readHealthSteps(request: HealthRequest): Promise<HealthRea
   if (status !== health.SdkAvailabilityStatus.SDK_AVAILABLE)
     return { status: 'unavailable', reason: 'device' };
   if (!(await health.initialize()))
-    throw new Error('Health Connect could not start. Open Health Connect and sync again.');
+    throw new Error('Health Connect couldn’t start. open Health Connect, then sync again.');
   const permissions = request.requestPermission
     ? await health.requestPermission([{ accessType: 'read', recordType: 'Steps' }])
     : await health.getGrantedPermissions();

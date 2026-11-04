@@ -95,7 +95,7 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
               ...state,
               save: {
                 status: 'error',
-                message: 'Your walk could not be saved. Free up device storage, then retry.',
+                message: 'couldn’t save your walk. free up space on this device, then retry.',
               },
             });
         }
@@ -140,7 +140,7 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
           publish({
             ...state,
             loading: 'error',
-            loadError: 'Device storage could not be opened. Try opening your walk again.',
+            loadError: 'couldn’t open this device’s storage. try opening your walk again.',
           });
       }
     },
@@ -158,18 +158,18 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
         const availability = await ports.availability();
         if (!alive || request !== epoch) return;
         if (availability === 'unsupported') {
-          locationError('Location is not available here. Try another browser or the mobile app.');
+          locationError('location isn’t available here. try another browser or the mobile app.');
           return;
         }
         if (availability === 'disabled') {
-          locationError('Location services are off. Turn them on, then start your walk again.', true);
+          locationError('location services are off. turn them on, then start your walk again.', true);
           return;
         }
         const permission = await ports.requestPermission();
         if (!alive || request !== epoch) return;
         if (permission.status === 'denied') {
           locationError(
-            'Allow location access to draw your route. Your step progress is safe.',
+            'allow location access to draw your route. your step progress is safe.',
             !permission.canAskAgain,
           );
           return;
@@ -199,14 +199,14 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
           (reason) => {
             if (!alive || request !== epoch) return;
             if (reason === 'permission')
-              locationError('Allow location access to draw your route. Your step progress is safe.', true);
-            else locationError('GPS could not find your location. Try again.');
+              locationError('allow location access to draw your route. your step progress is safe.', true);
+            else locationError('GPS couldn’t find your location. try again.');
           },
         );
         if (!alive || request !== epoch) watcher.remove();
         else subscription = watcher;
       } catch {
-        if (alive && request === epoch) locationError('Location could not start. Try again.');
+        if (alive && request === epoch) locationError('couldn’t start location. try again.');
       }
     },
     pause,
@@ -221,7 +221,7 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
     },
     async clear(): Promise<ClearWalkResult> {
       if (!alive || state.loading === 'loading')
-        return { ok: false, message: 'Your walk is still opening. Try erasing it again.' };
+        return { ok: false, message: 'your walk is still opening. try erasing it again.' };
       pause();
       loadId += 1;
       publish({ ...state, loading: 'loading', location: { status: 'idle' } });
@@ -231,7 +231,7 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
         if (alive) publish({ ...EMPTY_EXPLORER, loading: 'ready' });
         return { ok: true };
       } catch {
-        const message = 'This walk could not be deleted. Try deleting it again.';
+        const message = 'couldn’t delete this walk. try deleting it again.';
         if (alive)
           publish({
             ...state,

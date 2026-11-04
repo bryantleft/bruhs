@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { type Activity, getItem, QUALITIES } from '../game/content';
 import { useGame } from '../game/GameProvider';
 import { actionPreview, activityBlocker, available, runsLeft, skillLevel, unspentSteps } from '../game/game';
+import { formatPercent, statLabel } from '../game/items';
 import { itemArt, SKILL_ART } from '../pixel/art';
 import { Panel, QUALITY_TINT, Slot } from '../pixel/chrome';
 import { Sprite } from '../pixel/Sprite';
@@ -9,12 +10,8 @@ import { color, font, shadow, space } from '../theme/theme';
 import { Sheet } from './Sheet';
 import { Button } from './ui';
 
-function percent(value: number): string {
-  return `${Math.round(value * 1000) / 10}%`;
-}
-
 function odds(chance: number): string {
-  return chance >= 0.01 ? percent(chance) : `1 in ${Math.round(1 / chance).toLocaleString()}`;
+  return chance >= 0.01 ? formatPercent(chance) : `1 in ${Math.round(1 / chance).toLocaleString()}`;
 }
 
 function Stat({
@@ -94,26 +91,26 @@ export function ActivitySheet({
       <Panel title="stats" tone="well">
         <View style={styles.grid}>
           <Stat label="xp per action" value={`${preview.xp}`} good={preview.totals.xp > 0} />
-          <Stat label="work speed" value={`+${percent(efficiency)}`} good={efficiency > 0} />
-          <Stat label="from levels" value={`+${percent(preview.levelEfficiency)}`} />
+          <Stat label="work speed" value={`+${formatPercent(efficiency)}`} good={efficiency > 0} />
+          <Stat label="from levels" value={`+${formatPercent(preview.levelEfficiency)}`} />
           <Stat
             label="extra action chance"
-            value={percent(preview.totals.doubleAction)}
+            value={formatPercent(preview.totals.doubleAction)}
             good={preview.totals.doubleAction > 0}
           />
           <Stat
             label="double loot chance"
-            value={percent(preview.totals.doubleResult)}
+            value={formatPercent(preview.totals.doubleResult)}
             good={preview.totals.doubleResult > 0}
           />
           {activity.inputs?.length ? (
             <Stat
-              label="save materials"
-              value={percent(preview.totals.preserve)}
+              label={statLabel('preserve')}
+              value={formatPercent(preview.totals.preserve)}
               good={preview.totals.preserve > 0}
             />
           ) : null}
-          {activity.burn ? <Stat label="burn chance" value={percent(preview.burn)} /> : null}
+          {activity.burn ? <Stat label="burn chance" value={formatPercent(preview.burn)} /> : null}
           <Stat label="actions per 1,000 steps" value={(perThousand * doubled).toFixed(1)} />
           <Stat
             label="xp per 1,000 steps"
@@ -168,7 +165,7 @@ export function ActivitySheet({
             {QUALITIES.map((tier, index) => (
               <View key={tier.id} style={styles.qualityCell}>
                 <Text style={[styles.qualityName, { color: QUALITY_TINT[index] }]}>{tier.name}</Text>
-                <Text style={styles.small}>{percent(preview.quality[index] ?? 0)}</Text>
+                <Text style={styles.small}>{formatPercent(preview.quality[index] ?? 0)}</Text>
               </View>
             ))}
           </View>

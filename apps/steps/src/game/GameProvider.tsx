@@ -242,7 +242,7 @@ export function GameProvider({ children }: PropsWithChildren): React.JSX.Element
   const reset = (): void => {
     if (resetPending.current || loadPending.current) return;
     if (!recorder) {
-      setResetError('Your walk is still opening. Try erasing it again.');
+      setResetError('your walk is still opening. try erasing it again.');
       return;
     }
     resetPending.current = true;
@@ -265,7 +265,7 @@ export function GameProvider({ children }: PropsWithChildren): React.JSX.Element
       .then((result) => {
         if (!result.ok) setResetError(result.message);
       })
-      .catch(() => setResetError('Your journey could not be erased. Try again.'))
+      .catch(() => setResetError('couldn’t erase your journey. try again.'))
       .finally(() => {
         resetPending.current = false;
         setResetting(false);

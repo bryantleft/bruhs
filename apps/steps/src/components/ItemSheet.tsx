@@ -12,7 +12,16 @@ import {
   requirementText,
   townsWith,
 } from '../game/game';
-import { formatMod, keyItem, keyMods, keyName, keyValue, parseKey } from '../game/items';
+import {
+  formatMod,
+  formatPercent,
+  itemRange,
+  keyItem,
+  keyMods,
+  keyName,
+  keyValue,
+  parseKey,
+} from '../game/items';
 import { itemArt } from '../pixel/art';
 import { QUALITY_TINT, Slot, Tag } from '../pixel/chrome';
 import { color, font, shadow, space } from '../theme/theme';
@@ -24,10 +33,6 @@ export type ItemOrigin =
   | Readonly<{ from: 'bank' }>
   | Readonly<{ from: 'gear'; slot: GearSlot }>
   | Readonly<{ from: 'tool' }>;
-
-function percent(value: number): string {
-  return `${Math.round(value * 1000) / 10}%`;
-}
 
 export function ItemSheet({
   itemKey,
@@ -178,11 +183,8 @@ export function ItemSheet({
           {item.loot.table.map((entry) => (
             <View key={entry.item} style={styles.lootRow}>
               <Slot art={itemArt(entry.item)} size={28} />
-              <Text style={styles.lootName}>
-                {entry.min === entry.max ? entry.min : `${entry.min}–${entry.max}`}{' '}
-                {getItem(entry.item)?.name}
-              </Text>
-              <Text style={styles.small}>{percent(entry.weight / lootWeight)}</Text>
+              <Text style={styles.lootName}>{itemRange(entry.min, entry.max, entry.item)}</Text>
+              <Text style={styles.small}>{formatPercent(entry.weight / lootWeight)}</Text>
             </View>
           ))}
           <Text style={styles.small}>a quarter of chests roll twice.</Text>

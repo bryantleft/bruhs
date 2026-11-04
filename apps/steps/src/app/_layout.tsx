@@ -129,7 +129,7 @@ export default function RootLayout(): React.JSX.Element {
     return (
       <ScrollView style={styles.loading} contentContainerStyle={styles.loadingContent}>
         <Text style={{ color: color.text }}>
-          The app’s fonts could not load: {error.message}. Restart the app to try again.
+          couldn’t load the app’s fonts ({error.message}). restart the app to try again.
         </Text>
       </ScrollView>
     );

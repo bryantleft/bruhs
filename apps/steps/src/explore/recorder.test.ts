@@ -177,7 +177,7 @@ test('location denial and disabled services leave existing step data outside the
   assert.equal(denied.state().walk, null);
   assert.deepEqual(denied.state().location, {
     status: 'error',
-    message: 'Allow location access to draw your route. Your step progress is safe.',
+    message: 'allow location access to draw your route. your step progress is safe.',
     settings: true,
   });
 });
@@ -312,7 +312,7 @@ test('a failed first GPS fix preserves the previous recap even after permission 
   assert.deepEqual(h.state().walk, recap);
   assert.deepEqual(h.state().location, {
     status: 'error',
-    message: 'Allow location access to draw your route. Your step progress is safe.',
+    message: 'allow location access to draw your route. your step progress is safe.',
     settings: true,
   });
 });

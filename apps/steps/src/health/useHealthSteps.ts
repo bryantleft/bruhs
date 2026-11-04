@@ -65,7 +65,7 @@ export function useHealthSteps(
       setTracking({
         status: 'error',
         message:
-          'Health settings could not open. Open Apple Health or Health Connect on your phone to manage step access.',
+          'couldn’t open Health settings. open Apple Health or Health Connect on your phone to manage step access.',
       }),
     );
   }, []);

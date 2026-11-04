@@ -285,7 +285,7 @@ export default function ExploreScreen(): React.JSX.Element {
               onPress={() => {
                 void Linking.openSettings().catch(() =>
                   setSettingsError(
-                    'Settings could not open. Allow location in your phone settings, then return here.',
+                    'couldn’t open settings. allow location in your phone settings, then return here.',
                   ),
                 );
               }}

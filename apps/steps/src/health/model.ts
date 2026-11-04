@@ -50,14 +50,14 @@ export function parseHealthDays(
   const dates = new Set<string>();
   for (const row of rows) {
     if (Number.isNaN(row.start.getTime()) || row.start < start || row.start > end)
-      throw new Error('The health provider returned a step date outside the requested range. Sync again.');
+      throw new Error('your Health app returned a step date outside the requested range. sync again.');
     if (row.steps === undefined) continue;
     // Aggregated HealthKit quantities may be fractional when a sample crosses a
     // day boundary. Round once after aggregation, never round individual samples.
     if (!Number.isFinite(row.steps) || row.steps < 0 || !Number.isSafeInteger(Math.round(row.steps)))
-      throw new Error('The health provider returned an invalid step total. Sync again.');
+      throw new Error('your Health app returned an invalid step total. sync again.');
     const date = dateKey(row.start);
-    if (dates.has(date)) throw new Error('The health provider returned the same day twice. Sync again.');
+    if (dates.has(date)) throw new Error('your Health app returned the same day twice. sync again.');
     dates.add(date);
     result.push({ date, steps: Math.round(row.steps) });
   }
@@ -73,7 +73,7 @@ export function parseHealthKitDays(
   // requested interval. Keep the in-range bucket, including its crossing steps.
   const requested = rows.flatMap((row) => {
     if (!row.startDate || Number.isNaN(row.startDate.getTime()))
-      throw new Error('Apple Health returned a step total without a valid date. Sync again.');
+      throw new Error('Apple Health returned a step total without a valid date. sync again.');
     return row.startDate >= start && row.startDate <= end
       ? [{ start: row.startDate, steps: row.sumQuantity?.quantity }]
       : [];

@@ -19,6 +19,7 @@ import {
 } from './content.ts';
 import {
   actionPreview,
+  activityBlocker,
   advance,
   capacityOf,
   createDemoGame,
@@ -51,7 +52,7 @@ import {
   unspentSteps,
   updateGame,
 } from './game.ts';
-import { countOf, keyMods, parseKey, slotsUsed } from './items.ts';
+import { countOf, formatPercent, itemCount, itemRange, keyMods, parseKey, slotsUsed } from './items.ts';
 import { loadFailureCopy } from './session.ts';
 import { levelForXp, XP_TABLE, xpForLevel } from './xp.ts';
 
@@ -738,4 +739,14 @@ test('screens read item sources, banks and quest needs from the rules', () => {
   assert.deepEqual(questsNeeding(game, stack.item), []);
   const started = { ...game, quests: { [quest.id]: 'started' as const } };
   assert.deepEqual(questsNeeding(started, stack.item)[0], { quest, qty: stack.qty });
+});
+
+test('percents, loot ranges and requirement hints follow the copy rules', () => {
+  assert.equal(formatPercent(0.125), '12.5%');
+  assert.equal(formatPercent(0.04), '4%');
+  assert.equal(itemRange(1, 1, 'minnow'), itemCount(1, 'minnow'));
+  assert.equal(itemRange(2, 4, 'minnow'), `2–4 ${itemCount(2, 'minnow').slice(2)}`);
+  const smelt = getActivity('smelt-bronze');
+  assert.ok(smelt);
+  assert.equal(activityBlocker(at('bruhbridge'), smelt), `needs ${itemCount(1, 'copper-ore')}`);
 });

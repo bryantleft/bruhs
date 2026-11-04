@@ -51,7 +51,7 @@ export function createHealthSync(
               message:
                 error instanceof Error
                   ? error.message
-                  : 'Health steps could not be read. Check step access and sync again.',
+                  : 'couldn’t read Health steps. check step access, then sync again.',
             });
         } finally {
           if (generation === current) pending = null;

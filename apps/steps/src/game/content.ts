@@ -25,7 +25,7 @@ export const STATS = {
   chest: { name: 'chest find', blurb: 'better odds of finding chests.' },
   travel: { name: 'travel speed', blurb: 'fewer steps on the road.' },
   quality: { name: 'craft quality', blurb: 'better odds of fine crafted gear.' },
-  slots: { name: 'inventory slots', blurb: 'extra space in your bag.' },
+  slots: { name: 'bag slots', blurb: 'extra space in your bag.' },
 } as const;
 export type StatId = keyof typeof STATS;
 export const STAT_IDS = Object.keys(STATS) as StatId[];
