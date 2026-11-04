@@ -35,6 +35,10 @@ Drop into any HTML document. All utilities are pre-compiled; fonts load from the
 - **Document defaults:** canvas and text colours, Monaspace as the default family, and the focus ring, set in the base layer.
 - **Component classes:** `btn`, `input`, `surface-*`, `dialog`, `popover`, `menu-item`, `tooltip`, `segmented`, `kbd`, `code-block`, `spinner`, `empty-state`.
 
+### Lint
+
+`bruhs-theme-lint [paths]` fails on values outside the vocabulary: default Tailwind palettes, radii and type sizes, drop shadows, raw durations and z-indexes, and colour literals. Put it in your `check` script. `--skip <rule,…>` turns rules off; a `bruhs-theme-ignore` comment exempts one line.
+
 ### Mascot geometry
 
 `@bruhs/theme/logo` exports `bruhGeometry`: the viewBox, base circle, eye and mouth sizes, and the face position for each variant (`left`, `original`, `right`). It's plain TypeScript data, so draw the mascot with whatever renders SVG.

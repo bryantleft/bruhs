@@ -20,6 +20,16 @@ Ensure fonts are served at `/fonts/*` (the CSS references them via relative path
 
 The import also sets document defaults (canvas colour, text colour, Monaspace Neon as the default and `font-mono` family, and the persimmon focus ring), so an unstyled page is already Bruhs. See §12.
 
+### Keep it in the vocabulary
+
+The package ships `bruhs-theme-lint`, a dependency-free checker for the hard bans in §14 plus raw sizes, durations, z-indexes and colour literals. Add it to your `check` script:
+
+```json
+"check": "tsc && bruhs-theme-lint src"
+```
+
+`--skip type,weight` turns rules off for a deliberate dialect (a pixel-font site, say). Mark a one-off exception with a `bruhs-theme-ignore` comment on the line or the line above, and say why.
+
 ### Option B — Zero-build / cross-language (Leptos, Go, Rails, plain HTML)
 
 ```html

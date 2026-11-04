@@ -30,7 +30,8 @@
     "LICENSE"
   ],
   "bin": {
-    "bruhs-theme-fonts": "./scripts/copy-fonts.mjs"
+    "bruhs-theme-fonts": "./scripts/copy-fonts.mjs",
+    "bruhs-theme-lint": "./scripts/lint.mjs"
   },
   "exports": {
     "./styles/*": "./src/styles/*",
