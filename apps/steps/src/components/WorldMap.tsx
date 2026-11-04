@@ -1,141 +1,15 @@
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { G, Path } from 'react-native-svg';
-import { getLocation, LOCATIONS, ROADS, type SkinId } from '../game/content';
+import { LOCATIONS, type SkinId } from '../game/content';
 import { bruhArt } from '../pixel/art';
 import { artPaths } from '../pixel/Sprite';
+import { dottedLine, MAP_HEIGHT, MAP_WIDTH, roadPath, terrainPaths, tileCenter } from '../pixel/world';
 import { palette } from '../theme/palette';
 import { color, font, layout, shadow } from '../theme/theme';
 
-export const MAP_COLUMNS = 24;
-export const MAP_ROWS = 32;
-const TILE = 4;
-const W = MAP_COLUMNS * TILE;
-const H = MAP_ROWS * TILE;
-
-// ~ sea · - lake · . grass · T forest · : sand · ^ mountain · , marsh · M moonlit grove · X crater
-export const MAP_TILES: readonly string[] = [
-  '~~~~~~~~~~~~~~~~~~~~~~~~',
-  '~~~~...........,,,,~~~~~',
-  '~~...TT.......,,,,,,~~~~',
-  '~..TTTT......,,,-,,,,~~~',
-  '~.TTT----....,,---,,,~~~',
-  '~.TT------...,,,,,,,..~~',
-  '~.T--------.....,,....~~',
-  '~.T--------...........~~',
-  '~..-------.......TT...~~',
-  '~...-----.......TTT..~~~',
-  '~.TT.............T...:~~',
-  '~TTTT...............:~~~',
-  '~TTTTT..............:~~~',
-  '~TTTTT..............::~~',
-  '~TTTT................:~~',
-  '~.TT..................~~',
-  '~.....................~~',
-  '~.....................~~',
-  '~...............^.....~~',
-  '~^^............^^^....~~',
-  '~^^^...........^^.....~~',
-  '~^^^^.....MMMM........~~',
-  '~^^^^^...MMMMMM..:....~~',
-  '~^^^^^^..MMMMMMM::::..~~',
-  '~^^^^^^^.MMMMM::::::::~~',
-  '~^^^^^^......:::::::::~~',
-  '~^^^^^^.....::::::::::~~',
-  '~^^^^^.....:::::::::::~~',
-  '~~^^^.....::::::::::::~~',
-  '~~XXXXX..:::::::::::~~~~',
-  '~~XXXXXX~~~~~~~~~~~~~~~~',
-  '~~~XXX~~~~~~~~~~~~~~~~~~',
-];
-
-type Terrain = Readonly<{ base: string; detail: string; pattern: readonly string[] }>;
-const TERRAIN: Readonly<Record<string, Terrain>> = {
-  '~': {
-    base: palette['blueberry-800'],
-    detail: palette['blueberry-600'],
-    pattern: ['....', '.##.', '....', '#..#'],
-  },
-  '-': {
-    base: palette['blueberry-600'],
-    detail: palette['blueberry-400'],
-    pattern: ['....', '..##', '....', '##..'],
-  },
-  '.': {
-    base: palette['pandan-500'],
-    detail: palette['pandan-400'],
-    pattern: ['....', '.#..', '....', '...#'],
-  },
-  T: {
-    base: palette['pandan-700'],
-    detail: palette['pandan-400'],
-    pattern: ['.##.', '####', '.##.', '....'],
-  },
-  ':': {
-    base: palette['durian-500'],
-    detail: palette['durian-600'],
-    pattern: ['....', '..#.', '....', '#...'],
-  },
-  '^': {
-    base: palette['rambutan-700'],
-    detail: palette['rambutan-300'],
-    pattern: ['.#..', '###.', '####', '....'],
-  },
-  ',': {
-    base: palette['pandan-800'],
-    detail: palette['mangosteen-500'],
-    pattern: ['....', '.#..', '...#', '....'],
-  },
-  M: {
-    base: palette['mangosteen-800'],
-    detail: palette['rambutan-100'],
-    pattern: ['....', '.#..', '...#', '#...'],
-  },
-  X: {
-    base: palette['longan-800'],
-    detail: palette['persimmon-400'],
-    pattern: ['.#..', '....', '...#', '#...'],
-  },
-};
-
-function tileCenter(id: string): Readonly<{ x: number; y: number }> {
-  const place = getLocation(id);
-  return { x: (place?.x ?? 0) * TILE + TILE / 2, y: (place?.y ?? 0) * TILE + TILE / 2 };
-}
-
-function dottedLine(from: string, to: string, gap = 2): string {
-  const a = tileCenter(from);
-  const b = tileCenter(to);
-  const steps = Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y));
-  let d = '';
-  for (let index = 0; index <= steps; index += gap) {
-    const x = Math.round(a.x + ((b.x - a.x) * index) / steps);
-    const y = Math.round(a.y + ((b.y - a.y) * index) / steps);
-    d += `M${x} ${y}h1v1h-1z`;
-  }
-  return d;
-}
-
-function terrainPaths(): readonly (readonly [string, string])[] {
-  const paths = new Map<string, string>();
-  const add = (fill: string, d: string): void => {
-    paths.set(fill, (paths.get(fill) ?? '') + d);
-  };
-  MAP_TILES.forEach((row, ty) => {
-    for (let tx = 0; tx < row.length; tx += 1) {
-      const terrain = TERRAIN[row[tx] ?? '~'] ?? TERRAIN['~'];
-      if (!terrain) continue;
-      add(terrain.base, `M${tx * TILE} ${ty * TILE}h${TILE}v${TILE}h${-TILE}z`);
-      terrain.pattern.forEach((line, py) => {
-        for (let px = 0; px < line.length; px += 1)
-          if (line[px] === '#') add(terrain.detail, `M${tx * TILE + px} ${ty * TILE + py}h1v1h-1z`);
-      });
-    }
-  });
-  return [...paths];
-}
-
-let cachedTerrain: readonly (readonly [string, string])[] | null = null;
+const W = MAP_WIDTH;
+const H = MAP_HEIGHT;
 
 export function WorldMap({
   location,
@@ -152,8 +26,8 @@ export function WorldMap({
   travel: Readonly<{ path: readonly string[]; progress: number }> | null;
   locked: ReadonlySet<string>;
 }>): React.JSX.Element {
-  cachedTerrain ??= terrainPaths();
-  const roads = useMemo(() => ROADS.map(([a, b]) => dottedLine(a, b)).join(''), []);
+  const terrain = terrainPaths();
+  const roads = roadPath();
   const route = useMemo(() => {
     if (!travel) return '';
     let d = '';
@@ -183,7 +57,7 @@ export function WorldMap({
   return (
     <View style={styles.frame}>
       <Svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`}>
-        {cachedTerrain.map(([fill, d]) => (
+        {terrain.map(([fill, d]) => (
           <Path key={fill} d={d} fill={fill} />
         ))}
         <Path d={roads} fill={palette['durian-200']} />
