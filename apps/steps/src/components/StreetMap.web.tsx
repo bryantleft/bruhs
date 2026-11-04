@@ -305,6 +305,7 @@ export function StreetMap({ walk, skin, recenter, onStatus }: StreetMapProps): R
   }, []);
   return (
     <>
+      {/* biome-ignore lint/a11y/useSemanticElements: MapLibre mounts into this container div; the element stays as it was. */}
       <div
         ref={container}
         className="outside-street-map"

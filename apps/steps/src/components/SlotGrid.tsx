@@ -31,7 +31,7 @@ export function SlotGrid({
         ? cells.map((cell, index) =>
             cell ? (
               <Pressable
-                // Split stacks share a key, so the position keeps them distinct.
+                // biome-ignore lint/suspicious/noArrayIndexKey: split stacks share a key, so the position keeps them distinct.
                 key={`${cell.key}-${index}`}
                 accessibilityRole="button"
                 accessibilityLabel={`${keyName(cell.key)}, ${cell.qty}`}

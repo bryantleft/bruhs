@@ -30,7 +30,6 @@ function departureError(error: PartyError, action: 'leave' | 'delete'): string {
 function Member({ member, mine }: Readonly<{ member: PartyMember; mine: boolean }>): React.JSX.Element {
   const rank = member.place === null ? '—' : `${member.tied && member.tied > 1 ? '=' : ''}${member.place}`;
   return (
-    // biome-ignore lint/a11y/useSemanticElements: React Native View supplies the platform element.
     <View
       style={[styles.member, mine && styles.myRow]}
       accessible
@@ -485,7 +484,6 @@ function PartyContents({
               resets Monday · 00:00 UTC
             </Copy>
           </View>
-          {/* biome-ignore lint/a11y/useSemanticElements: React Native View supplies the platform element. */}
           <View style={styles.board} role="list" accessibilityLabel="Weekly party leaderboard">
             {rows.map((member) => (
               <Member key={member.id} member={member} mine={member.id === state.identity.userId} />
