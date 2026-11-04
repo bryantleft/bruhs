@@ -5,6 +5,8 @@ import { defineConfig } from 'astro/config';
 export default defineConfig({
   site: 'https://outside.bruhs.app',
   trailingSlash: 'always',
+  // Astro 7 defaults to 'jsx', which drops whitespace between inline elements. Keep v6 output.
+  compressHTML: true,
   vite: {
     plugins: [tailwindcss()],
     // Sprites, scenes, game data and fonts come straight from the game, so the page never drifts
