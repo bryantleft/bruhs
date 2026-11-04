@@ -179,59 +179,67 @@ svg {
   background-position: center bottom;
 }
 
-/* The fruitlands as one road: scenes edge to edge, scrolled sideways, aligned to the page column. */
-.strip {
-  --gutter: max(1.25rem, calc((100vw - 64rem) / 2 + 1.25rem));
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-snap-type: x proximity;
-  scroll-padding-inline: var(--gutter);
-  padding-inline: var(--gutter);
-  padding-bottom: 12px;
-  scrollbar-color: var(--color-longan-600) transparent;
-}
-
-.strip ol {
+/* The fruitlands: the app's world map beside the places, nearest first. */
+.world-map {
   outline: 2px solid #0a0a0a;
-  background: var(--color-longan-800);
+  background: var(--color-blueberry-800);
 }
 
-.strip-stop {
-  scroll-snap-align: start;
-  border-right: 2px solid #0a0a0a;
-}
-
-.strip-stop:last-child {
-  border-right: 0;
-}
-
-.strip-stop > svg {
+.world-map svg {
   display: block;
-  border-bottom: 2px solid #0a0a0a;
+  width: 100%;
+  height: auto;
 }
 
-.road {
-  position: relative;
-  height: 28px;
-}
-
-/* A dashed road through every stop, with a marker under each scene. */
-.road::before {
-  content: "";
+/* A name plate under its pin, readable over any terrain. Near an edge it grows inward. */
+.map-name {
   position: absolute;
-  inset-inline: 0;
-  top: 13px;
-  border-top: 2px dashed var(--color-durian-600);
+  translate: -50% 10px;
+  padding: 0 4px;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--color-rambutan-100);
+  background: rgb(10 8 6 / 0.72);
+  text-shadow: 1px 1px 0 #0a0a0a;
 }
 
-.road-marker {
-  position: absolute;
-  top: 8px;
-  left: 16px;
-  width: 12px;
-  height: 12px;
-  background: var(--color-durian-400);
-  outline: 2px solid #0a0a0a;
+.map-name:hover {
+  color: var(--color-durian-300);
+}
+
+.map-name-above {
+  translate: -50% calc(-100% - 10px);
+}
+
+.map-name-start {
+  translate: -8px 10px;
+}
+
+.map-name-end {
+  translate: calc(-100% + 8px) 10px;
+}
+
+.map-name-above.map-name-start {
+  translate: -8px calc(-100% - 10px);
+}
+
+.map-name-above.map-name-end {
+  translate: calc(-100% + 8px) calc(-100% - 10px);
+}
+
+.place:target {
+  border-color: var(--color-durian-300) var(--color-persimmon-800) var(--color-persimmon-800) var(--color-durian-300);
+}
+
+/* The place's scene in a fixed square, so every card shows it at the same zoom. */
+.place-scene {
+  overflow: hidden;
+}
+
+.place-scene svg {
+  display: block;
+  height: 100%;
 }
 
 /* An item slot from the app: count in the top-left corner. */

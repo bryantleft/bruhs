@@ -9,7 +9,7 @@ The page imports the game directly through the `@steps` alias in `astro.config.m
 
 So the page always matches the app, and its numbers come from the game:
 - **"a real first day"** (`src/lib/sample-day.ts`) runs a new save through the game's rules at build time: walk to pandan woods, chop, sync 8,000 steps. The report shows that run's numbers. The build fails if the day stops spending steps or ends somewhere else.
-- **The fruitlands strip** orders places by road distance from the starting town (`route`), and shows lock text from `locationBlocker`.
+- **The fruitlands** draws the app's world map (`src/pixel/world.ts`, shared with the map tab) beside the places, ordered by road distance from the starting town (`route`), with lock text and grey pins from `locationBlocker`.
 - **The hero** draws the town on a double-width canvas (`sceneShapes({ width })`). The bruh's hop and the drifting clouds are CSS only, and both stay still under reduced motion. The 1200×630 link-preview image (`/og.png`) is drawn at build time from the same scene and fonts. The game's web build links to it too.
 
 ## Develop

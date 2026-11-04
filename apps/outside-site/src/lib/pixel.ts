@@ -1,6 +1,7 @@
 // Server-side SVG for the game's own pixel art. Rendered at build time, so the page ships no
 // sprite JavaScript and always matches the app.
-import { type Art, BUSH, PINE, TREE } from '@steps/src/pixel/art.ts';
+import { LOCATIONS } from '@steps/src/game/content.ts';
+import { type Art, BUSH, bruhArt, INK, PINE, TREE } from '@steps/src/pixel/art.ts';
 import { artPaths } from '@steps/src/pixel/paths.ts';
 import {
   SCENE_GROUND,
@@ -11,6 +12,7 @@ import {
   sceneShapes,
   spriteAt,
 } from '@steps/src/pixel/scene.ts';
+import { MAP_HEIGHT, MAP_WIDTH, roadPath, terrainPaths, tileCenter } from '@steps/src/pixel/world.ts';
 import { palette } from '@steps/src/theme/palette.ts';
 
 // Always declared, so the same markup works inline and as a standalone .svg file or sharp input.
@@ -106,4 +108,32 @@ export function ridgeTile(from: string, to: string, phase = 0, height = 6): stri
   }
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SCENE_WIDTH}" height="${height}" viewBox="0 0 ${SCENE_WIDTH} ${height}" shape-rendering="crispEdges"><rect width="${SCENE_WIDTH}" height="${height}" fill="${from}"/><path fill="${to}" d="${rise}"/></svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+// The app's world map, pinned as the map tab draws a new save: the bruh stands in `home`,
+// shops are gold, places a new bruh can't reach yet are grey. Each pin carries `pin-<id>` so
+// the page can light it up from the place list.
+export function worldMapSvg(
+  options: Readonly<{ label: string; home: string; locked: ReadonlySet<string> }>,
+): string {
+  const terrain = terrainPaths()
+    .map(([fill, d]) => `<path fill="${fill}" d="${d}"/>`)
+    .join('');
+  const pins = LOCATIONS.map((place) => {
+    const { x, y } = tileCenter(place.id);
+    const fill =
+      place.id === options.home
+        ? palette['pandan-300']
+        : options.locked.has(place.id)
+          ? palette['rambutan-600']
+          : place.store
+            ? palette['durian-400']
+            : palette['lychee-400'];
+    return `<g class="pin pin-${place.id}"><path class="pin-ring" fill="${INK}" d="M${x - 3} ${y - 3}h6v6h-6z"/><path fill="${fill}" d="M${x - 2} ${y - 2}h4v4h-4z"/></g>`;
+  }).join('');
+  const home = tileCenter(options.home);
+  const bruh = artPaths(bruhArt('original'))
+    .map(([fill, d]) => `<path fill="${fill}" d="${d}"/>`)
+    .join('');
+  return `<svg ${XMLNS} role="img" aria-label="${escape(options.label)}" viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}" shape-rendering="crispEdges">${terrain}<path fill="${palette['durian-200']}" d="${roadPath()}"/>${pins}<g transform="translate(${home.x - 5} ${home.y - 13}) scale(0.625)">${bruh}</g></svg>`;
 }

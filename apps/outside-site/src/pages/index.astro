@@ -10,7 +10,8 @@ import Ridge from '../components/Ridge.astro';
 import WaitlistForm from '../components/WaitlistForm.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { itemSprite, skillSprite } from '../lib/art';
-import { heroSvg, sceneSvg, spriteSvg } from '../lib/pixel';
+import { MAP_HEIGHT, MAP_WIDTH, tileCenter } from '@steps/src/pixel/world.ts';
+import { heroSvg, sceneSvg, spriteSvg, worldMapSvg } from '../lib/pixel';
 import { SAMPLE_DATE, SAMPLE_STEPS, sampleDay } from '../lib/sample-day';
 
 const description =
@@ -24,6 +25,17 @@ const places = LOCATIONS.map((place) => {
   if (!road) throw new Error(`No road from ${START_LOCATION} to ${place.id}; the world map is disconnected.`);
   return { place, distance: road.distance, blocker: locationBlocker(fresh, place) };
 }).sort((a, b) => a.distance - b.distance);
+const mapSvg = worldMapSvg({
+  label: `map of the fruitlands: ${places.map(({ place }) => place.name).join(', ')}, joined by roads.`,
+  home: START_LOCATION,
+  locked: new Set(places.filter(({ blocker }) => blocker).map(({ place }) => place.id)),
+});
+const pinCss = places
+  .map(
+    ({ place: { id } }) =>
+      `.fruitlands:has(#place-${id}:hover, #place-${id}:target) .pin-${id} .pin-ring { fill: var(--color-rambutan-50); }`,
+  )
+  .join('\n');
 const pitch =
   'a pixel adventure that runs on walking. your daily steps sync in, and your bruh spends them travelling the fruitlands, chopping, mining, fishing, cooking and crafting.';
 const steps = [
@@ -115,39 +127,70 @@ const privacy = [
     </section>
 
     <Ridge from="longan-900" to="longan-950" phase={1} />
-    <section aria-labelledby="world" class="band bg-longan-950">
-      <div class="mx-auto flex max-w-5xl flex-col gap-2 px-5">
-        <h2 id="world" class="text-3xl font-bold text-durian-400 shadowed">the fruitlands</h2>
-        <p class="max-w-prose text-lg text-rambutan-300">
-          {LOCATIONS.length} places to walk to, from a cosy town to the edge of a fallen star. far places cost
-          more steps to reach, and some open only after a quest.
-        </p>
+    <section aria-labelledby="world" class="fruitlands band bg-longan-950">
+      <div class="mx-auto flex max-w-5xl flex-col gap-8 px-5">
+        <div class="flex flex-col gap-2">
+          <h2 id="world" class="text-3xl font-bold text-durian-400 shadowed">the fruitlands</h2>
+          <p class="max-w-prose text-lg text-rambutan-300">
+            {LOCATIONS.length} places to walk to, from a cosy town to the edge of a fallen star. far places cost
+            more steps to reach, and some open only after a quest.
+          </p>
+        </div>
+        <div class="grid items-start gap-6 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+          <figure class="flex flex-col gap-3 md:sticky md:top-6">
+            <div class="world-map relative">
+              <Fragment set:html={mapSvg} />
+              {/* Names over the pins, as on the app's map tab. The list below says the same to
+                  assistive tech, so these are pointer shortcuts to each place's entry. */}
+              <div aria-hidden="true">
+                {
+                  places.map(({ place }) => {
+                    const { x, y } = tileCenter(place.id);
+                    const left = (x / MAP_WIDTH) * 100;
+                    const top = (y / MAP_HEIGHT) * 100;
+                    return (
+                      <a
+                        href={`#place-${place.id}`}
+                        tabindex="-1"
+                        class:list={[
+                          'map-name label',
+                          top > 80 && 'map-name-above',
+                          left > 75 ? 'map-name-end' : left < 20 ? 'map-name-start' : null,
+                        ]}
+                        style={`left: ${left}%; top: ${top}%`}
+                      >
+                        {place.name}
+                      </a>
+                    );
+                  })
+                }
+              </div>
+            </div>
+            <figcaption class="text-sm text-rambutan-500">
+              steps away are by road from {town.name}. agility levels shorten every road.
+            </figcaption>
+          </figure>
+          <ol class="grid gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2" aria-label="the fruitlands, nearest first">
+            {
+              places.map(({ place, distance, blocker }) => (
+                <li id={`place-${place.id}`} class="place panel flex scroll-mt-6 items-start gap-3 p-3">
+                  <div class="place-scene well size-20 shrink-0" set:html={sceneSvg({ biome: place.biome, skin: 'original' }, { crop: 12 })} />
+                  <div class="flex min-w-0 flex-col gap-1">
+                    <p class:list={['label', distance === 0 ? 'text-pandan-300' : 'text-durian-300']}>
+                      {distance === 0 ? 'you start here' : `${distance.toLocaleString('en')} steps away`}
+                    </p>
+                    <h3 class="text-lg font-bold leading-tight text-rambutan-50">{place.name}</h3>
+                    <p class="text-sm leading-snug text-rambutan-500">{place.blurb}</p>
+                    {blocker ? <p class="text-sm leading-snug text-lychee-400">{blocker}</p> : null}
+                  </div>
+                </li>
+              ))
+            }
+          </ol>
+        </div>
       </div>
-      <div class="strip mt-8" role="region" aria-label="the fruitlands, nearest first" tabindex="0">
-        <ol class="flex w-max">
-          {
-            places.map(({ place, distance, blocker }) => (
-              <li class="strip-stop flex w-72 flex-col sm:w-80">
-                <Fragment set:html={sceneSvg({ biome: place.biome, skin: 'original' }, { crop: 12 })} />
-                <div class="road" aria-hidden="true">
-                  <span class="road-marker" />
-                </div>
-                <div class="flex flex-col gap-1 px-4 pb-2">
-                  <p class="label text-durian-300">
-                    {distance === 0 ? 'you start here' : `${distance.toLocaleString('en')} steps away`}
-                  </p>
-                  <h3 class="text-lg font-bold text-rambutan-50">{place.name}</h3>
-                  <p class="text-sm leading-snug text-rambutan-500">{place.blurb}</p>
-                  {blocker ? <p class="text-sm text-lychee-400">{blocker}</p> : null}
-                </div>
-              </li>
-            ))
-          }
-        </ol>
-      </div>
-      <p class="mx-auto mt-4 max-w-5xl px-5 text-sm text-rambutan-500">
-        steps away are by road from {town.name}. agility levels shorten every road.
-      </p>
+      {/* Pointing at a place lights its pin on the map. */}
+      <style is:inline set:html={pinCss} />
     </section>
 
     <Ridge from="longan-950" to="longan-900" phase={3} />
