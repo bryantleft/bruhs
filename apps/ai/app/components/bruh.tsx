@@ -4,9 +4,9 @@ import { useWindowDimensions } from "@/lib/hooks/use-window-dimensions";
 import { useBruhStore, useCommandStore, useMessageStore } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 
-export default function Bruh() {
-  const dimensions = { width: 60, height: 60 };
+const dimensions = { width: 60, height: 60 };
 
+export default function Bruh() {
   const { centered, focusPosition } = useBruhStore();
   const commandBarOpen = useCommandStore((s) => s.commandBarOpen);
   const messages = useMessageStore((s) => s.messages);
