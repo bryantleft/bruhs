@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { LOCATIONS } from '../game/content.ts';
+import { SCENE_HEIGHT, SCENE_WIDTH, sceneShapes } from './scene.ts';
+
+const still = { skin: 'original', night: false, frame: 0, working: false, walking: false } as const;
+
+test('every place draws a scene inside the frame, with the bruh standing at the centre', () => {
+  for (const place of LOCATIONS) {
+    const shapes = sceneShapes({ ...still, biome: place.biome });
+    assert.ok(shapes.length > 0, place.id);
+    for (const shape of shapes) assert.match(shape.d, /^M[-\d.]+ [-\d.]+/, place.id);
+  }
+  const town = sceneShapes({ ...still, biome: 'town' });
+  // 16-px bruh on the ground line (36), centred in the 96-px frame.
+  assert.ok(town.some((shape) => shape.transform === 'translate(40 24)'));
+  assert.equal(SCENE_WIDTH, SCENE_HEIGHT * 2);
+});
+
+test('a working bruh holds its tool; an idle one does not', () => {
+  const idle = sceneShapes({ ...still, biome: 'forest', tool: 'bronze-axe' });
+  const working = sceneShapes({ ...still, biome: 'forest', tool: 'bronze-axe', working: true });
+  assert.ok(working.length > idle.length);
+  assert.ok(working.some((shape) => shape.transform === 'translate(53 27)'));
+});
+
+test('a wider canvas keeps the biome centred and the default frame unchanged', () => {
+  const town = sceneShapes({ ...still, biome: 'town' });
+  assert.deepEqual(sceneShapes({ ...still, biome: 'town', width: SCENE_WIDTH }), town);
+  const wide = sceneShapes({ ...still, biome: 'town', width: SCENE_WIDTH * 2 });
+  // Shifted right by half the extra width: 48 + 40.
+  assert.ok(wide.some((shape) => shape.transform === 'translate(88 24)'));
+  assert.ok(wide[0]?.d.includes(`h${SCENE_WIDTH * 2}`));
+});

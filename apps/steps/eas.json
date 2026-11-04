@@ -1,0 +1,23 @@
+{
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "BRUHS_BUILD_ENV": "production",
+        "EXPO_PUBLIC_CONVEX_URL": "https://earnest-wren-707.convex.cloud"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "environment": "production",
+      "env": {
+        "BRUHS_BUILD_ENV": "production",
+        "EXPO_PUBLIC_CONVEX_URL": "https://earnest-wren-707.convex.cloud"
+      }
+    }
+  }
+}

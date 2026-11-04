@@ -1,0 +1,249 @@
+import {
+  decodeWalk,
+  type Fix,
+  finishWalk,
+  isFix,
+  MAX_ROUTE_ACCURACY,
+  pauseWalk,
+  recordFix,
+  resumeWalk,
+  startWalk,
+  type Walk,
+} from './walk.ts';
+
+export type LocationState =
+  | Readonly<{ status: 'idle' | 'requesting' | 'watching' }>
+  | Readonly<{ status: 'weak'; accuracy: number }>
+  | Readonly<{ status: 'error'; message: string; settings: boolean }>;
+export type SaveState =
+  | Readonly<{ status: 'saved' | 'saving' }>
+  | Readonly<{ status: 'error'; message: string }>;
+export type ExplorerState = Readonly<{
+  loading: 'loading' | 'ready' | 'error';
+  loadError: string | null;
+  walk: Walk | null;
+  location: LocationState;
+  save: SaveState;
+}>;
+export type Subscription = Readonly<{ remove: () => void }>;
+export type LocationPermission =
+  | Readonly<{ status: 'granted' | 'prompt' }>
+  | Readonly<{ status: 'denied'; canAskAgain: boolean }>;
+export type LocationFailure = 'permission' | 'unavailable';
+export type LocationAvailability = 'available' | 'disabled' | 'unsupported';
+export type RecorderPorts = Readonly<{
+  read: () => Promise<string | null>;
+  write: (raw: string) => Promise<void>;
+  remove: () => Promise<void>;
+  availability: () => Promise<LocationAvailability>;
+  requestPermission: () => Promise<LocationPermission>;
+  watch: (fix: (fix: unknown) => void, error: (reason: LocationFailure) => void) => Promise<Subscription>;
+  now: () => number;
+}>;
+export type LocationPorts = Pick<RecorderPorts, 'availability' | 'requestPermission' | 'watch'>;
+export type ClearWalkResult = Readonly<{ ok: true }> | Readonly<{ ok: false; message: string }>;
+
+export const EMPTY_EXPLORER: ExplorerState = {
+  loading: 'loading',
+  loadError: null,
+  walk: null,
+  location: { status: 'idle' },
+  save: { status: 'saved' },
+};
+
+export type Recorder = Readonly<{
+  load: () => Promise<void>;
+  start: () => Promise<void>;
+  pause: () => void;
+  finish: () => void;
+  retrySave: () => void;
+  clear: () => Promise<ClearWalkResult>;
+  dispose: () => void;
+}>;
+
+export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerState) => void): Recorder {
+  let state = EMPTY_EXPLORER;
+  let alive = true;
+  let epoch = 0;
+  let subscription: Subscription | null = null;
+  let writes = Promise.resolve();
+  let writing = false;
+  let pending: Readonly<{ id: number; walk: Walk }> | null = null;
+  let writeId = 0;
+  let loadId = 0;
+  const publish = (next: ExplorerState): void => {
+    state = next;
+    if (alive) changed(state);
+  };
+  const persist = (walk: Walk): void => {
+    const id = ++writeId;
+    pending = { id, walk };
+    publish({ ...state, save: { status: 'saving' } });
+    if (writing) return;
+    writing = true;
+    // Keep one in-flight write and the newest whole route while storage is busy.
+    writes = writes.then(async () => {
+      while (pending) {
+        const next = pending;
+        pending = null;
+        try {
+          await ports.write(JSON.stringify(next.walk));
+          if (next.id === writeId) publish({ ...state, save: { status: 'saved' } });
+        } catch {
+          if (next.id === writeId)
+            publish({
+              ...state,
+              save: {
+                status: 'error',
+                message: 'Your walk could not be saved. Free up device storage, then retry.',
+              },
+            });
+        }
+      }
+      writing = false;
+    });
+  };
+  const commit = (walk: Walk): void => {
+    publish({ ...state, walk });
+    persist(walk);
+  };
+  const stop = (): void => {
+    epoch += 1;
+    subscription?.remove();
+    subscription = null;
+  };
+  const pause = (): void => {
+    stop();
+    publish({ ...state, location: { status: 'idle' } });
+    if (state.walk?.status === 'recording') commit(pauseWalk(state.walk, ports.now()));
+  };
+  const locationError = (message: string, settings = false): void => {
+    pause();
+    publish({ ...state, location: { status: 'error', message, settings } });
+  };
+  return {
+    async load(): Promise<void> {
+      if (!alive || state.walk?.status === 'recording') return;
+      const request = ++loadId;
+      publish({ ...state, loading: 'loading' });
+      try {
+        const raw = await ports.read();
+        if (!alive || request !== loadId) return;
+        const decoded = raw === null ? null : decodeWalk(raw);
+        if (decoded && !decoded.ok) {
+          publish({ ...state, loading: 'error', loadError: decoded.message });
+          return;
+        }
+        publish({ ...state, loading: 'ready', loadError: null, walk: decoded?.ok ? decoded.walk : null });
+      } catch {
+        if (alive && request === loadId)
+          publish({
+            ...state,
+            loading: 'error',
+            loadError: 'Device storage could not be opened. Try opening your walk again.',
+          });
+      }
+    },
+    async start(): Promise<void> {
+      if (
+        !alive ||
+        state.loading !== 'ready' ||
+        state.location.status === 'requesting' ||
+        state.walk?.status === 'recording'
+      )
+        return;
+      const request = ++epoch;
+      publish({ ...state, location: { status: 'requesting' } });
+      try {
+        const availability = await ports.availability();
+        if (!alive || request !== epoch) return;
+        if (availability === 'unsupported') {
+          locationError('Location is not available here. Try another browser or the mobile app.');
+          return;
+        }
+        if (availability === 'disabled') {
+          locationError('Location services are off. Turn them on, then start your walk again.', true);
+          return;
+        }
+        const permission = await ports.requestPermission();
+        if (!alive || request !== epoch) return;
+        if (permission.status === 'denied') {
+          locationError(
+            'Allow location access to draw your route. Your step progress is safe.',
+            !permission.canAskAgain,
+          );
+          return;
+        }
+        const begin = (at: number): void => {
+          publish({ ...state, location: { status: 'watching' } });
+          commit(state.walk?.status === 'paused' ? resumeWalk(state.walk, at) : startWalk(at));
+        };
+        // Keep the previous recap until a real fix confirms access. Permission
+        // can be revoked between its check and the watch starting.
+        const watcher = await ports.watch(
+          (value) => {
+            if (!alive || request !== epoch || !isFix(value)) return;
+            const fix: Fix = value;
+            if (state.location.status === 'requesting') begin(fix.timestamp);
+            if (!state.walk || state.walk.status !== 'recording') return;
+            publish({
+              ...state,
+              location:
+                fix.accuracy > MAX_ROUTE_ACCURACY
+                  ? { status: 'weak', accuracy: fix.accuracy }
+                  : { status: 'watching' },
+            });
+            const walk = recordFix(state.walk, fix);
+            if (walk !== state.walk) commit(walk);
+          },
+          (reason) => {
+            if (!alive || request !== epoch) return;
+            if (reason === 'permission')
+              locationError('Allow location access to draw your route. Your step progress is safe.', true);
+            else locationError('GPS could not find your location. Try again.');
+          },
+        );
+        if (!alive || request !== epoch) watcher.remove();
+        else subscription = watcher;
+      } catch {
+        if (alive && request === epoch) locationError('Location could not start. Try again.');
+      }
+    },
+    pause,
+    finish(): void {
+      if (state.loading !== 'ready') return;
+      stop();
+      publish({ ...state, location: { status: 'idle' } });
+      if (state.walk && state.walk.status !== 'complete') commit(finishWalk(state.walk, ports.now()));
+    },
+    retrySave(): void {
+      if (state.loading === 'ready' && state.walk && state.save.status !== 'saving') persist(state.walk);
+    },
+    async clear(): Promise<ClearWalkResult> {
+      if (!alive || state.loading === 'loading')
+        return { ok: false, message: 'Your walk is still opening. Try erasing it again.' };
+      pause();
+      loadId += 1;
+      publish({ ...state, loading: 'loading', location: { status: 'idle' } });
+      await writes;
+      try {
+        await ports.remove();
+        if (alive) publish({ ...EMPTY_EXPLORER, loading: 'ready' });
+        return { ok: true };
+      } catch {
+        const message = 'This walk could not be deleted. Try deleting it again.';
+        if (alive)
+          publish({
+            ...state,
+            loading: state.walk ? 'ready' : 'error',
+            loadError: message,
+          });
+        return { ok: false, message };
+      }
+    },
+    dispose(): void {
+      alive = false;
+      pause();
+    },
+  };
+}

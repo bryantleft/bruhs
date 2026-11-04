@@ -1,0 +1,10 @@
+node_modules/
+.expo/
+.playwright-mcp/
+dist/
+web-build/
+expo-env.d.ts
+*.tsbuildinfo
+/ios/
+/android/
+.env*.local
