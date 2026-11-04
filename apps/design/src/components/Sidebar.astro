@@ -6,38 +6,61 @@ interface Props {
 }
 
 const path = Astro.props.current.replace(/\/$/, "");
-const links = [
-  { label: "Colors", href: "/colors" },
-  { label: "Typography", href: "/typography" },
-  { label: "Radius", href: "/radius" },
-  { label: "Elevation", href: "/elevation" },
-  { label: "Buttons", href: "/buttons" },
-  { label: "Badges", href: "/badges" },
-  { label: "Forms", href: "/forms" },
-  { label: "Icons", href: "/icons" },
-  { label: "Surfaces", href: "/surfaces" },
-  { label: "Agents", href: "/agents" },
-  { label: "Bruhs", href: "/bruhs" },
+const groups = [
+  {
+    label: "Foundations",
+    links: [
+      { label: "Colors", href: "/colors" },
+      { label: "Typography", href: "/typography" },
+      { label: "Radius", href: "/radius" },
+      { label: "Elevation", href: "/elevation" },
+      { label: "Surfaces", href: "/surfaces" },
+    ],
+  },
+  {
+    label: "Components",
+    links: [
+      { label: "Buttons", href: "/buttons" },
+      { label: "Badges", href: "/badges" },
+      { label: "Forms", href: "/forms" },
+      { label: "Icons", href: "/icons" },
+    ],
+  },
+  {
+    label: "Brand",
+    links: [
+      { label: "Logo", href: "/bruhs" },
+      { label: "Agents", href: "/agents" },
+    ],
+  },
 ];
+const currentLabel = groups.flatMap((g) => g.links).find((l) => l.href === path)?.label ?? "Bruhs";
 ---
 
 <!--
-  Below `lg` the sidebar is an off-canvas panel toggled by the menu button. While closed
-  it is `invisible`, which also takes its links out of the tab order.
+  Below `lg` the sidebar is an off-canvas panel opened from the top bar. While closed it
+  is `invisible`, which also takes its links out of the tab order.
 -->
-<button
-  type="button"
-  data-nav-toggle
-  aria-controls="site-nav"
-  aria-expanded="false"
-  aria-label="Open menu"
-  class="group fixed top-4 left-4 z-50 rounded-lychee bg-longan-900 p-3 text-rambutan-100/80 inset-ring inset-ring-rambutan-100/10 transition-all duration-300 hover:bg-longan-800 hover:text-rambutan-100 focus-visible:outline-2 focus-visible:outline-persimmon-400 active:scale-95 lg:hidden"
->
-  <svg class="size-6 transition-transform duration-300 group-aria-expanded:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-    <path class="group-aria-expanded:hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-    <path class="hidden group-aria-expanded:block" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-  </svg>
-</button>
+<header class="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-rambutan-100/5 bg-longan-950/90 px-3 backdrop-blur lg:hidden">
+  <button
+    type="button"
+    data-nav-toggle
+    aria-controls="site-nav"
+    aria-expanded="false"
+    aria-label="Open menu"
+    class="relative rounded-grape p-2 text-rambutan-200 transition-colors hover:bg-longan-800 hover:text-rambutan-100 focus-visible:outline-2 focus-visible:outline-persimmon-400"
+  >
+    <span class="absolute top-1/2 left-1/2 size-12 -translate-1/2" aria-hidden="true"></span>
+    <svg class="size-6" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"></path>
+    </svg>
+  </button>
+  <a href="/" class="flex items-center gap-2 rounded-grape focus-visible:outline-2 focus-visible:outline-persimmon-400">
+    <BruhLogo class="size-6 shrink-0" />
+    <span class="sr-only">Bruhs home</span>
+  </a>
+  <span class="text-label text-rambutan-100">{currentLabel}</span>
+</header>
 
 <button
   type="button"
@@ -50,49 +73,59 @@ const links = [
 <aside
   id="site-nav"
   data-nav
-  class="invisible fixed top-0 left-0 z-50 flex h-screen w-64 -translate-x-full flex-col border-r border-rambutan-100/5 bg-longan-950 transition-[translate,visibility] duration-500 ease-out data-open:visible data-open:translate-x-0 lg:visible lg:translate-x-0"
+  class="invisible fixed top-0 left-0 z-50 flex h-dvh w-64 -translate-x-full flex-col border-r border-rambutan-100/5 bg-longan-950 transition-[translate,visibility] duration-300 ease-out data-open:visible data-open:translate-x-0 data-open:transition-[translate] motion-reduce:transition-none lg:visible lg:translate-x-0"
 >
-  <div class="flex items-center justify-between border-b border-rambutan-100/5 p-5">
+  <div class="flex h-14 items-center justify-between border-b border-rambutan-100/5 px-5 lg:h-auto lg:py-5">
     <a href="/" class="flex items-center gap-3 rounded-grape focus-visible:outline-2 focus-visible:outline-persimmon-400">
-      <BruhLogo class="size-8 shrink-0" />
+      <BruhLogo class="size-7 shrink-0" />
       <span
         class:list={[
-          "font-krypton text-h4 font-semibold tracking-tighter",
-          path === "" ? "text-rambutan-100" : "text-rambutan-100/40 transition-opacity duration-200 hover:text-rambutan-100/70",
+          "font-krypton text-h4 font-semibold tracking-tighter transition-colors",
+          path === "" ? "text-rambutan-100" : "text-rambutan-300 hover:text-rambutan-100",
         ]}
       >
         Bruhs
       </span>
     </a>
+    <button
+      type="button"
+      data-nav-close
+      aria-label="Close menu"
+      class="rounded-grape p-2 text-rambutan-300 transition-colors hover:bg-longan-800 hover:text-rambutan-100 focus-visible:outline-2 focus-visible:outline-persimmon-400 lg:hidden"
+    >
+      <svg class="size-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"></path>
+      </svg>
+    </button>
   </div>
 
-  <nav aria-label="Design system" class="flex-1 overflow-y-auto p-5">
-    <ul class="space-y-2">
-      {links.map((link) => {
-        const isActive = link.href === path;
-        return (
-          <li>
-            <a
-              href={link.href}
-              aria-current={isActive ? "page" : undefined}
-              class="group flex flex-col rounded-lychee p-3 transition-all duration-300 hover:bg-longan-800/30 focus-visible:outline-2 focus-visible:outline-persimmon-400 active:scale-98"
-            >
-              <span
-                class:list={[
-                  "mb-1 font-krypton text-h3 font-semibold tracking-tighter transition-all duration-300 sm:text-h2",
-                  isActive
-                    ? "text-rambutan-100"
-                    : "text-rambutan-100/40 group-hover:translate-x-1 group-hover:text-rambutan-100/80",
-                ]}
-              >
-                {link.label}
-              </span>
-              {isActive && <span class="h-0.5 w-8 rounded-orb bg-persimmon-500"></span>}
-            </a>
-          </li>
-        );
-      })}
-    </ul>
+  <nav aria-label="Design system" class="flex-1 space-y-6 overflow-y-auto px-3 py-5">
+    {groups.map((group) => (
+      <div>
+        <p class="mb-1 px-3 text-label-sm text-rambutan-500">{group.label}</p>
+        <ul>
+          {group.links.map((link) => {
+            const isActive = link.href === path;
+            return (
+              <li>
+                <a
+                  href={link.href}
+                  aria-current={isActive ? "page" : undefined}
+                  class:list={[
+                    "relative flex items-center rounded-grape px-3 py-1.5 text-body transition-colors focus-visible:outline-2 focus-visible:outline-persimmon-400",
+                    isActive
+                      ? "bg-longan-900 text-rambutan-50 before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-orb before:bg-persimmon-500"
+                      : "text-rambutan-300 hover:bg-longan-900/60 hover:text-rambutan-100",
+                  ]}
+                >
+                  {link.label}
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    ))}
   </nav>
 </aside>
 
@@ -100,24 +133,24 @@ const links = [
   // Re-bind after every view transition: <ClientRouter /> swaps the body.
   document.addEventListener("astro:page-load", () => {
     const toggle = document.querySelector<HTMLButtonElement>("[data-nav-toggle]");
+    const close = document.querySelector<HTMLButtonElement>("[data-nav-close]");
     const backdrop = document.querySelector<HTMLButtonElement>("[data-nav-backdrop]");
     const nav = document.querySelector<HTMLElement>("[data-nav]");
-    if (!toggle || !backdrop || !nav) return;
+    if (!toggle || !close || !backdrop || !nav) return;
 
     const setOpen = (open: boolean) => {
       nav.toggleAttribute("data-open", open);
       backdrop.classList.toggle("hidden", !open);
       toggle.setAttribute("aria-expanded", String(open));
-      toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+      if (open) close.focus();
+      else toggle.focus();
     };
 
-    toggle.addEventListener("click", () => setOpen(!nav.hasAttribute("data-open")));
+    toggle.addEventListener("click", () => setOpen(true));
+    close.addEventListener("click", () => setOpen(false));
     backdrop.addEventListener("click", () => setOpen(false));
     nav.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        toggle.focus();
-      }
+      if (event.key === "Escape") setOpen(false);
     });
   });
 </script>
