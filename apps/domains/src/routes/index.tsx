@@ -25,7 +25,7 @@ function Home() {
   return (
     <main className="mx-auto min-h-screen max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
       <div className="space-y-4 text-center">
-        <h1 className="text-rambutan-100 text-3xl font-semibold text-balance">
+        <h1 className="text-h1 text-rambutan-100 text-balance">
           Domain Search
         </h1>
         <SearchInput value={input} onChange={setInput} parsed={parsed} />

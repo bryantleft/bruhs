@@ -21,7 +21,7 @@ export function ResultsGrid({ results }: { results: readonly DomainResult[] }) {
       aria-label="Results"
       className="mx-auto w-full max-w-4xl space-y-4"
     >
-      <p aria-live="polite" className="text-rambutan-400 text-sm">
+      <p aria-live="polite" className="text-body-sm text-rambutan-400">
         {summarize(results)}
       </p>
       <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

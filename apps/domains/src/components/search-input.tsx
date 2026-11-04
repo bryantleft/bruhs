@@ -59,12 +59,12 @@ export function SearchInput({ value, onChange, parsed }: Props) {
         spellCheck={false}
         // biome-ignore lint/a11y/noAutofocus: searching is the page's only task.
         autoFocus
-        className="rounded-grape border-longan-700 bg-longan-900 text-rambutan-100 placeholder:text-rambutan-400 focus-visible:border-persimmon-400 aria-invalid:border-lychee-500 h-14 w-full border-[1.5px] px-6 text-lg transition-colors outline-none"
+        className="input text-body-lg h-14 px-6"
       />
       <p
         id={helpId}
         aria-live="polite"
-        className={`px-1 text-sm text-pretty ${
+        className={`text-body-sm px-1 text-pretty ${
           isError ? "text-lychee-300" : "text-rambutan-400"
         }`}
       >

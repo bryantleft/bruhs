@@ -56,7 +56,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       <head>
         <HeadContent />
       </head>
-      <body className="bg-longan-950 text-rambutan-100 antialiased">
+      <body>
         {children}
         <Scripts />
       </body>
