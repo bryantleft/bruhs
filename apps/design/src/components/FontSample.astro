@@ -1,0 +1,28 @@
+---
+import CopiedOverlay from "@/components/CopiedOverlay.astro";
+
+interface Props {
+  name: string;
+  variable: string;
+  className: string;
+}
+
+const { name, variable, className } = Astro.props;
+---
+
+<button
+  type="button"
+  data-copy={variable}
+  class:list={[
+    "group/copy relative cursor-copy rounded-grape border border-rambutan-50/5 bg-longan-900 p-5 text-left transition-transform duration-150 ease-in-out hover:scale-[1.02] focus-visible:outline-2 focus-visible:outline-persimmon-400 active:scale-100 md:p-6",
+    className,
+  ]}
+>
+  <code class="absolute top-3 right-3 rounded-seed bg-longan-800 px-2 py-1 text-rambutan-400 opacity-0 transition-opacity group-hover/copy:opacity-100 group-focus-visible/copy:opacity-100 md:top-4 md:right-4">
+    {variable}
+  </code>
+  <span class="mb-4 block text-h4 font-semibold">{name}</span>
+  <span class="block text-h2 font-light">The quick brown fox</span>
+  <span class="mt-2 block text-body-lg">jumps over the lazy dog.</span>
+  <CopiedOverlay />
+</button>

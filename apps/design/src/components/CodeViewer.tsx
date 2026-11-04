@@ -1,60 +1,17 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { createHighlighter } from "shiki";
+import { useState } from "react";
 
-interface CodeViewerProps {
+type CodeViewerProps = {
+  /** Plain source, for copying. */
   code: string;
-  language: string;
+  /** The same source as highlighted HTML, rendered at build time by shiki. */
+  html: string;
   title?: string;
-}
+};
 
-// Create a singleton highlighter instance
-let highlighterInstance: any = null;
-
-const CodeViewer: React.FC<CodeViewerProps> = ({ code, language, title }) => {
-  const [highlightedCode, setHighlightedCode] = useState<string>("");
+export default function CodeViewer({ code, html, title }: CodeViewerProps) {
   const [copied, setCopied] = useState(false);
 
-  // Memoize the highlighter creation to avoid recreating it
-  const getHighlighter = useMemo(async () => {
-    if (!highlighterInstance) {
-      try {
-        highlighterInstance = await createHighlighter({
-          themes: ["github-dark"],
-          langs: [language as any],
-        });
-      } catch (error) {
-        console.error("Error creating highlighter:", error);
-        return null;
-      }
-    }
-    return highlighterInstance;
-  }, [language]);
-
-  useEffect(() => {
-    const highlightCode = async () => {
-      try {
-        const highlighter = await getHighlighter;
-        if (!highlighter) {
-          setHighlightedCode(`<pre><code>${code}</code></pre>`);
-          return;
-        }
-
-        const html = highlighter.codeToHtml(code, {
-          lang: language,
-          theme: "github-dark",
-        });
-
-        setHighlightedCode(html);
-      } catch (error) {
-        console.error("Error highlighting code:", error);
-        setHighlightedCode(`<pre><code>${code}</code></pre>`);
-      }
-    };
-
-    highlightCode();
-  }, [code, language, getHighlighter]);
-
-  const copyToClipboard = useCallback(async () => {
+  const copyToClipboard = async (): Promise<void> => {
     try {
       await navigator.clipboard.writeText(code);
       setCopied(true);
@@ -62,49 +19,37 @@ const CodeViewer: React.FC<CodeViewerProps> = ({ code, language, title }) => {
     } catch (err) {
       console.error("Failed to copy code:", err);
     }
-  }, [code]);
+  };
 
   return (
-    <div className="rounded-grape bg-longan-900 border border-rambutan-100/10 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-rambutan-100/10">
-        <div className="flex items-center">
-          {title && (
-            <span className="text-sm text-rambutan-300 font-mono">{title}</span>
-          )}
-        </div>
-        
+    <div className="overflow-hidden rounded-grape border border-rambutan-100/10 bg-longan-900">
+      <div className="flex items-center justify-between border-b border-rambutan-100/10 px-4 py-3">
+        {title && <span className="font-mono text-sm text-rambutan-300">{title}</span>}
         <button
+          type="button"
           onClick={copyToClipboard}
-          className="flex items-center gap-2 px-3 py-1.5 text-xs text-rambutan-300 hover:text-rambutan-100 bg-longan-800/50 hover:bg-longan-800 rounded-grape transition-all duration-200 border border-rambutan-100/10"
+          aria-live="polite"
+          className="flex items-center gap-2 rounded-grape border border-rambutan-100/10 bg-longan-800/50 px-3 py-1.5 text-xs text-rambutan-300 transition-all duration-200 hover:bg-longan-800 hover:text-rambutan-100 focus-visible:outline-2 focus-visible:outline-persimmon-400"
         >
-          {copied ? (
-            <>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              Copied!
-            </>
-          ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-              Copy
-            </>
-          )}
+          <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            {copied ? (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            )}
+          </svg>
+          {copied ? "Copied!" : "Copy"}
         </button>
       </div>
 
-      {/* Code Content */}
-      <div className="overflow-auto max-h-96">
-        <div 
-          className="text-sm leading-relaxed [&>pre]:!bg-transparent [&>pre]:!p-4 [&>pre]:!m-0 [&>pre]:!border-0 [&>pre]:!overflow-visible [&_code]:!bg-transparent [&_code]:!p-0"
-          dangerouslySetInnerHTML={{ __html: highlightedCode }}
+      <div className="max-h-96 overflow-auto">
+        <div
+          className="text-sm leading-relaxed [&_code]:!bg-transparent [&_code]:!p-0 [&>pre]:!m-0 [&>pre]:!overflow-visible [&>pre]:!border-0 [&>pre]:!bg-transparent [&>pre]:!p-4"
+          // Highlighted by shiki at build time from the app's own template (not user input);
+          // the only substituted values are HTML-escaped by `fillLogoCode`.
+          dangerouslySetInnerHTML={{ __html: html }}
         />
       </div>
     </div>
   );
-};
-
-export default CodeViewer;
+}

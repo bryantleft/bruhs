@@ -1,25 +1,37 @@
 ---
 import { ClientRouter } from "astro:transitions";
 import "@/styles/global.css";
-import MobileMenuToggle from "@/components/MobileMenuToggle";
+import Sidebar from "@/components/Sidebar.astro";
+
+interface Props {
+  /** Page name; omitted on the home page. */
+  title?: string;
+}
+
+const { title } = Astro.props;
+const fullTitle = title ? `${title} — Bruhs Design System` : "Bruhs Design System";
 ---
 
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" class="scheme-only-dark antialiased">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Bruhs Design System</title>
-		<ClientRouter />
-	</head>
-	<body class="bg-longan-950 text-rambutan-100 font-neon">
-		<MobileMenuToggle client:visible current={Astro.url.pathname} />
-		<main class="isolate ml-0 lg:ml-64 min-h-dvh overflow-y-auto pt-16 lg:pt-0">
-			<div class="max-w-4xl">
-				<slot />
-			</div>
-		</main>
-	</body>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{fullTitle}</title>
+    <ClientRouter />
+  </head>
+  <body class="bg-longan-950 font-neon text-rambutan-100">
+    <Sidebar current={Astro.url.pathname} />
+    <main class="isolate ml-0 min-h-dvh overflow-y-auto pt-16 lg:ml-64 lg:pt-0">
+      <div class="max-w-4xl">
+        <slot />
+      </div>
+    </main>
+    <div id="copy-status" class="sr-only" aria-live="polite"></div>
+    <script>
+      import "@/scripts/copy";
+    </script>
+  </body>
 </html>

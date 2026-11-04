@@ -1,0 +1,20 @@
+---
+/**
+ * "Copied" confirmation shown over a `[data-copy]` button after it is clicked. The button
+ * needs the `group/copy` class; the copy script sets `data-copied` on it for 1.5 s.
+ */
+interface Props {
+  label?: boolean;
+}
+const { label = false } = Astro.props;
+---
+
+<span
+  aria-hidden="true"
+  class="pointer-events-none absolute inset-0 hidden items-center justify-center gap-2 rounded-[inherit] bg-longan-950/60 text-rambutan-50 group-data-copied/copy:flex"
+>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="size-6">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
+  </svg>
+  {label && <span class="text-body-sm font-medium">Copied</span>}
+</span>
