@@ -1,7 +1,12 @@
+import { z } from "zod";
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { defaultMessages, defaultModel } from "@/lib/data";
-import type { Keys, Message, Model, Provider } from "@/lib/types";
+import {
+  createJSONStorage,
+  persist,
+  type StateStorage,
+} from "zustand/middleware";
+import { defaultModel, findModel } from "@/lib/data";
+import { type Keys, type Model, Provider } from "@/lib/types";
 
 type InitialStore = {
   visible: boolean;
@@ -13,110 +18,139 @@ export const useInitialStore = create<InitialStore>((set) => ({
   setVisible: (visible) => set({ visible }),
 }));
 
-type Coordinates = {
+export type Coordinates = {
   x: number;
   y: number;
 };
 
 type BruhStore = {
+  /** Force the bruh to the centre (used before leaving the page). */
   centered: boolean;
+  /** Where the bruh looks, in viewport pixels: the pointer or the selected message. */
   focusPosition: Coordinates;
   setCentered: (centered: boolean) => void;
   setFocusPosition: (coordinates: Coordinates) => void;
 };
 
 export const useBruhStore = create<BruhStore>((set) => ({
-  centered: true,
-  focusPosition: { x: 60, y: 60 },
+  centered: false,
+  focusPosition: { x: 0, y: 0 },
   setCentered: (centered) => set({ centered }),
   setFocusPosition: (coordinates) => set({ focusPosition: coordinates }),
 }));
 
-type LLMStore = {
-  keys: Keys | null;
-  model: Model;
+type LLMState = {
+  keys: Keys;
+  modelId: string;
+  /** Keep keys (and settings) in localStorage; otherwise only for this tab session. */
+  rememberKeys: boolean;
+};
+
+type LLMStore = LLMState & {
   addKey: (provider: Provider, key: string) => void;
   removeKey: (provider: Provider) => void;
   setModel: (model: Model) => void;
+  setRememberKeys: (remember: boolean) => void;
+};
+
+const browserStorage = (
+  kind: "localStorage" | "sessionStorage",
+): Storage | null => (typeof window === "undefined" ? null : window[kind]);
+
+/**
+ * Writes the store to localStorage when `rememberKeys` is on and to sessionStorage
+ * when it's off, removing the other copy, so a session-only key never lingers on disk.
+ */
+const keyAwareStorage: StateStorage = {
+  getItem: (name) =>
+    browserStorage("sessionStorage")?.getItem(name) ??
+    browserStorage("localStorage")?.getItem(name) ??
+    null,
+  setItem: (name, value) => {
+    let remember = true;
+    try {
+      remember = JSON.parse(value)?.state?.rememberKeys !== false;
+    } catch {
+      // Unparseable: keep the default (remember).
+    }
+    const keep = browserStorage(remember ? "localStorage" : "sessionStorage");
+    const drop = browserStorage(remember ? "sessionStorage" : "localStorage");
+    keep?.setItem(name, value);
+    drop?.removeItem(name);
+  },
+  removeItem: (name) => {
+    browserStorage("localStorage")?.removeItem(name);
+    browserStorage("sessionStorage")?.removeItem(name);
+  },
+};
+
+const KeysSchema = z.partialRecord(z.enum(Provider), z.string());
+
+/** Version 0 stored `{ keys: Keys | null, model: Model }`. */
+const LegacyStateSchema = z.object({
+  keys: KeysSchema.nullable().optional(),
+  model: z.object({ id: z.string() }).optional(),
+});
+
+const StateSchema = z.object({
+  keys: KeysSchema,
+  modelId: z.string(),
+  rememberKeys: z.boolean(),
+});
+
+const initialState: LLMState = {
+  keys: {},
+  modelId: defaultModel.id,
+  rememberKeys: true,
 };
 
 export const useLLMStore = create<LLMStore>()(
   persist(
     (set) => ({
-      keys: null,
-      model: defaultModel,
-      addKey: (provider, key) => {
-        set(({ keys }) => ({
-          keys: {
-            ...keys,
-            [provider]: key,
-          } as Keys,
-        }));
-      },
-      removeKey: (provider) => {
+      ...initialState,
+      addKey: (provider, key) =>
+        set(({ keys }) => ({ keys: { ...keys, [provider]: key } })),
+      removeKey: (provider) =>
         set(({ keys }) => {
-          const newKeys = { ...keys };
-          delete newKeys[provider];
-          return { keys: newKeys as Keys };
-        });
-      },
-      setModel: (model) => set({ model }),
+          const { [provider]: _removed, ...rest } = keys;
+          return { keys: rest };
+        }),
+      setModel: (model) => set({ modelId: model.id }),
+      setRememberKeys: (rememberKeys) => set({ rememberKeys }),
     }),
     {
       name: "llm",
+      version: 1,
+      storage: createJSONStorage(() => keyAwareStorage),
+      partialize: ({ keys, modelId, rememberKeys }): LLMState => ({
+        keys,
+        modelId,
+        rememberKeys,
+      }),
+      migrate: (persisted, version): LLMState => {
+        if (version !== 0) return initialState;
+        const legacy = LegacyStateSchema.safeParse(persisted);
+        if (!legacy.success) return initialState;
+        return {
+          keys: legacy.data.keys ?? {},
+          modelId: legacy.data.model?.id ?? defaultModel.id,
+          rememberKeys: true,
+        };
+      },
+      // Saved data is external input: keep it only if it matches the current shape.
+      merge: (persisted, current) => {
+        const saved = StateSchema.safeParse(persisted);
+        return saved.success ? { ...current, ...saved.data } : current;
+      },
     },
   ),
 );
 
-type MessageStore = {
-  messages: Message[];
-  lastMessage: Message;
-  selectedMessage: Message | null;
-  generating: boolean;
-  deleting: boolean;
-  addMessage: (message: Message) => void;
-  deleteMessage: (messagedId: string) => void;
-  addError: (error: string) => void;
-  setLastMessage: (message: Message) => void;
-  setSelectedMessage: (message: Message | null) => void;
-  setGenerating: (generating: boolean) => void;
-  setDeleting: (deleting: boolean) => void;
-};
-
-export const useMessageStore = create<MessageStore>((set, _get) => ({
-  messages: defaultMessages,
-  lastMessage: defaultMessages[0],
-  selectedMessage: null,
-  generating: false,
-  deleting: false,
-  addMessage: (message) => {
-    set(({ messages }) => ({
-      messages: [...messages, message],
-    }));
-  },
-  deleteMessage: (messageId) => {
-    set(({ messages }) => ({
-      messages: messages.filter((message) => message.id !== messageId),
-      deleting: true,
-    }));
-  },
-  addError: (error) => {
-    set(({ messages }) => {
-      if (!messages.length) return { messages };
-
-      return {
-        messages: [
-          ...messages.slice(0, -1),
-          { ...messages[messages.length - 1], error },
-        ],
-      };
-    });
-  },
-  setLastMessage: (message) => set({ lastMessage: message }),
-  setSelectedMessage: (message) => set({ selectedMessage: message }),
-  setGenerating: (generating) => set({ generating }),
-  setDeleting: (deleting) => set({ deleting }),
-}));
+/** The selected model; falls back to the default if a saved ID is no longer offered. */
+export function useModel(): Model {
+  const modelId = useLLMStore((s) => s.modelId);
+  return findModel(modelId) ?? defaultModel;
+}
 
 type CommandStore = {
   commandBarOpen: boolean;

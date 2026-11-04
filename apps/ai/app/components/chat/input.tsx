@@ -1,240 +1,126 @@
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
-import type React from "react";
 import {
-  type ChangeEvent,
   type FormEvent,
+  type KeyboardEvent,
   useEffect,
   useRef,
   useState,
 } from "react";
-import { defaultMessages } from "@/lib/data";
 import { useGlobalHotkey } from "@/lib/hooks/use-global-hotkey";
-import { useLLMStore, useMessageStore } from "@/lib/stores";
-import type { APIError, Message } from "@/lib/types";
-import { cn, randomKey } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
-// AI SDK 5+ messages carry `parts` instead of a `content` string; the app keeps
-// its own `content` shape and converts at the useChat boundary.
-function toUIMessage(message: Message): UIMessage {
-  return {
-    id: message.id,
-    role: message.role,
-    parts: [{ type: "text", text: message.content }],
-  };
-}
+type InputProps = {
+  generating: boolean;
+  onSend: (text: string) => void;
+  onStop: () => void;
+};
 
-function toMessage(message: UIMessage): Message {
-  return {
-    id: message.id,
-    role: message.role,
-    content: message.parts
-      .map((part) => (part.type === "text" ? part.text : ""))
-      .join(""),
-  };
-}
-
-const transport = new DefaultChatTransport({
-  api: "/api/llm",
-  // Keep the request body the /api/llm action expects: { role, content } messages.
-  prepareSendMessagesRequest: ({ id, messages, body }) => ({
-    body: {
-      ...body,
-      id,
-      messages: messages.map((message) => {
-        const { role, content } = toMessage(message);
-        return { role, content };
-      }),
-    },
-  }),
-});
-
-export default function Input() {
-  const { model, keys } = useLLMStore();
-  const {
-    messages,
-    lastMessage,
-    generating,
-    deleting,
-    addMessage,
-    addError,
-    setLastMessage,
-    setGenerating,
-    setDeleting,
-  } = useMessageStore();
+export default function Input({ generating, onSend, onStop }: InputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
-
-  const {
-    messages: chatMessages,
-    status,
-    setMessages,
-    sendMessage,
-    stop,
-  } = useChat({
-    transport,
-    messages: defaultMessages.map(toUIMessage),
-    onError: (error) => {
-      const errorMessage: APIError = JSON.parse(error.message);
-
-      if (errorMessage.code === "invalid_api_key") {
-        addError("Must populate a valid API key for openai");
-      } else if (errorMessage.message === "invalid x-api-key") {
-        addError("Must populate a valid API key for anthropic");
-      } else {
-        addError(errorMessage.message);
-      }
-    },
-    onFinish: ({ message, isAbort, isDisconnect, isError }) => {
-      // AI SDK 4 only called onFinish for completed responses.
-      if (isAbort || isDisconnect || isError) return;
-      addMessage(toMessage(message));
-    },
-    throttle: 50,
-  });
 
   useGlobalHotkey({
     key: "/",
     handler: (e) => {
-      const activeElement = document.activeElement;
-      const isInputFocused =
-        activeElement &&
-        (activeElement.tagName === "INPUT" ||
-          activeElement.tagName === "TEXTAREA" ||
-          activeElement.tagName === "SELECT");
-      if (!isInputFocused) {
+      const tag = document.activeElement?.tagName;
+      if (tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "SELECT") {
         e.preventDefault();
         textareaRef.current?.focus();
       }
     },
   });
 
-  useEffect(() => {
-    setGenerating(status === "streaming");
-  }, [status, setGenerating]);
-
-  useEffect(() => {
-    if (deleting) {
-      setMessages(messages.map(toUIMessage));
-      setDeleting(false);
-    }
-  }, [deleting, messages, setMessages, setDeleting]);
-
-  useEffect(() => {
-    const last = chatMessages[chatMessages.length - 1];
-    setLastMessage(last && toMessage(last));
-  }, [chatMessages, setLastMessage]);
-
+  // Imperative DOM sync: grow the textarea with its content, up to 200px.
   // biome-ignore lint/correctness/useExhaustiveDependencies: input can change textarea height
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.style.height = "42px";
-      const scrollHeight = textarea.scrollHeight;
-      textarea.style.height = `${Math.min(scrollHeight, 200)}px`;
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
     }
   }, [input]);
 
-  function handleInputChange(e: ChangeEvent<HTMLTextAreaElement>) {
-    e.preventDefault();
-    const newValue = e.target.value;
-    setInput(newValue);
-  }
-
-  async function handleSendMessage() {
+  function handleSend(): void {
     if (!input.trim() || generating) return;
-
-    const userMessage: Message = {
-      id: randomKey(),
-      role: "user",
-      content: input,
-    };
-    addMessage(userMessage);
+    onSend(input);
     setInput("");
-    await sendMessage(toUIMessage(userMessage), {
-      body: {
-        key: keys?.[model.provider],
-        model: model.id,
-        provider: model.provider,
-      },
-    });
   }
 
-  async function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>): void {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      await handleSendMessage();
+      handleSend();
     }
   }
 
-  async function handleFormSubmit(e: FormEvent<HTMLFormElement>) {
+  function handleFormSubmit(e: FormEvent<HTMLFormElement>): void {
     e.preventDefault();
-    await handleSendMessage();
-  }
-
-  function handleStop() {
-    stop();
-    addMessage(lastMessage);
-    addError("Stopped");
+    handleSend();
   }
 
   return (
     <form
       onSubmit={handleFormSubmit}
       className={cn(
-        "relative overflow-hidden rounded-t-2xl bg-longan-900",
+        "rounded-t-lychee bg-longan-900 relative overflow-hidden",
         "py-3",
         "border-longan-800 border-x-[0.5px] border-t-[0.5px]",
         "group-hover:border-longan-700",
       )}
     >
       <div className="relative flex flex-col px-4">
+        <label htmlFor="chat-input" className="sr-only">
+          Message
+        </label>
         <textarea
+          id="chat-input"
           ref={textareaRef}
           value={input}
-          onChange={handleInputChange}
+          onChange={(e) => setInput(e.target.value)}
           rows={1}
           className={cn(
             "w-full resize-none py-2",
-            "bg-longan-900 text-rambutan-200 text-sm placeholder:text-rambutan-300",
+            "bg-longan-900 text-rambutan-200 placeholder:text-rambutan-400 text-sm",
             "focus:outline-none",
             "overflow-y-auto",
-            "scrollbar-thin scrollbar-thumb-rambutan-300 scrollbar-track-transparent",
+            "scrollbar-thumb-rambutan-300 scrollbar-thin scrollbar-track-transparent",
           )}
           placeholder="Bruhhhh..."
           onKeyDown={handleKeyDown}
         />
-        {!generating && (
-          <div className="self-end">
-            <button
-              type="submit"
-              disabled={generating || input.trim().length === 0}
-              className={cn(
-                "flex cursor-pointer rounded-lg bg-mangosteen-700 p-[5px] hover:bg-mangosteen-600",
-                "transition-colors duration-200",
-                "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-mangosteen-700",
-              )}
-            >
-              <span className="iconify lucide--arrow-up h-4 w-4 text-rambutan-300" />
-            </button>
-          </div>
-        )}
-        {generating && (
-          <div className="self-end">
+        <div className="self-end">
+          {generating ? (
             <button
               type="button"
-              onMouseDown={handleStop}
+              aria-label="Stop generating"
+              // Keep focus in the textarea while stopping.
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onStop}
               className={cn(
-                "relative flex cursor-pointer items-center justify-center rounded-lg",
-                "bg-mangosteen-700 p-[5px] hover:bg-mangosteen-600",
+                "rounded-grape relative flex cursor-pointer items-center justify-center",
+                "bg-persimmon-500 hover:bg-persimmon-400 p-[5px]",
                 "transition-colors duration-200",
+                "focus-visible:outline-persimmon-400 focus-visible:outline-2 focus-visible:outline-offset-2",
               )}
             >
-              <span className="iconify lucide--loader-circle h-4 w-4 animate-spin text-rambutan-300" />
-              <span className="iconify lucide--dot -translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2 h-2 w-2 text-rambutan-300/60" />
+              <span className="iconify lucide--loader-circle text-longan-950 h-4 w-4 animate-spin" />
+              <span className="iconify lucide--dot text-longan-950/60 absolute top-1/2 left-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2" />
             </button>
-          </div>
-        )}
+          ) : (
+            <button
+              type="submit"
+              aria-label="Send message"
+              disabled={input.trim().length === 0}
+              className={cn(
+                "rounded-grape bg-persimmon-500 hover:bg-persimmon-400 flex cursor-pointer p-[5px]",
+                "transition-colors duration-200",
+                "focus-visible:outline-persimmon-400 focus-visible:outline-2 focus-visible:outline-offset-2",
+                "disabled:hover:bg-persimmon-500 disabled:cursor-not-allowed disabled:opacity-50",
+              )}
+            >
+              <span className="iconify lucide--arrow-up text-longan-950 h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
     </form>
   );

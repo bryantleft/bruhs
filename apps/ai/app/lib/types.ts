@@ -1,3 +1,6 @@
+import type { UIMessage } from "ai";
+import { z } from "zod";
+
 export enum Provider {
   OPENAI = "openai",
   ANTHROPIC = "anthropic",
@@ -7,11 +10,6 @@ export enum Provider {
 export type ProviderMetadata = {
   domain: string;
   logo: string;
-};
-
-type Pricing = {
-  prompt: number;
-  completion: number;
 };
 
 export enum InputType {
@@ -26,30 +24,66 @@ export type Model = {
   id: string;
   name: string;
   provider: Provider;
-  pricing: Pricing;
   inputs: InputType[];
   outputs: OutputType[];
 };
 
-export type Keys = Record<Provider, string>;
+/** Saved API keys. Any provider may be missing. */
+export type Keys = Partial<Record<Provider, string>>;
 
-// The app's own message shape (persisted in IndexedDB). AI SDK 5+ replaced the
-// `content` string with `parts`; convert at the useChat boundary instead.
-export interface Message {
-  id: string;
-  role: "system" | "user" | "assistant";
-  content: string;
+/** Per-message metadata the client attaches to `useChat` messages. */
+export type ChatMetadata = {
+  /** Why the reply to (or of) this message failed or stopped. */
   error?: string;
-}
-
-export type APIError = {
-  message: string;
-  type?: string;
-  code?: string;
 };
 
-export type Chat = {
-  id: string;
-  title: string;
-  messages: Message[];
-};
+export type ChatMessage = UIMessage<ChatMetadata>;
+
+/** The persisted message shape (IndexedDB). */
+export const StoredMessageSchema = z.object({
+  id: z.string(),
+  role: z.enum(["system", "user", "assistant"]),
+  content: z.string(),
+  error: z.string().optional(),
+});
+
+export type StoredMessage = z.infer<typeof StoredMessageSchema>;
+
+export const StoredChatSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  messages: z.array(StoredMessageSchema),
+});
+
+export type StoredChat = z.infer<typeof StoredChatSchema>;
+
+/** Machine-readable reasons `/api/llm` can fail. */
+export type ChatErrorCode =
+  | "invalid_request"
+  | "unknown_model"
+  | "missing_key"
+  | "invalid_key"
+  | "model_not_found"
+  | "rate_limited"
+  | "provider_rejected"
+  | "provider_unavailable"
+  | "provider_unreachable"
+  | "unknown";
+
+export const ChatErrorSchema = z.object({
+  code: z.enum([
+    "invalid_request",
+    "unknown_model",
+    "missing_key",
+    "invalid_key",
+    "model_not_found",
+    "rate_limited",
+    "provider_rejected",
+    "provider_unavailable",
+    "provider_unreachable",
+    "unknown",
+  ] satisfies ChatErrorCode[]),
+  message: z.string(),
+});
+
+export type ChatError = z.infer<typeof ChatErrorSchema>;
