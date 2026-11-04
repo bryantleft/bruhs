@@ -2,6 +2,7 @@
   "expo": {
     "name": "bruhs / outside",
     "slug": "bruhs-outside",
+    "owner": "bruhs",
     "scheme": "bruhs-outside",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -75,6 +76,11 @@
       ],
       "expo-status-bar",
       ["expo-secure-store", { "faceIDPermission": false }]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e9788ab3-2f30-4a05-b335-2d9e421b145a"
+      }
+    }
   }
 }
