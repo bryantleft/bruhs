@@ -573,3 +573,40 @@ test('busy storage defers serialization of superseded route snapshots', async ()
     await settle();
   }
 });
+
+test('a long walk writes its route in batches and always on pause', async () => {
+  const h = harness();
+  await h.recorder.load();
+  await h.recorder.start();
+  // 25 fixes, one second and about 11 m apart: the first point, then every tenth.
+  for (let index = 0; index < 25; index += 1) {
+    h.emit({ ...fix, latitude: index * 0.0001, timestamp: 1_000 + index * 1_000 });
+    await settle();
+  }
+  const points = (raw: string | undefined): number => {
+    const saved = decodeWalk(raw ?? '');
+    return saved.ok ? saved.walk.segments.flat().length : -1;
+  };
+  assert.deepEqual(h.writes.map(points), [1, 11, 21]);
+  assert.equal(h.state().walk?.segments[0]?.length, 25);
+  h.time(30_000);
+  h.recorder.pause();
+  await settle();
+  assert.equal(points(h.writes.at(-1)), 25);
+  assert.equal(h.writes.length, 4);
+  // A slow trickle of fixes still writes at least every 30 seconds.
+  await h.recorder.start();
+  for (const [latitude, timestamp] of [
+    [1, 40_000],
+    [1.0001, 45_000],
+  ]) {
+    h.emit({ ...fix, latitude, timestamp });
+    await settle();
+  }
+  const written = h.writes.length;
+  h.emit({ ...fix, latitude: 1.0002, timestamp: 75_000 });
+  await settle();
+  assert.equal(h.writes.length, written + 1);
+  assert.equal(points(h.writes.at(-1)), 28);
+  h.recorder.dispose();
+});

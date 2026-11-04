@@ -61,6 +61,11 @@ export type Recorder = Readonly<{
   dispose: () => void;
 }>;
 
+// While recording, the route is written every few fixes instead of on each one: a whole-walk
+// write per fix grows with the walk. Pause, finish, backgrounding and dispose always write.
+export const SAVE_EVERY_FIXES = 10;
+export const SAVE_EVERY_MS = 30_000;
+
 export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerState) => void): Recorder {
   let state = EMPTY_EXPLORER;
   let alive = true;
@@ -71,11 +76,16 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
   let pending: Readonly<{ id: number; walk: Walk }> | null = null;
   let writeId = 0;
   let loadId = 0;
+  // Fixes recorded since the last write, and the walk time that write covered.
+  let unsaved = 0;
+  let savedAt = 0;
   const publish = (next: ExplorerState): void => {
     state = next;
     if (alive) changed(state);
   };
   const persist = (walk: Walk): void => {
+    unsaved = 0;
+    savedAt = walk.updatedAt;
     const id = ++writeId;
     pending = { id, walk };
     publish({ ...state, save: { status: 'saving' } });
@@ -89,7 +99,8 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
         try {
           await ports.write(JSON.stringify(next.walk));
           if (next.id === writeId) publish({ ...state, save: { status: 'saved' } });
-        } catch {
+        } catch (error: unknown) {
+          console.warn('Walk could not be saved:', error);
           if (next.id === writeId)
             publish({
               ...state,
@@ -135,7 +146,8 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
           return;
         }
         publish({ ...state, loading: 'ready', loadError: null, walk: decoded?.ok ? decoded.walk : null });
-      } catch {
+      } catch (error: unknown) {
+        console.warn('Walk could not be read:', error);
         if (alive && request === loadId)
           publish({
             ...state,
@@ -193,8 +205,15 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
                   ? { status: 'weak', accuracy: fix.accuracy }
                   : { status: 'watching' },
             });
+            // A segment's first point is written at once, so a new or resumed walk is never
+            // only in memory; later points wait for the next batch.
+            const first = (state.walk.segments.at(-1)?.length ?? 0) === 0;
             const walk = recordFix(state.walk, fix);
-            if (walk !== state.walk) commit(walk);
+            if (walk === state.walk) return;
+            unsaved += 1;
+            if (first || unsaved >= SAVE_EVERY_FIXES || walk.updatedAt - savedAt >= SAVE_EVERY_MS)
+              commit(walk);
+            else publish({ ...state, walk });
           },
           (reason) => {
             if (!alive || request !== epoch) return;
@@ -205,7 +224,8 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
         );
         if (!alive || request !== epoch) watcher.remove();
         else subscription = watcher;
-      } catch {
+      } catch (error: unknown) {
+        console.warn('Location could not start:', error);
         if (alive && request === epoch) locationError('couldn’t start location. try again.');
       }
     },
@@ -230,7 +250,8 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
         await ports.remove();
         if (alive) publish({ ...EMPTY_EXPLORER, loading: 'ready' });
         return { ok: true };
-      } catch {
+      } catch (error: unknown) {
+        console.warn('Walk could not be deleted:', error);
         const message = 'couldn’t delete this walk. try deleting it again.';
         if (alive)
           publish({
