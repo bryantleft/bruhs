@@ -30,5 +30,13 @@
         "EXPO_PUBLIC_CONVEX_URL": "https://earnest-wren-707.convex.cloud"
       }
     }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6830522823",
+        "appleTeamId": "KW4434WNW9"
+      }
+    }
   }
 }
