@@ -1,6 +1,5 @@
 /// <reference types="vite/client" />
 
-import { QueryClientProvider } from "@tanstack/react-query";
 import {
   createRootRoute,
   HeadContent,
@@ -9,7 +8,6 @@ import {
 } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { NotFound } from "~/components/not-found";
-import { queryClient } from "~/lib/query-client";
 import appCss from "~/styles.css?url";
 
 export const Route = createRootRoute({
@@ -34,21 +32,19 @@ export const Route = createRootRoute({
 
 function RootComponent() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <RootDocument>
-        <Outlet />
-      </RootDocument>
-    </QueryClientProvider>
+    <RootDocument>
+      <Outlet />
+    </RootDocument>
   );
 }
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en" className="dark antialiased">
+    <html lang="en" className="antialiased">
       <head>
         <HeadContent />
       </head>
-      <body className="bg-longan-950 text-lychee-100 [background-image:radial-gradient(70rem_50rem_at_78%_-15%,var(--color-blueberry-950),transparent_70%)]">
+      <body className="bg-longan-950 text-rambutan-100 [background-image:radial-gradient(70rem_50rem_at_78%_-15%,var(--color-blueberry-950),transparent_70%)]">
         {children}
         <Scripts />
       </body>

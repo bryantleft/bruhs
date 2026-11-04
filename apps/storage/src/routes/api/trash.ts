@@ -8,6 +8,7 @@ import {
   type TrashTargetRejection,
 } from "~/lib/request-guard";
 import { readSnapshotRoot, trashPath } from "~/lib/scanner-server";
+import type { TrashFailure, TrashResult } from "~/lib/types";
 
 const REJECTION_STATUS: Record<TrashTargetRejection, number> = {
   not_absolute: 400,
@@ -18,8 +19,9 @@ const REJECTION_STATUS: Record<TrashTargetRejection, number> = {
   protected_path: 403,
 };
 
-function refuse(reason: string, status: number): Response {
-  return jsonResponse({ type: "trash", ok: false, reason }, status);
+function refuse(reason: TrashFailure, status: number): Response {
+  const body: TrashResult = { type: "trash", ok: false, reason };
+  return jsonResponse(body, status);
 }
 
 // POST /api/trash  { "path": "<absolute path inside the last scan's root>" }
@@ -47,16 +49,9 @@ export const Route = createFileRoute("/api/trash")({
           return refuse(target.reason, REJECTION_STATUS[target.reason]);
         }
 
-        const line = await trashPath(target.path);
-        return new Response(
-          line || '{"type":"trash","ok":false,"reason":"no_output"}',
-          {
-            headers: {
-              "Content-Type": "application/json",
-              "Cache-Control": "no-store",
-            },
-          },
-        );
+        const result = await trashPath(target.path);
+        if (result.ok) return jsonResponse(result);
+        return jsonResponse(result, result.reason === "not_found" ? 404 : 500);
       },
     },
   },

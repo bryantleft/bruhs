@@ -1,108 +1,146 @@
-import { useCallback, useRef, useState } from "react";
-import type { ProgressEvent, ResultEvent, ScanEvent } from "~/lib/types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { parseResultEvent, parseScanEvent } from "~/lib/protocol";
+import type { ProgressEvent, ResultEvent, ScanEngine } from "~/lib/types";
 
-export type ScanStatus = "idle" | "scanning" | "done" | "error";
+export type ScanState =
+  | { status: "idle" }
+  | { status: "scanning"; progress: ProgressEvent | null }
+  /** `id` changes with every new result, so views can reset their local state. */
+  | { status: "done"; result: ResultEvent; id: number }
+  | { status: "error"; message: string };
 
 export interface UseScan {
-  status: ScanStatus;
-  progress: ProgressEvent | null;
-  result: ResultEvent | null;
-  error: string | null;
-  scan: (root: string, engine?: "bulk" | "std") => Promise<void>;
-  loadSnapshot: () => Promise<boolean>;
+  state: ScanState;
+  scan: (root: string, engine?: ScanEngine) => Promise<void>;
   cancel: () => void;
 }
 
-/** Drives a streaming scan: reads the NDJSON response, surfacing live progress and the result. */
+/** Turn an NDJSON byte stream into complete, trimmed, non-empty lines. */
+async function* readLines(
+  body: ReadableStream<Uint8Array>,
+): AsyncGenerator<string> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx = buf.indexOf("\n");
+    while (idx >= 0) {
+      const line = buf.slice(0, idx).trim();
+      buf = buf.slice(idx + 1);
+      if (line) yield line;
+      idx = buf.indexOf("\n");
+    }
+  }
+  const last = buf.trim();
+  if (last) yield last;
+}
+
+async function fetchSnapshot(signal: AbortSignal): Promise<ResultEvent | null> {
+  const res = await fetch("/api/snapshot", { signal });
+  if (res.status !== 200) return null;
+  // A snapshot from an older scanner version parses to null and is ignored.
+  return parseResultEvent(await res.json());
+}
+
+/**
+ * Drives a streaming scan: reads the NDJSON response, surfacing live progress and the
+ * result. On mount it shows the last cached scan; starting a scan cancels that load, so
+ * a late snapshot can never replace a scan in progress.
+ */
 export function useScan(): UseScan {
-  const [status, setStatus] = useState<ScanStatus>("idle");
-  const [progress, setProgress] = useState<ProgressEvent | null>(null);
-  const [result, setResult] = useState<ResultEvent | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<ScanState>({ status: "idle" });
   const abortRef = useRef<AbortController | null>(null);
+  const resultIdRef = useRef(0);
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
   }, []);
 
-  const scan = useCallback(
-    async (root: string, engine: "bulk" | "std" = "bulk") => {
-      cancel();
-      const controller = new AbortController();
-      abortRef.current = controller;
-      setStatus("scanning");
-      setProgress(null);
-      setResult(null);
-      setError(null);
+  const begin = useCallback((): AbortController => {
+    cancel();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    return controller;
+  }, [cancel]);
 
+  const finish = useCallback((result: ResultEvent) => {
+    resultIdRef.current += 1;
+    setState({ status: "done", result, id: resultIdRef.current });
+  }, []);
+
+  const scan = useCallback(
+    async (root: string, engine: ScanEngine = "bulk") => {
+      const controller = begin();
+      const isCurrent = () => abortRef.current === controller;
+      setState({ status: "scanning", progress: null });
+
+      let result: ResultEvent | null = null;
+      let failure: string | null = null;
       try {
         const res = await fetch(
           `/api/scan?root=${encodeURIComponent(root)}&engine=${engine}`,
-          {
-            signal: controller.signal,
-          },
+          { signal: controller.signal },
         );
-        if (!res.ok || !res.body)
-          throw new Error(`Scan failed (${res.status})`);
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buf = "";
-
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          let idx = buf.indexOf("\n");
-          while (idx >= 0) {
-            const line = buf.slice(0, idx).trim();
-            buf = buf.slice(idx + 1);
-            if (line) handleEvent(line);
-            idx = buf.indexOf("\n");
+        if (!res.ok || !res.body) {
+          throw new Error(`Scan failed (HTTP ${res.status})`);
+        }
+        for await (const line of readLines(res.body)) {
+          const evt = parseScanEvent(line);
+          if (evt?.type === "progress") {
+            setState({ status: "scanning", progress: evt });
+          } else if (evt?.type === "result") {
+            result = evt;
+          } else if (evt?.type === "fatal") {
+            failure = `The scanner failed: ${evt.reason}`;
+          } else if (evt?.type === "error") {
+            failure = evt.stderr
+              ? `${evt.message} ${evt.stderr.trim().split("\n").pop()}`
+              : evt.message;
           }
         }
-        const last = buf.trim();
-        if (last) handleEvent(last);
-
-        setStatus((s) => (s === "error" ? s : "done"));
       } catch (e) {
         if (controller.signal.aborted) {
-          setStatus("idle");
+          if (isCurrent()) setState({ status: "idle" });
           return;
         }
-        setError(e instanceof Error ? e.message : "Scan failed");
-        setStatus("error");
-      } finally {
-        if (abortRef.current === controller) abortRef.current = null;
+        failure = e instanceof Error ? e.message : "Scan failed";
       }
+      if (!isCurrent()) return;
+      abortRef.current = null;
 
-      function handleEvent(line: string) {
-        let evt: ScanEvent;
-        try {
-          evt = JSON.parse(line) as ScanEvent;
-        } catch {
-          return; // ignore partial/non-JSON lines
-        }
-        if (evt.type === "progress") setProgress(evt);
-        else if (evt.type === "result") setResult(evt as ResultEvent);
-      }
+      if (failure !== null) setState({ status: "error", message: failure });
+      else if (result) finish(result);
+      else
+        setState({ status: "error", message: "The scan returned no result." });
     },
-    [cancel],
+    [begin, finish],
   );
 
-  const loadSnapshot = useCallback(async (): Promise<boolean> => {
-    try {
-      const res = await fetch("/api/snapshot");
-      if (res.status !== 200) return false;
-      const data = (await res.json()) as ResultEvent;
-      setResult(data);
-      setStatus("done");
-      return true;
-    } catch {
-      return false;
-    }
-  }, []);
+  const cancelScan = useCallback(() => {
+    cancel();
+    setState((s) => (s.status === "scanning" ? { status: "idle" } : s));
+  }, [cancel]);
 
-  return { status, progress, result, error, scan, loadSnapshot, cancel };
+  // Show the last cached scan on mount. This is a fetch with cleanup, kept in an effect
+  // because it shares the abort controller with `scan`.
+  useEffect(() => {
+    const controller = begin();
+    fetchSnapshot(controller.signal)
+      .then((snapshot) => {
+        if (snapshot && abortRef.current === controller) finish(snapshot);
+      })
+      .catch(() => {
+        // No snapshot (or the load was cancelled): stay idle.
+      })
+      .finally(() => {
+        if (abortRef.current === controller) abortRef.current = null;
+      });
+    return cancel;
+  }, [begin, cancel, finish]);
+
+  return { state, scan, cancel: cancelScan };
 }
