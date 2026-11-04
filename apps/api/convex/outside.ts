@@ -1,18 +1,35 @@
 import { getAuthSessionId, getAuthUserId } from '@convex-dev/auth/server';
-import { ConvexError, v } from 'convex/values';
+import { type Infer, v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { type MutationCtx, mutation, type QueryCtx, query } from './_generated/server';
-import { day, homeResult, member, profileName, skin, validDate, weekStart } from './validators';
+import {
+  day,
+  fail,
+  homeResult,
+  MAX_PARTY,
+  type Member,
+  member,
+  profileName,
+  skin,
+  validDate,
+  weekStart,
+} from './validators';
 
 type Reader = QueryCtx | MutationCtx;
+type Home = Infer<typeof homeResult>;
+
+const DAY = 86400000;
+// Health reports a day's total, and no real day comes near this; it keeps one call from
+// winning every race.
+const MAX_DAILY_STEPS = 200_000;
 
 async function actor(ctx: Reader): Promise<Id<'users'>> {
   const [userId, sessionId] = await Promise.all([getAuthUserId(ctx), getAuthSessionId(ctx)]);
-  if (!userId || !sessionId) throw new ConvexError('sign_in_required');
+  if (!userId || !sessionId) fail('sign_in_required');
   const [user, session] = await Promise.all([ctx.db.get(userId), ctx.db.get(sessionId)]);
   // Checking only the JWT subject would let a deleted guest use an unexpired token.
   if (!user || !session || session.userId !== userId || session.expirationTime <= Date.now())
-    throw new ConvexError('sign_in_required');
+    fail('sign_in_required');
   return userId;
 }
 
@@ -23,10 +40,22 @@ async function profile(ctx: Reader, userId: Id<'users'>): Promise<Doc<'outsidePr
     .unique();
 }
 
-async function readHome(ctx: Reader, userId: Id<'users'>) {
+// The party a profile points at, or null when it points nowhere. A dangling pointer (a party
+// deleted from the dashboard) is logged and treated as no party, so the guest can still join,
+// leave or delete their account instead of being stuck on an error.
+async function currentParty(
+  ctx: Reader,
+  saved: Doc<'outsideProfiles'> | null,
+): Promise<Doc<'outsideParties'> | null> {
+  if (!saved?.partyId) return null;
+  const party = await ctx.db.get(saved.partyId);
+  if (!party) console.error(`Profile ${saved._id} points at missing party ${saved.partyId}.`);
+  return party;
+}
+
+async function readHome(ctx: Reader, userId: Id<'users'>): Promise<Home> {
   const saved = await profile(ctx, userId);
-  const party = saved?.partyId ? await ctx.db.get(saved.partyId) : null;
-  if (saved?.partyId && (!party || party.members < 1)) throw new ConvexError('invalid_party');
+  const party = await currentParty(ctx, saved);
   return {
     userId,
     home: {
@@ -53,6 +82,25 @@ export const home = query({
   },
 });
 
+type Entry =
+  | Readonly<{ kind: 'join'; invite: string; name: string; skin: Infer<typeof skin> }>
+  | Readonly<{ kind: 'create' | 'profile'; name: string; skin: Infer<typeof skin> }>;
+
+// Convex requires an object for top-level args, so the join/create split can't live in the
+// validator. Narrow it here, before anything reads the fields: a join needs an invite, and the
+// others must not carry one.
+function entryOf(
+  args: Readonly<{ kind: Entry['kind']; name: string; skin: Entry['skin']; invite?: string }>,
+): Entry {
+  const { kind, name, skin: chosen, invite } = args;
+  if (kind === 'join') {
+    if (invite === undefined) fail('invite_not_found');
+    return { kind, invite, name, skin: chosen };
+  }
+  if (invite !== undefined) fail('invite_not_found');
+  return { kind, name, skin: chosen };
+}
+
 export const enter = mutation({
   args: {
     kind: v.union(v.literal('create'), v.literal('join'), v.literal('profile')),
@@ -61,20 +109,21 @@ export const enter = mutation({
     invite: v.optional(v.string()),
   },
   returns: homeResult,
-  handler: async (ctx, args) => {
+  handler: async (ctx, raw) => {
+    const args = entryOf(raw);
     const userId = await actor(ctx);
     const name = profileName(args.name);
     const saved = await profile(ctx, userId);
-    let partyId = saved?.partyId;
+    let partyId = (await currentParty(ctx, saved))?._id;
     if (args.kind === 'join') {
-      const invite = args.invite?.trim().toLowerCase();
-      if (!invite || !/^[a-f0-9]{32}$/.test(invite)) throw new ConvexError('invite_not_found');
+      const invite = args.invite.trim().toLowerCase();
+      if (!/^[a-f0-9]{32}$/.test(invite)) fail('invite_not_found');
       const party = await ctx.db
         .query('outsideParties')
         .withIndex('by_invite', (q) => q.eq('invite', invite))
         .unique();
-      if (!party) throw new ConvexError('invite_not_found');
-      if (partyId && partyId !== party._id) throw new ConvexError('already_in_party');
+      if (!party) fail('invite_not_found');
+      if (partyId && partyId !== party._id) fail('already_in_party');
       partyId = party._id;
     } else if (args.kind === 'create' && !partyId) {
       // Convex provides a seeded strong PRNG inside mutations. Four 32-bit words
@@ -90,13 +139,14 @@ export const enter = mutation({
           .withIndex('by_invite', (q) => q.eq('invite', invite))
           .unique()
       )
-        throw new ConvexError('invite_collision');
+        fail('invite_collision');
       partyId = await ctx.db.insert('outsideParties', { invite, members: 0 });
     }
     const joining = partyId !== undefined && saved?.partyId !== partyId;
     if (joining && partyId) {
       const party = await ctx.db.get(partyId);
-      if (!party) throw new ConvexError('invite_not_found');
+      if (!party) fail('invite_not_found');
+      if (party.members >= MAX_PARTY) fail('party_full');
       // OCC serializes this update with joins and the last departure.
       await ctx.db.patch(party._id, { members: party.members + 1 });
     }
@@ -107,29 +157,39 @@ export const enter = mutation({
   },
 });
 
+// The client only sends the current race week; allowing last week too covers a late sync
+// across Monday. Older dates would let one guest grow their score rows without bound.
+function submitWindow(now: number): Readonly<{ earliest: string; latest: string }> {
+  const iso = (time: number) => new Date(time).toISOString().slice(0, 10);
+  return { earliest: weekStart(iso(now - 7 * DAY)), latest: iso(now + DAY) };
+}
+
 export const submit = mutation({
+  // A plain string on purpose: the client keeps this id as text, and any mismatch (including a
+  // malformed id) must read as a stale login, sign_in_required, not as a validation error.
   args: { expectedUserId: v.string(), days: v.array(day) },
   returns: v.literal(true),
   handler: async (ctx, { expectedUserId, days }): Promise<true> => {
     const userId = await actor(ctx);
-    if (expectedUserId !== userId) throw new ConvexError('sign_in_required');
+    if (expectedUserId !== userId) fail('sign_in_required');
     const saved = await profile(ctx, userId);
-    if (!saved?.partyId) throw new ConvexError('not_in_party');
+    if (!saved?.partyId) fail('not_in_party');
     // Health reads at most seven daily buckets. Validate all of them before any write.
-    if (days.length < 1 || days.length > 7) throw new ConvexError('invalid_steps');
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    if (days.length < 1 || days.length > 7) fail('invalid_steps');
+    const { earliest, latest } = submitWindow(Date.now());
     const dates = new Set<string>();
     const weeks = new Map<string, typeof days>();
     for (const value of days) {
       if (
         !validDate(value.date) ||
-        value.date > tomorrow ||
+        value.date < earliest ||
+        value.date > latest ||
         dates.has(value.date) ||
         !Number.isSafeInteger(value.steps) ||
         value.steps < 0 ||
-        value.steps > 2147483647
+        value.steps > MAX_DAILY_STEPS
       )
-        throw new ConvexError('invalid_steps');
+        fail('invalid_steps');
       dates.add(value.date);
       const week = weekStart(value.date);
       weeks.set(week, [...(weeks.get(week) ?? []), value]);
@@ -158,64 +218,75 @@ export const submit = mutation({
   },
 });
 
+type Ranked = Readonly<{ row: Doc<'outsideProfiles'>; steps: number | null }>;
+
+// Most steps first, then members without a score; ties keep join order. Places are dense
+// ("1, 1, 3"), and `tied` counts members sharing a score.
+export function rankMembers(
+  members: readonly Doc<'outsideProfiles'>[],
+  totals: ReadonlyMap<Id<'users'>, number>,
+): Member[] {
+  const joined = (row: Doc<'outsideProfiles'>) => row.joinedAt ?? row._creationTime;
+  const byScore = (a: Ranked, b: Ranked): number => {
+    if (a.steps === null || b.steps === null) return (a.steps === null ? 1 : 0) - (b.steps === null ? 1 : 0);
+    return b.steps - a.steps;
+  };
+  const sorted = members
+    .map((row): Ranked => ({ row, steps: totals.get(row.userId) ?? null }))
+    .sort(
+      (a, b) => byScore(a, b) || joined(a.row) - joined(b.row) || a.row.userId.localeCompare(b.row.userId),
+    );
+  const ties = new Map<number, number>();
+  for (const { steps } of sorted) if (steps !== null) ties.set(steps, (ties.get(steps) ?? 0) + 1);
+  return sorted.map(({ row, steps }, index): Member => {
+    const base = {
+      user_id: row.userId,
+      name: row.name,
+      skin: row.skin,
+      synced_at: row.syncedAt === undefined ? null : new Date(row.syncedAt).toISOString(),
+    };
+    if (steps === null) return { ...base, steps: null, place: null, tied: null };
+    const first = sorted.findIndex((other) => other.steps === steps);
+    return { ...base, steps, place: (first < 0 ? index : first) + 1, tied: ties.get(steps) ?? 1 };
+  });
+}
+
 export const board = query({
-  args: { start: v.string(), end: v.string(), offset: v.number() },
+  // `end` is always `start` + 6 days; it stays optional for clients that still send it.
+  args: { start: v.string(), end: v.optional(v.string()), offset: v.number() },
   returns: v.object({ rows: v.array(member), total: v.number() }),
   handler: async (ctx, { start, end, offset }) => {
     const userId = await actor(ctx);
+    const expectedEnd = validDate(start)
+      ? new Date(Date.parse(`${start}T00:00:00Z`) + 6 * DAY).toISOString().slice(0, 10)
+      : null;
     if (
-      !validDate(start) ||
-      !validDate(end) ||
+      !expectedEnd ||
       weekStart(start) !== start ||
-      Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`) !== 6 * 86400000 ||
+      (end !== undefined && end !== expectedEnd) ||
       !Number.isSafeInteger(offset) ||
       offset < 0
     )
-      throw new ConvexError('invalid_week');
+      fail('invalid_week');
     const saved = await profile(ctx, userId);
-    if (!saved?.partyId) throw new ConvexError('not_in_party');
+    if (!saved?.partyId) fail('not_in_party');
     const partyId = saved.partyId;
-    // Two indexed reads for the private party; no per-member/day query waterfall.
+    // Two indexed reads for the private party, both bounded by the party cap.
     const [members, scores] = await Promise.all([
       ctx.db
         .query('outsideProfiles')
         .withIndex('by_party', (q) => q.eq('partyId', partyId))
-        .collect(),
+        .take(MAX_PARTY),
       ctx.db
         .query('outsideScores')
         .withIndex('by_party_week', (q) => q.eq('partyId', partyId).eq('week', start))
-        .collect(),
+        .take(MAX_PARTY),
     ]);
     const totals = new Map(
       scores.map((row) => [row.userId, row.days.reduce((sum, value) => sum + value.steps, 0)]),
     );
-    const sorted = members
-      .map((row) => ({ row, steps: totals.get(row.userId) ?? null }))
-      .sort(
-        (a, b) =>
-          (a.steps === null ? (b.steps === null ? 0 : 1) : b.steps === null ? -1 : b.steps - a.steps) ||
-          (a.row.joinedAt ?? a.row._creationTime) - (b.row.joinedAt ?? b.row._creationTime) ||
-          a.row.userId.localeCompare(b.row.userId),
-      );
-    const ties = new Map<number, number>();
-    for (const { steps } of sorted) if (steps !== null) ties.set(steps, (ties.get(steps) ?? 0) + 1);
-    let previous: number | null = null;
-    let place = 0;
-    const rows = sorted.map(({ row, steps }, index) => {
-      if (steps !== null && (index === 0 || steps !== previous)) place = index + 1;
-      previous = steps;
-      return {
-        user_id: row.userId,
-        name: row.name,
-        skin: row.skin,
-        steps,
-        place: steps === null ? null : place,
-        tied: steps === null ? null : (ties.get(steps) ?? 1),
-        synced_at: row.syncedAt === undefined ? null : new Date(row.syncedAt).toISOString(),
-      };
-    });
     // Keep the existing twenty-row page (about three phone viewports).
-    return { rows: rows.slice(offset, offset + 20), total: members.length };
+    return { rows: rankMembers(members, totals).slice(offset, offset + 20), total: members.length };
   },
 });
 
@@ -223,7 +294,7 @@ async function leave(ctx: MutationCtx, saved: Doc<'outsideProfiles'> | null): Pr
   if (!saved?.partyId) return;
   const partyId = saved.partyId;
   const [party, scores] = await Promise.all([
-    ctx.db.get(partyId),
+    currentParty(ctx, saved),
     ctx.db
       .query('outsideScores')
       .withIndex('by_user_party_week', (q) => q.eq('userId', saved.userId).eq('partyId', partyId))
@@ -231,9 +302,17 @@ async function leave(ctx: MutationCtx, saved: Doc<'outsideProfiles'> | null): Pr
   ]);
   await Promise.all(scores.map((score) => ctx.db.delete(score._id)));
   await ctx.db.patch(saved._id, { partyId: undefined, joinedAt: undefined, syncedAt: undefined });
-  if (!party || party.members < 1) throw new ConvexError('invalid_party');
-  if (party.members === 1) await ctx.db.delete(partyId);
-  else await ctx.db.patch(partyId, { members: party.members - 1 });
+  if (!party) return;
+  // Count who is really left rather than trusting the counter, so a drifted count repairs
+  // itself here instead of locking the last member in.
+  const remaining = (
+    await ctx.db
+      .query('outsideProfiles')
+      .withIndex('by_party', (q) => q.eq('partyId', partyId))
+      .take(MAX_PARTY + 1)
+  ).filter((row) => row._id !== saved._id).length;
+  if (remaining === 0) await ctx.db.delete(partyId);
+  else await ctx.db.patch(partyId, { members: remaining });
 }
 
 export const depart = mutation({

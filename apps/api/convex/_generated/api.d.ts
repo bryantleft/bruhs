@@ -10,6 +10,7 @@
 
 import type * as auth from "../auth.js";
 import type * as http from "../http.js";
+import type * as limits from "../limits.js";
 import type * as outside from "../outside.js";
 import type * as validators from "../validators.js";
 import type * as waitlist from "../waitlist.js";
@@ -23,6 +24,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   http: typeof http;
+  limits: typeof limits;
   outside: typeof outside;
   validators: typeof validators;
   waitlist: typeof waitlist;

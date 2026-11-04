@@ -1,16 +1,28 @@
+import { generateKeyPairSync } from 'node:crypto';
+import rateLimiter from '@convex-dev/rate-limiter/test';
 import { makeFunctionReference } from 'convex/server';
 import type { Value } from 'convex/values';
 import { convexTest } from 'convex-test';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../convex/_generated/api';
+import { rankMembers } from '../convex/outside';
 import schema from '../convex/schema';
+import { MAX_PARTY } from '../convex/validators';
 
 const modules = {
   '../convex/_generated/server.js': () => import('../convex/_generated/server.js'),
+  '../convex/_generated/api.js': () => import('../convex/_generated/api.js'),
   '../convex/auth.ts': () => import('../convex/auth'),
+  '../convex/http.ts': () => import('../convex/http'),
+  '../convex/limits.ts': () => import('../convex/limits'),
   '../convex/outside.ts': () => import('../convex/outside'),
+  '../convex/waitlist.ts': () => import('../convex/waitlist'),
 };
-const create = () => convexTest(schema, modules);
+function create() {
+  const t = convexTest(schema, modules);
+  rateLimiter.register(t);
+  return t;
+}
 type Backend = ReturnType<typeof create>;
 async function guest(t: Backend) {
   const { userId, sessionId } = await t.run(async (ctx) => {
@@ -29,6 +41,13 @@ async function party(t: Backend) {
   if (!saved) throw new Error('Test party was not created');
   return { ...owner, party: saved };
 }
+
+// The submit window is relative to now; pin it inside the test week (Mon 2026-10-26).
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-30T12:00:00Z'));
+});
+afterEach(() => vi.useRealTimers());
 
 describe('Outside private races', () => {
   it('exposes no party data to unauthenticated, missing-session, expired or deleted identities', async () => {
@@ -68,7 +87,18 @@ describe('Outside private races', () => {
   it('validates profiles, invites and strict payload shapes before writing', async () => {
     const t = create();
     const user = await guest(t);
-    for (const name of ['', '  ', 'x'.repeat(25), 'hi\nthere', '\u0085', 'a\u2028b'])
+    for (const name of [
+      '',
+      '  ',
+      'x'.repeat(25),
+      'hi\nthere',
+      '\u0085',
+      'a\u2028b',
+      'moss\u202e',
+      'a\u200bb',
+      'mo\ufeffss',
+      'x\u2066y',
+    ])
       await expect(user.client.mutation(api.outside.enter, { ...entry, name })).rejects.toThrow(
         'invalid_profile',
       );
@@ -80,6 +110,11 @@ describe('Outside private races', () => {
     const raw = makeFunctionReference<'mutation', Record<string, Value>>('outside:enter');
     await expect(user.client.mutation(raw, { ...entry, skin: 'fake' })).rejects.toThrow();
     await expect(user.client.mutation(raw, { ...entry, coordinates: [1, 2] })).rejects.toThrow();
+    // A create can't carry an invite, and a join must.
+    await expect(user.client.mutation(raw, { ...entry, invite: 'f'.repeat(32) })).rejects.toThrow(
+      'invite_not_found',
+    );
+    await expect(user.client.mutation(raw, { ...entry, kind: 'join' })).rejects.toThrow('invite_not_found');
   });
 
   it('pins submission identity and makes weekly totals monotonic, atomic and retry-safe', async () => {
@@ -113,7 +148,9 @@ describe('Outside private races', () => {
       [{ date: '2026-02-30', steps: 1 }],
       [{ date: week.start, steps: -1 }],
       [{ date: week.start, steps: 1.5 }],
-      [{ date: week.start, steps: 2147483648 }],
+      [{ date: week.start, steps: 200_001 }],
+      [{ date: '2026-10-18', steps: 1 }],
+      [{ date: '2001-01-01', steps: 1 }],
       [{ date: week.start, steps: 1, route: [] }],
       [
         { date: week.start, steps: 1 },
@@ -264,5 +301,103 @@ describe('Outside private races', () => {
       'authVerificationCodes',
     ] as const)
       expect(await t.run((ctx) => ctx.db.query(table).collect())).toHaveLength(0);
+  });
+});
+
+describe('Outside limits and repairs', () => {
+  it(`refuses the ${MAX_PARTY + 1}st member with party_full and keeps the count`, async () => {
+    const t = create();
+    const owner = await party(t);
+    await t.run(async (ctx) => {
+      const partyId = owner.party.id;
+      for (let index = 1; index < MAX_PARTY; index += 1) {
+        const userId = await ctx.db.insert('users', { isAnonymous: true });
+        await ctx.db.insert('outsideProfiles', { userId, name: `bruh ${index}`, skin: 'original', partyId });
+      }
+      await ctx.db.patch(partyId, { members: MAX_PARTY });
+    });
+    const late = await guest(t);
+    await expect(
+      late.client.mutation(api.outside.enter, { ...entry, kind: 'join', invite: owner.party.invite_code }),
+    ).rejects.toThrow('party_full');
+    expect((await owner.client.query(api.outside.home)).home.party?.member_count).toBe(MAX_PARTY);
+    expect((await owner.client.query(api.outside.board, week)).total).toBe(MAX_PARTY);
+  });
+
+  it('lets a guest leave when the member count has drifted, repairing it from the real members', async () => {
+    const t = create();
+    const owner = await party(t);
+    const other = await guest(t);
+    await other.client.mutation(api.outside.enter, {
+      ...entry,
+      kind: 'join',
+      invite: owner.party.invite_code,
+    });
+    // A counter that went wrong (for example a profile deleted from the dashboard).
+    await t.run((ctx) => ctx.db.patch(owner.party.id, { members: 0 }));
+    await other.client.mutation(api.outside.depart, { removeAccount: false });
+    expect(await t.run((ctx) => ctx.db.get(owner.party.id))).toMatchObject({ members: 1 });
+    await owner.client.mutation(api.outside.depart, { removeAccount: false });
+    expect(await t.run((ctx) => ctx.db.query('outsideParties').collect())).toHaveLength(0);
+  });
+
+  it('treats a profile pointing at a deleted party as having none, so the guest can carry on', async () => {
+    const t = create();
+    const owner = await party(t);
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await t.run((ctx) => ctx.db.delete(owner.party.id));
+    expect((await owner.client.query(api.outside.home)).home.party).toBeNull();
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining('missing party'));
+    const again = await owner.client.mutation(api.outside.enter, entry);
+    expect(again.home.party?.member_count).toBe(1);
+    await owner.client.mutation(api.outside.depart, { removeAccount: true });
+    errors.mockRestore();
+  });
+
+  it('accepts the board end for older clients but rejects a wrong one', async () => {
+    const t = create();
+    const owner = await party(t);
+    const { end: _end, ...withoutEnd } = week;
+    expect((await owner.client.query(api.outside.board, withoutEnd)).total).toBe(1);
+    await expect(owner.client.query(api.outside.board, { ...week, end: '2026-11-02' })).rejects.toThrow(
+      'invalid_week',
+    );
+  });
+
+  it('ranks scores first with shared places, then members without one in join order', () => {
+    const row = (userId: string, joinedAt: number) =>
+      ({ _id: `p${userId}`, _creationTime: 0, userId, name: userId, skin: 'original', joinedAt }) as never;
+    const totals = new Map([
+      ['b', 5],
+      ['c', 9],
+      ['d', 5],
+    ]) as never;
+    const ranked = rankMembers([row('a', 1), row('b', 2), row('c', 3), row('d', 4)], totals);
+    expect(ranked.map((m) => [m.user_id, m.steps, m.place, m.tied])).toEqual([
+      ['c', 9, 1, 1],
+      ['b', 5, 2, 2],
+      ['d', 5, 2, 2],
+      ['a', null, null, null],
+    ]);
+  });
+});
+
+describe('anonymous sign-in', () => {
+  // Real Convex Auth signing keys, generated per run; nothing leaves the test.
+  beforeEach(() => {
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const jwk = { ...publicKey.export({ format: 'jwk' }), use: 'sig', alg: 'RS256' };
+    vi.stubEnv('JWT_PRIVATE_KEY', privateKey.export({ format: 'pem', type: 'pkcs8' }).toString());
+    vi.stubEnv('JWKS', JSON.stringify({ keys: [jwk] }));
+    vi.stubEnv('CONVEX_SITE_URL', 'https://test.convex.site');
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('signs guests in until the flood limit, then refuses with rate_limited', async () => {
+    const t = create();
+    for (let index = 0; index < 40; index += 1)
+      expect(await t.action(api.auth.signIn, { provider: 'anonymous' })).toHaveProperty('tokens');
+    await expect(t.action(api.auth.signIn, { provider: 'anonymous' })).rejects.toThrow('rate_limited');
+    expect(await t.run((ctx) => ctx.db.query('users').collect())).toHaveLength(40);
   });
 });

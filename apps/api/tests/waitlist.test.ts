@@ -9,6 +9,7 @@ const modules = {
   '../convex/_generated/api.js': () => import('../convex/_generated/api.js'),
   '../convex/auth.ts': () => import('../convex/auth'),
   '../convex/http.ts': () => import('../convex/http'),
+  '../convex/limits.ts': () => import('../convex/limits'),
   '../convex/waitlist.ts': () => import('../convex/waitlist'),
 };
 const SITE = 'https://outside.bruhs.app';
@@ -79,9 +80,32 @@ describe('POST /waitlist', () => {
     const fromDev = await post(t, { email: 'moss@example.com' }, { Origin: DEV });
     expect(fromDev.status).toBe(303);
     expect(fromDev.headers.get('Location')).toBe(`${DEV}/waitlist/joined/`);
-    const forged = await post(t, { email: 'nope' }, { Origin: 'https://evil.example' });
-    expect(forged.headers.get('Location')).toBe(`${SITE}/waitlist/invalid/`);
-    expect(forged.headers.get('Access-Control-Allow-Origin')).toBeNull();
+    const noOrigin = await post(t, { email: 'nope' }, { Origin: '' });
+    expect(noOrigin.headers.get('Location')).toBe(`${SITE}/waitlist/invalid/`);
+  });
+
+  it('refuses posts from unlisted origins, including sandboxed frames, before storing anything', async () => {
+    const t = create();
+    for (const Origin of ['https://evil.example', 'null']) {
+      const forged = await post(t, { email: 'victim@example.com' }, { Origin });
+      expect(forged.status, Origin).toBe(403);
+      expect(await forged.json()).toEqual({ error: 'origin_not_allowed' });
+      expect(forged.headers.get('Access-Control-Allow-Origin')).toBeNull();
+    }
+    expect(await emails(t)).toEqual([]);
+  });
+
+  it('answers preflight with CORS headers for listed origins only', async () => {
+    const t = create();
+    const listed = await t.fetch('/waitlist', { method: 'OPTIONS', headers: { Origin: DEV } });
+    expect(listed.status).toBe(204);
+    expect(listed.headers.get('Access-Control-Allow-Origin')).toBe(DEV);
+    const other = await t.fetch('/waitlist', {
+      method: 'OPTIONS',
+      headers: { Origin: 'https://evil.example' },
+    });
+    expect(other.headers.get('Access-Control-Allow-Origin')).toBeNull();
+    expect(other.headers.get('Vary')).toBe('Origin');
   });
 
   it('refuses other content types and oversized bodies', async () => {

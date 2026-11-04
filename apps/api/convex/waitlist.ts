@@ -1,7 +1,7 @@
-import { MINUTE, RateLimiter } from '@convex-dev/rate-limiter';
 import { v } from 'convex/values';
-import { components, internal } from './_generated/api';
+import { internal } from './_generated/api';
 import { type ActionCtx, httpAction, internalMutation } from './_generated/server';
+import { rateLimiter } from './limits';
 
 // RFC 5321 caps an address at 254 characters. Percent-encoding can triple that, plus field
 // names and the honeypot: a real form body stays under 1 KiB.
@@ -10,12 +10,6 @@ const MAX_EMAIL = 254;
 
 export type WaitlistAction = 'join' | 'leave';
 export type WaitlistReply = 'joined' | 'left' | 'invalid_email' | 'rate_limited';
-
-// One shared bucket per action. Convex documents no client IP for HTTP actions, so a
-// per-visitor limit isn't possible here: this caps floods (20 a minute, bursts of 40), not a
-// slow drip. Real launch-day traffic sits well under it.
-const FLOOD = { kind: 'token bucket', rate: 20, period: MINUTE, capacity: 40 } as const;
-const rateLimiter = new RateLimiter(components.rateLimiter, { waitlistJoin: FLOOD, waitlistLeave: FLOOD });
 
 // Lowercased and trimmed, so "Moss@Example.com " and "moss@example.com" are one signup.
 export function normalizeEmail(raw: string): string | null {
@@ -131,11 +125,22 @@ function formHandler(action: WaitlistAction) {
       return Response.json({ error: 'waitlist_not_configured' }, { status: 500 });
     }
     const headers = corsHeaders(request, origins);
+    // Browsers always send Origin on POST, and a page can't forge it. Refusing unlisted ones
+    // (including "null" from sandboxed frames) stops other sites signing up a visitor's email
+    // with a hidden form. Clients without Origin (curl) could fake one anyway, so they pass.
+    const origin = request.headers.get('Origin');
+    if (origin && !origins.includes(origin))
+      return Response.json({ error: 'origin_not_allowed' }, { status: 403, headers });
     const type = request.headers.get('Content-Type') ?? '';
     if (!type.startsWith('application/x-www-form-urlencoded'))
       return Response.json({ error: 'unsupported_content_type' }, { status: 415, headers });
+    // Refuse a declared oversize body before buffering it; the length check after reading
+    // catches bodies that lie about it.
+    if (Number(request.headers.get('Content-Length') ?? 0) > MAX_BODY)
+      return Response.json({ error: 'body_too_large' }, { status: 413, headers });
     const body = await request.text();
-    if (body.length > MAX_BODY) return Response.json({ error: 'body_too_large' }, { status: 413, headers });
+    if (new TextEncoder().encode(body).length > MAX_BODY)
+      return Response.json({ error: 'body_too_large' }, { status: 413, headers });
     const form = new URLSearchParams(body);
     const email = normalizeEmail(form.get('email') ?? '');
     // The honeypot is hidden from people; bots that fill it get a normal reply and no change.
