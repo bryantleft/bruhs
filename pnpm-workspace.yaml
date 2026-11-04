@@ -1,3 +1,21 @@
 packages:
   - apps/*
   - packages/*
+
+# pnpm 11+ no longer reads the `pnpm` field of package.json: https://pnpm.io/package_json
+overrides:
+  "@vercel/routing-utils>path-to-regexp": 6.3.0
+  "@vercel/static-config>ajv": 8.20.0
+  # glob <=14.0.1 has GHSA-3g3m-2fjr-6pw4 (and pulls minimatch <11.0.1, GHSA-g3hv-75wg-m249);
+  # @vercel/nft 1.11.0 (latest) still asks for ^13. Traces are identical with 14.
+  "@vercel/nft>glob": 14.0.3
+
+# pnpm 11+ fails the install on unreviewed dependency build scripts: https://pnpm.io/settings/build
+# sharp and @biomejs/biome ship prebuilt binaries and have no install scripts.
+allowBuilds:
+  # Verifies and installs its platform binary.
+  esbuild: true
+  # Only builds from source when npm_config_build_from_source=true; prebuilt binaries are used.
+  "@parcel/watcher": false
+  # Prints a funding banner.
+  core-js: false
