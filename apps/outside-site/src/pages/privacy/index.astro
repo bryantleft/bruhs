@@ -1,10 +1,61 @@
 ---
-import Policy, { type Section } from '../../components/Policy.astro';
+import Header from '../../components/Header.astro';
 import WaitlistForm from '../../components/WaitlistForm.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
 
+// One policy for the app and the waitlist; App Store Connect and Play Console link here. Keep the
+// app part true to the app: health reads (apps/outside/docs/health-integration.md), GPS walks
+// (src/explore), the party upload (src/friends, apps/api/convex/outside.ts) and the map style
+// (src/explore/map.ts). The old /privacy/app/ redirects to #app (vercel.json).
 // Bump when anything below changes.
 const UPDATED = '4 November 2026';
-const sections: readonly Section[] = [
+const CONTACT = 'contact@bruhs.dev';
+type Section = Readonly<{ title: string; lines: readonly string[] }>;
+const app: readonly Section[] = [
+  {
+    title: 'on your phone',
+    lines: [
+      'your game, your walks and your step history save on your phone, and we never see them.',
+      'erase your saved journey in the app and they are gone. deleting the app removes them too.',
+    ],
+  },
+  {
+    title: 'your steps',
+    lines: [
+      'with your permission, outside reads your daily step totals from Apple Health on iPhone or Health Connect on Android. it reads nothing else and never writes to either.',
+      "your steps pay for your bruh's travel, skills, missions and quests, worked out on your phone.",
+      'step data is never used for ads, never sold, and never shared with anyone except a party you choose to join.',
+      "you can turn off access any time in your phone's settings.",
+    ],
+  },
+  {
+    title: 'your location',
+    lines: [
+      'when you start a walk, outside uses your location while the app is open to draw your route and earn distance stamps. it never tracks you in the background.',
+      'your routes stay on your phone and are never uploaded.',
+      'the map comes from OpenFreeMap. like any website, its servers see your IP address and which map tiles your phone loads, which shows roughly where the map is looking.',
+    ],
+  },
+  {
+    title: 'parties',
+    lines: [
+      'parties are optional. outside works fully without one.',
+      "when you create or join one, you agree to share your bruh's name, outfit, daily step totals for the race week, and when you last synced, with everyone in that party.",
+      "we store those with Convex, our database host, in the US, under a guest login made for your phone. there's no email, password or real name, and the login stays in your phone's secure storage.",
+      'leave the party and your shared step totals are deleted. delete your party profile and your name, outfit and guest login are deleted too.',
+      "lost your phone or reinstalled the app? the guest login can't be recovered, so email us your bruh's name and party invite code and we'll delete what was shared.",
+    ],
+  },
+  {
+    title: "what we don't do",
+    lines: [
+      'no ads, no analytics, no tracking across apps or websites, and no selling or sharing your data.',
+      'no account, email, contacts or photos needed to play.',
+      "outside isn't made for children under 13, and we don't knowingly collect data from them.",
+    ],
+  },
+];
+const waitlist: readonly Section[] = [
   {
     title: 'what we keep',
     lines: [
@@ -25,27 +76,58 @@ const sections: readonly Section[] = [
     lines: [
       'the list is stored with Convex, our database host, in the US.',
       'emails are sent through Resend, our email provider, from outside@bruhs.app.',
-      'this page is served by Vercel. it sets no cookies and runs no analytics.',
+      'this site is served by Vercel. it sets no cookies and runs no analytics.',
     ],
   },
 ];
+const parts = [
+  { id: 'app', title: 'the app', sections: app },
+  { id: 'waitlist', title: 'the waitlist', sections: waitlist },
+] as const;
 ---
 
-<Policy
+<BaseLayout
   title="privacy · bruhs / outside"
-  heading="privacy"
-  description="what the outside waitlist keeps, why, and how to remove your email."
+  description="what the outside app reads, what stays on your phone, what a party shares, and what the waitlist keeps."
   path="/privacy/"
-  updated={UPDATED}
-  {sections}
 >
-  <p slot="intro" class="leading-relaxed text-rambutan-300">
-    this covers the waitlist. the game has <a href="/privacy/app/" class="link">its own privacy policy</a>, covering
-    step data from Apple Health and Health Connect.
-  </p>
-  <section aria-labelledby="remove" class="panel flex flex-col gap-4 p-5">
-    <h2 id="remove" class="text-2xl font-bold text-durian-400 shadowed">remove your email</h2>
-    <p class="leading-relaxed text-rambutan-300">enter the email you joined with and it comes off the list.</p>
-    <WaitlistForm id="leave" leave />
-  </section>
-</Policy>
+  <Header />
+  <main class="mx-auto flex w-full max-w-2xl flex-col gap-12 px-5 py-16">
+    <div class="flex flex-col gap-2">
+      <h1 class="text-4xl font-bold text-durian-400 shadowed">privacy</h1>
+      <p class="label text-rambutan-500">updated {UPDATED}</p>
+      <p class="leading-relaxed text-rambutan-300">
+        this covers the outside app on iPhone and Android, and the waitlist on this site.
+      </p>
+    </div>
+    {
+      parts.map((part) => (
+        <div class="flex scroll-mt-6 flex-col gap-10" id={part.id}>
+          <h2 class="text-3xl font-bold text-durian-400 shadowed">{part.title}</h2>
+          {part.sections.map((section) => (
+            <section class="flex flex-col gap-3">
+              <h3 class="text-2xl font-bold text-rambutan-50 shadowed">{section.title}</h3>
+              {section.lines.map((line) => (
+                <p class="leading-relaxed text-rambutan-300">{line}</p>
+              ))}
+            </section>
+          ))}
+          {part.id === 'waitlist' && (
+            <section id="leave" aria-labelledby="remove" class="panel flex scroll-mt-6 flex-col gap-4 p-5">
+              <h3 id="remove" class="text-2xl font-bold text-durian-400 shadowed">remove your email</h3>
+              <p class="leading-relaxed text-rambutan-300">enter the email you joined with and it comes off the list.</p>
+              <WaitlistForm id="leave" leave />
+            </section>
+          )}
+        </div>
+      ))
+    }
+    <section aria-labelledby="contact" class="flex flex-col gap-3">
+      <h2 id="contact" class="text-3xl font-bold text-durian-400 shadowed">questions</h2>
+      <p class="leading-relaxed text-rambutan-300">
+        email <a href={`mailto:${CONTACT}`} class="link">{CONTACT}</a> about your data or anything on this page.
+      </p>
+      <p class="leading-relaxed text-rambutan-300">if anything here changes, we update this page and the date at the top.</p>
+    </section>
+  </main>
+</BaseLayout>
