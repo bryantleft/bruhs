@@ -1122,7 +1122,8 @@ function healthSync(game: Game, action: Extract<GameAction, { type: 'health-sync
       startedOn:
         game.health?.enabled && game.health.source === action.source
           ? game.health.startedOn
-          : action.days.reduce((first, day) => (day.date < first ? day.date : first), action.date),
+          : // biome-ignore lint/complexity/useMathMinMax: dates are ISO YYYY-MM-DD strings, which compare by text; Math.min would coerce them to NaN.
+            action.days.reduce((first, day) => (day.date < first ? day.date : first), action.date),
     },
   };
   return Number.isSafeInteger(totalSteps(updated)) ? accept(updated) : INVALID;

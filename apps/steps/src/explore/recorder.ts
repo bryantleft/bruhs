@@ -197,7 +197,7 @@ export function createRecorder(ports: RecorderPorts, changed: (state: ExplorerSt
             if (!alive || request !== epoch || !isFix(value)) return;
             const fix: Fix = value;
             if (state.location.status === 'requesting') begin(fix.timestamp);
-            if (!state.walk || state.walk.status !== 'recording') return;
+            if (state.walk?.status !== 'recording') return;
             publish({
               ...state,
               location:

@@ -73,7 +73,8 @@
           "isAndroidForegroundServiceEnabled": false
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      ["expo-secure-store", { "faceIDPermission": false }]
     ]
   }
 }

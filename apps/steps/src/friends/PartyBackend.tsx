@@ -1,9 +1,9 @@
 import { ConvexAuthProvider, useAuthActions, useAuthToken } from '@convex-dev/auth/react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ConvexReactClient, useConvexAuth } from 'convex/react';
 import { type PropsWithChildren, useEffect, useRef, useState } from 'react';
 import { createPartyService } from './client';
 import { PartyProvider } from './PartyProvider';
+import { createPartyTokenStore } from './partyTokenStore';
 import { createPartySession, createPartyStorage, type PartyStorage } from './session';
 import { createStepUpload } from './upload';
 
@@ -61,13 +61,9 @@ function ConnectedParty({
 }
 
 export function PartyBackend({ children }: PropsWithChildren): React.JSX.Element {
-  const [storage] = useState(() =>
-    createPartyStorage({
-      getItem: (key) => AsyncStorage.getItem(key),
-      setItem: (key, value) => AsyncStorage.setItem(key, value),
-      removeItem: (key) => AsyncStorage.removeItem(key),
-    }),
-  );
+  // SecureStore on iOS and Android, moving logins saved by earlier builds out of
+  // AsyncStorage; AsyncStorage (localStorage) on web.
+  const [storage] = useState(() => createPartyStorage(createPartyTokenStore()));
   if (!client)
     return (
       <PartyProvider service={null} hasSession={false}>
