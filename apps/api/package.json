@@ -1,0 +1,32 @@
+{
+  "name": "bruhs-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./api": "./convex/_generated/api.js"
+  },
+  "scripts": {
+    "dev": "convex dev",
+    "deploy": "convex deploy",
+    "codegen": "convex codegen",
+    "auth:setup": "node scripts/configure-auth.mjs",
+    "lint": "biome check .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "pnpm lint && pnpm typecheck && pnpm test"
+  },
+  "dependencies": {
+    "@auth/core": "0.41.1",
+    "@convex-dev/auth": "0.0.96",
+    "convex": "1.48.0",
+    "dotenv": "16.6.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.0.6",
+    "@types/node": "22.15.21",
+    "convex-test": "0.0.66",
+    "typescript": "~6.0.3",
+    "vitest": "5.0.5"
+  }
+}
