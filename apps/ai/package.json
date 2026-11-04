@@ -5,7 +5,8 @@
   "scripts": {
     "build": "bruhs-theme-fonts && react-router build",
     "dev": "bruhs-theme-fonts && portless run react-router dev",
-    "check": "react-router typegen && tsc -b && biome check --write"
+    "check": "react-router typegen && tsc -b && biome check",
+    "fix": "biome check --write"
   },
   "portless": {
     "name": "ai-bruhs"
