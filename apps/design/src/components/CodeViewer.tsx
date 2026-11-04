@@ -29,7 +29,7 @@ export default function CodeViewer({ code, html, title }: CodeViewerProps) {
           type="button"
           onClick={copyToClipboard}
           aria-live="polite"
-          className="flex items-center gap-2 rounded-grape border border-rambutan-100/10 bg-longan-800/50 px-3 py-1.5 text-xs text-rambutan-300 transition-all duration-200 hover:bg-longan-800 hover:text-rambutan-100 focus-visible:outline-2 focus-visible:outline-persimmon-400"
+          className="flex items-center gap-2 rounded-grape border border-rambutan-100/10 bg-longan-800/50 px-3 py-1.5 text-xs text-rambutan-300 transition-colors duration-200 hover:bg-longan-800 hover:text-rambutan-100 focus-visible:outline-2 focus-visible:outline-persimmon-400"
         >
           <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             {copied ? (

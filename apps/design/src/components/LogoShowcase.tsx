@@ -59,7 +59,7 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
               key={color.id}
               onClick={() => setActiveColor(color)}
               aria-pressed={activeColor.id === color.id}
-              className={`px-3 py-2 sm:px-4 sm:py-2 rounded-grape text-label transition-all flex items-center gap-2 ${
+              className={`px-3 py-2 sm:px-4 sm:py-2 rounded-grape text-label transition-colors flex items-center gap-2 ${
                 activeColor.id === color.id
                   ? "bg-longan-900 text-rambutan-100 ring-2 ring-rambutan-100/50"
                   : "bg-longan-800/50 text-rambutan-300 hover:bg-longan-800"
@@ -84,7 +84,7 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
                 type="button"
                 aria-pressed={viewMode === "preview"}
                 onClick={() => setViewMode('preview')}
-                className={`px-4 py-2 rounded-grape text-sm font-medium transition-all ${
+                className={`px-4 py-2 rounded-grape text-sm font-medium transition-colors ${
                   viewMode === 'preview'
                     ? 'bg-persimmon-500 text-longan-950'
                     : 'text-rambutan-300 hover:text-rambutan-100 hover:bg-longan-800/50'
@@ -100,7 +100,7 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
                 type="button"
                 aria-pressed={viewMode === "code"}
                 onClick={() => setViewMode('code')}
-                className={`px-4 py-2 rounded-grape text-sm font-medium transition-all ${
+                className={`px-4 py-2 rounded-grape text-sm font-medium transition-colors ${
                   viewMode === 'code'
                     ? 'bg-persimmon-500 text-longan-950'
                     : 'text-rambutan-300 hover:text-rambutan-100 hover:bg-longan-800/50'
@@ -132,7 +132,7 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
                     eyeColor={activeColor.eyeColor}
                     mouthColor={activeColor.mouthColor}
                     variant={activeVariant.id}
-                    className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 lg:w-56 lg:h-56 transition-all duration-500"
+                    className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 lg:w-56 lg:h-56"
                   />
                 </div>
 
@@ -140,7 +140,7 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
                 <button
                   type="button"
                   onClick={() => setActiveVariantIndex(prevIndex)}
-                  className="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-orb bg-longan-800/80 backdrop-blur-sm border border-rambutan-100/10 flex items-center justify-center text-rambutan-100/80 hover:text-rambutan-100 hover:bg-longan-700/90 transition-all duration-300 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-persimmon-400/50 cursor-pointer"
+                  className="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-orb bg-longan-800/80 backdrop-blur-sm border border-rambutan-100/10 flex items-center justify-center text-rambutan-100/80 hover:text-rambutan-100 hover:bg-longan-700/90 transition-colors focus-visible:outline-2 focus-visible:outline-persimmon-400 cursor-pointer"
                   aria-label={`Switch to ${variants[prevIndex].name} variant`}
                 >
                   <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -151,7 +151,7 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
                 <button
                   type="button"
                   onClick={() => setActiveVariantIndex(nextIndex)}
-                  className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-orb bg-longan-800/80 backdrop-blur-sm border border-rambutan-100/10 flex items-center justify-center text-rambutan-100/80 hover:text-rambutan-100 hover:bg-longan-700/90 transition-all duration-300 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-persimmon-400/50 cursor-pointer"
+                  className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-orb bg-longan-800/80 backdrop-blur-sm border border-rambutan-100/10 flex items-center justify-center text-rambutan-100/80 hover:text-rambutan-100 hover:bg-longan-700/90 transition-colors focus-visible:outline-2 focus-visible:outline-persimmon-400 cursor-pointer"
                   aria-label={`Switch to ${variants[nextIndex].name} variant`}
                 >
                   <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -189,7 +189,7 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
                 key={variant.id}
                 onClick={() => setActiveVariantIndex(index)}
                 aria-current={index === activeVariantIndex ? "true" : undefined}
-                className={`w-3 h-3 rounded-orb transition-all duration-300 ${
+                className={`w-3 h-3 rounded-orb transition-[background-color,scale] duration-200 ${
                   index === activeVariantIndex
                     ? 'bg-persimmon-500 scale-125'
                     : 'bg-rambutan-100/30 hover:bg-rambutan-100/60'

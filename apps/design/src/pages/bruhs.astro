@@ -19,8 +19,15 @@ const code = buildLogoCode(LOGO_CODE_PLACEHOLDERS);
 const html = await codeToHtml(code, { lang: "tsx", theme: "github-dark" });
 ---
 
-<BaseLayout title="Bruhs">
-  <div class="flex flex-col gap-16 p-6 md:gap-20 md:p-8">
+<BaseLayout title="Logo">
+  <div class="flex flex-col gap-8 p-6 md:p-8">
+    <section>
+      <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Logo</h1>
+      <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
+        The Bruhs face comes in three eye positions and eight palettes. Pick one, then switch to Code for a
+        dependency-free React component.
+      </p>
+    </section>
     <LogoShowcase client:visible variants={logoVariants} colors={colors} codeTemplate={{ code, html }} />
   </div>
 </BaseLayout>
