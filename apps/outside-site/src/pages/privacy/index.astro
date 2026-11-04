@@ -3,108 +3,148 @@ import Header from '../../components/Header.astro';
 import WaitlistForm from '../../components/WaitlistForm.astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 
-// One policy for the app and the waitlist; App Store Connect and Play Console link here. Keep the
-// app part true to the app: health reads (apps/outside/docs/health-integration.md), GPS walks
-// (src/explore), the party upload (src/friends, apps/api/convex/outside.ts) and the map style
-// (src/explore/map.ts). The old /privacy/app/ redirects to #app (vercel.json).
-// Bump when anything below changes.
+// Outside's one privacy policy, for the app and the waitlist. App Store Connect and Play Console
+// link here, Play's account deletion link is #delete, and the app's health screen links #app.
+// It covers what Apple (guideline 5.1.1) and Google Play (User Data, health apps) ask a policy to
+// say: who we are, what is collected and why, who handles it, how long it's kept, how it's
+// protected, and how to delete it.
+// Keep it true to the code: health reads (apps/outside/docs/health-integration.md), GPS walks
+// (src/explore), the party upload (src/friends, apps/api/convex/outside.ts, including
+// expireIdleGuests), the map style (src/explore/map.ts) and the waitlist (convex/waitlist.ts).
+// The old /privacy/app/ redirects to #app (vercel.json). Bump when anything below changes.
 const UPDATED = '4 November 2026';
 const CONTACT = 'contact@bruhs.dev';
 type Section = Readonly<{ title: string; lines: readonly string[] }>;
-const app: readonly Section[] = [
+type Part = Readonly<{ id: string; title: string; lines?: readonly string[]; sections?: readonly Section[] }>;
+const parts: readonly Part[] = [
   {
-    title: 'on your phone',
-    lines: [
-      'your game, your walks and your step history save on your phone, and we never see them.',
-      'erase your saved journey in the app and they are gone. deleting the app removes them too.',
+    id: 'app',
+    title: 'the app',
+    sections: [
+      {
+        title: 'on your phone',
+        lines: ['your game, your walks and your step history save on your phone, and we never see them.'],
+      },
+      {
+        title: 'your steps',
+        lines: [
+          'with your permission, outside reads your daily step totals from Apple Health on iPhone or Health Connect on Android. it reads nothing else and never writes to either.',
+          "your steps pay for your bruh's travel, skills, missions and quests, worked out on your phone.",
+          'step data is never used for ads, never sold, and never shared with anyone except a party you choose to join.',
+        ],
+      },
+      {
+        title: 'your location',
+        lines: [
+          'when you start a walk, outside uses your location while the app is open to draw your route and earn distance stamps. it never tracks you in the background.',
+          'your routes stay on your phone and are never uploaded.',
+          "the map comes from OpenFreeMap. like any website, its servers see your IP address and which map tiles your phone loads, which shows roughly where the map is looking. it gets nothing else from us.",
+        ],
+      },
+      {
+        title: 'parties',
+        lines: [
+          'parties are optional. outside works fully without one.',
+          "when you create or join one, you agree to share your bruh's name, outfit, daily step totals for the race week, and when you last synced, with everyone in that party.",
+          "we store those with Convex, our database host, in the US, under a guest login made for your phone. there's no email, password or real name, and the login stays in your phone's secure storage.",
+        ],
+      },
+      {
+        title: "what we don't do",
+        lines: [
+          'no ads, no analytics, no tracking across apps or websites, and no selling or sharing your data.',
+          'no account, email, contacts or photos needed to play.',
+          "outside isn't made for children under 13, and we don't knowingly collect data from them.",
+        ],
+      },
     ],
   },
   {
-    title: 'your steps',
-    lines: [
-      'with your permission, outside reads your daily step totals from Apple Health on iPhone or Health Connect on Android. it reads nothing else and never writes to either.',
-      "your steps pay for your bruh's travel, skills, missions and quests, worked out on your phone.",
-      'step data is never used for ads, never sold, and never shared with anyone except a party you choose to join.',
-      "you can turn off access any time in your phone's settings.",
+    id: 'waitlist',
+    title: 'the waitlist',
+    sections: [
+      {
+        title: 'what we keep',
+        lines: [
+          'your email, trimmed and lowercased, when you joined, when you confirmed and when we sent you an invite. nothing else.',
+          'the form has no account, no name field and no tracking pixel.',
+        ],
+      },
+      {
+        title: 'what we use it for',
+        lines: [
+          'the confirmation email, an invite if we open early testing, and one email when outside launches on iPhone and Android.',
+          "we don't sell it, share it or use it for anything else.",
+        ],
+      },
+      {
+        title: 'where it lives',
+        lines: [
+          'the list is stored with Convex, our database host, in the US.',
+          'emails are sent through Resend, our email provider, from outside@bruhs.app.',
+          'this site is served by Vercel. it sets no cookies and runs no analytics.',
+        ],
+      },
     ],
   },
   {
-    title: 'your location',
+    id: 'retention',
+    title: 'how long we keep it',
     lines: [
-      'when you start a walk, outside uses your location while the app is open to draw your route and earn distance stamps. it never tracks you in the background.',
-      'your routes stay on your phone and are never uploaded.',
-      'the map comes from OpenFreeMap. like any website, its servers see your IP address and which map tiles your phone loads, which shows roughly where the map is looking.',
+      'your game, walks and step history stay on your phone until you erase your saved journey or delete the app.',
+      "shared party totals stay while you're in the party. leaving deletes them.",
+      'a party profile that has not synced steps for 90 days is deleted automatically, with its shared totals and guest login.',
+      "waitlist signups that aren't confirmed are deleted after 7 days. a confirmed email stays until you remove it, and after the launch email we delete the whole list.",
+      'records of the emails we send are cleared from our database within a month. Resend keeps its own delivery logs under its privacy policy.',
     ],
   },
   {
-    title: 'parties',
+    id: 'security',
+    title: 'keeping it safe',
     lines: [
-      'parties are optional. outside works fully without one.',
-      "when you create or join one, you agree to share your bruh's name, outfit, daily step totals for the race week, and when you last synced, with everyone in that party.",
-      "we store those with Convex, our database host, in the US, under a guest login made for your phone. there's no email, password or real name, and the login stays in your phone's secure storage.",
-      'leave the party and your shared step totals are deleted. delete your party profile and your name, outfit and guest login are deleted too.',
-      "lost your phone or reinstalled the app? the guest login can't be recovered, so email us your bruh's name and party invite code and we'll delete what was shared.",
+      'everything between the app, this site and our servers is encrypted in transit over HTTPS, and Convex encrypts stored data at rest.',
+      "your guest login is kept in the iPhone keychain or Android's encrypted storage.",
+      'only we can reach the database. Convex, Resend and Vercel handle data only to run outside for us, and protect it at least as well as this policy does.',
     ],
   },
   {
-    title: "what we don't do",
+    id: 'delete',
+    title: 'deleting your data',
     lines: [
-      'no ads, no analytics, no tracking across apps or websites, and no selling or sharing your data.',
-      'no account, email, contacts or photos needed to play.',
-      "outside isn't made for children under 13, and we don't knowingly collect data from them.",
+      'in the app, leave your party to delete your shared step totals, or delete your party profile to delete your name, outfit and guest login too.',
+      'erase your saved journey on the step sync screen to clear the game from your phone.',
+      "to stop step or location access, turn it off in Apple Health, Health Connect or your phone's settings. that withdraws your consent from then on.",
+      `lost your phone or reinstalled the app? the guest login can't be recovered, so email ${CONTACT} with your bruh's name and party invite code and we'll delete what was shared within 30 days.`,
     ],
   },
 ];
-const waitlist: readonly Section[] = [
-  {
-    title: 'what we keep',
-    lines: [
-      'your email, trimmed and lowercased, when you joined, when you confirmed and when we sent you an invite. nothing else.',
-      'the form has no account, no name field and no tracking pixel.',
-      "you're only on the list once you confirm from the email we send. unconfirmed signups are deleted after 7 days.",
-    ],
-  },
-  {
-    title: 'what we use it for',
-    lines: [
-      'the confirmation email, an invite if we open early testing, and one email when outside launches on iPhone and Android.',
-      "we don't sell it, share it or use it for anything else.",
-    ],
-  },
-  {
-    title: 'where it lives',
-    lines: [
-      'the list is stored with Convex, our database host, in the US.',
-      'emails are sent through Resend, our email provider, from outside@bruhs.app.',
-      'this site is served by Vercel. it sets no cookies and runs no analytics.',
-    ],
-  },
-];
-const parts = [
-  { id: 'app', title: 'the app', sections: app },
-  { id: 'waitlist', title: 'the waitlist', sections: waitlist },
-] as const;
 ---
 
 <BaseLayout
-  title="privacy · bruhs / outside"
-  description="what the outside app reads, what stays on your phone, what a party shares, and what the waitlist keeps."
+  title="privacy policy · bruhs / outside"
+  description="outside's privacy policy: what the app reads, what stays on your phone, what a party shares, what the waitlist keeps, and how to delete it."
   path="/privacy/"
 >
   <Header />
   <main class="mx-auto flex w-full max-w-2xl flex-col gap-12 px-5 py-16">
     <div class="flex flex-col gap-2">
-      <h1 class="text-4xl font-bold text-durian-400 shadowed">privacy</h1>
+      <h1 class="text-4xl font-bold text-durian-400 shadowed">privacy policy</h1>
       <p class="label text-rambutan-500">updated {UPDATED}</p>
       <p class="leading-relaxed text-rambutan-300">
-        this covers the outside app on iPhone and Android, and the waitlist on this site.
+        outside is a game by bruhs. this policy covers the outside app on iPhone and Android, and the waitlist on
+        outside.bruhs.app.
       </p>
     </div>
     {
       parts.map((part) => (
         <div class="flex scroll-mt-6 flex-col gap-10" id={part.id}>
-          <h2 class="text-3xl font-bold text-durian-400 shadowed">{part.title}</h2>
-          {part.sections.map((section) => (
+          <div class="flex flex-col gap-3">
+            <h2 class="text-3xl font-bold text-durian-400 shadowed">{part.title}</h2>
+            {part.lines?.map((line) => (
+              <p class="leading-relaxed text-rambutan-300">{line}</p>
+            ))}
+          </div>
+          {part.sections?.map((section) => (
             <section class="flex flex-col gap-3">
               <h3 class="text-2xl font-bold text-rambutan-50 shadowed">{section.title}</h3>
               {section.lines.map((line) => (
@@ -112,10 +152,10 @@ const parts = [
               ))}
             </section>
           ))}
-          {part.id === 'waitlist' && (
+          {part.id === 'delete' && (
             <section id="leave" aria-labelledby="remove" class="panel flex scroll-mt-6 flex-col gap-4 p-5">
               <h3 id="remove" class="text-2xl font-bold text-durian-400 shadowed">remove your email</h3>
-              <p class="leading-relaxed text-rambutan-300">enter the email you joined with and it comes off the list.</p>
+              <p class="leading-relaxed text-rambutan-300">enter the email you joined the waitlist with and it comes off the list.</p>
               <WaitlistForm id="leave" leave />
             </section>
           )}
