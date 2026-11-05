@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "astro",
   "buildCommand": "sh scripts/vercel-build.sh",
-  "ignoreCommand": "git diff --quiet ${VERCEL_GIT_PREVIOUS_SHA:-HEAD^} HEAD -- . ../api ../outside/src ../outside/assets ../../packages ../../pnpm-lock.yaml ../../package.json ../../pnpm-workspace.yaml ../../turbo.json",
+  "ignoreCommand": "sh scripts/vercel-ignore.sh",
   "redirects": [
     {
       "source": "/privacy/app",
