@@ -12,14 +12,40 @@ import path from "node:path";
 import { after, before, describe, test } from "node:test";
 import {
   isJsonRequest,
+  isLoopbackHost,
   isSameOriginRequest,
   resolveTrashTarget,
   type TrashScope,
 } from "../src/lib/request-guard.ts";
 
 describe("isSameOriginRequest", () => {
+  // Requests reach the dev server on a loopback host unless a case says otherwise.
   const check = (init: Record<string, string>) =>
-    isSameOriginRequest(new Headers(init));
+    isSameOriginRequest(new Headers({ host: "localhost:3001", ...init }));
+
+  test("refuses a DNS-rebinding page whose own requests look same-origin", () => {
+    // evil.example re-resolved to 127.0.0.1: the browser sees one origin throughout.
+    assert.equal(
+      check({ "sec-fetch-site": "same-origin", host: "evil.example:3001" }),
+      false,
+    );
+    assert.equal(
+      check({
+        origin: "http://evil.example:3001",
+        host: "evil.example:3001",
+      }),
+      false,
+    );
+    // A rebound page can set X-Forwarded-Host but not Host.
+    assert.equal(
+      check({
+        "sec-fetch-site": "same-origin",
+        host: "evil.example:3001",
+        "x-forwarded-host": "storage-bruhs.localhost",
+      }),
+      false,
+    );
+  });
 
   test("accepts the app's own pages", () => {
     assert.equal(check({ "sec-fetch-site": "same-origin" }), true);
@@ -62,6 +88,33 @@ describe("isSameOriginRequest", () => {
 
   test("allows non-browser clients that send neither header", () => {
     assert.equal(check({}), true);
+  });
+});
+
+describe("isLoopbackHost", () => {
+  test("accepts loopback addresses and *.localhost names, with or without a port", () => {
+    for (const host of [
+      "localhost",
+      "localhost:3001",
+      "storage-bruhs.localhost",
+      "127.0.0.1:4123",
+      "[::1]:4123",
+    ]) {
+      assert.equal(isLoopbackHost(host), true, host);
+    }
+  });
+
+  test("refuses every other name, look-alikes and a missing Host", () => {
+    for (const host of [
+      "evil.example",
+      "localhost.evil.example",
+      "127.0.0.1.evil.example",
+      "192.168.1.20:3001",
+      "",
+    ]) {
+      assert.equal(isLoopbackHost(host), false, host);
+    }
+    assert.equal(isLoopbackHost(null), false);
   });
 });
 

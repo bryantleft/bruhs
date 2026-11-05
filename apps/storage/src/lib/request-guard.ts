@@ -7,15 +7,40 @@ import { realpath } from "node:fs/promises";
 import path from "node:path";
 
 /**
+ * `Host` names only this machine: loopback, or a `*.localhost` name, which browsers
+ * resolve to loopback themselves. Any other name could be a DNS-rebinding page: a
+ * site whose domain re-resolves to 127.0.0.1, so its requests look same-origin.
+ * Page scripts can't set `Host`, unlike `X-Forwarded-Host`, so only `Host` counts.
+ */
+export function isLoopbackHost(host: string | null): boolean {
+  if (host === null) return false;
+  let hostname: string;
+  try {
+    hostname = new URL(`http://${host}`).hostname;
+  } catch {
+    return false;
+  }
+  return (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]"
+  );
+}
+
+/**
  * Refuse requests that a browser made on behalf of another site.
  *
- * Browsers send `Sec-Fetch-Site` on every request; only our own pages produce
- * `same-origin`. (`none` means the user typed the URL or opened a bookmark.) Older
- * browsers without it still send `Origin` on cross-origin requests, which must then match
- * the host the request was addressed to. A request with neither header comes from a
- * non-browser client such as curl, which a web page can't drive.
+ * The request must be addressed to a loopback host (see `isLoopbackHost`). Then browsers
+ * send `Sec-Fetch-Site` on every request; only our own pages produce `same-origin`.
+ * (`none` means the user typed the URL or opened a bookmark.) Older browsers without it
+ * still send `Origin` on cross-origin requests, which must then match the host the
+ * request was addressed to. A request with neither header comes from a non-browser
+ * client such as curl, which a web page can't drive.
  */
 export function isSameOriginRequest(headers: Headers): boolean {
+  if (!isLoopbackHost(headers.get("host"))) return false;
+
   const site = headers.get("sec-fetch-site");
   if (site !== null) return site === "same-origin" || site === "none";
 
