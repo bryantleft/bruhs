@@ -8,7 +8,7 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
       <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Icons</h1>
       <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
         Use <a href="https://heroicons.com" class="text-persimmon-300 underline decoration-persimmon-400/30 hover:decoration-persimmon-400">Heroicons</a>
-        as the default set. Pair viewBox to size class one-to-one — never scale.
+        at their native sizes. Match each icon's viewBox to its size class.
       </p>
     </section>
 
@@ -21,8 +21,8 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
               <path d="M8 2.5a.75.75 0 0 1 .75.75v4h4a.75.75 0 0 1 0 1.5h-4v4a.75.75 0 0 1-1.5 0v-4h-4a.75.75 0 0 1 0-1.5h4v-4A.75.75 0 0 1 8 2.5Z" />
             </svg>
             <div class="min-w-0">
-              <p class="text-label text-rambutan-100">Micro · size-4 · viewBox 16</p>
-              <p class="text-body-sm text-rambutan-400">Default for app UI — dashboards, forms, inline with <code class="code-inline">text-body-sm</code>.</p>
+              <p class="text-label text-rambutan-100">Micro (16px)</p>
+              <p class="text-body-sm text-rambutan-400">Use <code class="code-inline">size-4</code> in app interfaces and beside <code class="code-inline">text-body-sm</code>.</p>
             </div>
           </li>
           <li class="flex items-center gap-4">
@@ -30,8 +30,8 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
               <path d="M10 3a.75.75 0 0 1 .75.75v5.5h5.5a.75.75 0 0 1 0 1.5h-5.5v5.5a.75.75 0 0 1-1.5 0v-5.5h-5.5a.75.75 0 0 1 0-1.5h5.5v-5.5A.75.75 0 0 1 10 3Z" />
             </svg>
             <div class="min-w-0">
-              <p class="text-label text-rambutan-100">Mini · size-5 · viewBox 20</p>
-              <p class="text-body-sm text-rambutan-400">Navigation lists and marketing pages. Avoid in dense app UI.</p>
+              <p class="text-label text-rambutan-100">Mini (20px)</p>
+              <p class="text-body-sm text-rambutan-400">Use <code class="code-inline">size-5</code> for navigation and marketing pages.</p>
             </div>
           </li>
           <li class="flex items-center gap-4">
@@ -39,8 +39,8 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
             <div class="min-w-0">
-              <p class="text-label text-rambutan-100">Outline · size-6 · viewBox 24</p>
-              <p class="text-body-sm text-rambutan-400">Hero illustrations and feature rows only — never inline with body copy.</p>
+              <p class="text-label text-rambutan-100">Outline (24px)</p>
+              <p class="text-body-sm text-rambutan-400">Use <code class="code-inline">size-6</code> for hero illustrations and feature rows.</p>
             </div>
           </li>
         </ul>
@@ -49,13 +49,13 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-6">Rules</h2>
-      <ul role="list" class="flex flex-col gap-3 max-w-[72ch]">
-        <li class="text-body text-rambutan-300 text-pretty">Never scale icons. <code class="code-inline">viewBox="0 0 16 16"</code> uses <code class="code-inline">size-4</code>; 20 uses <code class="code-inline">size-5</code>; 24 uses <code class="code-inline">size-6</code>. Wrong size? Use a different icon set.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Never wrap icons in decorative containers (colored squares, circle backgrounds). Use the icon directly.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Use <code class="code-inline">fill-*</code> for filled icons and <code class="code-inline">stroke-*</code> for stroked — don't use <code class="code-inline">text-*</code> with <code class="code-inline">currentColor</code>.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Always add <code class="code-inline">shrink-0</code> to icons inside flex containers; add <code class="code-inline">h-lh</code> to align with adjacent text.</li>
-        <li class="text-body text-rambutan-300 text-pretty">For icon-only buttons, add a hidden 48×48 touch target via an absolute child to meet mobile tap requirements.</li>
-      </ul>
+      <div class="flex flex-col gap-3 max-w-[72ch]">
+        <p class="text-body text-rambutan-300 text-pretty">Choose the icon set that matches the required size. Keep its native dimensions.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Place icons directly in the layout. Skip decorative boxes and circles behind them.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Use <code class="code-inline">fill-*</code> for filled icons and <code class="code-inline">stroke-*</code> for outlines.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Add <code class="code-inline">shrink-0</code> inside flex containers. Use <code class="code-inline">h-lh</code> to align with adjacent text.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Use <code class="code-inline">btn-icon</code> for buttons that show only an icon. It adds a 48px touch target.</p>
+      </div>
     </section>
   </div>
 </BaseLayout>

@@ -12,9 +12,9 @@ const cross = `<svg viewBox="0 0 16 16" fill="currentColor" class="size-4"><path
     <section>
       <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Buttons</h1>
       <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
-        <code class="code-inline">btn</code> plus one tone. Persimmon is the brand primary: one filled primary per
-        page, and every other action uses soft, outline or ghost. Utilities on the same element still win, so
-        <code class="code-inline">btn btn-primary w-full</code> works.
+        Use <code class="code-inline">btn</code> with a tone class.
+        Reserve the filled persimmon style for the page's primary action.
+        Utilities can override the defaults, as in <code class="code-inline">btn btn-primary w-full</code>.
       </p>
     </section>
 
@@ -38,8 +38,9 @@ const cross = `<svg viewBox="0 0 16 16" fill="currentColor" class="size-4"><path
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-2">Sizes and states</h2>
       <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
-        Default is about 36px tall, for form submits and page actions. <code class="code-inline">btn-sm</code> is
-        about 28px, for inline actions like "Resend code". Disabled buttons fade and stop reacting to hover.
+        Use the default size for form submissions and page actions.
+        Choose <code class="code-inline">btn-sm</code> for inline actions such as "Resend code".
+        Disabled buttons fade and ignore hover.
       </p>
       <Example code={`<button type="button" class="btn btn-primary">Default</button>
 <button type="button" class="btn btn-soft btn-sm">Small</button>
@@ -53,8 +54,9 @@ const cross = `<svg viewBox="0 0 16 16" fill="currentColor" class="size-4"><path
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-2">With icons</h2>
       <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
-        Asymmetric padding: the icon side matches the vertical padding. <code class="code-inline">btn-icon</code> is
-        square and gets an invisible 48px hit area on touch screens; give it an <code class="code-inline">aria-label</code>.
+        Match the padding beside the icon to the vertical padding.
+        Use <code class="code-inline">btn-icon</code> for a square button with a 48px touch target.
+        Give it an <code class="code-inline">aria-label</code> that names the action.
       </p>
       <Example code={`<button type="button" class="btn btn-primary pl-2">${plus} New item</button>
 <button type="button" class="btn btn-outline pr-2">Continue ${chevron}</button>
@@ -67,13 +69,12 @@ const cross = `<svg viewBox="0 0 16 16" fill="currentColor" class="size-4"><path
 
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-6">Rules</h2>
-      <ul role="list" class="flex flex-col gap-3 max-w-[72ch]">
-        <li class="text-body text-rambutan-300 text-pretty">Only one filled button per page. Dialogs count as their own page.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Secondary buttons must never be higher contrast than the primary.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Destructive actions use <code class="code-inline">btn-soft-danger</code> unless deleting is the point of the page or dialog; then <code class="code-inline">btn-danger</code>.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Links styled as buttons keep <code class="code-inline">&lt;a&gt;</code>; buttons that navigate are a bug.</li>
-        <li class="text-body text-rambutan-300 text-pretty">The focus ring comes from the theme. Don't restate it per button.</li>
-      </ul>
+      <div class="flex flex-col gap-3 max-w-[72ch]">
+        <p class="text-body text-rambutan-300 text-pretty">Use one filled primary button per page or dialog. Keep secondary actions lower in contrast.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Use <code class="code-inline">btn-soft-danger</code> for destructive actions. Choose <code class="code-inline">btn-danger</code> when deletion is the main action.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Use <code class="code-inline">&lt;a&gt;</code> for navigation, even when styled as a button.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Keep the focus ring provided by the theme.</p>
+      </div>
     </section>
   </div>
 </BaseLayout>

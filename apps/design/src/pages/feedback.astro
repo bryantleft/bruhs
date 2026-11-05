@@ -8,16 +8,17 @@ import Example from "@/components/Example.astro";
     <section>
       <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Feedback</h1>
       <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
-        Loading, empty and error states. Small, so every app shows waiting and nothing-here the same way.
+        Tell people when work is in progress or content is missing.
+        Explain errors and give a useful next action.
       </p>
     </section>
 
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-2">Spinner</h2>
       <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
-        Takes its size from <code class="code-inline">size-*</code> or the font size and its colour from the text colour.
-        Set <code class="code-inline">--spinner-width</code> for a finer stroke. It keeps turning, more slowly, when the user
-        prefers reduced motion. Pair it with text, or <code class="code-inline">aria-hidden</code> plus a label on the button.
+        Set the spinner's size with <code class="code-inline">size-*</code> and its color with a text color class.
+        Use <code class="code-inline">--spinner-width</code> to adjust the stroke.
+        Add a visible label or label its button. The spinner slows down for reduced motion.
       </p>
       <Example code={`<span class="spinner size-4 text-rambutan-400" aria-hidden="true"></span>
 <span class="spinner size-6 text-persimmon-400 [--spinner-width:3px]" aria-hidden="true"></span>
@@ -35,19 +36,19 @@ import Example from "@/components/Example.astro";
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-2">Empty state</h2>
       <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
-        <code class="code-inline">empty-state</code> centres a heading, a line of help and one action. The same class covers
-        404 pages: add <code class="code-inline">min-h-dvh</code>. Say what's missing and what to do next.
+        Use <code class="code-inline">empty-state</code> to center a message and one action.
+        Say what's missing and what to do next. Add <code class="code-inline">min-h-dvh</code> for a full page.
       </p>
       <Example previewClass="" code={`<div class="empty-state">
   <p class="text-eyebrow text-rambutan-500">No scans yet</p>
   <h2 class="text-h3">Pick a folder to see what's using space</h2>
-  <p class="text-body-sm">Nothing leaves your machine. Scans take about a minute per 100 GB.</p>
+  <p class="text-body-sm">Choose a folder to start your first scan.</p>
   <button type="button" class="btn btn-primary mt-4">Choose folder</button>
 </div>`}>
         <div class="empty-state">
           <p class="text-eyebrow text-rambutan-500">No scans yet</p>
           <h2 class="text-h3">Pick a folder to see what's using space</h2>
-          <p class="text-body-sm">Nothing leaves your machine. Scans take about a minute per 100 GB.</p>
+          <p class="text-body-sm">Choose a folder to start your first scan.</p>
           <button type="button" class="btn btn-primary mt-4">Choose folder</button>
         </div>
       </Example>
@@ -55,11 +56,11 @@ import Example from "@/components/Example.astro";
 
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-6">Rules</h2>
-      <ul role="list" class="flex flex-col gap-3 max-w-[72ch]">
-        <li class="text-body text-rambutan-300 text-pretty">Show a spinner only after a short wait; instant work shouldn't flash one.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Errors say what failed and how to fix it, not "something went wrong".</li>
-        <li class="text-body text-rambutan-300 text-pretty">One action per empty state. If there's nothing the user can do, say when it'll change.</li>
-      </ul>
+      <div class="flex flex-col gap-3 max-w-[72ch]">
+        <p class="text-body text-rambutan-300 text-pretty">Show a spinner after a short wait. Skip it when the work finishes immediately.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Say what failed and how to fix it.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Give each empty state one action. If no action is available, explain when the content will appear.</p>
+      </div>
     </section>
   </div>
 </BaseLayout>

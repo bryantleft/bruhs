@@ -26,7 +26,7 @@ const { items, title, description } = Astro.props;
         >
           <span class="flex flex-col gap-0.5">
             <code class="text-code text-rambutan-100">{item.className}</code>
-            <span class="text-body-sm text-rambutan-400 tabular-nums">{item.size} · {item.weight}</span>
+            <span class="text-body-sm text-rambutan-400 tabular-nums">{item.size} (weight {item.weight})</span>
             <span class="text-body-sm text-rambutan-500">{item.usage}</span>
           </span>
           <span class:list={["block truncate text-rambutan-100", item.className, item.mono && "font-mono"]}>

@@ -2,12 +2,12 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 
 const steps = [
-  { name: "Canvas", cls: "bg-longan-950 rounded-lychee inset-ring inset-ring-white/5", label: "body", note: "The page itself. Zero elevation; the theme sets it on <body>." },
-  { name: "Panel", cls: "surface-panel", label: "surface-panel", note: "Ambient containers: nav, sidebar, hero frames." },
-  { name: "Card", cls: "surface-card", label: "surface-card", note: "Independently interactive, one step above canvas." },
-  { name: "Floating", cls: "surface-floating", label: "surface-floating", note: "Popovers, menus, tooltips. Lifted two steps." },
-  { name: "Modal", cls: "surface-modal", label: "surface-modal", note: "Dialogs, against a longan-950/70 scrim." },
-  { name: "Well", cls: "surface-well", label: "surface-well", note: "Recessed: nested or secondary content." },
+  { name: "Canvas", cls: "bg-longan-950 rounded-lychee inset-ring inset-ring-white/5", label: "body", note: "The page background, set by the theme." },
+  { name: "Panel", cls: "surface-panel", label: "surface-panel", note: "Containers for navigation and supporting content." },
+  { name: "Card", cls: "surface-card", label: "surface-card", note: "Separate or interactive content above the panel tone." },
+  { name: "Floating", cls: "surface-floating", label: "surface-floating", note: "Menus and popovers above the card tone." },
+  { name: "Modal", cls: "surface-modal", label: "surface-modal", note: "Dialogs shown over a dimmed backdrop." },
+  { name: "Well", cls: "surface-well", label: "surface-well", note: "Recessed areas for nested or secondary content." },
 ];
 ---
 
@@ -16,17 +16,16 @@ const steps = [
     <section>
       <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Elevation</h1>
       <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
-        Bruhs has no <code class="code-inline">shadow-*</code>. Elevation is expressed with two levers:
-        a tone step in the <span class="code-inline">longan</span> neutral and a matching
-        <code class="code-inline">inset-ring</code>. The <code class="code-inline">surface-*</code> classes bundle both, so you pick a
-        rung instead of a pair of values.
+        Show depth with background tones and inset rings.
+        Choose a <code class="code-inline">surface-*</code> class to set both together.
       </p>
     </section>
 
     <section>
-      <h2 class="text-h1 font-semibold tracking-tight mb-2">Ladder</h2>
+      <h2 class="text-h1 font-semibold tracking-tight mb-2">Surface levels</h2>
       <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
-        Add <code class="code-inline">surface-interactive</code> to a clickable surface and its ring lifts one step on hover.
+        Add <code class="code-inline">surface-interactive</code> to a clickable surface.
+        Its ring becomes more visible on hover.
       </p>
       <ul role="list" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {steps.map(s => (
@@ -44,7 +43,8 @@ const steps = [
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-6">Bloom</h2>
       <p class="text-body-sm text-rambutan-400 mb-4 max-w-[65ch] text-pretty">
-        The one exception — a persimmon glow reserved for focus, active, and "something happened here" accents.
+        Use the persimmon glow for focus or an active control.
+        Reserve it for moments that need attention.
       </p>
       <div class="rounded-lychee p-8 bg-longan-900 inset-ring inset-ring-white/5 flex items-center justify-center gap-6">
         <button type="button" class="rounded-grape bg-persimmon-500 px-4 py-2 text-button text-longan-950 ring-1 ring-persimmon-500 [box-shadow:var(--shadow-bloom)]">
@@ -56,13 +56,13 @@ const steps = [
 
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-6">Rules</h2>
-      <ul role="list" class="flex flex-col gap-3 max-w-[72ch]">
+      <div class="flex flex-col gap-3 max-w-[72ch]">
         <!-- bruhs-theme-ignore: this rule names the banned shadow classes -->
-        <li class="text-body text-rambutan-300 text-pretty">Never use <code class="code-inline">shadow-xs</code> through <code class="code-inline">shadow-2xl</code>. They are not defined in Bruhs.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Elevate by stepping the background tone (<code class="code-inline">longan-950 → 900 → 800 → 700</code>) and widening the inset-ring in parallel (<code class="code-inline">white/5 → /10 → /15 → /20</code>).</li>
-        <li class="text-body text-rambutan-300 text-pretty"><code class="code-inline">--shadow-bloom</code> is allowed only for focus states, active triggers, or deliberate attention accents.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Modals use a <code class="code-inline">longan-950/70</code> scrim — never pure <code class="code-inline">black/*</code>.</li>
-      </ul>
+        <p class="text-body text-rambutan-300 text-pretty">Use tone and ring for depth. Bruhs omits <code class="code-inline">shadow-xs</code> through <code class="code-inline">shadow-2xl</code>.</p>
+        <p class="text-body text-rambutan-300 text-pretty">As a surface rises, lighten its background and strengthen its inset ring.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Reserve <code class="code-inline">--shadow-bloom</code> for focus, active controls or deliberate attention.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Use <code class="code-inline">longan-950/70</code> for modal backdrops.</p>
+      </div>
     </section>
   </div>
 </BaseLayout>

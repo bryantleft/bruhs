@@ -24,7 +24,7 @@ export const logoVariants: LogoVariant[] = [
     id: "right",
     name: "Right",
     fileName: "right.svg",
-    description: "Skeptical right-side glance",
+    description: "Skeptical glance to the right",
   }
 ];
 

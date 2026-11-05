@@ -2,11 +2,11 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 
 const patterns = [
-  { context: "Inline gap: button to icon, badge to text", cls: "gap-1.5", px: 6 },
+  { context: "Icon to text", cls: "gap-1.5", px: 6 },
   { context: "Form label to field", cls: "gap-2", px: 8 },
-  { context: "Card padding, compact", cls: "p-4", px: 16 },
+  { context: "Compact card padding", cls: "p-4", px: 16 },
   { context: "Form field to field", cls: "gap-6", px: 24 },
-  { context: "Card padding, default", cls: "p-6", px: 24 },
+  { context: "Default card padding", cls: "p-6", px: 24 },
   { context: "Page padding", cls: "p-6 md:p-8", px: 32 },
   { context: "Section to section", cls: "gap-12 md:gap-16", px: 64 },
 ];
@@ -17,8 +17,8 @@ const patterns = [
     <section>
       <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Spacing</h1>
       <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
-        Tailwind's 4px grid is the only rhythm. Every gap, padding and margin is a multiple of 4px, and these are the
-        values each context reaches for.
+        Use Tailwind's spacing scale for a consistent rhythm.
+        Start with the values below for each layout.
       </p>
     </section>
 
@@ -42,12 +42,12 @@ const patterns = [
 
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-6">Rules</h2>
-      <ul role="list" class="flex flex-col gap-3 max-w-[72ch]">
-        <li class="text-body text-rambutan-300 text-pretty">Space flex and grid children with <code class="code-inline">gap-*</code> on the parent, not margins on the children.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Prefer shorthand: <code class="code-inline">p-4</code>, not <code class="code-inline">px-4 py-4</code>. Split axes only when a breakpoint overrides one.</li>
-        <li class="text-body text-rambutan-300 text-pretty">For an arbitrary value use <code class="code-inline">--spacing(3)</code>, not <code class="code-inline">12px</code> or <code class="code-inline">calc(var(--spacing) * 3)</code>.</li>
-        <li class="text-body text-rambutan-300 text-pretty">When separation is still unclear, step up the surface (divider, well, card) rather than adding more space.</li>
-      </ul>
+      <div class="flex flex-col gap-3 max-w-[72ch]">
+        <p class="text-body text-rambutan-300 text-pretty">Set <code class="code-inline">gap-*</code> on the parent to space flex or grid children.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Use shorthand such as <code class="code-inline">p-4</code>. Split the axes when a breakpoint changes only one.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Use <code class="code-inline">--spacing(3)</code> for custom spacing values to stay on the scale.</p>
+        <p class="text-body text-rambutan-300 text-pretty">If more space doesn't clarify the grouping, use a divider or a surface.</p>
+      </div>
     </section>
   </div>
 </BaseLayout>

@@ -8,15 +8,16 @@ import Example from "@/components/Example.astro";
     <section>
       <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Form controls</h1>
       <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
-        Native HTML elements styled with CSS state variants. No JavaScript toggling classes.
+        Style native HTML controls with CSS. State variants handle their appearance.
       </p>
     </section>
 
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-2">Text input</h2>
       <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
-        <code class="code-inline">input</code> works on inputs and textareas. Set <code class="code-inline">aria-invalid="true"</code> for the
-        error state; the focus ring insets so it never spills outside the field.
+        Add <code class="code-inline">input</code> to a text field or textarea.
+        Set <code class="code-inline">aria-invalid="true"</code> to show an error.
+        The focus ring stays inside the field.
       </p>
       <Example previewClass="grid gap-6 sm:grid-cols-2" code={`<div class="flex flex-col gap-2">
   <label for="email" class="text-label text-rambutan-200">Email</label>
@@ -25,7 +26,7 @@ import Example from "@/components/Example.astro";
 <div class="flex flex-col gap-2">
   <label for="handle" class="text-label text-rambutan-200">Handle</label>
   <input id="handle" name="handle" value="bruh" aria-invalid="true" aria-describedby="handle-error" class="input" />
-  <p id="handle-error" class="text-body-sm text-lychee-300">That handle is taken.</p>
+  <p id="handle-error" class="text-body-sm text-lychee-300">That handle is taken. Choose another.</p>
 </div>
 <div class="flex flex-col gap-2 sm:col-span-2">
   <label for="bio" class="text-label text-rambutan-200">Bio</label>
@@ -38,7 +39,7 @@ import Example from "@/components/Example.astro";
         <div class="flex flex-col gap-2">
           <label for="demo-handle" class="text-label text-rambutan-200">Handle</label>
           <input id="demo-handle" name="handle" value="bruh" aria-invalid="true" aria-describedby="demo-handle-error" class="input" />
-          <p id="demo-handle-error" class="text-body-sm text-lychee-300">That handle is taken.</p>
+          <p id="demo-handle-error" class="text-body-sm text-lychee-300">That handle is taken. Choose another.</p>
         </div>
         <div class="flex flex-col gap-2 sm:col-span-2">
           <label for="demo-bio" class="text-label text-rambutan-200">Bio</label>
@@ -50,8 +51,9 @@ import Example from "@/components/Example.astro";
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-2">Segmented control</h2>
       <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
-        For two to four mutually exclusive views. Mark the active item with <code class="code-inline">aria-pressed</code>,
-        <code class="code-inline">aria-selected</code> or <code class="code-inline">aria-checked</code>; the class reads whichever you use.
+        Use a segmented control to choose one of two to four views.
+        Mark the active item with the ARIA state that matches its role.
+        The class supports <code class="code-inline">aria-pressed</code>, <code class="code-inline">aria-selected</code> and <code class="code-inline">aria-checked</code>.
       </p>
       <Example code={`<div class="segmented" role="group" aria-label="View">
   <button type="button" class="segmented-item" aria-pressed="true">Preview</button>
@@ -82,13 +84,13 @@ import Example from "@/components/Example.astro";
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-6">Select</h2>
       <p class="text-body-sm text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
-        Native <code class="code-inline">&lt;select&gt;</code> with a custom chevron. Two sizes, support for
-        leading icons, error and disabled states. Wrapper gets the focus ring so it reads as one surface.
+        Use a native <code class="code-inline">&lt;select&gt;</code> with a custom chevron.
+        The wrapper carries the focus ring. Examples below show the available sizes and states.
       </p>
 
       <div class="rounded-lychee inset-ring inset-ring-rambutan-100/5 bg-longan-900 p-6 flex flex-col gap-6">
         <div class="max-w-xs flex flex-col gap-2">
-          <label for="select-default" class="text-label text-rambutan-200">Favorite fruit · default</label>
+          <label for="select-default" class="text-label text-rambutan-200">Favorite fruit</label>
           <span class="inline-grid grid-cols-[1fr_--spacing(8)] rounded-grape bg-white/5 inset-ring inset-ring-white/10 focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-persimmon-400 hover:inset-ring-white/15 transition">
             <select
               id="select-default"
@@ -135,9 +137,9 @@ import Example from "@/components/Example.astro";
               name="fruit-icon"
               class="col-start-2 col-end-4 row-start-1 appearance-none bg-transparent pr-8 py-2 text-body text-rambutan-100 focus:outline-hidden"
             >
-              <option>In season · Lychee</option>
-              <option>In season · Persimmon</option>
-              <option>In season · Durian</option>
+              <option>Lychee in season</option>
+              <option>Persimmon in season</option>
+              <option>Durian in season</option>
             </select>
             <svg viewBox="0 0 8 5" width="8" height="5" fill="none" class="pointer-events-none col-start-3 row-start-1 place-self-center text-rambutan-400">
               <path d="M.5.5 4 4 7.5.5" stroke="currentcolor" />
@@ -153,7 +155,7 @@ import Example from "@/components/Example.astro";
               name="fruit-error"
               class="col-span-full row-start-1 appearance-none bg-transparent px-3 py-2 pr-8 text-body text-rambutan-100 focus:outline-hidden"
             >
-              <option>Pick one…</option>
+              <option>Choose a fruit</option>
               <option>Lychee</option>
               <option>Persimmon</option>
             </select>
@@ -161,7 +163,7 @@ import Example from "@/components/Example.astro";
               <path d="M.5.5 4 4 7.5.5" stroke="currentcolor" />
             </svg>
           </span>
-          <p class="text-body-sm text-lychee-300">Please choose a fruit before continuing.</p>
+          <p class="text-body-sm text-lychee-300">Choose a fruit to continue.</p>
         </div>
 
         <div class="max-w-xs flex flex-col gap-2">
@@ -215,8 +217,8 @@ import Example from "@/components/Example.astro";
         ))}
       </div>
       <p class="text-body-sm text-rambutan-400 mt-3 max-w-[65ch] text-pretty">
-        The indeterminate state is a DOM property, not an HTML attribute — set <code class="code-inline">input.indeterminate = true</code> in JavaScript.
-        Styling is pure CSS via the <code class="code-inline">:indeterminate</code> pseudo-class and <code class="code-inline">group-not-has-indeterminate</code>.
+        Set <code class="code-inline">input.indeterminate = true</code> in JavaScript for a partial selection.
+        CSS handles the appearance through <code class="code-inline">:indeterminate</code> and <code class="code-inline">group-not-has-indeterminate</code>.
       </p>
     </section>
 
@@ -265,12 +267,12 @@ import Example from "@/components/Example.astro";
 
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-6">Rules</h2>
-      <ul role="list" class="flex flex-col gap-3 max-w-[72ch]">
-        <li class="text-body text-rambutan-300 text-pretty">Every control has a <code class="code-inline">name</code> and either a <code class="code-inline">&lt;label&gt;</code> or <code class="code-inline">aria-label</code>.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Controls use <code class="code-inline">inset-ring</code>, not solid borders. Text fields take the <code class="code-inline">input</code> class rather than restating it.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Checkboxes, radios, toggles are bigger on mobile (<code class="code-inline">size-5 sm:size-4</code>) for touch targets.</li>
-        <li class="text-body text-rambutan-300 text-pretty">Never use the conjoined input+button pattern — leave a gap or nest the button visually.</li>
-      </ul>
+      <div class="flex flex-col gap-3 max-w-[72ch]">
+        <p class="text-body text-rambutan-300 text-pretty">Give every control a <code class="code-inline">name</code> and an accessible label.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Use <code class="code-inline">input</code> for text fields. Use <code class="code-inline">inset-ring</code> for custom control outlines.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Make choice controls larger on mobile with <code class="code-inline">size-5 sm:size-4</code>.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Leave a gap between a field and its button, or place the button inside the field.</p>
+      </div>
     </section>
   </div>
 </BaseLayout>

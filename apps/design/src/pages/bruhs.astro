@@ -24,8 +24,8 @@ const html = await codeToHtml(code, { lang: "tsx", theme: "github-dark" });
     <section>
       <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Logo</h1>
       <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
-        The Bruhs face comes in three eye positions and eight palettes. Pick one, then switch to Code for a
-        dependency-free React component.
+        Choose an expression and a palette for the Bruhs face.
+        Open Code to copy a React component with no extra dependencies.
       </p>
     </section>
     <LogoShowcase client:visible variants={logoVariants} colors={colors} codeTemplate={{ code, html }} />

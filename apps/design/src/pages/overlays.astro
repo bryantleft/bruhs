@@ -3,13 +3,13 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import Example from "@/components/Example.astro";
 
 const layers = [
-  { name: "z-raised", value: 10, use: "Lifted above siblings: a focused card, a sticky table cell" },
+  { name: "z-raised", value: 10, use: "Focused cards and sticky table cells" },
   { name: "z-sticky", value: 20, use: "Sticky headers and toolbars" },
-  { name: "z-overlay", value: 40, use: "Scrims and off-canvas backdrops" },
-  { name: "z-modal", value: 50, use: "Drawers and modals that aren't a native <dialog>" },
-  { name: "z-popover", value: 60, use: "Menus and command palettes, above a modal" },
+  { name: "z-overlay", value: 40, use: "Backdrops behind overlays" },
+  { name: "z-modal", value: 50, use: "Custom drawers and modals" },
+  { name: "z-popover", value: 60, use: "Menus and command palettes above modals" },
   { name: "z-toast", value: 70, use: "Toasts and live notifications" },
-  { name: "z-tooltip", value: 80, use: "Tooltips, always on top" },
+  { name: "z-tooltip", value: 80, use: "Tooltips above other named layers" },
 ];
 ---
 
@@ -18,23 +18,23 @@ const layers = [
     <section>
       <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Overlays</h1>
       <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
-        Dialogs, menus and tooltips. Prefer the platform: a native <code class="code-inline">&lt;dialog&gt;</code> and the
-        <code class="code-inline">popover</code> attribute render in the top layer, so they never fight over z-index.
+        Use native <code class="code-inline">&lt;dialog&gt;</code> and <code class="code-inline">popover</code> elements where possible.
+        The browser places them in the top layer, above the page's stacking order.
       </p>
     </section>
 
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-2">Dialog</h2>
       <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
-        <code class="code-inline">dialog</code> styles a native <code class="code-inline">&lt;dialog&gt;</code> opened with
-        <code class="code-inline">showModal()</code>: modal surface, longan scrim, and a short fade and scale that's skipped
-        when the user prefers reduced motion. Escape and the form's <code class="code-inline">method="dialog"</code> close it.
+        Add <code class="code-inline">dialog</code> and open it with <code class="code-inline">showModal()</code>.
+        The class provides the surface and backdrop. Its entrance animation respects reduced motion.
+        Escape or a form with <code class="code-inline">method="dialog"</code> closes it.
       </p>
       <Example code={`<button type="button" class="btn btn-outline" onclick="trash.showModal()">Delete file</button>
 <dialog id="trash" class="dialog" aria-labelledby="trash-title">
   <form method="dialog" class="flex flex-col gap-4">
     <h2 id="trash-title" class="text-h3">Move to Trash?</h2>
-    <p class="text-body-sm text-rambutan-400">You can restore it from the Trash for 30 days.</p>
+    <p class="text-body-sm text-rambutan-400">You can restore the file until you empty the Trash.</p>
     <div class="flex justify-end gap-3">
       <button value="cancel" class="btn btn-ghost">Cancel</button>
       <button value="confirm" class="btn btn-danger">Move to Trash</button>
@@ -45,7 +45,7 @@ const layers = [
         <dialog id="demo-dialog" class="dialog" aria-labelledby="demo-dialog-title">
           <form method="dialog" class="flex flex-col gap-4">
             <h2 id="demo-dialog-title" class="text-h3">Move to Trash?</h2>
-            <p class="text-body-sm text-rambutan-400">You can restore it from the Trash for 30 days.</p>
+            <p class="text-body-sm text-rambutan-400">You can restore the file until you empty the Trash.</p>
             <div class="flex justify-end gap-3">
               <button value="cancel" class="btn btn-ghost">Cancel</button>
               <button value="confirm" class="btn btn-danger">Move to Trash</button>
@@ -58,10 +58,9 @@ const layers = [
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-2">Menu</h2>
       <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
-        <code class="code-inline">popover</code> is the floating surface; <code class="code-inline">menu-item</code> is each row.
-        Rows highlight on hover and when marked <code class="code-inline">aria-selected</code>, <code class="code-inline">aria-pressed</code>,
-        <code class="code-inline">aria-current</code> or <code class="code-inline">data-highlighted</code>, which is what cmdk
-        and most listbox libraries set. Shown inline here; in an app, put it on a <code class="code-inline">[popover]</code> element.
+        Use <code class="code-inline">popover</code> for the surface and <code class="code-inline">menu-item</code> for each row.
+        Rows highlight on hover or when marked as active. The example stays open to show the styles.
+        In an app, use a <code class="code-inline">[popover]</code> element.
       </p>
       <Example previewClass="flex" code={`<div class="popover w-64" role="menu" aria-label="File">
   <button type="button" class="menu-item" role="menuitem">Rename</button>
@@ -83,8 +82,8 @@ const layers = [
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-2">Tooltip</h2>
       <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
-        <code class="code-inline">tooltip</code> is only the bubble; show it from the trigger. Screen readers don't see hover,
-        so the trigger keeps an <code class="code-inline">aria-label</code> or <code class="code-inline">aria-describedby</code>.
+        Use <code class="code-inline">tooltip</code> for the bubble. Show it on hover and keyboard focus.
+        Label the trigger with <code class="code-inline">aria-label</code> or connect it to the tooltip with <code class="code-inline">aria-describedby</code>.
       </p>
       <Example previewClass="flex pt-14" code={`<button type="button" class="group relative btn btn-ghost btn-icon" aria-describedby="tip-copy">
   <svg viewBox="0 0 16 16" fill="currentColor" class="size-4" aria-hidden="true">…</svg>
@@ -107,8 +106,8 @@ const layers = [
     <section>
       <h2 class="text-h1 font-semibold tracking-tight mb-2">Layers</h2>
       <p class="text-body text-rambutan-400 mb-6 max-w-[65ch] text-pretty">
-        When something can't use the top layer, pick a named layer instead of a number. The values are an order, not a
-        scale; the CSS variables (<code class="code-inline">--z-popover</code>) are there for plain CSS.
+        Use a named layer when the browser's top layer isn't available.
+        The values set the stacking order. Use variables such as <code class="code-inline">--z-popover</code> in plain CSS.
       </p>
       <ul role="list" class="surface-panel divide-y divide-rambutan-100/5 overflow-hidden">
         {layers.map((l) => (
