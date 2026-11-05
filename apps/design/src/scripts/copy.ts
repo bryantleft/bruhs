@@ -22,11 +22,11 @@ document.addEventListener("click", async (event) => {
   try {
     await navigator.clipboard.writeText(text);
   } catch {
-    announce("Copy failed");
+    announce("Copy failed. Try again.");
     return;
   }
   target.dataset.copied = "";
-  announce(`Copied ${text}`);
+  announce("Copied");
   setTimeout(() => {
     delete target.dataset.copied;
   }, COPIED_MS);

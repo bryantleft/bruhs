@@ -64,7 +64,7 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
                   ? "bg-longan-900 text-rambutan-100 ring-2 ring-rambutan-100/50"
                   : "bg-longan-800/50 text-rambutan-300 hover:bg-longan-800"
               }`}
-              aria-label={`Switch to ${color.name} color`}
+              aria-label={`Use ${color.name} palette`}
             >
               <span 
                 className="w-3 h-3 sm:w-4 sm:h-4 rounded-orb border border-rambutan-100/20" 
@@ -79,7 +79,7 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
         {/* View Mode Toggle */}
         <div className="px-4 sm:px-6 md:px-8 pb-4 sm:pb-6 md:pb-8">
           <div className="flex justify-center">
-            <div className="segmented" role="group" aria-label="View">
+            <div className="segmented" role="group" aria-label="Logo view">
               <button
                 type="button"
                 aria-pressed={viewMode === "preview"}
@@ -133,7 +133,7 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
                   type="button"
                   onClick={() => setActiveVariantIndex(prevIndex)}
                   className="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-orb bg-longan-800/80 backdrop-blur-sm border border-rambutan-100/10 flex items-center justify-center text-rambutan-100/80 hover:text-rambutan-100 hover:bg-longan-700/90 transition-colors focus-visible:outline-2 focus-visible:outline-persimmon-400 cursor-pointer"
-                  aria-label={`Switch to ${variants[prevIndex].name} variant`}
+                  aria-label={`Use ${variants[prevIndex].name} expression`}
                 >
                   <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -144,7 +144,7 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
                   type="button"
                   onClick={() => setActiveVariantIndex(nextIndex)}
                   className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-orb bg-longan-800/80 backdrop-blur-sm border border-rambutan-100/10 flex items-center justify-center text-rambutan-100/80 hover:text-rambutan-100 hover:bg-longan-700/90 transition-colors focus-visible:outline-2 focus-visible:outline-persimmon-400 cursor-pointer"
-                  aria-label={`Switch to ${variants[nextIndex].name} variant`}
+                  aria-label={`Use ${variants[nextIndex].name} expression`}
                 >
                   <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -157,7 +157,7 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
               <CodeViewer
                 code={fillLogoCode(codeTemplate.code, codeValues, { html: false })}
                 html={fillLogoCode(codeTemplate.html, codeValues, { html: true })}
-                title={`${activeVariant.name} - ${activeColor.name}`}
+                title={`${activeVariant.name} (${activeColor.name})`}
               />
             </div>
           )}
@@ -169,7 +169,7 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
             <h3 className="text-h2 sm:text-h1 font-semibold text-rambutan-100 mb-2">{activeVariant.name}</h3>
             <p className="text-body sm:text-body-lg text-rambutan-200">{activeVariant.description}</p>
             <p className="text-label text-rambutan-300 mt-2">
-              {activeColor.name} Variant
+              {activeColor.name} palette
             </p>
           </div>
           
@@ -186,7 +186,7 @@ export default function LogoShowcase({ variants, colors, codeTemplate }: Props) 
                     ? 'bg-persimmon-500 scale-125'
                     : 'bg-rambutan-100/30 hover:bg-rambutan-100/60'
                 }`}
-                aria-label={`Switch to ${variant.name} variant`}
+                aria-label={`Use ${variant.name} expression`}
               />
             ))}
           </div>

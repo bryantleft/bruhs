@@ -5,7 +5,7 @@ type Props = {
   label?: string;
 };
 
-const CopyLLMsButton: FunctionComponent<Props> = ({ content, label = "Copy for your LLM" }) => {
+const CopyLLMsButton: FunctionComponent<Props> = ({ content, label = "Copy guide" }) => {
   const [status, setStatus] = useState<"idle" | "copied" | "error">("idle");
 
   const handleCopy = async () => {
@@ -20,7 +20,7 @@ const CopyLLMsButton: FunctionComponent<Props> = ({ content, label = "Copy for y
   };
 
   const buttonLabel =
-    status === "copied" ? "Copied" : status === "error" ? "Copy failed" : label;
+    status === "copied" ? "Copied" : status === "error" ? "Copy failed. Try again." : label;
 
   return (
     <button
