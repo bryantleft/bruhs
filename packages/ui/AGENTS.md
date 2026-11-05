@@ -1,14 +1,16 @@
-# Bruhs Design System — Agent Guide
+# Bruhs design system guide
 
-A framework-agnostic design system. OKLCH fruit-named colors, Monaspace all-mono typography, warm-dark neutrals, elevation by tone and ring (no drop shadows). Works anywhere Tailwind CSS v4 runs (React, Vue, Svelte, Astro, Solid, Leptos, Go templates, Rails, raw HTML), and also works zero-build via a precompiled CSS bundle.
+Use Bruhs to build interfaces with warm dark surfaces and Monaspace type. Colors use OKLCH and names drawn from fruit. Background tones and inset rings show depth.
 
-This document is self-contained. Read it once and implement. Do not invent tokens, scale values, or class names — use exactly what's listed here.
+Bruhs works anywhere Tailwind CSS v4 runs. A compiled CSS bundle also works in plain HTML.
+
+Use the tokens and classes in this guide. Keep custom values within the documented scales.
 
 ---
 
 ## 1. Adoption
 
-### Option A — Tailwind v4 project (preferred)
+### Option A: Tailwind v4 (preferred)
 
 ```css
 /* your-app.css */
@@ -16,48 +18,49 @@ This document is self-contained. Read it once and implement. Do not invent token
 @import "@bruhs/theme/styles/index.css";
 ```
 
-Ensure fonts are served at `/fonts/*` (the CSS references them via relative paths). Copy `@bruhs/theme/fonts/*` into your `public/fonts/` at build time, or link them in via your bundler.
+Serve fonts at `/fonts/*`. Copy `@bruhs/theme/fonts/*` into `public/fonts/` at build time, or link them through your bundler. The CSS uses relative font paths.
 
-The import also sets document defaults (canvas colour, text colour, Monaspace Neon as the default and `font-mono` family, and the persimmon focus ring), so an unstyled page is already Bruhs. See §12.
+The import sets the page colors and Monaspace Neon as the default font. It also sets the `font-mono` family and persimmon focus ring. See section 12 for document defaults.
 
 ### Keep it in the vocabulary
 
-The package ships `bruhs-theme-lint`, a dependency-free checker for the hard bans in §14 plus raw sizes, durations, z-indexes and colour literals. Add it to your `check` script:
+Add `bruhs-theme-lint` to your `check` script. It checks the rules in section 14 and rejects raw values that bypass the tokens.
 
 ```json
 "check": "tsc && bruhs-theme-lint src"
 ```
 
-`--skip type,weight` turns rules off for a deliberate dialect (a pixel-font site, say). Mark a one-off exception with a `bruhs-theme-ignore` comment on the line or the line above, and say why.
+Use `--skip type,weight` when a project deliberately uses different type rules. Mark a local exception with a `bruhs-theme-ignore` comment on that line or the line above. Explain why it is needed.
 
-### Option B — Zero-build / cross-language (Leptos, Go, Rails, plain HTML)
+### Option B: Compiled CSS
 
 ```html
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@bruhs/theme/dist/bruhs.css">
 ```
 
-All utilities are pre-compiled. Fonts load from the CDN too. Drop into any HTML document.
+Add this stylesheet to any HTML document. The CDN serves the compiled utilities and fonts.
 
-### Option C — Copy-paste
+### Option C: Host the files
 
-Download `dist/bruhs.css` + the `fonts/` directory from the package. Serve them from your own host.
+Download `dist/bruhs.css` and the `fonts/` directory from the package. Serve both from your own host.
 
 ---
 
 ## 2. Core philosophy
 
-Four non-negotiable rules that define Bruhs:
+Set all text in Monaspace. Each text role uses a specific family.
 
-1. **All-mono typography.** Every pixel of text is a Monaspace variant. No sans-serif, no system fonts.
-2. **Warm-dark neutrals.** The canvas is `longan` (warm brown-black), not gray or pure black.
-3. **No drop shadows.** Elevation is expressed by tone step + `inset-ring`. `shadow-xs` through `shadow-2xl` do not exist in Bruhs.
-4. **Persimmon is the brand.** Reserved for primary actions, focus, and "pay attention" moments. Never use it as ambient chrome.
+Use `longan` for the warm dark canvas. Keep gray and pure black out of the neutral palette.
+
+Show depth with background tones and `inset-ring`. Bruhs omits `shadow-xs` through `shadow-2xl`.
+
+Reserve persimmon for primary actions and focus. Use it sparingly to draw attention.
 
 ---
 
 ## 3. Color vocabulary
 
-Ten named scales. Every scale has 11 steps (`50`, `100`, `200`, …, `900`, `950`) in OKLCH. Use the semantic name, not a hex.
+The palette has seven accent scales and two neutral scales, plus mascot colors. Each scale has 11 OKLCH shades from `50` to `950`. Use token names for colors.
 
 | Token | Role | Tint |
 |-------|------|------|
@@ -69,25 +72,28 @@ Ten named scales. Every scale has 11 steps (`50`, `100`, `200`, …, `900`, `950
 | `mangosteen` | Decorative, secondary accents | Purple |
 | `dragonfruit` | Decorative, tertiary accents | Pink |
 | `rambutan` | Foreground text, UI surfaces | Warm gray |
-| `longan` | Background canvas, panels, cards | Warm brown-black |
+| `longan` | Background canvas, panels, cards | Warm dark brown |
 | `bruh-{base,eye,mouth}` | Mascot branding only | Custom |
 
 ### Utilities
 
-Any Tailwind color utility works with these names:
+Use these names with any Tailwind color utility.
 
-- `bg-persimmon-500`, `text-rambutan-100`, `border-pandan-400`
-- `ring-persimmon-500`, `inset-ring-white/10`, `outline-persimmon-400`
-- `fill-lychee-400`, `stroke-durian-300`, `decoration-blueberry-500`
-- `divide-rambutan-100/10`, `accent-persimmon-500`
+| Purpose | Examples |
+|---------|----------|
+| Background and text | `bg-persimmon-500`, `text-rambutan-100` |
+| Borders and focus | `border-pandan-400`, `ring-persimmon-500`, `outline-persimmon-400` |
+| Inset rings | `inset-ring-white/10` |
+| Icons | `fill-lychee-400`, `stroke-durian-300` |
+| Decoration and accents | `decoration-blueberry-500`, `divide-rambutan-100/10`, `accent-persimmon-500` |
 
-Opacity modifiers on a color scale (`bg-persimmon-500/15`) are the primary way to produce soft/muted tints. **Do not** introduce new shades; use opacity.
+Use opacity for softer tints, as in `bg-persimmon-500/15`. Keep the existing shades.
 
 ### Canvas / panel / card tones
 
 | Surface | Class | Background | Ring |
 |---------|-------|------------|------|
-| Page canvas | (theme default on `<body>`) | `bg-longan-950` | — |
+| Page canvas | Theme default on `<body>` | `bg-longan-950` | None |
 | Panel / sidebar / nav | `surface-panel` | `bg-longan-900` | `inset-ring inset-ring-white/5` |
 | Card | `surface-card` | `bg-longan-800` | `inset-ring inset-ring-white/10` |
 | Floating (popover, menu) | `surface-floating` | `bg-longan-700` | `inset-ring inset-ring-white/15` |
@@ -98,22 +104,22 @@ Opacity modifiers on a color scale (`bg-persimmon-500/15`) are the primary way t
 
 ## 4. Radius vocabulary
 
-Fruit-named scale. **Never** use `rounded-sm`, `rounded-md`, `rounded-lg`, `rounded-xl`, `rounded-2xl`, `rounded-3xl`, or `rounded-full` — those are not Bruhs vocabulary.
+Use the fruit radius classes below. Tailwind's default radius classes, from `rounded-sm` through `rounded-full`, aren't part of Bruhs.
 
 | Class | Value | Use for |
 |-------|-------|---------|
-| `rounded-seed` | 4px | Tags, micro-chips, dense controls |
+| `rounded-seed` | 4px | Tags and compact controls |
 | `rounded-grape` | 8px | Buttons, inputs, badges |
 | `rounded-lychee` | 14px | Cards, panels, sidebar items |
 | `rounded-mango` | 22px | Hero tiles, media containers |
-| `rounded-pomelo` | 36px | Marketing blocks, pull-quotes |
+| `rounded-pomelo` | 36px | Marketing blocks and pull quotes |
 | `rounded-orb` | full | Avatars, pills, toggles, dots |
 
-Directional variants work: `rounded-l-grape`, `rounded-tr-lychee`, `rounded-b-mango`, etc.
+Use directional variants for individual corners or edges, such as `rounded-l-grape`.
 
 ### Concentric nesting
 
-For nested rounded elements, enforce `inner = outer − padding`:
+Subtract the padding from the outer radius to get the inner radius. Use CSS variables to keep nested curves parallel.
 
 ```html
 <div class="rounded-mango p-4 [--radius:var(--radius-mango)] [--padding:--spacing(4)]">
@@ -125,7 +131,7 @@ For nested rounded elements, enforce `inner = outer − padding`:
 
 ## 5. Typography
 
-Every `.text-*` utility self-sets its Monaspace variant. **Do not** apply `font-*` utilities on top of `.text-*` — the role system is the source of truth.
+Each text role class sets its Monaspace family. Keep that family by omitting `font-*` overrides on `.text-*` roles.
 
 | Class | Font | Size | Weight | Use for |
 |-------|------|------|--------|---------|
@@ -134,7 +140,7 @@ Every `.text-*` utility self-sets its Monaspace variant. **Do not** apply `font-
 | `text-display-sm` | Krypton | clamp(28…44px) | 400 | Page headers |
 | `text-h1` | Xenon | clamp(24…32px) | 500 | Primary headings |
 | `text-h2` | Xenon | 24px | 500 | Section headings |
-| `text-h3` | Xenon | 20px | 500 | Sub-sections |
+| `text-h3` | Xenon | 20px | 500 | Subsections |
 | `text-h4` | Xenon | 18px | 500 | Component headings |
 | `text-body-lg` | Neon | 18px | 400 | Lead paragraphs |
 | `text-body` | Neon | 16px | 400 | Default prose |
@@ -144,7 +150,7 @@ Every `.text-*` utility self-sets its Monaspace variant. **Do not** apply `font-
 | `text-label-sm` | Argon | 12px | 500 | Captions, annotations |
 | `text-eyebrow` | Argon | 11px, uppercase | 500 | Label above a heading or group |
 | `text-code-lg` | Neon | 16px | 400 | Code blocks |
-| `text-code` | Neon | 14px | 400 | Inline code |
+| `text-code` | Neon | 14px | 400 | Code snippets |
 | `text-code-sm` | Neon | 12px | 400 | Small code annotations |
 | `text-button-lg` | Argon | 16px | 500 | Primary action buttons |
 | `text-button` | Argon | 14px | 500 | Standard buttons |
@@ -153,154 +159,171 @@ Every `.text-*` utility self-sets its Monaspace variant. **Do not** apply `font-
 
 ### Rules
 
-- **Never use `font-bold`** — use `font-semibold` (600) or `font-medium` (500).
-- **Never add `leading-*` to headings** — the role utility already sets line-height.
-- **Add `text-balance` to headings, `text-pretty` to body paragraphs.**
-- **Constrain prose width** with `max-w-[65ch]` or `max-w-[72ch]` on the block.
-- **Add `tabular-nums`** to any element displaying numbers that change (counters, prices, stats).
-- **Never apply `text-*` utilities to inline elements** (`<span>`, `<a>`, `<strong>`, `<em>`, `<code>`). They inherit from their block-level parent. For inline `<code>`, apply only color (`text-rambutan-200`) — the parent's `text-body`/`text-body-sm` already sets the Neon mono font.
-- **`text-code-*` utilities are for block code** (`<pre>`, `<div>` wrappers). For inline code, omit them.
+Use `font-semibold` or `font-medium` for emphasis. Bruhs omits `font-bold`.
+
+Keep the heading role's line height. Add `text-balance` to headings and `text-pretty` to body paragraphs.
+
+Limit prose width with `max-w-[65ch]` or `max-w-[72ch]`. Use `tabular-nums` for changing numbers.
+
+Let inline elements inherit their parent's text role. A color class such as `text-rambutan-200` is fine on inline code. Reserve `text-code-*` roles for block code.
 
 ---
 
 ## 6. Elevation
 
-No `shadow-*` utilities. Elevation is a two-lever system:
+Use background tones and inset rings to show depth.
 
 | Step | Class | Background | Ring |
 |------|-------|------------|------|
-| Canvas | — | `bg-longan-950` | — |
+| Canvas | Theme default | `bg-longan-950` | None |
 | Panel | `surface-panel` | `bg-longan-900` | `inset-ring-white/5` |
 | Card | `surface-card` | `bg-longan-800` | `inset-ring-white/10` |
 | Floating | `surface-floating` | `bg-longan-700` | `inset-ring-white/15` |
 | Modal | `surface-modal` | `bg-longan-800` | `inset-ring-white/20` |
 
-Each `surface-*` class sets the tone, the ring and `rounded-lychee`; override the radius with any `rounded-*`. Add `surface-interactive` to a clickable surface to lift its ring one step on hover.
+Each `surface-*` class sets the tone and ring with `rounded-lychee` corners. Override the radius with a fruit radius class. Add `surface-interactive` to strengthen a clickable surface's ring on hover.
 
 ### Stacking layers
 
-Prefer the top layer: a native `<dialog>` or a `[popover]` element never needs a z-index. Otherwise use a named layer, never a number:
+Prefer native `<dialog>` and `[popover]` elements. They use the browser's top layer. For other overlays, use a named stacking layer.
 
 | Class | Value | Use for |
 |-------|-------|---------|
 | `z-raised` | 10 | Lifted above siblings |
 | `z-sticky` | 20 | Sticky headers and toolbars |
-| `z-overlay` | 40 | Scrims, off-canvas backdrops |
-| `z-modal` | 50 | Drawers and non-native modals |
+| `z-overlay` | 40 | Backdrops behind overlays |
+| `z-modal` | 50 | Custom drawers and modals |
 | `z-popover` | 60 | Menus and command palettes (above a modal) |
 | `z-toast` | 70 | Toasts |
 | `z-tooltip` | 80 | Tooltips |
 
-The values are an order, not a scale. `--z-raised` … `--z-tooltip` are on `:root` for plain CSS.
+The values set the stacking order. Variables from `--z-raised` through `--z-tooltip` are available on `:root` for plain CSS.
 
 ### Bloom
 
-One exception: `--shadow-bloom` is a persimmon glow reserved for focus states, active triggers, and deliberate attention accents.
+Use `--shadow-bloom` for a persimmon glow on focus or active controls. Reserve it for deliberate attention.
 
 ```html
 <button class="[box-shadow:var(--shadow-bloom)]">Focused</button>
 ```
 
-Do not introduce your own glows in other colors.
+Keep glows in persimmon.
 
 ---
 
 ## 7. Motion
 
-Animation timing is tokenized so transitions feel coordinated across the system. Five durations, four easings — all exposed as CSS custom properties and as `duration-*` / `ease-*` Tailwind utilities.
+Use the motion tokens to keep transitions consistent. Five durations and four easing curves are available as CSS variables and Tailwind utilities.
 
 ### Durations
 
 | Token | Value | Use for |
 |-------|-------|---------|
-| `duration-blink` | 80ms | Instant feedback — radio select, keyboard nav, typeahead |
+| `duration-blink` | 80ms | Brief selection feedback |
 | `duration-fast` | 150ms | Hover, button press, small state changes (default) |
 | `duration-standard` | 250ms | Expand, fade, slide |
-| `duration-slow` | 400ms | Page-level transitions, big panel moves |
+| `duration-slow` | 400ms | Page transitions and large panels |
 | `duration-bloom` | 600ms | Deliberate attention moments, bloom accents |
 
-`--default-transition-duration` is set to `var(--duration-fast)`, so a bare `class="transition"` uses 150ms automatically.
+The default `transition` uses `duration-fast` at 150ms.
 
 ### Easings
 
 | Token | Curve | Use for |
 |-------|-------|---------|
 | `ease-standard` | `cubic-bezier(0.2, 0, 0, 1)` | Default for most UI transitions |
-| `ease-entrance` | `cubic-bezier(0, 0, 0, 1)` | Content entering view (slide-in, fade-in) |
-| `ease-exit` | `cubic-bezier(0.4, 0, 1, 1)` | Content leaving view (slide-out, fade-out) |
-| `ease-bloom` | `cubic-bezier(0.34, 1.56, 0.64, 1)` | Playful overshoot — reserved for bloom/attention accents |
+| `ease-entrance` | `cubic-bezier(0, 0, 0, 1)` | Content entering view |
+| `ease-exit` | `cubic-bezier(0.4, 0, 1, 1)` | Content leaving view |
+| `ease-bloom` | `cubic-bezier(0.34, 1.56, 0.64, 1)` | Playful overshoot for brand accents |
 
 ### Rules
 
-- **Bare `transition` gets the right default.** Don't reach for `duration-150` manually.
-- **Pair durations with their intended easings.** `duration-standard ease-standard` for expand/fade; `duration-bloom ease-bloom` only for brand moments.
-- **Respect `prefers-reduced-motion`.** Wrap non-essential motion in `motion-safe:` variants.
-- **Never use durations > 1000ms** except for splash/onboarding moments.
+Use `transition` for the default duration. Name the changing property when possible, as in `transition-colors`.
+
+Pair each duration with a suitable easing. Use `duration-standard ease-standard` for expanding content. Reserve `duration-bloom ease-bloom` for brand accents.
+
+Respect `prefers-reduced-motion`. Wrap decorative motion in `motion-safe:` variants.
+
+Keep routine transitions at 400ms or less. Durations over 1000ms are reserved for splash screens or onboarding.
 
 ---
 
 ## 8. Spacing
 
-Tailwind's default 4px grid (`--spacing: 0.25rem`) is the only spacing rhythm. Every gap, padding, and margin should be a multiple of 4px.
+Use Tailwind's spacing scale, based on `--spacing: 0.25rem`. Choose the common values below for a consistent rhythm.
 
 ### Common patterns
 
 | Context | Value | Why |
 |---------|-------|-----|
-| Inline gap (button → icon, badge → text) | `gap-1.5` (6px) | Tight without touching |
-| Form label → field | `gap-2` (8px) | Tightly bound |
-| Form field → field | `gap-6` (24px) | Clear separation without feeling loose |
+| Icon to text | `gap-1.5` (6px) | Tight without touching |
+| Form label to field | `gap-2` (8px) | Closely related content |
+| Form field to field | `gap-6` (24px) | Clear separation |
 | Card padding (compact) | `p-4` (16px) | Dense apps |
 | Card padding (default) | `p-6` (24px) | Standard |
-| Section → section | `gap-12 md:gap-16` (48/64px) | Breathing room on long pages |
-| Page padding | `p-6 md:p-8` (24/32px) | Mobile-first |
+| Section to section | `gap-12 md:gap-16` (48/64px) | Room between sections |
+| Page padding | `p-6 md:p-8` (24/32px) | More space on larger screens |
 
 ### Rules
 
-- **Never use `mt-*`/`mb-*`/`ml-*`/`mr-*`/`mx-*`/`my-*` between flex or grid children** — use `gap-*` on the parent.
-- **Prefer shorthand over split axes.** `p-4` not `px-4 py-4`; keep them split only when a variant overrides one axis (e.g. `p-6 md:px-8`).
-- **Use `--spacing(…)` for arbitrary spacing values** — `--padding: --spacing(3)` not `12px` or `0.75rem`.
-- **Never use `calc(var(--spacing)*…)`** — use `--spacing(…)`.
-- **Never use `theme(spacing.…)`** — use `--spacing(…)`.
+Use `gap-*` on the parent to space flex or grid children. Keep margin utilities out of that spacing.
+
+Use shorthand such as `p-4`. Split axes when a variant overrides one, as in `p-6 md:px-8`.
+
+Use `--spacing(…)` for custom spacing values. It replaces raw pixels, `calc(var(--spacing)*…)` and `theme(spacing.…)`.
 
 ---
 
 ## 9. Responsive breakpoints
 
-Mobile-first. Tailwind's default breakpoints apply: `sm:` 640px, `md:` 768px, `lg:` 1024px, `xl:` 1280px, `2xl:` 1536px.
+Start with the mobile layout. Use Tailwind's default breakpoints to adapt it for larger screens.
+
+| Breakpoint | Minimum width |
+|------------|---------------|
+| `sm:` | 640px |
+| `md:` | 768px |
+| `lg:` | 1024px |
+| `xl:` | 1280px |
+| `2xl:` | 1536px |
 
 ### Layout shifts
 
 | Shift | At breakpoint |
 |-------|---------------|
-| 1 → 2 column | `md:` (768px) |
-| 2 → 3 column | `lg:` (1024px) |
-| 3 → 4 column | `xl:` (1280px) |
-| Off-canvas nav → in-flow sidebar | `lg:` (1024px) |
-| Page padding 24px → 32px | `md:` (768px) |
-| Section gap 48px → 64px | `md:` (768px) |
+| One to two columns | `md:` (768px) |
+| Two to three columns | `lg:` (1024px) |
+| Three to four columns | `xl:` (1280px) |
+| Hidden navigation to visible sidebar | `lg:` (1024px) |
+| Page padding from 24px to 32px | `md:` (768px) |
+| Section gap from 48px to 64px | `md:` (768px) |
 
 ### Typography
 
-- **Display and headings use `clamp()` internally** — don't add `md:text-*` overrides to them. The role utilities handle fluid scaling.
-- **Body text is fixed** at its declared size. If a context needs `text-body-sm` at desktop density, bump it to mobile-base via `max-sm:text-base/6`.
+Display roles and `text-h1` use `clamp()` to scale with the viewport. Other heading roles use fixed sizes. Keep the size set by each role instead of adding `md:text-*` overrides.
+
+Body text uses a fixed size. If a dense layout uses `text-body-sm`, enlarge it on mobile with `max-sm:text-base/6`.
 
 ### Rules
 
-- **Always `min-h-dvh`**, never `min-h-screen` (deprecated).
-- **Touch targets stay ≥44×44px** regardless of breakpoint. Use the absolute overlay pattern for small icon buttons.
-- **Reconfigure dividers per breakpoint** when column count changes — see §10.19.
-- **Checkboxes, radios, toggles are bigger on mobile** (`size-5 sm:size-4`, `w-11 sm:w-9`) for finger-friendliness.
+Use `min-h-dvh` for full viewport height.
+
+Keep touch targets at least 44px square at every breakpoint. Add an invisible target around small icon buttons.
+
+Adjust dividers when the column count changes. See section 10.18.
+
+Make choice controls larger on mobile with `size-5 sm:size-4` or `w-11 sm:w-9`.
 
 ---
 
 ## 10. Component patterns
 
-The common pieces ship as classes in `@bruhs/theme` (`src/styles/components.css`), so apps don't rebuild them from utility strings. They sit in the `components` layer: any utility on the same element wins, so `btn btn-primary w-full` and `surface-card rounded-mango` behave as you'd expect. Patterns that are still utility strings follow after them.
+Use the component classes in `@bruhs/theme`. They live in `src/styles/components.css` and share the design rules across apps.
+
+Utilities on the same element override component defaults. Use `btn btn-primary w-full` for a full width button or `surface-card rounded-mango` for a different radius.
 
 ### 10.1 Buttons
 
-`btn` plus one tone: `btn-primary`, `btn-soft`, `btn-outline`, `btn-ghost`, `btn-soft-danger`, `btn-danger`. Add `btn-sm` for the small size and `btn-icon` for a square icon-only button.
+Use `btn` with a tone class. Add `btn-sm` for a smaller button. Use `btn-icon` for a square button that shows only an icon.
 
 ```html
 <button type="button" class="btn btn-primary">Save</button>
@@ -312,12 +335,17 @@ The common pieces ship as classes in `@bruhs/theme` (`src/styles/components.css`
 <button type="button" class="btn btn-soft btn-sm">Resend code</button>
 ```
 
-- **One `btn-primary` per page or dialog.** Its ring matches the fill exactly.
-- **Destructive actions use `btn-soft-danger`** unless deleting is the purpose of the page or dialog; then `btn-danger`.
-- **Sizes:** default is about 36px, `btn-sm` about 28px. At most two sizes per surface.
-- **Disabled** (`disabled` or `aria-disabled="true"`) fades to 60% and ignores hover. Works on `<a class="btn">` too.
-- **Icons:** asymmetric padding, the icon side matching the vertical padding: `btn btn-primary pl-2` for a leading icon, `pr-2` for a trailing one.
-- **Icon-only:** `btn btn-ghost btn-icon` with an `aria-label`. On touch screens it gets an invisible 48px hit area.
+Use one `btn-primary` per page or dialog. Match its ring to its fill.
+
+Use `btn-soft-danger` for destructive actions. Choose `btn-danger` when deletion is the main action.
+
+The default button is about 36px tall. `btn-sm` is about 28px. Use at most two sizes per surface.
+
+Set `disabled` on a button to prevent activation and show disabled styles. With `aria-disabled="true"`, the styles apply but your code must prevent activation. This also applies to links with `class="btn"`.
+
+Match the padding beside an icon to the vertical padding. Use `pl-2` for a leading icon or `pr-2` for a trailing icon.
+
+Give icon buttons an `aria-label`. On touch screens, `btn-icon` adds an invisible 48px touch target.
 
 ```html
 <button type="button" class="btn btn-primary pl-2">
@@ -339,11 +367,11 @@ The common pieces ship as classes in `@bruhs/theme` (`src/styles/components.css`
 <textarea id="bio" name="bio" rows="3" class="input"></textarea>
 ```
 
-`aria-invalid="true"` switches to the lychee error state; point `aria-describedby` at the message. The focus ring insets (`-1px`) so it never spills outside the field.
+Set `aria-invalid="true"` for the lychee error state. Point `aria-describedby` to the error message. The focus ring stays inside the field.
 
 ### 10.3 Surfaces
 
-`surface-panel`, `surface-card`, `surface-floating`, `surface-modal`, `surface-well`; see §6 for when each applies.
+Choose a surface class from section 6 to set its background and ring.
 
 ```html
 <div class="surface-card p-6">
@@ -355,26 +383,28 @@ The common pieces ship as classes in `@bruhs/theme` (`src/styles/components.css`
 
 ### 10.4 Dialog
 
-`dialog` styles a native `<dialog>` opened with `showModal()`: modal surface, `rounded-mango`, the longan scrim on `::backdrop`, and a 250ms fade and scale that's skipped under reduced motion.
+Add `dialog` to a native `<dialog>` and open it with `showModal()`. The class sets the modal surface and `rounded-mango` corners. It adds a longan backdrop and a 250ms entrance animation. Reduced motion skips the animation.
 
 ```html
 <dialog id="trash" class="dialog" aria-labelledby="trash-title">
   <form method="dialog" class="flex flex-col gap-4">
     <h2 id="trash-title" class="text-h3">Move to Trash?</h2>
-    <p class="text-body-sm text-rambutan-400">You can restore it for 30 days.</p>
+    <p class="text-body-sm text-rambutan-400">You can restore the file until you empty the Trash.</p>
     <div class="flex justify-end gap-3">
-      <button value="cancel" class="btn btn-ghost">Cancel</button>
-      <button value="confirm" class="btn btn-danger">Move to Trash</button>
+      <button type="submit" value="cancel" class="btn btn-ghost">Cancel</button>
+      <button type="submit" value="confirm" class="btn btn-danger">Move to Trash</button>
     </div>
   </form>
 </dialog>
 ```
 
-If clicking the backdrop should close it, put the padding on an inner wrapper (`dialog p-0`), since a click on the padding counts as a click on the dialog itself.
+If clicking the backdrop should close the dialog, put padding on an inner wrapper and use `dialog p-0`. A click on the dialog's own padding counts as an inside click.
 
 ### 10.5 Menu, listbox and command palette
 
-`popover` is the floating surface (works on a `[popover]` element or a positioned div, where it takes `z-popover`). `menu-item` is each row; it highlights on hover and when marked `aria-selected`, `aria-pressed`, `aria-current` or `data-highlighted`, which covers cmdk and most listbox libraries.
+Use `popover` for a floating menu surface and `menu-item` for each row. The surface works on a `[popover]` element or a positioned div. A positioned div uses `z-popover`.
+
+Rows highlight on hover or when marked with an active state. The class reads `aria-selected`, `aria-pressed`, `aria-current` and `data-highlighted`.
 
 ```html
 <div class="popover w-64" role="menu" aria-label="File">
@@ -386,7 +416,7 @@ If clicking the backdrop should close it, put the padding on an inner wrapper (`
 
 ### 10.6 Tooltip
 
-`tooltip` is the bubble only. Show it from the trigger, and keep `aria-label` or `aria-describedby` on the trigger: screen readers don't see hover.
+Use `tooltip` for the bubble. Show it on hover and keyboard focus. Give the trigger an `aria-label` or connect it to the tooltip with `aria-describedby`.
 
 ```html
 <button type="button" class="group relative btn btn-ghost btn-icon" aria-describedby="tip">
@@ -397,7 +427,7 @@ If clicking the backdrop should close it, put the padding on an inner wrapper (`
 
 ### 10.7 Segmented control
 
-For two to four mutually exclusive views. The active item carries `aria-pressed`, `aria-selected` or `aria-checked`.
+Use a segmented control to choose one of two to four views. Mark the active item with the ARIA state that matches its role. The class reads `aria-pressed`, `aria-selected` and `aria-checked`.
 
 ```html
 <div class="segmented" role="group" aria-label="View">
@@ -414,7 +444,7 @@ For two to four mutually exclusive views. The active item carries `aria-pressed`
 <kbd class="kbd">⌘</kbd><kbd class="kbd">K</kbd>
 ```
 
-`code-block` scrolls sideways instead of wrapping. With a syntax highlighter, drop the highlighter theme's own background so the block's shows.
+Use `code-block` for horizontal scrolling instead of wrapping. Remove the syntax highlighter's background so the block's background shows.
 
 ### 10.9 Spinner
 
@@ -422,7 +452,9 @@ For two to four mutually exclusive views. The active item carries `aria-pressed`
 <span class="spinner size-4 text-rambutan-400" aria-hidden="true"></span>
 ```
 
-Size from `size-*` or the font size, colour from the text colour, stroke from `--spinner-width` (default 2px). It keeps turning, more slowly, under reduced motion. Pair it with visible text or a label on its button.
+Set the spinner's size with `size-*` or the font size. Set its color with a text color class. Use `--spinner-width` to change the default 2px stroke.
+
+Pair it with visible text or label its button. The spinner slows down for reduced motion.
 
 ### 10.10 Empty, error and 404 states
 
@@ -430,14 +462,14 @@ Size from `size-*` or the font size, colour from the text colour, stroke from `-
 <main class="empty-state min-h-dvh">
   <p class="text-eyebrow text-rambutan-500">404</p>
   <h1 class="text-h1">This page doesn't exist</h1>
-  <p class="text-body-sm">It may have moved. Head back and search from there.</p>
+  <p class="text-body-sm">Go to the home page to find what you need.</p>
   <a href="/" class="btn btn-primary mt-4">Go home</a>
 </main>
 ```
 
-One action per empty state; say what's missing and what to do next.
+Give each empty state one action. Say what's missing and what to do next.
 
-### 10.11 Badge — soft
+### 10.11 Soft badge
 
 ```html
 <span class="inline-flex items-center rounded-grape bg-pandan-500/15 text-pandan-200 px-2 py-1 text-label-sm inset-ring inset-ring-pandan-400/20">
@@ -445,9 +477,9 @@ One action per empty state; say what's missing and what to do next.
 </span>
 ```
 
-Pattern: any accent tone with `-500/15` bg, `-200` text, `-400/20` ring. Works for `lychee`, `persimmon`, `durian`, `pandan`, `blueberry`, `mangosteen`, `dragonfruit`, `rambutan`.
+Use the chosen tone's `500` shade at 15% opacity for the background. Pair it with `200` text and a `400` ring at 20% opacity. This pattern works with any accent or rambutan.
 
-### 10.12 Badge — outline
+### 10.12 Outline badge
 
 ```html
 <span class="inline-flex items-center rounded-grape px-2 py-1 text-label-sm text-persimmon-300 inset-ring inset-ring-persimmon-400/30">
@@ -483,15 +515,15 @@ Pattern: any accent tone with `-500/15` bg, `-200` text, `-400/20` ring. Works f
 </span>
 ```
 
-For error state: swap wrapper to `bg-lychee-500/5 inset-ring-lychee-400/40 focus-within:outline-lychee-400`.
+For an error, use `bg-lychee-500/5 inset-ring-lychee-400/40 focus-within:outline-lychee-400` on the wrapper.
 
-For disabled: add `disabled` to `<select>` and `opacity-60 bg-white/[0.02] inset-ring-white/5` on the wrapper.
+For a disabled control, add `disabled` to `<select>`. Use `opacity-60 bg-white/[0.02] inset-ring-white/5` on the wrapper.
 
-For a leading icon: use `grid-cols-[--spacing(9)_1fr_--spacing(8)]` and place the icon at `col-start-1 row-start-1`.
+For a leading icon, use `grid-cols-[--spacing(9)_1fr_--spacing(8)]`. Place the icon at `col-start-1 row-start-1`.
 
 ### 10.15 Checkbox
 
-Supports three states: unchecked, checked, indeterminate. The indeterminate state is a DOM property — set `input.indeterminate = true` in JavaScript (it is not an HTML attribute).
+A checkbox supports checked, unchecked and partial selection states. Set `input.indeterminate = true` in JavaScript for a partial selection. This is a DOM property rather than an HTML attribute.
 
 ```html
 <div class="flex items-center gap-2 text-body text-rambutan-200">
@@ -515,10 +547,11 @@ Supports three states: unchecked, checked, indeterminate. The indeterminate stat
 
 ### 10.16 Radio
 
-Identical structure to checkbox but with:
-- `type="radio"` on the input
-- `rounded-orb` (not `rounded-seed`)
-- A filled dot indicator: `<span class="pointer-events-none col-start-1 row-start-1 size-[round(down,40%,1px)] self-center justify-self-center rounded-orb bg-longan-950 group-not-has-checked:opacity-0"></span>`
+Use the checkbox structure with `type="radio"` and `rounded-orb` on the input. Replace the checkmark with this filled dot.
+
+```html
+<span class="pointer-events-none col-start-1 row-start-1 size-[round(down,40%,1px)] self-center justify-self-center rounded-orb bg-longan-950 group-not-has-checked:opacity-0"></span>
+```
 
 ### 10.17 Toggle
 
@@ -539,7 +572,7 @@ Identical structure to checkbox but with:
 </ul>
 ```
 
-Reconfigure divider patterns when column count changes at a breakpoint.
+Adjust dividers when the column count changes at a breakpoint.
 
 ---
 
@@ -547,7 +580,7 @@ Reconfigure divider patterns when column count changes at a breakpoint.
 
 Use [Heroicons](https://heroicons.com) as the default set.
 
-**Never scale icons.** The viewBox size determines the Tailwind size class, exactly:
+Match each icon's viewBox to its Tailwind size class. Keep the native dimensions.
 
 | Set | viewBox | Class |
 |-----|---------|-------|
@@ -555,20 +588,19 @@ Use [Heroicons](https://heroicons.com) as the default set.
 | Heroicons Mini | `0 0 20 20` | `size-5` |
 | Heroicons Outline | `0 0 24 24` | `size-6` |
 
-- **App UIs (dashboards, settings, forms):** Micro only.
-- **Navigation lists, marketing:** Mini.
-- **Hero illustrations:** Outline.
+Use Micro for app interfaces. Choose Mini for navigation and marketing pages. Reserve Outline for hero illustrations.
 
 ### Rules
 
-- Always add `shrink-0` to icons inside flex/grid containers.
-- Align icons with adjacent text using `h-lh`.
-- Use `fill-*` for filled icons and `stroke-*` for stroked icons. Never use `text-*` with `currentColor` (legacy hack).
-- Never wrap icons in decorative containers (colored squares, circle backgrounds).
+Add `shrink-0` to icons inside flex or grid containers. Use `h-lh` to align with adjacent text.
 
-### Icon-only buttons
+Use `fill-*` for filled icons and `stroke-*` for outlines. Avoid text color utilities with `currentColor`.
 
-Use `btn btn-icon` with an `aria-label`. On coarse pointers it adds an invisible 48×48 hit area, so a 32px button still meets mobile tap requirements:
+Place icons directly in the layout. Skip decorative boxes and circles behind them.
+
+### Buttons with only an icon
+
+Use `btn btn-icon` with an `aria-label`. On touch screens, it adds an invisible 48px square touch target around the button.
 
 ```html
 <button type="button" class="btn btn-ghost btn-icon" aria-label="Settings">
@@ -580,14 +612,11 @@ Use `btn btn-icon` with an `aria-label`. On coarse pointers it adds an invisible
 
 ## 12. Global document setup
 
-Importing the theme already sets, in the base layer:
+The theme sets dark mode and font smoothing on `<html>`. It sets `bg-longan-950` and `text-rambutan-100` on `<body>`.
 
-- `color-scheme: dark` and font smoothing on `<html>`
-- `bg-longan-950` and `text-rambutan-100` on `<body>`
-- Monaspace Neon as Tailwind's `font-sans` and `font-mono`, so unstyled text and `font-mono` stay in the system
-- a `:focus-visible` outline of 2px `persimmon-400` at a 2px offset on everything
+Monaspace Neon is the default `font-sans` and `font-mono` family. Every `:focus-visible` element gets a 2px persimmon outline at a 2px offset.
 
-So a document only needs:
+Start with this document structure.
 
 ```html
 <html lang="en">
@@ -599,36 +628,43 @@ So a document only needs:
 </html>
 ```
 
-- `isolate` on the main container: prevents z-index conflicts with portalled elements.
-- `min-h-dvh`: modern viewport unit, avoids `min-h-screen`.
-- Don't restate the body colours or the focus ring per element. Override the focus colour only where it means something (`btn-danger` uses `lychee-400`).
+Use `isolate` on the main container to keep its stacking context separate from portalled elements. Use `min-h-dvh` for full viewport height.
+
+Keep the default body colors and focus ring. Override the focus color when it carries meaning, as `btn-danger` does with `lychee-400`.
 
 ---
 
-## 13. Accessibility checklist
+## 13. Accessibility
 
-- Every form control has a `name` attribute and either a `<label>` (associated via `for`/`id`) or an `aria-label`.
-- Every `<button>` has an explicit `type` attribute (`"submit"` inside forms, `"button"` otherwise).
-- All `<ul>` and `<ol>` in flex/grid layouts get `role="list"` (Safari strips the implicit role when `list-style: none` is applied).
-- Touch targets are at least 44×44px. Small icon buttons use the absolute overlay pattern above.
-- Focus rings are always visible: the theme sets one on every `:focus-visible` element. Never remove it with `outline-none` unless you draw a replacement.
-- On `<input>` and `<textarea>`, use `-outline-offset-1` so the focus ring insets rather than spilling outside.
-- Form controls must never conjoin an input with a button into a shared border — leave a gap or nest the button visually.
+Give every form control a `name` and an accessible label. Connect a `<label>` through `for` and `id`, or use `aria-label`.
+
+Set an explicit `type` on every button. Use `submit` to submit a form and `button` for other actions.
+
+Add `role="list"` to `<ul>` and `<ol>` elements styled as flex or grid layouts. Safari can remove their list role when markers are hidden.
+
+Keep touch targets at least 44px square. Use the invisible target pattern for small icon buttons.
+
+Keep a visible focus ring. Replace it before removing the default outline. Use `-outline-offset-1` on text fields to keep the ring inside.
+
+Leave a gap between a field and its button, or place the button inside the field.
 
 ---
 
-## 14. Hard bans (never do these)
+## 14. Required design rules
 
-1. **Never use `shadow-xs`, `shadow-sm`, `shadow-md`, `shadow-lg`, `shadow-xl`, `shadow-2xl`.** Bruhs has no drop-shadow system. Use tone-step + `inset-ring` instead.
-2. **Never use `rounded-sm`, `rounded-md`, `rounded-lg`, `rounded-xl`, `rounded-2xl`, `rounded-3xl`, `rounded-full`.** Use the fruit names.
-3. **Never use pure `#000`, `bg-black`, or gray/slate/zinc/neutral scales.** Use `longan-950` or the `rambutan` neutral for foreground.
-4. **Never override the typography role with `font-*` utilities.** Let `.text-*` classes declare the font.
-5. **Never use `font-bold`.** Use `font-semibold` or `font-medium`.
-6. **Never scale an icon.** Match viewBox size to size class.
-7. **Never use `text-xs` for body copy.** Minimum body size is `text-sm` and only above `sm:` breakpoints; mobile default is `text-base`.
-8. **Never wrap an icon in a colored square or circle.**
-9. **Never use reduced-opacity rings on a solid primary button.** The ring must match the fill color.
-10. **Never place more than one filled primary button on a single page/dialog.**
+Use tone and `inset-ring` for depth. Bruhs omits Tailwind's drop shadows from `shadow-xs` through `shadow-2xl`.
+
+Use fruit radius names. Default classes such as `rounded-sm` and `rounded-full` aren't part of Bruhs.
+
+Use `longan-950` for the canvas and rambutan for foreground details. Keep pure black and the gray, slate, zinc and neutral scales out of the palette.
+
+Let `.text-*` roles set their fonts. Use `font-semibold` or `font-medium` for emphasis instead of `font-bold`.
+
+Keep icons at their native sizes and place them directly in the layout.
+
+Keep body text at least `text-sm` on screens wider than `sm:`. Use `text-base` on mobile. Reserve `text-xs` for labels and annotations.
+
+Match a solid primary button's ring to its fill. Use one filled primary button per page or dialog.
 
 ---
 
@@ -640,38 +676,50 @@ When you need a softer tint of a color, use opacity modifiers on the scale:
 |---------|---------|
 | `-500/15` | Soft backgrounds (badges, tinted panels) |
 | `-400/20` | Soft ring pairing for `-500/15` backgrounds |
-| `-400/30` | Outline-style ring on transparent background |
+| `-400/30` | Outline ring on a transparent background |
 | `white/5`, `white/10`, `white/15`, `white/20` | Elevation rings on dark surfaces |
 | `longan-950/70` | Modal / drawer scrim |
 
 ---
 
-## 16. Focus & state pattern reference
+## 16. Focus and states
 
-- **Focus (keyboard):** provided by the theme. Change only the colour or offset when needed, e.g. `focus-visible:outline-lychee-400`.
-- **Focus inside input:** `input` insets it with `-outline-offset-1`; for a custom field, add `focus-visible:-outline-offset-1`.
-- **Hover (elevated surfaces):** bump the `inset-ring` opacity by 5 (`white/5` → `white/10`) and optionally tone-step the background.
-- **Active / pressed:** darker fill (`bg-persimmon-600` for primary) or `active:scale-[0.98]` for subtle feedback.
-- **Disabled:** `opacity-60`, `cursor-not-allowed` on the element, `disabled:` variant on interactive children.
+Keep the theme's keyboard focus ring. Change its color or offset when needed, as in `focus-visible:outline-lychee-400`.
+
+The `input` class keeps focus inside the field. For a custom field, add `focus-visible:-outline-offset-1`.
+
+On hover, increase an elevated surface's ring opacity by five percentage points. For example, change `white/5` to `white/10`. Lighten the background if needed.
+
+For a pressed state, use a darker fill such as `bg-persimmon-600`. Use `active:scale-[0.98]` for subtle size feedback.
+
+Use `opacity-60` and `cursor-not-allowed` for disabled styles. Apply the `disabled:` variant to interactive children.
 
 ---
 
-## 17. Writing / copy voice
+## 17. Writing
 
-Not every design system documents voice, but Bruhs is opinionated:
+Lead with the point. Use the fewest words that keep the meaning.
 
-- Short. Complete sentences beat fragments when it matters; use fragments for UI labels.
-- Lowercase button labels are allowed when the surrounding voice supports it. Don't mix cases inconsistently within one page.
-- Numbers use `tabular-nums` and a thousands separator (`1,284` not `1284`).
+Write short, complete sentences. Keep one idea per paragraph. Use fragments for labels when the action or meaning is clear.
+
+Use sentence case in the interface, including chat messages and placeholders. Use lowercase for conversational replies outside the product. Preserve the case of product names and code identifiers.
+
+Write instructions as short paragraphs. Use a table when readers need to compare values. Keep bullet points and dash punctuation out of UI copy. Preserve dashes required by code or URLs.
+
+Name the action on each button. Say what failed and what to do next in errors.
+
+Cut filler and repeated claims. Split packed sentences instead of joining more clauses.
+
+Use `tabular-nums` for numbers that change. Add thousands separators, as in `1,284`.
 
 ---
 
 ## 18. When in doubt
 
-- Prefer whitespace over borders, borders over wells, wells over cards. Escalate only when the content demands it.
-- If a pattern isn't documented here, compose it from the primitives above rather than inventing new tokens.
-- Bruhs is a vocabulary, not a component library. Reach for the *classes* (including the component classes in §10), not imported framework components.
+Start with whitespace. Add a divider or surface only when the content needs more separation.
+
+Build new patterns from the existing tokens. Use the classes in section 10 across frameworks.
 
 ---
 
-_Bruhs is a personal design system by [bnle.me](https://bnle.me). This guide is the canonical adoption reference — if something here conflicts with older documentation, this wins._
+Bruhs is a personal design system by [bnle.me](https://bnle.me). This guide takes precedence over older documentation.
