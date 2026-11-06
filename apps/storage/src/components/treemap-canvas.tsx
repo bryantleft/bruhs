@@ -1,103 +1,449 @@
+import type { TokenRef } from "@bruhs/theme/semantic";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { middleTruncate } from "~/lib/display-names";
+import { foldersBetween } from "~/lib/folder-trail";
 import {
-  type HierarchyRectangularNode,
-  hierarchy,
-  treemap,
-  treemapSquarify,
-} from "d3-hierarchy";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CATEGORY_VAR, type Category, formatBytes } from "~/lib/format";
-import { categoryForNode } from "~/lib/tree-utils";
+  CATEGORY_LABEL,
+  CATEGORY_VAR,
+  type Category,
+  formatBytes,
+} from "~/lib/format";
+import {
+  type Appearance,
+  inkFor,
+  LABEL_INKS,
+  MAP_ROLES,
+  type MapRole,
+  parseOklch,
+  roleTokens,
+} from "~/lib/map-colors";
+import {
+  CATEGORIES,
+  folderToOpenAt,
+  GAP,
+  headerLabel,
+  type Kind,
+  kindBytesByFolder,
+  type LabelMetrics,
+  layoutTreemap,
+  type Tile,
+  type TreemapLayout,
+  tileAt,
+  tileForPath,
+  tileLabel,
+  tileName,
+  tileSize,
+} from "~/lib/treemap-layout";
 import type { DirNode, TreeNode } from "~/lib/types";
 
 interface Props {
   /** The directory currently shown as the treemap root. */
   root: DirNode;
-  /** Zoom into a directory (its depth-1 child in the current view). */
+  /**
+   * Open a child folder of `root`. Opening a folder further down calls this once per
+   * level, so the host's path keeps a step for each folder.
+   */
   onEnterDir: (node: DirNode) => void;
   /** Selection changed (for the details/delete panel). null clears. */
   onSelect: (node: TreeNode | null) => void;
   selectedPath: string | null;
+  /** Follow the system's light or dark appearance. The browser app is dark-only. */
+  followSystemAppearance?: boolean;
+  /** Dim every block that isn't this kind. */
+  highlightKind?: Kind | null;
+  /** A path hovered in another view, such as the largest-files list, to outline here. */
+  linkedPath?: string | null;
+  /** The path under the pointer or keyboard focus changed, for linking other views. */
+  onHoverPath?: (path: string | null) => void;
 }
 
-type RNode = HierarchyRectangularNode<TreeNode>;
+/** Labels are Monaspace Neon at 11 px, the size of the native data captions. */
+const LABEL = { size: 11, lineHeight: 13, padX: 4, padY: 3 } as const;
+/** Blocks outside the highlighted kind stay visible as context, but recede. */
+const DIM_ALPHA = 0.2;
+/** Folders drawn as one block are see-through, so they read apart from files. */
+const FOLDER_FILL_ALPHA = 0.45;
+/** Hatching for grouped items: a 1 px line every 6 px across, at a strength that stays behind labels. */
+const HATCH = { step: 6, alpha: 0.55 } as const;
 
-/** Corner radius of leaf blocks; matches `rounded-seed` (4px) on the hover outline. */
-const LEAF_RADIUS = 4;
-
-const CATEGORIES: Category[] = [
-  "code",
-  "image",
-  "video",
-  "audio",
-  "document",
-  "archive",
-  "binary",
-  "other",
-];
-
-/** Concrete colour strings for canvas drawing, read from the theme at runtime. */
+/** Theme colours resolved to concrete strings, because a canvas can't read CSS variables. */
 interface Palette {
-  category: Record<Category, string>;
-  /** Cushion highlight, labels and the selection outline. */
-  light: string;
-  /** Cushion shade, folder frames and the label halo. */
-  dark: string;
-  /** Font family for folder labels (Monaspace Argon, like the label roles). */
-  labelFont: string;
+  readonly role: Readonly<Record<MapRole, string>>;
+  readonly fill: Readonly<Record<Category, string>>;
+  /** Label ink on each kind's fill: the darker or lighter ink, whichever contrasts more. */
+  readonly ink: Readonly<Record<Category, string>>;
+  readonly folderFill: Readonly<Record<Category, string>>;
+  readonly font: string;
 }
 
-/**
- * Resolve the fruit-palette CSS variables to concrete colour strings for canvas use.
- * Theme colours are OKLCH values, which canvas accepts in current browsers.
- */
-function resolvePalette(): Palette {
-  const cs = getComputedStyle(document.documentElement);
-  const token = (name: string) => cs.getPropertyValue(name).trim();
-  const fallback = token("--color-rambutan-500");
-  const category = {} as Record<Category, string>;
-  for (const c of CATEGORIES) category[c] = token(CATEGORY_VAR[c]) || fallback;
-  return {
-    category,
-    light: token("--color-rambutan-50"),
-    dark: token("--color-longan-950"),
-    labelFont: token("--font-argon") || "ui-monospace, monospace",
-  };
-}
-
-/** Add an alpha channel to a resolved theme colour: `…(18% .01 65)` → `…(18% .01 65 / 0.3)`. */
+/** Add an alpha channel to a theme colour: "…(L C H)" → "…(L C H / a)". */
 function withAlpha(color: string, alpha: number): string {
+  parseOklch(color);
   return color.replace(/\)\s*$/, ` / ${alpha})`);
 }
 
-function colorFor(node: TreeNode, palette: Palette): string {
-  return palette.category[categoryForNode(node)];
+function resolvePalette(
+  appearance: Appearance,
+  increasedContrast: boolean,
+): Palette {
+  const style = getComputedStyle(document.documentElement);
+  const variable = (name: string) => {
+    const value = style.getPropertyValue(name).trim();
+    if (!value) {
+      throw new Error(
+        `${name} isn't in this page's CSS. Tailwind only emits theme variables that a class or stylesheet uses, so reference it there.`,
+      );
+    }
+    return value;
+  };
+  const color = (token: string) => variable(`--color-${token}`);
+  const resolve = (ref: TokenRef) =>
+    typeof ref === "string"
+      ? color(ref)
+      : withAlpha(color(ref.token), ref.alpha);
+
+  const tokens = roleTokens(appearance, increasedContrast);
+  const role = {} as Record<MapRole, string>;
+  for (const name of MAP_ROLES) role[name] = resolve(tokens[name]);
+
+  const inks = { dark: color(LABEL_INKS.dark), light: color(LABEL_INKS.light) };
+  const levels = { dark: parseOklch(inks.dark), light: parseOklch(inks.light) };
+  const fill = {} as Record<Category, string>;
+  const ink = {} as Record<Category, string>;
+  const folderFill = {} as Record<Category, string>;
+  for (const category of CATEGORIES) {
+    const value = variable(CATEGORY_VAR[category]);
+    fill[category] = value;
+    ink[category] = inks[inkFor(parseOklch(value), levels)];
+    folderFill[category] = withAlpha(value, FOLDER_FILL_ALPHA);
+  }
+  const font = `${variable("--font-neon")}, ui-monospace, Menlo, monospace`;
+  return { role, fill, ink, folderFill, font };
 }
 
-const childrenOf = (d: TreeNode): readonly TreeNode[] | undefined =>
-  d.kind === "dir" ? d.children : undefined;
+/** The system appearance when the host follows it; otherwise bruhs's dark. */
+function useAppearance(follow: boolean) {
+  const query = (media: string) => follow && window.matchMedia(media).matches;
+  const [light, setLight] = useState(() =>
+    query("(prefers-color-scheme: light)"),
+  );
+  const [more, setMore] = useState(() => query("(prefers-contrast: more)"));
+  useEffect(() => {
+    if (!follow) return;
+    const scheme = window.matchMedia("(prefers-color-scheme: light)");
+    const contrast = window.matchMedia("(prefers-contrast: more)");
+    const update = () => {
+      setLight(scheme.matches);
+      setMore(contrast.matches);
+    };
+    scheme.addEventListener("change", update);
+    contrast.addEventListener("change", update);
+    return () => {
+      scheme.removeEventListener("change", update);
+      contrast.removeEventListener("change", update);
+    };
+  }, [follow]);
+  const appearance: Appearance = light ? "light" : "dark";
+  return { appearance, increasedContrast: more };
+}
 
-/** A folder the user can zoom into. */
-function isOpenable(node: TreeNode, root: DirNode): node is DirNode {
+/** The display's pixel density, which changes when the window moves between screens. */
+function useDevicePixelRatio() {
+  const [ratio, setRatio] = useState(() => window.devicePixelRatio || 1);
+  useEffect(() => {
+    const query = window.matchMedia(`(resolution: ${ratio}dppx)`);
+    const update = () => setRatio(window.devicePixelRatio || 1);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, [ratio]);
+  return ratio;
+}
+
+/**
+ * True once loading the label font has finished, so labels are measured and cut with its
+ * real widths. If the font can't load they still appear, in the fallback monospace.
+ */
+function useFontSettled(font: string | null) {
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    if (!font) return;
+    let live = true;
+    const settle = () => {
+      if (live) setSettled(true);
+    };
+    Promise.all([
+      document.fonts.load(`500 ${LABEL.size}px ${font}`),
+      document.fonts.load(`400 ${LABEL.size}px ${font}`),
+    ]).then(settle, settle);
+    return () => {
+      live = false;
+    };
+  }, [font]);
+  return settled;
+}
+
+interface Drawn {
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+}
+
+/** A tile's painted area: its box less the gap on the right and bottom. */
+const drawnBox = (tile: Tile): Drawn => ({
+  x: tile.x0,
+  y: tile.y0,
+  w: tile.x1 - tile.x0 - GAP,
+  h: tile.y1 - tile.y0 - GAP,
+});
+
+function matchesKind(tile: Tile, kind: Kind): boolean {
+  if (tile.kind === "group") return kind === "grouped";
+  return tile.kind !== "folder" && tile.category === kind;
+}
+
+function drawMap(
+  canvas: HTMLCanvasElement,
+  layout: TreemapLayout,
+  palette: Palette,
+  highlight: Kind | null,
+  ratio: number,
+  labels: boolean,
+): void {
+  const ctx = canvas.getContext("2d");
+  if (!ctx)
+    throw new Error("This browser couldn't create a canvas for the disk map.");
+  canvas.width = Math.round(layout.width * ratio);
+  canvas.height = Math.round(layout.height * ratio);
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, layout.width, layout.height);
+  ctx.textBaseline = "middle";
+  const fonts = {
+    name: `500 ${LABEL.size}px ${palette.font}`,
+    size: `400 ${LABEL.size}px ${palette.font}`,
+  };
+  ctx.font = fonts.name;
+  const metrics: LabelMetrics = {
+    charWidth: ctx.measureText("0").width,
+    lineHeight: LABEL.lineHeight,
+    padX: LABEL.padX,
+    padY: LABEL.padY,
+  };
+
+  const text = (
+    value: string,
+    x: number,
+    y: number,
+    font: string,
+    color: string,
+    align: CanvasTextAlign,
+  ) => {
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textAlign = align;
+    ctx.fillText(value, x, y);
+  };
+
+  const clipTo = (box: Drawn, paint: () => void) => {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(box.x, box.y, box.w, box.h);
+    ctx.clip();
+    paint();
+    ctx.restore();
+  };
+
+  const outline = (box: Drawn, color: string) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(box.x + 0.5, box.y + 0.5, box.w - 1, box.h - 1);
+  };
+
+  const hatch = (box: Drawn) => {
+    clipTo(box, () => {
+      ctx.strokeStyle = palette.role.textTertiary;
+      ctx.globalAlpha *= HATCH.alpha;
+      ctx.beginPath();
+      for (let d = -box.h; d < box.w; d += HATCH.step) {
+        ctx.moveTo(box.x + d, box.y + box.h);
+        ctx.lineTo(box.x + d + box.h, box.y);
+      }
+      ctx.stroke();
+    });
+  };
+
+  const drawFolder = (tile: Extract<Tile, { kind: "folder" }>) => {
+    const box = drawnBox(tile);
+    ctx.fillStyle = palette.role.well;
+    ctx.fillRect(box.x, box.y, box.w, box.h);
+    outline(box, palette.role.hairline);
+    const label = labels ? headerLabel(tile, metrics) : null;
+    if (!label) return;
+    const middle = box.y + tile.header / 2 + 0.5;
+    clipTo({ ...box, h: tile.header }, () => {
+      text(
+        label.name,
+        box.x + LABEL.padX,
+        middle,
+        fonts.name,
+        palette.role.text,
+        "left",
+      );
+      if (label.size) {
+        text(
+          label.size,
+          box.x + box.w - LABEL.padX,
+          middle,
+          fonts.size,
+          palette.role.textSecondary,
+          "right",
+        );
+      }
+    });
+  };
+
+  const drawBlock = (tile: Exclude<Tile, { kind: "folder" }>, dim: boolean) => {
+    const box = drawnBox(tile);
+    ctx.globalAlpha = dim ? DIM_ALPHA : 1;
+    let ink = palette.role.text;
+    if (tile.kind === "file") {
+      ctx.fillStyle = palette.fill[tile.category];
+      ctx.fillRect(box.x, box.y, box.w, box.h);
+      ink = palette.ink[tile.category];
+    } else if (tile.kind === "collapsed") {
+      ctx.fillStyle = palette.folderFill[tile.category];
+      ctx.fillRect(box.x, box.y, box.w, box.h);
+      outline(box, palette.fill[tile.category]);
+    } else {
+      ctx.fillStyle = palette.role.hairline;
+      ctx.fillRect(box.x, box.y, box.w, box.h);
+      hatch(box);
+    }
+    const label = labels ? tileLabel(tile, metrics) : null;
+    if (label) {
+      const first = box.y + LABEL.padY + LABEL.lineHeight / 2 + 0.5;
+      clipTo(box, () => {
+        text(label.name, box.x + LABEL.padX, first, fonts.name, ink, "left");
+        if (!label.size) return;
+        if (label.lines === 2) {
+          text(
+            label.size,
+            box.x + LABEL.padX,
+            first + LABEL.lineHeight,
+            fonts.size,
+            ink,
+            "left",
+          );
+        } else {
+          text(
+            label.size,
+            box.x + box.w - LABEL.padX,
+            first,
+            fonts.size,
+            ink,
+            "right",
+          );
+        }
+      });
+    }
+    ctx.globalAlpha = 1;
+  };
+
+  const visit = (tiles: readonly Tile[]) => {
+    for (const tile of tiles) {
+      if (tile.kind === "folder") {
+        drawFolder(tile);
+        visit(tile.children);
+      } else {
+        drawBlock(tile, highlight !== null && !matchesKind(tile, highlight));
+      }
+    }
+  };
+  visit(layout.tiles);
+}
+
+const percentOf = (part: number, whole: number) => {
+  const share = whole > 0 ? (part / whole) * 100 : 0;
+  return share > 0 && share < 1 ? "<1%" : `${Math.round(share)}%`;
+};
+
+/** What the hover card says about a block: what it is, its size, and what clicks do. */
+function describe(
+  tile: Tile,
+  open: DirNode | null,
+  root: DirNode,
+): { title: string; detail: string; hint: string } {
+  const share = `${formatBytes(tileSize(tile))} · ${percentOf(tileSize(tile), root.size)} of ${root.name || "/"}`;
+  const openFolder = open ? ` Double-click to open ${open.name}/.` : "";
+  const title = middleTruncate(tileName(tile), 34);
+  switch (tile.kind) {
+    case "file":
+      return {
+        title,
+        detail: `${CATEGORY_LABEL[tile.category]} · ${share}`,
+        hint: `Click to select.${openFolder}`,
+      };
+    case "group":
+      return {
+        title,
+        detail: share,
+        hint: `Too small to show one by one.${openFolder}`,
+      };
+    default: {
+      const mostly =
+        tile.kind === "collapsed" && tile.category !== "other"
+          ? `, mostly ${CATEGORY_LABEL[tile.category].toLowerCase()}`
+          : "";
+      return {
+        title,
+        detail: `Folder${mostly} · ${share}`,
+        hint: "Click to select. Double-click to open.",
+      };
+    }
+  }
+}
+
+/** A ring drawn over the canvas, so hover and selection never repaint the map. */
+function Ring({ tile, shadow }: { tile: Tile; shadow: string }) {
+  const box = drawnBox(tile);
   return (
-    node.kind === "dir" && node.children.length > 0 && node.path !== root.path
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute"
+      style={{
+        left: box.x,
+        top: box.y,
+        width: box.w,
+        height: box.h,
+        boxShadow: shadow,
+      }}
+    />
   );
 }
+
+const pathOf = (tile: Tile | null) =>
+  tile && tile.kind !== "group" ? tile.node.path : null;
 
 export function TreemapCanvas({
   root,
   onEnterDir,
   onSelect,
   selectedPath,
+  followSystemAppearance = false,
+  highlightKind = null,
+  linkedPath = null,
+  onHoverPath,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
-  const [hover, setHover] = useState<{
-    x: number;
-    y: number;
-    node: RNode;
-  } | null>(null);
-  const paletteRef = useRef<Palette | null>(null);
+  const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
+  const [focusPath, setFocusPath] = useState<string | null>(null);
+  const reported = useRef<string | null>(null);
+  const { appearance, increasedContrast } = useAppearance(
+    followSystemAppearance,
+  );
+  const ratio = useDevicePixelRatio();
 
   // Track container size.
   useEffect(() => {
@@ -110,151 +456,118 @@ export function TreemapCanvas({
     return () => ro.disconnect();
   }, []);
 
-  // Compute the squarified treemap layout for the current root.
-  const layout = useMemo<RNode | null>(() => {
-    if (size.w < 2 || size.h < 2) return null;
-    const h = hierarchy<TreeNode>(root, childrenOf)
-      .sum((d) => (d.kind === "dir" && d.children.length > 0 ? 0 : d.size))
-      .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
-    return treemap<TreeNode>()
-      .tile(treemapSquarify)
-      .size([size.w, size.h])
-      .paddingInner(1)
-      .paddingTop((d) => (d.depth === 0 ? 0 : d.children ? 14 : 0))
-      .round(true)(h);
-  }, [root, size]);
-
-  const leaves = useMemo(() => layout?.leaves() ?? [], [layout]);
-
-  // Draw to canvas.
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !layout || size.w < 2) return;
-    if (!paletteRef.current) paletteRef.current = resolvePalette();
-    const palette = paletteRef.current;
-
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = size.w * dpr;
-    canvas.height = size.h * dpr;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, size.w, size.h);
-
-    // Leaf rectangles with soft corners and cushion shading.
-    for (const leaf of leaves) {
-      const w = leaf.x1 - leaf.x0;
-      const h = leaf.y1 - leaf.y0;
-      if (w < 1 || h < 1) continue;
-      const r = w > 7 && h > 7 ? Math.min(LEAF_RADIUS, w / 2, h / 2) : 0;
-      ctx.beginPath();
-      ctx.roundRect(leaf.x0, leaf.y0, w, h, r);
-      ctx.fillStyle = colorFor(leaf.data, palette);
-      ctx.fill();
-      // Cushion: light top-left, dark bottom-right.
-      if (w > 3 && h > 3) {
-        const g = ctx.createLinearGradient(leaf.x0, leaf.y0, leaf.x1, leaf.y1);
-        g.addColorStop(0, withAlpha(palette.light, 0.22));
-        g.addColorStop(0.5, withAlpha(palette.light, 0));
-        g.addColorStop(1, withAlpha(palette.dark, 0.3));
-        ctx.fillStyle = g;
-        ctx.fill();
-      }
+  const colors = useMemo((): { palette: Palette } | { error: string } => {
+    try {
+      return { palette: resolvePalette(appearance, increasedContrast) };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) };
     }
-
-    // Directory frames + labels for the top two levels.
-    ctx.textBaseline = "middle";
-    ctx.font = `600 11px ${palette.labelFont}, ui-monospace, monospace`;
-    for (const d of layout.descendants() as RNode[]) {
-      if (d.depth === 0 || !d.children) continue;
-      const w = d.x1 - d.x0;
-      const h = d.y1 - d.y0;
-      if (w < 6 || h < 6) continue;
-      ctx.strokeStyle = withAlpha(palette.dark, d.depth === 1 ? 0.55 : 0.25);
-      ctx.lineWidth = d.depth === 1 ? 1.5 : 0.75;
-      ctx.beginPath();
-      ctx.roundRect(d.x0 + 0.5, d.y0 + 0.5, w - 1, h - 1, LEAF_RADIUS);
-      ctx.stroke();
-      if (d.depth <= 2 && w > 42 && h > 14) {
-        const label = d.data.name;
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(d.x0 + 3, d.y0, w - 6, 14);
-        ctx.clip();
-        // Subtle dark halo keeps labels legible over any color.
-        ctx.shadowColor = withAlpha(palette.dark, 0.55);
-        ctx.shadowBlur = 2;
-        ctx.fillStyle = withAlpha(palette.light, 0.95);
-        ctx.fillText(label, d.x0 + 4, d.y0 + 7.5);
-        ctx.restore();
-      }
-    }
-
-    // Selection outline.
-    if (selectedPath) {
-      const sel =
-        leaves.find((l) => l.data.path === selectedPath) ??
-        (layout.descendants() as RNode[]).find(
-          (d) => d.data.path === selectedPath,
-        );
-      // Never outline the root (depth 0) — that would frame the whole map.
-      if (sel && sel.depth > 0) {
-        ctx.strokeStyle = palette.light;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(
-          sel.x0 + 1,
-          sel.y0 + 1,
-          sel.x1 - sel.x0 - 2,
-          sel.y1 - sel.y0 - 2,
-        );
-      }
-    }
-  }, [layout, leaves, size, selectedPath]);
-
-  // Hit-test: smallest rect under the cursor among descendants.
-  const nodeAt = useCallback(
-    (px: number, py: number): RNode | null => {
-      if (!layout) return null;
-      let best: RNode | null = null;
-      for (const d of layout.descendants() as RNode[]) {
-        if (d.depth === 0) continue;
-        if (px >= d.x0 && px <= d.x1 && py >= d.y0 && py <= d.y1) {
-          if (!best || d.depth > best.depth) best = d;
-        }
-      }
-      return best;
-    },
-    [layout],
+  }, [appearance, increasedContrast]);
+  const fontSettled = useFontSettled(
+    "palette" in colors ? colors.palette.font : null,
   );
 
-  const onMove = (e: React.MouseEvent) => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const n = nodeAt(x, y);
-    setHover(n ? { x, y, node: n } : null);
+  // Layout once per folder and size; hovering never lays out again.
+  const kinds = useMemo(() => kindBytesByFolder(root), [root]);
+  const layout = useMemo(
+    () =>
+      size.w < 2 || size.h < 2
+        ? null
+        : layoutTreemap(root, size.w, size.h, kinds),
+    [root, size, kinds],
+  );
+
+  // Paint when the layout, colours, label font or highlight change.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !layout || !("palette" in colors)) return;
+    drawMap(canvas, layout, colors.palette, highlightKind, ratio, fontSettled);
+  }, [layout, colors, highlightKind, ratio, fontSettled]);
+
+  // Tell the host what's under the pointer or keyboard focus, once per change.
+  const report = useCallback(
+    (path: string | null) => {
+      if (path === reported.current) return;
+      reported.current = path;
+      onHoverPath?.(path);
+    },
+    [onHoverPath],
+  );
+
+  const focusItem = useCallback(
+    (path: string | null) => {
+      setFocusPath(path);
+      report(path);
+    },
+    [report],
+  );
+
+  const pointed =
+    layout && pointer ? tileAt(layout, pointer.x, pointer.y) : null;
+  const outlinedPath = linkedPath ?? focusPath;
+  const outlined =
+    pointed ??
+    (layout && outlinedPath ? tileForPath(layout, outlinedPath) : null);
+  const selected =
+    layout && selectedPath ? tileForPath(layout, selectedPath) : null;
+
+  const onMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const point = { x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY };
+    setPointer(point);
+    report(layout ? pathOf(tileAt(layout, point.x, point.y)) : null);
   };
 
-  // Single click selects (for inspect/delete). Double click on a folder zooms in.
+  const onLeave = () => {
+    setPointer(null);
+    report(focusPath);
+  };
+
+  // Single click selects (for inspect/delete). Double click opens a folder.
   // Keeping these separate means nothing is ever left "selected" just by navigating.
-  const onClick = (e: React.MouseEvent) => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const n = nodeAt(e.clientX - rect.left, e.clientY - rect.top);
-    onSelect(n ? n.data : null);
+  const onClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!layout) return;
+    const tile = tileAt(layout, e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+    onSelect(tile && tile.kind !== "group" ? tile.node : null);
   };
 
-  const onDoubleClick = (e: React.MouseEvent) => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const n = nodeAt(e.clientX - rect.left, e.clientY - rect.top);
-    if (n && isOpenable(n.data, root)) onEnterDir(n.data);
+  const onDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!layout) return;
+    const folder = folderToOpenAt(
+      layout,
+      e.nativeEvent.offsetX,
+      e.nativeEvent.offsetY,
+    );
+    if (!folder) return;
+    for (const step of foldersBetween(root, folder)) onEnterDir(step);
   };
 
+  if ("error" in colors) {
+    return (
+      <p
+        role="alert"
+        className="text-body-sm p-4 text-(--role-status-critical,var(--color-lychee-400))"
+      >
+        The disk map can't draw: {colors.error}
+      </p>
+    );
+  }
+
+  const highlightLabel =
+    highlightKind === null
+      ? ""
+      : ` Highlighting ${highlightKind === "grouped" ? "smaller items" : CATEGORY_LABEL[highlightKind].toLowerCase()}.`;
   const summary = `Treemap of ${root.path}, ${formatBytes(root.size)} in ${
     root.children.length
-  } items. Use the list after it to select or open them.`;
+  } items.${highlightLabel} Use the list after it to select or open them.`;
+
+  const card =
+    pointed && layout && pointer
+      ? describe(pointed, folderToOpenAt(layout, pointer.x, pointer.y), root)
+      : null;
+  const ink = (tile: Tile) =>
+    tile.kind === "file"
+      ? colors.palette.ink[tile.category]
+      : colors.palette.role.text;
 
   return (
     <div ref={wrapRef} className="relative h-full w-full overflow-hidden">
@@ -266,64 +579,93 @@ export function TreemapCanvas({
           width: size.w,
           height: size.h,
           display: "block",
-          cursor: "pointer",
+          cursor: pointed ? "pointer" : "default",
         }}
         onMouseMove={onMove}
-        onMouseLeave={() => setHover(null)}
+        onMouseLeave={onLeave}
         onClick={onClick}
         onDoubleClick={onDoubleClick}
       />
-      {hover && (
-        <>
-          <div
-            aria-hidden="true"
-            className="rounded-seed pointer-events-none absolute z-0 ring-2 ring-white/70 ring-inset"
-            style={{
-              left: hover.node.x0,
-              top: hover.node.y0,
-              width: hover.node.x1 - hover.node.x0,
-              height: hover.node.y1 - hover.node.y0,
-            }}
-          />
-          <div
-            className="tooltip absolute max-w-xs px-2.5 py-2"
-            style={{
-              left: Math.min(hover.x + 14, size.w - 224),
-              top: Math.min(hover.y + 14, size.h - 60),
-            }}
-          >
-            <div className="text-code text-rambutan-50 truncate">
-              {hover.node.data.name}
-            </div>
-            <div className="text-code-sm text-persimmon-300 tabular-nums">
-              {formatBytes(hover.node.value ?? hover.node.data.size)}
-            </div>
-            <div className="text-code-sm text-rambutan-400 mt-0.5 max-w-56 truncate">
-              {hover.node.data.path}
-            </div>
-          </div>
-        </>
+      {layout && layout.tiles.length === 0 && (
+        <p className="text-body-sm pointer-events-none absolute inset-0 flex items-center justify-center text-(--role-text-secondary,var(--color-rambutan-400))">
+          Nothing in this folder takes up space.
+        </p>
+      )}
+      {selected && (
+        <Ring
+          tile={selected}
+          // On a coloured block, a line of its label ink keeps the accent apart from the fill.
+          shadow={`inset 0 0 0 2px ${colors.palette.role.accent}${
+            selected.kind === "file" || selected.kind === "collapsed"
+              ? `, inset 0 0 0 3px ${ink(selected)}`
+              : ""
+          }`}
+        />
+      )}
+      {outlined && outlined !== selected && (
+        <Ring tile={outlined} shadow={`inset 0 0 0 2px ${ink(outlined)}`} />
+      )}
+      {card && pointer && (
+        <div
+          className="tooltip absolute max-w-64 px-2.5 py-2"
+          style={{
+            ...(pointer.x > size.w / 2
+              ? { right: size.w - pointer.x + 14 }
+              : { left: pointer.x + 14 }),
+            ...(pointer.y > size.h * 0.6
+              ? { bottom: size.h - pointer.y + 14 }
+              : { top: pointer.y + 14 }),
+          }}
+        >
+          <p className="text-code-sm font-medium break-all text-(--role-text,var(--color-rambutan-50))">
+            {card.title}
+          </p>
+          <p className="text-code-sm text-(--role-text-secondary,var(--color-rambutan-300)) tabular-nums">
+            {card.detail}
+          </p>
+          <p className="text-label-sm mt-1 text-pretty text-(--role-text-tertiary,var(--color-rambutan-400))">
+            {card.hint}
+          </p>
+        </div>
       )}
       <TreemapItems
         root={root}
         selectedPath={selectedPath}
         onSelect={onSelect}
         onEnterDir={onEnterDir}
+        onFocusItem={focusItem}
       />
     </div>
   );
 }
 
+/** A folder the user can zoom into. */
+function isOpenable(node: TreeNode, root: DirNode): node is DirNode {
+  return (
+    node.kind === "dir" && node.children.length > 0 && node.path !== root.path
+  );
+}
+
 /**
  * The canvas can't be reached by keyboard or read by a screen reader, so the current
- * folder's items are also listed as buttons. The list is visually hidden until it holds
- * focus, then it appears over the treemap.
+ * folder's items are also listed as buttons, including the ones too small to draw. The
+ * list is visually hidden until it holds focus, then it appears over the treemap, and the
+ * focused item is outlined on the map.
  */
-function TreemapItems({ root, selectedPath, onSelect, onEnterDir }: Props) {
+const TreemapItems = memo(function TreemapItems({
+  root,
+  selectedPath,
+  onSelect,
+  onEnterDir,
+  onFocusItem,
+}: Pick<Props, "root" | "selectedPath" | "onSelect" | "onEnterDir"> & {
+  onFocusItem: (path: string | null) => void;
+}) {
   return (
     <ul
       aria-label={`Items in ${root.name || root.path}`}
       className="surface-floating focus-within:z-popover sr-only max-h-[calc(100%-1rem)] overflow-y-auto p-2 focus-within:not-sr-only focus-within:absolute focus-within:top-2 focus-within:left-2 focus-within:w-80"
+      onBlur={() => onFocusItem(null)}
     >
       {root.children.map((child) => (
         <li key={child.path} className="flex items-center gap-1">
@@ -331,10 +673,13 @@ function TreemapItems({ root, selectedPath, onSelect, onEnterDir }: Props) {
             type="button"
             aria-pressed={child.path === selectedPath}
             onClick={() => onSelect(child)}
-            className="menu-item text-rambutan-100 aria-pressed:bg-blueberry-500/15 block min-w-0 flex-1 truncate px-2 py-1"
+            onFocus={() =>
+              onFocusItem(child.kind === "aggregate" ? null : child.path)
+            }
+            className="menu-item block min-w-0 flex-1 truncate px-2 py-1"
           >
             {child.name}{" "}
-            <span className="text-code-sm text-rambutan-400 tabular-nums">
+            <span className="text-code-sm text-(--role-text-secondary,var(--color-rambutan-400)) tabular-nums">
               {formatBytes(child.size)}
             </span>
           </button>
@@ -342,8 +687,9 @@ function TreemapItems({ root, selectedPath, onSelect, onEnterDir }: Props) {
             <button
               type="button"
               onClick={() => onEnterDir(child)}
+              onFocus={() => onFocusItem(child.path)}
               aria-label={`Open ${child.name}`}
-              className="menu-item text-rambutan-300 w-auto shrink-0 px-2 py-1"
+              className="menu-item w-auto shrink-0 px-2 py-1"
             >
               Open
             </button>
@@ -352,4 +698,4 @@ function TreemapItems({ root, selectedPath, onSelect, onEnterDir }: Props) {
       ))}
     </ul>
   );
-}
+});
