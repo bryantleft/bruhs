@@ -13,11 +13,11 @@
   --color-dragonfruit-300: oklch(0.765 0.123 342.6);
   --color-dragonfruit-400: oklch(0.650 0.180 342.5);
   --color-dragonfruit-500: oklch(0.561 0.215 342.5);
-  --color-dragonfruit-600: oklch(0.468 0.235 342.6);
-  --color-dragonfruit-700: oklch(0.389 0.215 342.6);
-  --color-dragonfruit-800: oklch(0.325 0.191 342.7);
-  --color-dragonfruit-900: oklch(0.278 0.167 342.6);
-  --color-dragonfruit-950: oklch(0.157 0.106 342.7);
+  --color-dragonfruit-600: oklch(0.468 0.223 342.6);
+  --color-dragonfruit-700: oklch(0.389 0.186 342.6);
+  --color-dragonfruit-800: oklch(0.325 0.155 342.7);
+  --color-dragonfruit-900: oklch(0.278 0.133 342.6);
+  --color-dragonfruit-950: oklch(0.157 0.076 342.7);
   --color-dragonfruit: var(--color-dragonfruit-500);
 
   /* Lychee Colors (Red) */
@@ -29,9 +29,9 @@
   --color-lychee-500: oklch(0.589 0.173 25.0);
   --color-lychee-600: oklch(0.506 0.197 24.9);
   --color-lychee-700: oklch(0.422 0.187 25.2);
-  --color-lychee-800: oklch(0.364 0.174 25.2);
-  --color-lychee-900: oklch(0.305 0.154 25.3);
-  --color-lychee-950: oklch(0.163 0.096 25.3);
+  --color-lychee-800: oklch(0.364 0.166 25.2);
+  --color-lychee-900: oklch(0.305 0.139 25.3);
+  --color-lychee-950: oklch(0.163 0.075 25.3);
   --color-lychee: var(--color-lychee-600);
 
   /* Persimmon Colors (Orange) */
@@ -77,10 +77,10 @@
   --color-pandan: var(--color-pandan-400);
 
   /* Blueberry Colors (Blue) */
-  --color-blueberry-50: oklch(0.969 0.023 259.45);
-  --color-blueberry-100: oklch(0.936 0.046 258.89);
-  --color-blueberry-200: oklch(0.892 0.071 258.34);
-  --color-blueberry-300: oklch(0.836 0.098 257.89);
+  --color-blueberry-50: oklch(0.969 0.016 259.45);
+  --color-blueberry-100: oklch(0.936 0.033 258.89);
+  --color-blueberry-200: oklch(0.892 0.058 258.34);
+  --color-blueberry-300: oklch(0.836 0.089 257.89);
   --color-blueberry-400: oklch(0.762 0.125 257.45);
   --color-blueberry-500: oklch(0.686 0.152 257.12);
   --color-blueberry-600: oklch(0.597 0.170 256.89);
