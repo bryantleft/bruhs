@@ -13,9 +13,12 @@
     "includes": [
       "src/**",
       "tests/**",
+      "native-web/**",
+      "vite.native.config.ts",
       "!**/.tanstack-start",
       "!**/src/tanstack-start.d.ts",
       "!**/src/styles.css",
+      "!**/native-web/styles.css",
       "!**/src/routeTree.gen.ts"
     ]
   }

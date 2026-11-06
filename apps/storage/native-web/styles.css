@@ -1,0 +1,120 @@
+@import "../src/styles.css";
+@source "./";
+@source "../src/components";
+/* Names each kind's colour (CATEGORY_VAR), so Tailwind emits them for the map canvas. */
+@source "../src/lib/format.ts";
+
+/*
+ * Pith's disk map sits in a native window that follows the system appearance, and bruhs's
+ * web theme is dark-only. So this host defines bruhs's semantic roles
+ * (packages/ui/src/lib/semantic.ts) as CSS variables for light, dark and Increase
+ * Contrast; tests/map-colors.test.ts keeps them in step with semantic.ts, which the native
+ * views and the map canvas read directly. Shared components use them with a fallback to
+ * bruhs's dark tokens, so the browser storage app keeps its dark look.
+ */
+:root {
+  color-scheme: light dark;
+  --role-text: var(--color-rambutan-100);
+  --role-text-secondary: var(--color-rambutan-400);
+  --role-text-tertiary: var(--color-rambutan-500);
+  --role-hairline: color-mix(in oklab, var(--color-rambutan-100) 10%, transparent);
+  --role-well: color-mix(in oklab, var(--color-longan-950) 35%, transparent);
+  --role-accent: var(--color-persimmon-400);
+  --role-selection: color-mix(in oklab, var(--color-persimmon-500) 24%, transparent);
+  --role-status-critical: var(--color-lychee-400);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --role-text: var(--color-longan-950);
+    --role-text-secondary: var(--color-longan-700);
+    --role-text-tertiary: var(--color-longan-600);
+    --role-hairline: color-mix(in oklab, var(--color-longan-950) 10%, transparent);
+    --role-well: color-mix(in oklab, var(--color-longan-100) 55%, transparent);
+    --role-accent: var(--color-persimmon-700);
+    --role-selection: color-mix(in oklab, var(--color-persimmon-500) 18%, transparent);
+    --role-status-critical: var(--color-lychee-700);
+  }
+}
+
+@media (prefers-color-scheme: dark) and (prefers-contrast: more) {
+  :root {
+    --role-text-secondary: var(--color-rambutan-300);
+    --role-text-tertiary: var(--color-rambutan-400);
+    --role-hairline: color-mix(in oklab, var(--color-rambutan-100) 25%, transparent);
+  }
+}
+
+@media (prefers-color-scheme: light) and (prefers-contrast: more) {
+  :root {
+    --role-text-secondary: var(--color-longan-800);
+    --role-text-tertiary: var(--color-longan-700);
+    --role-hairline: color-mix(in oklab, var(--color-longan-950) 25%, transparent);
+  }
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  /* One surface: the native window's background shows through the page. */
+  html,
+  body {
+    background: transparent;
+  }
+
+  body {
+    margin: 0;
+    color: var(--role-text);
+  }
+
+  :focus-visible {
+    outline-color: var(--role-accent);
+  }
+}
+
+/* bruhs's floating surfaces and list rows are dark-only; in light mode they follow the roles. */
+@layer components {
+  @media (prefers-color-scheme: light) {
+    .tooltip,
+    .surface-floating {
+      background-color: var(--color-rambutan-50);
+      box-shadow: inset 0 0 0 1px var(--role-hairline);
+      color: var(--role-text);
+    }
+
+    .menu-item {
+      color: var(--role-text);
+    }
+
+    .menu-item[aria-pressed="true"],
+    .menu-item[data-highlighted] {
+      background-color: var(--role-hairline);
+      color: var(--role-text);
+    }
+
+    .empty-state p {
+      color: var(--role-text-secondary);
+    }
+  }
+
+  @media (prefers-color-scheme: light) and (hover: hover) {
+    .menu-item:hover:not([aria-disabled="true"]) {
+      background-color: var(--role-hairline);
+      color: var(--role-text);
+    }
+  }
+}
+
+/* Grouped small items: hatched, so they read apart from any kind's colour. */
+@utility hatched {
+  background-color: var(--role-hairline);
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--role-text-tertiary) 0 1px,
+    transparent 1px 4px
+  );
+}
