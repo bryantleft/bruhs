@@ -1,0 +1,68 @@
+# Pith for Mac
+
+Pith is the native menu bar version of Storage. It combines current activity, ten minutes of session history, and the existing Rust disk scanner and React treemap. The name is provisional.
+
+## Build and open
+
+From the repository root on a Mac with Xcode 26 or later, Rust, Node and pnpm installed. The command-line tools alone aren't enough: the app icon is an Icon Composer package, which only Xcode 26's `actool` compiles.
+
+```sh
+pnpm build:pith
+pnpm open:pith
+```
+
+The app is at `apps/storage/native/.build/Pith.app`. You can drag it to Applications. It is built for the current Mac's architecture, targets macOS 14+, and has been run locally on Apple Silicon/macOS 26.3. Older macOS versions and Intel need their own verification before release.
+
+The local build is ad-hoc signed, including the bundled scanner, with hardened runtime enabled. It is **not Developer ID signed or notarized**. Public distribution needs a stable signing identity, notarization and independent compatibility testing. Rebuilding the ad-hoc app can invalidate existing privacy grants; grant Full Disk Access to the final installed app when a partial scan requires it.
+
+## Use
+
+- The menu bar shows the bruh-slice glyph and system CPU. While memory pressure is elevated or critical, its symbol appears in its status colour, also in icon-only mode.
+- Click the item for the panel: CPU and memory pressure over the last ten minutes, the busiest apps, and free space on the startup disk. Click an app to open it in Activity, or the disk row to open Disk. Settings and Quit are under the ⋯ button.
+- Activity and Disk are tabs of one window (⌘1 and ⌘2). Activity lists apps with live CPU, memory and disk writes; search with ⌘F and include apps that quit in the last ten minutes from the filter menu. Drag across the CPU chart to rank apps by that time instead of now, and press Escape or Back to Live to return. The inspector (⌥⌘I) shows the selected app's history, processes, path, and Reveal in Finder and Quit.
+- Disk scans the startup disk or a folder you choose. Larger blocks occupy more space and their colour shows the kind of file. Select a block or largest-file entry, double-click a folder to explore, or use the accessible item list with the keyboard.
+- Move to Trash is a native, confirmed action on an entry from the current scan. Protected paths and paths escaping the scan root are rejected. Finder's Put Back restores trashed files. A successful move refreshes the scan.
+- Closing the window keeps monitoring. Quit ends monitoring and clears session history. Login startup and icon-only mode are opt-in in Settings. Reopen the app from Finder to recover Activity if macOS hides the menu bar item.
+- Pith follows the system appearance: light, dark and Increase Contrast.
+
+## Logo
+
+Pith's mark is the bruh mascot as a lemon slice. `scripts/brand.mjs` generates everything in `Brand/` from the bruhs colour tokens and the shared mascot geometry (`packages/ui/src/lib/logo.ts`):
+
+- `AppIcon.icon`: the Icon Composer app icon, with the slice and the face as separate layers so macOS can render its light, dark, clear and tinted styles.
+- `StatusGlyph.svg`: the menu bar template image.
+- `pith-mark.svg` and `pith-wordmark.svg`: the mark and the wordmark (the mark plus "pith" in Monaspace Krypton, outlined).
+
+After changing a token or the mascot, run `node scripts/brand.mjs` in `apps/storage` and commit the result. `pnpm check:pith` fails while `Brand/` is out of date. You can open `AppIcon.icon` in Icon Composer to preview it, but edits made there are overwritten the next time the generator runs.
+
+## Data and architecture
+
+SwiftUI/AppKit owns the menu bar, Activity window, sampler, history, folder picker and file actions. Rust runs only during a requested scan or Trash operation. The disk renderer reuses the existing React components in a WKWebView created on demand and released on close. It ships as static local assets with no Node server, listening socket, remote page, telemetry or network dependency.
+
+System CPU uses deltas of host CPU ticks. Process CPU uses libproc time counters converted from Mach units with `mach_timebase_info`, then divided by measured elapsed time and active core count. A live regression test compares this result to `getrusage` process CPU time. Memory is the sum of member processes' physical footprints, **not unique RAM**; shared pages can be counted more than once. The undocumented memory-pressure sysctl is capability checked, with unknown values shown as unavailable. Protected processes are explicitly counted as unavailable rather than assigned zero usage.
+
+Helpers are grouped only when their executable bundle and process ancestry establish the same owner. Process identities include their start times. App history retains sample-time membership, CPU, footprints and read/write counter rates. Individual process counters are a live drill-down. History is in memory, lasts ten minutes and expires against continuous monotonic time across sleep. Sampling pauses during sleep and restarts with a fresh baseline. Missing counters and gaps remain visible.
+
+The provisional two-second cadence follows measured warm native sampling of about 10–15 ms across roughly 710 groups on the development Mac. This is a sampling-cost measurement, not a whole-app CPU or energy guarantee. Keep profiling the packaged app with full history, process churn and windows both open and closed.
+
+Power/temperature readings, privileged process control, fan control, persisted history, automatic cleanup and automatic claims about which app grew a folder are outside this first build.
+
+## Verification
+
+```sh
+pnpm --filter storage build:scanner
+pnpm check:pith
+pnpm check:storage
+cargo test --manifest-path apps/storage/scanner/Cargo.toml
+```
+
+Swift tests cover rate resets, positive live footprints, CPU units, PID reuse, exited-app retention, Unicode protocol chunks, wrong protocol versions, bridge origin/frame checks, Trash containment and final-component symlinks, real Rust scan decoding, subprocess cancellation/reuse, and stderr diagnostics. The CI Mac job also packages and verifies the local app signature.
+
+For a desktop smoke test, provide a disposable folder containing at least one file:
+
+```sh
+apps/storage/native/.build/Pith.app/Contents/MacOS/Pith \
+  --smoke-test /absolute/path/to/fixture /tmp/pith-verification.json
+```
+
+This opens real native windows and runs the bundled Rust scanner and WKWebView. It verifies metrics, the panel's size and fit, pause/resume, toolbar bridging, range ranking and Escape, tab switching, rendering, fonts, selection, remote-navigation rejection, and web-view and window release, then quits. It does not trash files or change login/privacy settings. `--activity` opens Activity; `--scan /absolute/path` opens Disk and scans that path; `--probe` prints sampler timings and its own footprint without creating a UI.
