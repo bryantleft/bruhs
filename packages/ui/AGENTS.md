@@ -714,7 +714,49 @@ Use `tabular-nums` for numbers that change. Add thousands separators, as in `1,2
 
 ---
 
-## 18. When in doubt
+## 18. Native Mac apps
+
+Native apps keep the system's chrome and use Bruhs for their content. Windows, toolbars, menus, popovers and Settings stay standard AppKit and SwiftUI, with system materials and the system font. Bruhs sets the colours, data type, radii and motion inside them. Pith, in `apps/storage/native`, is the reference app.
+
+### Tokens
+
+Generate Swift tokens from the theme instead of copying values. Run the same command with `--check` in CI; it fails when the file has drifted from the CSS.
+
+```sh
+bruhs-theme-swift Sources/App/Theme/BruhsTokens.swift
+bruhs-theme-swift Sources/App/Theme/BruhsTokens.swift --check
+```
+
+| Type | Holds |
+|---|---|
+| `BruhsColor` | The semantic roles in `src/lib/semantic.ts`, resolved for dark, light and Increase Contrast |
+| `BruhsPalette` | Every colour token as a Display P3 `NSColor` |
+| `BruhsRadius` | The fruit radius scale in points |
+| `BruhsMotion` | The duration scale, with standard, entrance and exit animations |
+
+Use `BruhsColor` roles for text, hairlines, wells, accents, selection and status. Use `BruhsPalette` only for data, such as chart series or file kinds.
+
+Change a role in `semantic.ts`, not in Swift. `scripts/verify-tokens.mjs` checks each role's contrast in all four appearances and that every token fits Display P3.
+
+### Rules
+
+Follow the system appearance. The roles already resolve for light, dark and Increase Contrast, so don't force dark mode.
+
+Set data in Monaspace: readouts, figures, sizes, paths and times. Keep labels, buttons and sentences in the system font. Register the bundled fonts at launch and check them in a smoke test.
+
+Use the Bruhs accent for selection, the primary action and highlights in content, not the system accent colour. Show status with `statusNormal`, `statusWarning` and `statusCritical`, always alongside a symbol or words.
+
+Keep shadows out of content. The system draws window and popover shadows; content uses tone and hairlines, as on the web.
+
+Don't animate live data. Values and charts update in place. Use `BruhsMotion` for changes of state, such as entering or leaving a selected range.
+
+Put a window's title and subtitle in its title bar or toolbar. Mac windows don't use large titles inside their content.
+
+Pith's `scripts/lint-native.mjs` fails on the system accent, system colours and large titles in its views. Copy it into a new app with its paths changed.
+
+---
+
+## 19. When in doubt
 
 Start with whitespace. Add a divider or surface only when the content needs more separation.
 

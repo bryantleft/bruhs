@@ -31,7 +31,8 @@
   ],
   "bin": {
     "bruhs-theme-fonts": "./scripts/copy-fonts.mjs",
-    "bruhs-theme-lint": "./scripts/lint.mjs"
+    "bruhs-theme-lint": "./scripts/lint.mjs",
+    "bruhs-theme-swift": "./scripts/swift-tokens.mjs"
   },
   "exports": {
     "./styles/*": "./src/styles/*",
