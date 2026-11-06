@@ -36,6 +36,8 @@
   "exports": {
     "./styles/*": "./src/styles/*",
     "./logo": "./src/lib/logo.ts",
+    "./oklch": "./src/lib/oklch.ts",
+    "./semantic": "./src/lib/semantic.ts",
     "./fonts/*": "./fonts/*",
     "./dist/bruhs.css": "./dist/bruhs.css",
     "./dist/fonts/*": "./dist/fonts/*",
@@ -46,7 +48,7 @@
     "copy-fonts": "rm -rf ./dist/fonts && cp -r ./fonts ./dist/fonts",
     "build:unminified": "tailwindcss -i ./src/styles/bundle.css -o ./dist/bruhs.css && pnpm run copy-fonts",
     "prepublishOnly": "pnpm run build",
-    "check": "pnpm run build && node scripts/verify-bundle.mjs"
+    "check": "pnpm run build && node scripts/verify-bundle.mjs && node scripts/verify-tokens.mjs"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.4",
