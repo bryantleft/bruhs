@@ -32,3 +32,27 @@ jobs:
 
       - name: Run check for ${{ matrix.project-filter }}
         run: pnpm run check:${{ matrix.project-filter }}
+
+  pith-macos:
+    # The app icon is an Icon Composer package; compiling it needs Xcode 26's actool.
+    runs-on: macos-26
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+      - name: Use Node.js 26
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build Rust scanner for native integration tests
+        run: pnpm --filter storage build:scanner
+      - name: Check native core and bundled disk UI
+        run: pnpm check:pith
+      - name: Package local Mac app
+        run: pnpm build:pith
+      - name: Verify app and bundled executable signatures
+        run: codesign --verify --strict --verbose=2 apps/storage/native/.build/Pith.app

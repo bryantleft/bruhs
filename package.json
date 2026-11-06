@@ -3,6 +3,9 @@
 	"private": true,
 	"scripts": {
 		"build": "turbo run build",
+		"build:pith": "pnpm --filter storage build:mac",
+		"open:pith": "pnpm --filter storage open:mac",
+		"check:pith": "pnpm --filter storage check:mac",
 		"dev:design": "turbo run dev --filter=design",
 		"dev:www": "turbo run dev --filter=www",
 		"dev:domains": "turbo run dev --filter=domains",
