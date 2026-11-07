@@ -27,19 +27,20 @@ const BRONZE = { a: palette['persimmon-500'], b: palette['persimmon-700'], c: pa
 
 // --- item templates ---------------------------------------------------------
 
+// A chunky log on its side: the cut end with its rings, bark, a broken-off branch.
 const LOG = art(
   [
     '............',
-    '............',
-    '............',
+    '..........k.',
+    '.........kck',
+    '..kkkkkkkkbk',
+    '.kddkcccccak',
+    'kdeedkaaaaak',
+    'kdoedkabaaak',
+    'kdeedkaaabak',
+    'kdeedkaaaaak',
+    '.kddkbbbbbbk',
     '..kkkkkkkkk.',
-    '.kdddkcccaak',
-    'kdeeedkaaaak',
-    'kdeoedkaabak',
-    'kdeeedkabbak',
-    '.kdddkbbbbk.',
-    '..kkkkkkkk..',
-    '............',
     '............',
   ],
   {
@@ -76,56 +77,179 @@ const ORE = art(
   },
 );
 
+// A rock with a crystal shard growing out of it: moonstone and sunstone.
+const CRYSTAL_ORE = art(
+  [
+    '......kk....',
+    '.....kpok...',
+    '.....kpok...',
+    '....kkpokk..',
+    '..kkcpookbk.',
+    '.kccakokaabk',
+    'kcaaakkaaabk',
+    'kaaoaaaaaabk',
+    'kbaaaaaaobbk',
+    '.kbbaaabbbk.',
+    '..kkkkkkkk..',
+    '............',
+  ],
+  {
+    a: palette['rambutan-600'],
+    b: palette['rambutan-800'],
+    c: palette['rambutan-400'],
+    o: palette['mangosteen-300'],
+    p: palette['rambutan-50'],
+  },
+);
+
+// An ingot: a lit top face narrowing to the back, the front in shadow.
 const BAR = art(
   [
     '............',
     '............',
     '............',
+    '...kkkkkk...',
+    '..kccccccak.',
+    '.kccccccccak',
+    'kkkkkkkkkkkk',
+    'kcaaaaaaaabk',
+    'kbbbbbbbbbbk',
+    'kkkkkkkkkkkk',
     '............',
-    '...kkkkkkkk.',
-    '..kccccccckk',
-    '.kccccccckak',
-    '.kkkkkkkkkak',
-    '.kaaaaaaakbk',
-    '.kbbbbbbbkk.',
-    '.kkkkkkkkk..',
     '............',
   ],
   { a: palette['persimmon-500'], b: palette['persimmon-700'], c: palette['persimmon-300'] },
 );
 
-const FISH = art(
+// One drawing per species, so each reads by shape: cooking only browns the colours.
+const TROUT = art(
   [
     '............',
     '............',
     '............',
-    '....kkkk....',
-    '..kkaaaakk.k',
-    '.kakaaaaabkk',
-    'kaaaaaaaabbk',
-    'kcccccaaabkk',
-    '.kcccccabk.k',
-    '..kkccckk...',
-    '....kkk.....',
+    '...kkkkk..kk',
+    '..kaasaakkbk',
+    '.kkaaaasabbk',
+    'kaaasaaaabk.',
+    'kcccccccabbk',
+    '.kcccccbkkbk',
+    '..kkkkkk..kk',
+    '............',
     '............',
   ],
-  { a: palette['rambutan-400'], b: palette['rambutan-600'], c: palette['rambutan-200'] },
+  {
+    a: palette['pandan-500'],
+    b: palette['pandan-700'],
+    c: palette['dragonfruit-200'],
+    s: palette['pandan-800'],
+  },
 );
+const FISH = TROUT;
 
+const FISH_ART: Readonly<Record<string, Art>> = {
+  minnow: art(
+    [
+      '............',
+      '............',
+      '............',
+      '............',
+      '...kkkkk..kk',
+      '..kaaaaakkbk',
+      '.kakaaaaabk.',
+      '.kcccccccbkk',
+      '..kkkkkkk..k',
+      '............',
+      '............',
+      '............',
+    ],
+    { a: palette['rambutan-400'], b: palette['rambutan-600'], c: palette['rambutan-200'] },
+  ),
+  trout: TROUT,
+  eel: art(
+    [
+      '............',
+      '............',
+      '.kkk........',
+      'kakak.......',
+      'kcaabk...kk.',
+      '.kccabk.kabk',
+      '..kkcabkcabk',
+      '....kcaacabk',
+      '.....kccabk.',
+      '......kkkk..',
+      '............',
+      '............',
+    ],
+    { a: palette['mangosteen-700'], b: palette['mangosteen-900'], c: palette['mangosteen-400'] },
+  ),
+  swordfish: art(
+    [
+      '............',
+      '............',
+      '......kk....',
+      '.....kbbk...',
+      '....kaaaakkk',
+      'kkkkaakaaabk',
+      '.kkcccccabbk',
+      '...kccccbkkk',
+      '....kkkkk...',
+      '............',
+      '............',
+      '............',
+    ],
+    { a: palette['blueberry-600'], b: palette['blueberry-800'], c: palette['blueberry-200'] },
+  ),
+  moonray: art(
+    [
+      '............',
+      '.....kk.....',
+      '....kcak....',
+      '...kcaaak...',
+      '..kcakakak..',
+      '.kcaaaaaabk.',
+      'kcaaaaaaaabk',
+      '.kbaaaaabbk.',
+      '..kkbbbbkk..',
+      '....kbk.....',
+      '.....kbk....',
+      '......kk....',
+    ],
+    { a: palette['mangosteen-300'], b: palette['mangosteen-600'], c: palette['blueberry-100'] },
+  ),
+  sunfish: art(
+    [
+      '.......kk...',
+      '......kcak..',
+      '...kkkcaak..',
+      '..kccaaaaak.',
+      '.kcaaaaaaabk',
+      'kcakaaaaaabk',
+      'kcaaaaaaaabk',
+      '.kaaaaaaaabk',
+      '..kbbaaabbk.',
+      '...kkkbaabk.',
+      '......kbbk..',
+      '.......kk...',
+    ],
+    { a: palette['durian-400'], b: palette['persimmon-600'], c: palette['durian-100'] },
+  ),
+};
+
+// A flat blade with a bright cutting edge, on a diagonal haft like the pickaxe.
 const AXE = art(
   [
-    '.......kk...',
-    '...kkkkkhk..',
-    '..kcccakhk..',
-    '.kcaaaakhk..',
-    '.kcaaaakhk..',
-    '.kbaaaakhk..',
-    '..kbbbbkhk..',
-    '...kkkkkhk..',
-    '.......khk..',
-    '.......khk..',
-    '.......kdk..',
-    '.......kkk..',
+    '.....kkk....',
+    '....kccak...',
+    '...kccaabk..',
+    '..kccaaabkk.',
+    '.kccaaabkhdk',
+    'kcckaabkhdk.',
+    'kck.kbkhdk..',
+    '.k...khdk...',
+    '....khdk....',
+    '...khdk.....',
+    '..khdk......',
+    '..kdk.......',
   ],
   { ...WOOD, ...BRONZE },
 );
@@ -237,25 +361,26 @@ const MANGOSTEEN = art(
   },
 );
 
+// A spiky green husk: thorns break the outline all the way round.
 const DURIAN = art(
   [
     '.....hh.....',
-    '...kkhhkk...',
-    '..kcabaabk..',
-    '.kcabaabaabk',
-    'kbaabaabaabk',
-    'kaabaabaabak',
-    'kabaabaabaak',
-    'kbaabaabaabk',
+    '..k.khhk.k..',
+    '.kakkaakkak.',
+    '..kcabaabak.',
+    'kkcabaabaakk',
     '.kabaabaabk.',
-    '..kbaabaak..',
-    '...kkkkkk...',
+    'kkbaabaabakk',
+    '.kaabaabaak.',
+    '..kbbaabbk..',
+    '.kak.kk.kak.',
+    '..k......k..',
     '............',
   ],
   {
-    a: palette['durian-500'],
-    b: palette['pandan-600'],
-    c: palette['durian-300'],
+    a: palette['pandan-500'],
+    b: palette['pandan-700'],
+    c: palette['pandan-300'],
     h: palette['persimmon-800'],
   },
 );
@@ -283,20 +408,21 @@ const DRAGONFRUIT = art(
   },
 );
 
+// A gold coin face-on, its raised rim catching the light top-left.
 const COINS = art(
   [
     '............',
-    '............',
-    '.....kkkk...',
-    '....kccaabk.',
-    '..kkkcaaabk.',
-    '.kccakaaabk.',
-    '.kcaabkbbk..',
-    '.kaaabkkk...',
-    '.kbbbk......',
-    '..kkk.......',
-    '............',
-    '............',
+    '....kkkk....',
+    '..kkccaakk..',
+    '.kccbbbbaak.',
+    '.kcbcaaabak.',
+    'kcbcaaaaabak',
+    'kcbaaaaaabak',
+    'kcbaaaaaabbk',
+    '.kabaaaabbk.',
+    '.kaabbbbbbk.',
+    '..kkbbbbkk..',
+    '....kkkk....',
   ],
   { a: palette['durian-500'], b: palette['durian-700'], c: palette['durian-200'] },
 );
@@ -424,22 +550,28 @@ const POT = art(
   },
 );
 
+// A boot from the side: a folded cuff, the toe forward, a heeled sole.
 const BOOT = art(
   [
     '............',
-    '...kkkk.....',
-    '...kcak.....',
-    '...kcak.....',
-    '...kaak.....',
-    '...kaak.....',
-    '...kaabkk...',
-    '...kaaaabk..',
-    '..kaaaaaabk.',
-    '..kbbbbbbbk.',
-    '..kkkkkkkkk.',
-    '............',
+    '.kkkkkkk....',
+    '.kcccccck...',
+    '..kcaabk....',
+    '..kcaabk....',
+    '..kcaabk....',
+    '..kcaaabkkk.',
+    '..kcaaaaaabk',
+    '..kcaaaaaabk',
+    '..kssssssssk',
+    '..kssk.kkkk.',
+    '..kkkk......',
   ],
-  { a: palette['blueberry-600'], b: palette['blueberry-800'], c: palette['blueberry-400'] },
+  {
+    a: palette['blueberry-600'],
+    b: palette['blueberry-800'],
+    c: palette['blueberry-400'],
+    s: palette['longan-800'],
+  },
 );
 
 const CHEST = art(
@@ -543,20 +675,21 @@ const STATS = art(
   { g: palette['pandan-400'] },
 );
 
+// Two bare footprints, toes and all.
 const STEPS = art(
   [
-    '......kkkk..',
-    '.....kaaaak.',
-    '.....kaaaak.',
-    '.....kaaaak.',
-    '......kaak..',
-    '......kkkk..',
-    '.kkkk.......',
-    'kaaaak......',
-    'kaaaak......',
-    'kaaaak......',
-    '.kaak.......',
-    '.kkkk.......',
+    '.......a.a.a',
+    '......a.....',
+    '.......aaaa.',
+    '......aaaaa.',
+    'a.a.a..aaaa.',
+    '........aa..',
+    '.aaaa...aaa.',
+    'aaaaa...aaa.',
+    '.aaaa....a..',
+    '..aa........',
+    '..aaa.......',
+    '..aaa.......',
   ],
   { a: palette['durian-400'] },
 );
@@ -861,64 +994,80 @@ const ORE_TINTS: Readonly<Record<string, Record<string, string>>> = {
   },
   'mithril-ore': { o: palette['blueberry-500'], p: palette['blueberry-200'] },
   'gold-ore': { o: palette['durian-400'], p: palette['durian-100'] },
-  'moonstone-ore': { o: palette['blueberry-100'], p: palette['rambutan-50'] },
-  'sunstone-ore': { o: palette['persimmon-400'], p: palette['durian-200'] },
 };
-const FISH_TINTS: Readonly<Record<string, Record<string, string>>> = {
-  minnow: { a: palette['rambutan-400'], b: palette['rambutan-600'], c: palette['rambutan-200'] },
-  trout: { a: palette['pandan-500'], b: palette['pandan-700'], c: palette['dragonfruit-200'] },
-  eel: { a: palette['mangosteen-700'], b: palette['mangosteen-900'], c: palette['mangosteen-400'] },
-  swordfish: { a: palette['blueberry-600'], b: palette['blueberry-800'], c: palette['blueberry-200'] },
-  moonray: { a: palette['mangosteen-300'], b: palette['mangosteen-600'], c: palette['blueberry-100'] },
-  sunfish: { a: palette['durian-400'], b: palette['persimmon-600'], c: palette['durian-100'] },
+const COOKED = {
+  a: palette['persimmon-500'],
+  b: palette['persimmon-700'],
+  c: palette['durian-300'],
+  s: palette['persimmon-700'],
 };
-const COOKED = { a: palette['persimmon-500'], b: palette['persimmon-700'], c: palette['durian-300'] };
 
 // --- materials, gems and chests (v3) ------------------------------------------------
 
+// A sheaf: blue flowers on top, stalks tied at the waist.
 const FLAX = art(
   [
-    '.b...b...b..',
-    'bwb.bwb.bwb.',
-    '.b...b...b..',
-    '.g...g...g..',
-    '..g..g..g...',
-    '..g..g..g...',
-    '...g.g.g....',
-    '...kdddk....',
-    '...g.g.g....',
-    '..g..g..g...',
-    '..g..g..g...',
-    '.g...g...g..',
+    '..b.b..b.b..',
+    '.bwbwbbwbwb.',
+    '..kbgbbgbk..',
+    '...kgaagk...',
+    '...kagagk...',
+    '....kagk....',
+    '...kddddk...',
+    '....kagk....',
+    '...kagagk...',
+    '..kagaagak..',
+    '..kgagagak..',
+    '...kkkkkk...',
   ],
   {
     b: palette['blueberry-400'],
     w: palette['blueberry-100'],
-    g: palette['pandan-500'],
+    g: palette['pandan-400'],
+    a: palette['pandan-600'],
     d: palette['persimmon-700'],
   },
 );
-const REEDS_BUNDLE = tint(FLAX, {
-  b: palette['persimmon-800'],
-  w: palette['persimmon-600'],
-  g: palette['pandan-600'],
-  d: palette['durian-600'],
-});
+// Cattails: brown seed heads on green stalks, tied like the flax.
+const REEDS_BUNDLE = art(
+  [
+    '..k..k..k...',
+    '.kck.kckkck.',
+    '.kbkkcbkkbk.',
+    '.kbkkbbkkbk.',
+    '.kbkkbbkkbk.',
+    '..kgkbkkgk..',
+    '...kgkgkk...',
+    '...kddddk...',
+    '....kagk....',
+    '...kagagk...',
+    '..kagaagak..',
+    '...kkkkkk...',
+  ],
+  {
+    b: palette['persimmon-800'],
+    c: palette['persimmon-600'],
+    g: palette['pandan-400'],
+    a: palette['pandan-600'],
+    d: palette['durian-600'],
+  },
+);
 
+// Folded cloth, two layers with their folds to the right.
 const LINEN = art(
   [
     '............',
     '............',
-    '............',
+    '...kkkkkkkk.',
+    '..kccccccck.',
+    '.kcaaaaaaak.',
     '.kkkkkkkkkk.',
-    'kcccccccccak',
-    'kaaaaaaaaabk',
-    'kkkkkkkkkkkk',
-    'kcccccccccak',
-    'kaaaaaaaaabk',
-    'kbbbbbbbbbbk',
+    '.kcccccccack',
+    'kcaaaaaaaabk',
+    'kkkkkkkkkkbk',
+    'kcccccccckbk',
+    'kbbbbbbbbbkk',
     '.kkkkkkkkkk.',
-    '............',
   ],
   { a: palette['rambutan-200'], b: palette['rambutan-400'], c: palette['rambutan-50'] },
 );
@@ -988,55 +1137,65 @@ const HAT = art(
   { a: palette['durian-400'], b: palette['durian-600'], c: palette['durian-200'], d: palette['lychee-500'] },
 );
 
+// A knit beanie: a pom-pom, a rolled and ribbed cuff.
 const CAP = art(
   [
-    '............',
-    '............',
-    '............',
+    '.....kk.....',
+    '....kwvk....',
     '....kkkk....',
     '...kcaaak...',
-    '..kcaabaak..',
-    '..kaabaabk..',
-    '..kkkkkkkkk.',
-    '.....kdddddk',
-    '......kkkkk.',
-    '............',
+    '..kcaaaabk..',
+    '.kcaaaaaabk.',
+    '.kcaaaaaabk.',
+    '.kkkkkkkkkk.',
+    '.kdbdbdbdbk.',
+    '.kdbdbdbdbk.',
+    '.kkkkkkkkkk.',
     '............',
   ],
-  { a: palette['lychee-500'], b: palette['lychee-800'], c: palette['lychee-300'], d: palette['lychee-700'] },
+  {
+    a: palette['lychee-500'],
+    b: palette['lychee-700'],
+    c: palette['lychee-300'],
+    d: palette['lychee-800'],
+    w: palette['rambutan-50'],
+    v: palette['rambutan-200'],
+  },
 );
 
+// A chef's toque: a puffed top over a pleated band.
 const CHEF_HAT = art(
   [
-    '...kk..kk...',
-    '..kcckkcak..',
-    '.kccccaaaak.',
-    '.kcccaaaaak.',
-    '..kcaaaaak..',
-    '..kcaaaaak..',
-    '..kcaaaaak..',
+    '....kkkk....',
+    '.kkkcccakkk.',
+    'kccakcaakaak',
+    'kcaaaaaaaabk',
+    'kcaaaaaaaabk',
+    '.kcaaaaaabk.',
     '..kkkkkkkk..',
-    '..kbbbbbbk..',
+    '..kcbcbcbk..',
+    '..kcbcbcbk..',
+    '..kcbcbcbk..',
     '..kkkkkkkk..',
-    '............',
     '............',
   ],
   { a: palette['rambutan-100'], b: palette['rambutan-300'], c: palette['rambutan-50'] },
 );
 
+// A hard hat from the front, its lamp lit on the forehead.
 const HELMET = art(
   [
     '............',
-    '.....kkk....',
-    '....kwyyk...',
-    '...kkkkkkk..',
-    '..kccaaaabk.',
-    '.kcaaaaaaabk',
-    '.kaaaaaaaabk',
+    '............',
+    '....kkkk....',
+    '..kkcaaakk..',
+    '.kcakkkkkak.',
+    'kcaakwwykabk',
+    'kcaakwyykabk',
+    'kcaakkkkkabk',
     'kkkkkkkkkkkk',
     'kbbbbbbbbbbk',
     '.kkkkkkkkkk.',
-    '............',
     '............',
   ],
   {
@@ -1044,24 +1203,25 @@ const HELMET = art(
     b: palette['durian-700'],
     c: palette['durian-300'],
     w: palette['rambutan-50'],
-    y: palette['durian-300'],
+    y: palette['durian-200'],
   },
 );
 
+// A glove, palm out: three fingers, the thumb to the side, a cuff.
 const GLOVES = art(
   [
-    '............',
-    '..kk.kk.....',
-    '.kcakcak....',
-    '.kcakcakkk..',
-    '.kaakaakcak.',
-    '.kaaaaaaaak.',
-    '.kaaaaaaabk.',
-    '..kaaaaabk..',
+    '...kk.kk.kk.',
+    '..kcakcakcak',
+    '..kcakcakcak',
+    '..kcakcakcak',
+    '.kkcaaaaaabk',
+    'kcakaaaaaabk',
+    'kcaaaaaaaabk',
+    '.kcaaaaaaabk',
+    '..kcaaaaabk.',
     '..kddddddk..',
     '..kddddddk..',
     '..kkkkkkkk..',
-    '............',
   ],
   {
     a: palette['rambutan-200'],
@@ -1071,19 +1231,20 @@ const GLOVES = art(
   },
 );
 
+// Trousers: a belt and buckle, two legs, darker cuffs.
 const TROUSERS = art(
   [
     '............',
-    '..kkkkkkkk..',
-    '..kddydddk..',
-    '..kcaaaabk..',
-    '..kcaakabk..',
-    '..kcakkabk..',
-    '..kcak.kabk.',
-    '..kcak.kabk.',
-    '..kcak.kabk.',
-    '..kkkk.kkkk.',
-    '............',
+    'kkkkkkkkkkkk',
+    'kddddyyddddk',
+    'kcaaaaaaaabk',
+    'kcaaaakaaabk',
+    'kcaabkkcaabk',
+    'kcabk..kcabk',
+    'kcabk..kcabk',
+    'kcabk..kcabk',
+    'kbbbk..kbbbk',
+    'kkkkk..kkkkk',
     '............',
   ],
   {
@@ -1095,19 +1256,20 @@ const TROUSERS = art(
   },
 );
 
+// An open vest: shoulders, armholes and buttons down both fronts.
 const VEST = art(
   [
     '............',
-    '...kk..kk...',
-    '..kcak.kabk.',
-    '.kcaakkkaabk',
-    '.kcaaaaaaabk',
-    '.kcadaadaabk',
-    '.kcaaaaaaabk',
-    '.kcadaadaabk',
-    '.kcaaaaaaabk',
-    '.kkkkkkkkkkk',
-    '............',
+    '..kkk..kkk..',
+    '.kcck..kaak.',
+    'kccak..kaabk',
+    'kcaabkkbaabk',
+    '.kcaakkaabk.',
+    '.kcadkkdabk.',
+    '.kcaakkaabk.',
+    '.kcadkkdabk.',
+    '.kcaakkaabk.',
+    '.kkkkkkkkkk.',
     '............',
   ],
   {
@@ -1118,68 +1280,78 @@ const VEST = art(
   },
 );
 
+// A bib apron: the neck loop, waist ties, a pocket on the skirt.
 const APRON = art(
   [
+    '....kkkk....',
     '...k....k...',
     '...k....k...',
     '...kkkkkk...',
     '...kcaabk...',
     '..kkcaabkk..',
-    '..kcaaaabk..',
-    '..kcaddabk..',
-    '..kcaddabk..',
-    '..kcaaaabk..',
-    '..kcaaaabk..',
-    '..kkkkkkkk..',
-    '............',
+    '.k.kcaabk.k.',
+    '..kcaaaaabk.',
+    '..kcaaaaabk.',
+    '..kcadddabk.',
+    '..kcaaaaabk.',
+    '..kkkkkkkkk.',
   ],
   {
     a: palette['persimmon-700'],
     b: palette['persimmon-900'],
     c: palette['persimmon-500'],
-    d: palette['persimmon-900'],
+    d: palette['longan-800'],
   },
 );
 
+// A backpack: carry loop, rounded flap with a buckle, front pocket.
 const PACK = art(
   [
-    '............',
     '....kkkk....',
-    '...k....k...',
+    '...kk..kk...',
     '..kkkkkkkk..',
-    '.kcaaaaaabk.',
-    '.kcakkkkabk.',
-    '.kcaddddabk.',
-    '.kcaaaaaabk.',
-    '.kcadaadabk.',
-    '.kcaaaaaabk.',
-    '.kbbbbbbbbk.',
+    '.kccccaaaak.',
+    'kccaaaaaaabk',
+    'kcaaakkaaabk',
+    'kkkkkyykkkkk',
+    'kcakaaaakabk',
+    'kcakaaaakabk',
+    'kcakkkkkkabk',
+    'kbbbbbbbbbbk',
     '.kkkkkkkkkk.',
   ],
   {
     a: palette['durian-600'],
     b: palette['durian-800'],
     c: palette['durian-400'],
-    d: palette['persimmon-800'],
+    y: palette['persimmon-500'],
   },
 );
 
+// A cape from behind: gold collar and clasp, its lining showing as it swings.
 const CAPE = art(
   [
-    '............',
     '...kkkkkk...',
-    '..kddddddk..',
-    '..kcaaaabk..',
-    '.kcaaaaaabk.',
-    '.kcaaaaaabk.',
-    '.kcaaaaaaabk',
-    'kcaaaaaaaabk',
-    'kcaaaaaaaabk',
-    'kcaaaaaaabbk',
-    'kkkkkkkkkkkk',
-    '............',
+    '..kddyyddk..',
+    '.kkkkkkkkkk.',
+    '.kcaabaalk..',
+    '.kcaabaaalk.',
+    'kcaabaaaalk.',
+    'kcaabaaaaalk',
+    'kcaabaaaaalk',
+    'kcaaabaaaalk',
+    'kcaaabaaallk',
+    'kbbbbbbklllk',
+    'kkkkkkkkkkk.',
   ],
-  { a: palette['lychee-600'], b: palette['lychee-800'], c: palette['lychee-400'], d: palette['durian-400'] },
+  {
+    a: palette['lychee-600'],
+    b: palette['lychee-800'],
+    c: palette['lychee-400'],
+    d: palette['durian-400'],
+    y: palette['durian-200'],
+    l: palette['durian-500'],
+  },
 );
 
 const RING = art(
@@ -1224,22 +1396,146 @@ const AMULET = art(
   { a: palette['durian-500'], g: palette['durian-400'], h: palette['durian-100'], b: palette['durian-700'] },
 );
 
+// A crown: three jewelled points over a band set with gems.
 const CROWN = art(
   [
     '............',
     '............',
     '.k...kk...k.',
-    '.kk.kcck.kk.',
-    '.kakkaakkak.',
-    '.kaaaaaaaak.',
-    '.kabgaagbak.',
-    '.kaaaaaaaak.',
-    '.kbbbbbbbbk.',
+    'kgk.kcck.kgk',
+    'kak.kaak.kak',
+    'kaakkaakkaak',
+    'kcaaaaaaaabk',
+    'kkkkkkkkkkkk',
+    'kbgbbhhbbgbk',
+    'kbbbbbbbbbbk',
+    'kkkkkkkkkkkk',
+    '............',
+  ],
+  {
+    a: palette['durian-400'],
+    b: palette['durian-600'],
+    c: palette['durian-200'],
+    g: palette['lychee-500'],
+    h: palette['blueberry-400'],
+  },
+);
+
+// A closed helm: domed top, a T-shaped visor slit.
+const HELM = art(
+  [
+    '............',
+    '....kkkk....',
+    '...kccaak...',
+    '..kcaaaabk..',
+    '.kcaaaaaabk.',
+    '.kcaaaaaabk.',
+    '.kkkkkkkkkk.',
+    '.kcaakkaabk.',
+    '.kcaakkaabk.',
+    '.kbbbkkbbbk.',
     '..kkkkkkkk..',
+    '............',
+  ],
+  { a: palette['rambutan-100'], b: palette['mangosteen-500'], c: palette['rambutan-50'] },
+);
+
+// A peaked hood, the face in shadow, draping to the shoulders.
+const HOOD = art(
+  [
+    '.....kk.....',
+    '....kcak....',
+    '...kcaaak...',
+    '..kcaaaabk..',
+    '.kcakkkkabk.',
+    '.kckffffkbk.',
+    '.kckffffkbk.',
+    'kcakffffkabk',
+    'kcaakkkkaabk',
+    'kcaaaaaaaabk',
+    'kbbbbbbbbbbk',
+    'kkkkkkkkkkkk',
+  ],
+  {
+    a: palette['mangosteen-300'],
+    b: palette['mangosteen-600'],
+    c: palette['rambutan-100'],
+    f: palette['mangosteen-900'],
+  },
+);
+
+// A long robe: sleeves out, a sash, the hem flaring.
+const ROBE = art(
+  [
+    '...kk..kk...',
+    '..kcckkaak..',
+    '.kccakkaaak.',
+    'kcaaakkaaabk',
+    'kcakakkakabk',
+    'kkkkddddkkkk',
+    '..kcakkabk..',
+    '..kcakkabk..',
+    '.kcaakkaabk.',
+    '.kcaakkaabk.',
+    'kcaaakkaaabk',
+    'kkkkkkkkkkkk',
+  ],
+  {
+    a: palette['mangosteen-300'],
+    b: palette['mangosteen-600'],
+    c: palette['rambutan-100'],
+    d: palette['durian-300'],
+  },
+);
+
+// A lychee: round, bumpy red skin, a short stem and leaf.
+const LYCHEE = art(
+  [
+    '......kk....',
+    '....kkhgk...',
+    '...kkkhkk...',
+    '..kccabaak..',
+    '.kcaabaabak.',
+    '.kbaabaabbk.',
+    '.kaabaabaak.',
+    '.kabaabaabk.',
+    '..kbaabbbk..',
+    '...kkkkkk...',
     '............',
     '............',
   ],
-  { a: palette['durian-400'], b: palette['durian-700'], c: palette['durian-200'], g: palette['lychee-500'] },
+  {
+    a: palette['lychee-500'],
+    b: palette['lychee-700'],
+    c: palette['lychee-300'],
+    g: palette['pandan-400'],
+    h: palette['persimmon-800'],
+  },
+);
+
+// A spool of thread with a needle through it, for crafting.
+const SPOOL = art(
+  [
+    '..........kk',
+    '.........kwk',
+    '.kkkkkkkkwk.',
+    'khhhhhhhwk..',
+    '.kkkkkkwkk..',
+    '.kccaawabk..',
+    '.kcaawaabk..',
+    '.kcawaaabk..',
+    '.kkwkkkkk...',
+    'khwhhhhhk...',
+    '.kkkkkkk....',
+    '............',
+  ],
+  {
+    a: palette['lychee-500'],
+    b: palette['lychee-700'],
+    c: palette['lychee-300'],
+    h: palette['persimmon-600'],
+    w: palette['rambutan-100'],
+  },
 );
 
 function jewel(template: Art, gem: string): Art {
@@ -1286,21 +1582,9 @@ const GEAR_ART: Readonly<Record<string, Art>> = {
     b: palette['blueberry-800'],
     c: palette['blueberry-300'],
   }),
-  'moonsilk-robe': tint(VEST, {
-    a: palette['mangosteen-300'],
-    b: palette['mangosteen-600'],
-    c: palette['rambutan-100'],
-  }),
-  'moonsilk-hood': tint(CAP, {
-    a: palette['mangosteen-300'],
-    b: palette['mangosteen-600'],
-    c: palette['rambutan-100'],
-  }),
-  'moonsteel-helm': tint(HELMET, {
-    a: palette['rambutan-100'],
-    b: palette['mangosteen-500'],
-    c: palette['rambutan-50'],
-  }),
+  'moonsilk-robe': ROBE,
+  'moonsilk-hood': HOOD,
+  'moonsteel-helm': HELM,
   'moonsteel-boots': tint(BOOT, {
     a: palette['rambutan-100'],
     b: palette['mangosteen-500'],
@@ -1326,6 +1610,7 @@ const GEAR_ART: Readonly<Record<string, Art>> = {
     b: palette['mangosteen-900'],
     c: palette['durian-300'],
     d: palette['durian-400'],
+    l: palette['durian-400'],
   }),
   'lumberjack-cap': CAP,
   'angler-hat': tint(HAT, {
@@ -1346,6 +1631,7 @@ const GEAR_ART: Readonly<Record<string, Art>> = {
     b: palette['durian-600'],
     c: palette['durian-200'],
     d: palette['bruh-mouth'],
+    l: palette['bruh-mouth'],
   }),
 };
 
@@ -1354,7 +1640,8 @@ const MATERIAL_ART: Readonly<Record<string, Art>> = {
   silkweed: tint(FLAX, {
     b: palette['mangosteen-300'],
     w: palette['rambutan-50'],
-    g: palette['mangosteen-600'],
+    g: palette['mangosteen-400'],
+    a: palette['mangosteen-600'],
     d: palette['blueberry-200'],
   }),
   moonsilk: tint(LINEN, {
@@ -1367,11 +1654,7 @@ const MATERIAL_ART: Readonly<Record<string, Art>> = {
     b: palette['persimmon-700'],
     c: palette['persimmon-300'],
   }),
-  lychee: tint(RAMBUTAN, {
-    a: palette['dragonfruit-400'],
-    b: palette['dragonfruit-600'],
-    c: palette['dragonfruit-200'],
-  }),
+  lychee: LYCHEE,
   reeds: REEDS_BUNDLE,
   linen: LINEN,
   wicker: WICKER,
@@ -1420,9 +1703,11 @@ const UNIQUE: Readonly<Record<string, Art>> = {
   bottle: BOTTLE,
   'golden-seed': SEED,
   coins: COINS,
+  'moonstone-ore': CRYSTAL_ORE,
+  'sunstone-ore': tint(CRYSTAL_ORE, { o: palette['persimmon-400'], p: palette['durian-100'] }),
   ...MATERIAL_ART,
   ...GEAR_ART,
-  'burnt-fish': tint(FISH, { a: palette['longan-800'], b: INK, c: palette['longan-700'] }),
+  'burnt-fish': tint(FISH, { a: palette['longan-800'], b: INK, c: palette['longan-700'], s: INK }),
 };
 const TOOL_ART: Readonly<Record<string, Art>> = {
   axe: AXE,
@@ -1444,9 +1729,8 @@ export function itemArt(id: string): Art {
   else if (id === 'gold-bar') result = tint(BAR, GEM_COLORS.gold ?? {});
   else if (id.endsWith('-bar') && metal && metal in METAL_COLORS)
     result = tint(BAR, METAL_COLORS[metal as keyof typeof METAL_COLORS]);
-  else if (id.startsWith('raw-') && FISH_TINTS[id.slice(4)])
-    result = tint(FISH, FISH_TINTS[id.slice(4)] ?? {});
-  else if (FISH_TINTS[id]) result = tint(FISH, COOKED);
+  else if (id.startsWith('raw-') && FISH_ART[id.slice(4)]) result = FISH_ART[id.slice(4)] ?? FISH;
+  else if (FISH_ART[id]) result = tint(FISH_ART[id] ?? FISH, COOKED);
   else if (metal && kind && metal in METAL_COLORS && TOOL_ART[kind])
     result = tint(TOOL_ART[kind] ?? AXE, METAL_COLORS[metal as keyof typeof METAL_COLORS]);
   itemCache.set(id, result);
@@ -1456,15 +1740,11 @@ export function itemArt(id: string): Art {
 export const SKILL_ART: Readonly<Record<SkillId, Art>> = {
   woodcutting: tint(AXE, METAL_COLORS.iron),
   mining: tint(PICKAXE, METAL_COLORS.bronze),
-  fishing: tint(FISH, FISH_TINTS.trout ?? {}),
+  fishing: FISH,
   foraging: RAMBUTAN,
   smithing: ANVIL,
   cooking: POT,
-  crafting: tint(GLOVES, {
-    a: palette['rambutan-200'],
-    b: palette['rambutan-400'],
-    c: palette['rambutan-50'],
-  }),
+  crafting: SPOOL,
   agility: BOOT,
 };
 

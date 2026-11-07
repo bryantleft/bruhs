@@ -1836,3 +1836,40 @@ Verified in the web export at 320, 390 and 1280 wide (Chromium via Playwright; s
 - The map's tiles, terrain colours, place centres and dotted roads moved out of `components/WorldMap.tsx` into `pixel/world.ts`, with no React Native imports, so `apps/outside-site` draws the same map at build time. The map tab is unchanged: same terrain, roads, pins, name plates and key at all three widths, with no page errors.
 - The landing page's fruitlands section was a sideways-scrolling strip. It is now this map beside the places, nearest first, with the same pin colours and a key. It fits the page column from 320 wide up, with no sideways scroll.
 - Remaining checks: the map tab on a phone, and the landing page's map name plates with larger text.
+
+## Pixel icon audit and redraw (November 7, 2026)
+
+Every sprite and glyph was rendered to a labelled contact sheet at 8× and at in-game size (2× and 4× of the 12×12 grid, about 16 to 32 points), and each was checked against common pixel icon practice: the silhouette alone should say what it is, light comes from the top left, one shade and one highlight per material, and a shared black outline. Checked in contact sheets only, not yet in the running app or on a device.
+
+- Redrawn because they read as something else:
+  - **Logs** looked like two circles. Now a chunky log on its side, with ringed cut end, bark and a branch stub.
+  - **Axes**, and the woodcutting skill icon, looked like flags. Now a flat blade with a bright edge on a diagonal haft.
+  - **Cooked fish** were one shared shape. Every fish now has its own drawing, raw and cooked: a slim minnow, a spotted trout, an S-curved eel, a swordfish with its bill, a diamond-shaped moonray, a tall-finned sunfish.
+  - **Linen and moonsilk** looked like bars. Now folded cloth.
+  - **Flax and silkweed** looked like tridents. Now a tied sheaf.
+  - **Reeds** reused the flax drawing. Now cattails.
+  - **Steps**, in the HUD and loot report, looked like goblets. Now two bare footprints. The `trail` glyph is footprints too.
+  - **Coins** looked like bones. Now one coin with a raised rim.
+  - **Packs**, and the bag icon, looked like radios. Now a backpack with a flap, buckle and pocket.
+  - **Capes** looked like blobs, and a first redraw still read as a skirt. Now a cape seen from behind, with a collar and clasp, and its lining showing as it swings.
+  - **Mining helmet** looked like a pie, and a side-on redraw like a loaf. Now a hard hat from the front with its lamp on the forehead.
+  - **Moonsteel helm** now has its own closed helm with a T-shaped visor slit.
+  - **Moonsilk hood** reused the cap, and a first redraw looked like a tombstone. Now a peaked hood with the face in shadow.
+  - **Moonsilk robe** reused the vest. Now a robe.
+  - **Fisher's vest** now opens at the front.
+  - **Lychee** reused the hairy rambutan. Now bumpy red skin with a stem.
+  - **Durian** now has thorns breaking its outline.
+  - **Crafting** used gloves. Now a spool of thread with a needle.
+  - **Bars** are an ingot with a lit top face.
+  - The **flame** glyph lost its cross-shaped hole for an inner tongue.
+  - **Boots**, and the agility and feet icons, were a bare L that read as a sock or a letter. Now a boot from the side with a cuff, toe and heeled sole.
+  - **Gloves and gauntlets**, and the hands icon, were a lumpy blob. Now a glove with fingers, a thumb out to the side and a cuff.
+  - **Chef's hat** looked like a cup. Now a puffed toque over a pleated band.
+  - **Lumberjack cap** was a red smear. Now a knit beanie with a pom-pom and ribbed cuff.
+  - **Forge apron** looked like a bottle. Now a bib apron with its neck loop, waist ties and a pocket.
+  - **Bruh crown**'s two red gems read as eyes. Now three jewelled points over a band set with gems.
+  - **Trousers**, and the legs icon, looked like an arch. Now a belt and buckle, two separate legs and darker cuffs.
+  - **Moonstone and sunstone ore** were near-twins of tin and copper ore. Now a rock with a crystal shard growing out of it.
+- Unchanged after a second look, because they read clearly: the other ores, gems, rings, amulets, straw and angler's hats, vest, robe, packs, chests, tools other than the axe, fruit, scenery, skins, and the other glyphs.
+- The app icon, splash and favicon now come from the 16×16 bruh (`pnpm render:icon`), matching the pixel logo.
+- Remaining checks: the redrawn sprites in the bag, bank, gear, loot report and skills screens of the running app, and on a phone at 1×, 2× and 3×.
