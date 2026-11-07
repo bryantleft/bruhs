@@ -763,7 +763,13 @@ Set text in `BruhsType` styles rather than system text styles or fixed sizes. Ad
 
 Keep bullets, middle dots and dashes out of UI text, both between figures and in place of a missing value. Lay the parts out as elements instead. Pith's `LabeledFigure` names a figure, as in "Peak 40%", and its `BruhsBadge` holds a process kind, version or count. Write ranges with "to". Leave a figure the app can't read empty and say why once per row; Pith puts a lock after the name of a process macOS protects.
 
-Pith's `scripts/lint-native.mjs` fails on the system accent, system colours, large titles and text outside `BruhsType` in its views, and on bullets, middle dots and dashes in UI text there and in its disk map. Copy it into a new app with its paths changed.
+Count storage in decimal units, as Finder does (995 GB), and memory in binary units, as Activity Monitor does. Pith's `formatBytes` and `formatMemory` hold the two rules.
+
+Keep text at 4.5:1 or more on both background roles, tertiary text included: the HIG asks it of text under 18 pt, which is nearly all of a Mac app's text.
+
+Use `BruhsPalette` hues for data only. The one exception is the disk map: its eight file kinds need eight hues that tell apart at a glance, so they use the whole fruit palette, the accent's and status colours' hues included. Where a kind shares the accent's hue, the selected block gets a ring of its label ink inside the accent.
+
+Pith's `scripts/lint-native.mjs` fails on the system accent, system colours, large titles and text outside `BruhsType` in its views, and on bullets, middle dots and dashes in UI text there, in PithCore's strings and in its disk map, whether written as characters or as escapes. Copy it into a new app with its paths changed.
 
 ---
 

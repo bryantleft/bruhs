@@ -41,3 +41,14 @@ Verified on the same Mac (macOS 26.3, Xcode 26.6, Swift 6.3.3) after the redesig
 The menu panel now has a stable, scrollable viewport sized for the status item's own display. Hosting-controller automatic resizing is disabled so incoming app rows cannot grow the popover above the screen. Smaller displays reduce the viewport height rather than cutting off the content.
 
 All 19 native tests pass, including normal, short and secondary-display layout cases. All 14 packaged-app smoke checks pass. The real popover kept the same height before and after live data populated, and its full window frame remained inside its display bounds. The updated local bundle was rebuilt and its signature verified.
+
+## 2026-11-07: audit fixes
+
+Verified on the same Mac after working through the feature-gap and UX audit (`reports/Pith feature gaps and UX audit.md`, kept out of git).
+
+- **Scanner:** 15 Rust tests. A scan of `/` now reports 870.6 GB in 41.5 s on a disk whose APFS container uses 904.0 GB, against 1,794 GB in 85.9 s before. The rest is Recovery (unmounted), 488 folders macOS wouldn't let it read with Full Disk Access off, and snapshots, which the Disk tab's Where the space is breakdown accounts for. Preboot, Update and VM are measured from their own used space (10.07 GB, 19 MB and 24 KB, matching `diskutil apfs list`).
+- **Native:** all Swift tests pass with warnings as errors, including real-scanner decoding, file-identity Trash protection at the home folder's `/System/Volumes/Data` path, scan editing for Trash and Undo, memory, tiers, power, history buckets, search filters, signer and free-now reads.
+- **Web and theme:** 77 node tests, Biome, TypeScript, both theme lints, the Swift token and brand drift checks, `lint-native.mjs` (now also PithCore and escaped dashes) and `verify-tokens.mjs` (21 roles; tertiary text now meets 4.5:1).
+- **Appearance:** the new Disk, panel, Settings, welcome and Activity views were checked in offscreen renders of the real views, light and dark.
+
+**Not yet run:** the packaged smoke test and the four live checks the audit asked for (⌘X and ⌘Z in the search field, the map under the pointer when the selection bar appears, the panel's appearance under a dark menu bar, the inspector's resize cursor). They open windows and take focus.
