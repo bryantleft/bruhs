@@ -3,10 +3,31 @@ import { describe, test } from "node:test";
 import { foldersBetween, retraceFolders } from "../src/lib/folder-trail.ts";
 import type { DirNode, TreeNode } from "../src/lib/types.ts";
 
+/** Files a folder holds, as the scanner counts them. */
+function countFiles(children: readonly TreeNode[]): number {
+  return children.reduce(
+    (sum, child) =>
+      sum +
+      (child.kind === "file"
+        ? 1
+        : child.kind === "dir" || child.kind === "aggregate"
+          ? child.files
+          : 0),
+    0,
+  );
+}
+
 function dir(path: string, children: TreeNode[]): DirNode {
   const name = path.slice(path.lastIndexOf("/") + 1);
   const size = children.reduce((sum, child) => sum + child.size, 0);
-  return { kind: "dir", name, path, size, children };
+  return {
+    kind: "dir",
+    name,
+    path,
+    size,
+    files: countFiles(children),
+    children,
+  };
 }
 
 describe("foldersBetween", () => {

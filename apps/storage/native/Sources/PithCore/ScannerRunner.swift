@@ -71,6 +71,8 @@ public actor ScannerRunner {
                 let status = await termination.value
                 let diagnostic = await errors.value
                 if wasCancelled { throw CancellationError() }
+                // The scanner's own failures are already sentences for the user; the exit code would only add noise.
+                if let failure = error as? DiskFailure, failure.isComplete { throw failure }
                 throw DiskFailure("\(error.localizedDescription) Exit code \(status). \(diagnostic)")
             }
         } onCancel: {

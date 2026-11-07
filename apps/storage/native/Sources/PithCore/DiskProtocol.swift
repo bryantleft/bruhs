@@ -1,46 +1,254 @@
 import Foundation
 
-public struct DiskNode: Codable, Sendable {
-    public enum Kind: String, Codable, Sendable { case dir, file, aggregate }
+/// A node of the scanner's pruned tree (`TreeNode` in scanner/src/model.rs).
+public struct DiskNode: Codable, Sendable, Equatable {
+    public enum Kind: String, Codable, Sendable {
+        case dir, file
+        /// The scanner's "(smaller items)": small files and folders folded into one node with no path on disk.
+        case aggregate
+        /// A folder the scan couldn't read. Its size is unknown, so it's 0.
+        case unreadable
+        /// Another volume mounted here. Its size is its used space when it shares the scanned disk, otherwise 0.
+        case volume
+    }
+
+    /// Why a folder couldn't be read.
+    public enum Reason: String, Codable, Sendable {
+        /// macOS privacy protection; Full Disk Access lifts it for most folders.
+        case protected
+        /// The folder's permissions: another user's or the system's files.
+        case denied
+        case other
+    }
+
     public let kind: Kind
     public let name: String
     public let path: String
     public let size: UInt64
+    public let reason: Reason?
+    public let sharesDisk: Bool?
+    /// Files inside a folder or an aggregate; nil for a file, which is one.
+    public let files: UInt64?
+    /// An aggregate's bytes by file kind ("code", "image", …), so the map's legend counts grouped items as what they are.
+    public let kinds: [String: UInt64]?
     public let children: [DiskNode]?
+
+    public init(kind: Kind, name: String, path: String, size: UInt64, reason: Reason? = nil, sharesDisk: Bool? = nil, files: UInt64? = nil,
+                kinds: [String: UInt64]? = nil, children: [DiskNode]?) {
+        self.kind = kind; self.name = name; self.path = path; self.size = size
+        self.reason = reason; self.sharesDisk = sharesDisk; self.files = files; self.kinds = kinds; self.children = children
+    }
+
     public var entries: [DiskNode] { [self] + (children ?? []).flatMap(\.entries) }
+
+    /// A real file or folder: something to select, reveal and move to the Trash.
+    public var isItem: Bool { kind == .dir || kind == .file }
+
+    /// How many files this node stands for.
+    public var fileCount: UInt64 { kind == .file ? 1 : files ?? 0 }
+
+    func with(size: UInt64, files: UInt64?, children: [DiskNode]?) -> DiskNode {
+        // A shrunken group's kinds shrink in proportion: which kind the removed file was isn't known here.
+        let scaled = kinds.map { kinds in
+            self.size > 0 ? kinds.mapValues { UInt64(Double($0) * Double(size) / Double(self.size)) } : kinds
+        }
+        return DiskNode(kind: kind, name: name, path: path, size: size, reason: reason, sharesDisk: sharesDisk, files: files, kinds: scaled, children: children)
+    }
 }
 
-public struct DiskFile: Codable, Sendable {
+public struct DiskFile: Codable, Sendable, Equatable {
     public let name: String
     public let path: String
     public let size: UInt64
+    public init(name: String, path: String, size: UInt64) { self.name = name; self.path = path; self.size = size }
 }
 
-public struct DiskSummary: Codable, Sendable {
+public struct DiskVolume: Codable, Sendable, Equatable {
+    public let path: String
+    public let name: String
+    /// Used space, when the volume shares the scanned disk; otherwise 0.
+    public let bytes: UInt64
+    public let sharesDisk: Bool
+    public init(path: String, name: String, bytes: UInt64, sharesDisk: Bool) { self.path = path; self.name = name; self.bytes = bytes; self.sharesDisk = sharesDisk }
+}
+
+public struct DiskUnreadableFolder: Codable, Sendable, Equatable {
+    public let path: String
+    public let reason: DiskNode.Reason
+    public init(path: String, reason: DiskNode.Reason) { self.path = path; self.reason = reason }
+}
+
+public struct DiskSummary: Codable, Sendable, Equatable {
+    public struct Unreadable: Codable, Sendable, Equatable {
+        public let protected: UInt64
+        public let denied: UInt64
+        public let other: UInt64
+        public init(protected: UInt64, denied: UInt64, other: UInt64) { self.protected = protected; self.denied = denied; self.other = other }
+    }
+
+    public struct CloudOnly: Codable, Sendable, Equatable {
+        public let files: UInt64
+        /// The files' full sizes, which they'd take once downloaded.
+        public let bytes: UInt64
+        /// Folders whose contents macOS hasn't listed.
+        public let folders: UInt64
+        public init(files: UInt64, bytes: UInt64, folders: UInt64) { self.files = files; self.bytes = bytes; self.folders = folders }
+    }
+
     public let dirs: UInt64
     public let files: UInt64
+    /// The scanned folder's size, volumes that share its disk included.
     public let bytes: UInt64
+    /// Folders the scan couldn't read.
     public let errors: UInt64
+    public let unreadable: Unreadable
+    public let entryErrors: UInt64
+    public let cloudOnly: CloudOnly
     public let elapsedMs: UInt64
     public let engine: String
+
+    public init(dirs: UInt64, files: UInt64, bytes: UInt64, errors: UInt64, unreadable: Unreadable, entryErrors: UInt64, cloudOnly: CloudOnly, elapsedMs: UInt64, engine: String) {
+        self.dirs = dirs; self.files = files; self.bytes = bytes; self.errors = errors; self.unreadable = unreadable
+        self.entryErrors = entryErrors; self.cloudOnly = cloudOnly; self.elapsedMs = elapsedMs; self.engine = engine
+    }
+
+    func with(bytes: UInt64, files: UInt64, errors: UInt64? = nil, unreadable: Unreadable? = nil) -> DiskSummary {
+        DiskSummary(dirs: dirs, files: files, bytes: bytes, errors: errors ?? self.errors, unreadable: unreadable ?? self.unreadable, entryErrors: entryErrors, cloudOnly: cloudOnly, elapsedMs: elapsedMs, engine: engine)
+    }
 }
 
 public struct DiskResult: Codable, Sendable {
+    /// `RESULT_VERSION` in scanner/src/output.rs.
+    public static let version = 3
     public let type: String
     public let version: Int
     public let root: DiskNode
     public let topFiles: [DiskFile]
+    public let volumes: [DiskVolume]
+    public let unreadableFolders: [DiskUnreadableFolder]
     public let summary: DiskSummary
+
+    public init(type: String = "result", version: Int = DiskResult.version, root: DiskNode, topFiles: [DiskFile], volumes: [DiskVolume] = [], unreadableFolders: [DiskUnreadableFolder] = [], summary: DiskSummary) {
+        self.type = type; self.version = version; self.root = root; self.topFiles = topFiles
+        self.volumes = volumes; self.unreadableFolders = unreadableFolders; self.summary = summary
+    }
+
     public func validate() throws {
-        guard type == "result", version == 2, root.kind == .dir, root.path.hasPrefix("/"), ["bulk", "std"].contains(summary.engine) else {
+        if type == "result", version == Self.version, root.kind == .unreadable {
+            let name = root.name.isEmpty ? root.path : root.name
+            switch root.reason {
+            case .protected?: throw DiskFailure("macOS protects \(name), so Pith can’t read it. Give Pith Full Disk Access, then scan again.", needsDiskAccess: true)
+            case .denied?: throw DiskFailure("\(name)’s permissions don’t let you read it, so Pith can’t scan it.", isComplete: true)
+            default: throw DiskFailure("Pith couldn’t read \(name).", isComplete: true)
+            }
+        }
+        guard type == "result", version == Self.version, root.kind == .dir, root.path.hasPrefix("/"), ["bulk", "std"].contains(summary.engine) else {
             throw DiskFailure("Scanner result has an unsupported version or root.")
         }
     }
+
+    /// The real file or folder at `path`, from the tree or the largest-files list.
+    public func item(at path: String) -> DiskNode? {
+        root.entries.first { $0.path == path && $0.isItem }
+            ?? topFiles.first { $0.path == path }.map { DiskNode(kind: .file, name: $0.name, path: $0.path, size: $0.size, children: nil) }
+    }
+
+    /// The scan with the item at `path` gone, as after moving it to the Trash: every folder above it shrinks by its size
+    /// and files. Nil when the tree doesn't hold the item.
+    public func removing(_ path: String) -> DiskResult? {
+        guard path != root.path, let (tree, removed) = Self.remove(path, from: root) else {
+            // A file shown only in the largest-files list lies inside an aggregate, which already counts it.
+            guard let file = topFiles.first(where: { $0.path == path }), let tree = Self.shrink(root, toward: path, size: file.size, files: 1) else { return nil }
+            return DiskResult(root: tree, topFiles: topFiles.filter { $0.path != path }, volumes: volumes, unreadableFolders: unreadableFolders,
+                              summary: summary.with(bytes: tree.size, files: summary.files.saturatingSubtract(1)))
+        }
+        let inside = { (other: String) in other == path || other.hasPrefix(path + "/") }
+        let unreadable = unreadableFolders.filter { !inside($0.path) }
+        return DiskResult(root: tree, topFiles: topFiles.filter { !inside($0.path) }, volumes: volumes.filter { !inside($0.path) }, unreadableFolders: unreadable,
+                          summary: summary.with(bytes: tree.size, files: summary.files.saturatingSubtract(removed.fileCount)))
+    }
+
+    /// The scan with the folder at `path` replaced by a newer scan of that folder, whose detail is finer: the scanner
+    /// prunes by the scanned folder's own size.
+    public func replacing(_ path: String, with scan: DiskResult) -> DiskResult? {
+        guard scan.root.path == path else { return nil }
+        if path == root.path { return scan }
+        guard let tree = Self.replace(path, in: root, with: scan.root) else { return nil }
+        let inside = { (other: String) in other == path || other.hasPrefix(path + "/") }
+        let old = root.entries.first { $0.path == path }
+        let top = (topFiles.filter { !inside($0.path) } + scan.topFiles).sorted { $0.size > $1.size }.prefix(topFiles.count)
+        let gone = unreadableFolders.filter { inside($0.path) }
+        let unreadable = unreadableFolders.filter { !inside($0.path) } + scan.unreadableFolders
+        let files = summary.files.saturatingSubtract(old?.fileCount ?? 0) + scan.summary.files
+        // The old counts less the folders the newer scan covers, plus what it couldn't read.
+        func count(_ reason: DiskNode.Reason, _ total: KeyPath<DiskSummary.Unreadable, UInt64>) -> UInt64 {
+            summary.unreadable[keyPath: total].saturatingSubtract(UInt64(gone.filter { $0.reason == reason }.count)) + scan.summary.unreadable[keyPath: total]
+        }
+        let counts = DiskSummary.Unreadable(protected: count(.protected, \.protected), denied: count(.denied, \.denied), other: count(.other, \.other))
+        return DiskResult(root: tree, topFiles: Array(top), volumes: volumes.filter { !inside($0.path) } + scan.volumes, unreadableFolders: unreadable,
+                          summary: summary.with(bytes: tree.size, files: files, errors: counts.protected + counts.denied + counts.other, unreadable: counts))
+    }
+
+    private static func remove(_ path: String, from node: DiskNode) -> (DiskNode, removed: DiskNode)? {
+        guard let children = node.children else { return nil }
+        if let index = children.firstIndex(where: { $0.path == path }) {
+            let removed = children[index]
+            var rest = children; rest.remove(at: index)
+            return (node.with(size: node.size.saturatingSubtract(removed.size), files: node.files.map { $0.saturatingSubtract(removed.fileCount) }, children: rest), removed)
+        }
+        guard let index = children.firstIndex(where: { path.hasPrefix($0.path + "/") && $0.kind == .dir }),
+              let (child, removed) = remove(path, from: children[index]) else { return nil }
+        var updated = children; updated[index] = child
+        return (node.with(size: node.size.saturatingSubtract(removed.size), files: node.files.map { $0.saturatingSubtract(removed.fileCount) }, children: updated), removed)
+    }
+
+    /// Shrinks the folders above `path` and the aggregate holding it, for an item the tree folded away.
+    private static func shrink(_ node: DiskNode, toward path: String, size: UInt64, files: UInt64) -> DiskNode? {
+        let children = node.children ?? []
+        var updated = children
+        if let index = children.firstIndex(where: { path.hasPrefix($0.path + "/") && $0.kind == .dir }), let child = shrink(children[index], toward: path, size: size, files: files) {
+            updated[index] = child
+        } else if let index = children.firstIndex(where: { $0.kind == .aggregate }) {
+            let aggregate = children[index]
+            updated[index] = aggregate.with(size: aggregate.size.saturatingSubtract(size), files: aggregate.files.map { $0.saturatingSubtract(files) }, children: nil)
+        } else {
+            return nil
+        }
+        return node.with(size: node.size.saturatingSubtract(size), files: node.files.map { $0.saturatingSubtract(files) }, children: updated)
+    }
+
+    private static func replace(_ path: String, in node: DiskNode, with fresh: DiskNode) -> DiskNode? {
+        guard var children = node.children else { return nil }
+        let index: Int
+        let child: DiskNode
+        if let found = children.firstIndex(where: { $0.path == path }) {
+            index = found; child = fresh
+        } else if let found = children.firstIndex(where: { path.hasPrefix($0.path + "/") && $0.kind == .dir }), let inner = replace(path, in: children[found], with: fresh) {
+            index = found; child = inner
+        } else { return nil }
+        let old = children[index]
+        children[index] = DiskNode(kind: child.kind, name: old.name, path: child.path, size: child.size, reason: child.reason, sharesDisk: child.sharesDisk,
+                                   files: child.files, kinds: child.kinds, children: child.children)
+        children.sort { $0.size > $1.size }
+        let size = node.size.saturatingSubtract(old.size) + child.size
+        let files = node.files.map { $0.saturatingSubtract(old.fileCount) + child.fileCount }
+        return node.with(size: size, files: files, children: children)
+    }
+}
+
+extension UInt64 {
+    public func saturatingSubtract(_ other: UInt64) -> UInt64 { self >= other ? self - other : 0 }
 }
 
 public struct DiskFailure: LocalizedError, Sendable {
     public let message: String
-    public init(_ message: String) { self.message = message }
+    /// macOS's privacy protection caused it, so Full Disk Access is the fix to offer.
+    public let needsDiskAccess: Bool
+    /// The scanner said this itself, as a sentence for the user, so its exit code and log would only add noise.
+    public let isComplete: Bool
+    public init(_ message: String, needsDiskAccess: Bool = false, isComplete: Bool = false) {
+        self.message = message; self.needsDiskAccess = needsDiskAccess; self.isComplete = isComplete || needsDiskAccess
+    }
     public var errorDescription: String? { message }
 }
 
@@ -80,37 +288,108 @@ public struct DiskStreamDecoder {
             let result = try decoder.decode(DiskResult.self, from: data)
             try result.validate()
             return .result(result)
-        case "fatal": throw DiskFailure(tag.reason ?? "The scanner could not complete the scan.")
+        case "fatal": throw DiskFailure(tag.reason ?? "The scanner could not complete the scan.", isComplete: tag.reason != nil)
         default: throw DiskFailure("Unexpected scanner event: \(tag.type)")
         }
     }
 }
 
+/// What moving an item to the Trash will do, checked before Pith asks.
+public struct TrashPlan: Sendable, Equatable {
+    public enum Consequence: Sendable, Equatable {
+        /// The item syncs with iCloud Drive, so the Trash takes it off the user's other devices too.
+        case iCloud
+        /// The item syncs with a cloud storage provider, such as Dropbox or Google Drive.
+        case cloudStorage(provider: String)
+        /// A Photos library: its photos and edits go with it.
+        case photosLibrary
+    }
+
+    public let target: URL
+    public let name: String
+    public let size: UInt64
+    public let files: UInt64
+    public let isFolder: Bool
+    public let consequences: [Consequence]
+}
+
 public enum TrashPolicy {
-    public static func resolve(_ input: String, result: DiskResult, home: URL) throws -> URL {
+    /// Folders in the home folder that never go to the Trash whole (`VITAL_HOME_FOLDERS` in scanner/src/trash.rs).
+    public static let vitalHomeFolders = [
+        ".Trash", "Applications", "Desktop", "Documents", "Downloads", "Library", "Library/Application Support", "Library/CloudStorage",
+        "Library/Containers", "Library/Group Containers", "Library/Mobile Documents", "Library/Mobile Documents/com~apple~CloudDocs",
+        "Movies", "Music", "Pictures", "Public",
+    ]
+    /// Volume roots whose top-level folders hold the system: the startup disk as shown, and its data volume.
+    public static let systemRoots = ["/", "/System/Volumes/Data"]
+
+    public static func plan(_ input: String, result: DiskResult, home: URL) throws -> TrashPlan {
         guard input.hasPrefix("/"), !input.utf8.contains(0) else { throw DiskFailure("Select an absolute path from the current scan.") }
-        let entries = result.root.entries
-        let node = entries.first(where: { $0.path == input }) ?? result.topFiles.first(where: { $0.path == input }).map {
-            DiskNode(kind: .file, name: $0.name, path: $0.path, size: $0.size, children: nil)
-        }
-        guard let node, node.kind != .aggregate,
-              !input.split(separator: "/").contains("__other__") else {
-            throw DiskFailure("This item is not a real entry in the current scan. Rescan before moving it to Trash.")
+        guard let node = result.item(at: input), !input.split(separator: "/").contains("__other__") else {
+            throw DiskFailure("This item isn’t a real entry in the current scan. Scan again before moving it to the Trash.")
         }
         let normalized = URL(fileURLWithPath: input).standardizedFileURL
         let target = normalized.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(normalized.lastPathComponent)
         let root = URL(fileURLWithPath: result.root.path).resolvingSymlinksInPath().standardizedFileURL
-        let home = home.resolvingSymlinksInPath().standardizedFileURL
         func inside(_ child: URL, _ parent: URL) -> Bool {
             child.path != parent.path && child.pathComponents.starts(with: parent.pathComponents)
         }
-        guard inside(target, root), target.deletingLastPathComponent().path != "/",
-              target.path != home.path, !inside(home, target) else {
-            throw DiskFailure("This path is protected or is outside the scanned folder.")
+        guard inside(target, root) else { throw DiskFailure("This item is outside the scanned folder.") }
+        guard let identity = identity(of: target.path, following: false) else {
+            throw DiskFailure("The item no longer exists or can’t be read. Scan again and try again.")
         }
-        var statInfo = stat()
-        guard lstat(target.path, &statInfo) == 0 else { throw DiskFailure("The item no longer exists or cannot be read. Rescan and try again.") }
-        return target
+        // Paths can't decide this: the startup disk shows each firmlinked folder at two paths.
+        if protectedIdentities(home: home).contains(identity) {
+            throw DiskFailure("macOS or your account needs \(target.lastPathComponent), so Pith won’t move it to the Trash. You can still move items inside it.")
+        }
+        if node.kind == .dir, let parent = Self.identity(of: target.deletingLastPathComponent().path, following: true), parent.device != identity.device {
+            throw DiskFailure("\(target.lastPathComponent) is a volume. Eject it in Finder instead.")
+        }
+        return TrashPlan(target: target, name: target.lastPathComponent, size: node.size, files: node.fileCount, isFolder: node.kind == .dir,
+                         consequences: consequences(of: target, home: home.resolvingSymlinksInPath()))
+    }
+
+    /// Device and inode, which a folder keeps at every path that reaches it.
+    public struct Identity: Hashable, Sendable {
+        public let device: UInt64
+        public let inode: UInt64
+    }
+
+    public static func identity(of path: String, following: Bool) -> Identity? {
+        var info = stat()
+        guard (following ? stat(path, &info) : lstat(path, &info)) == 0 else { return nil }
+        return Identity(device: UInt64(bitPattern: Int64(info.st_dev)), inode: info.st_ino)
+    }
+
+    public static func protectedIdentities(home: URL) -> Set<Identity> {
+        var protected = Set<Identity>()
+        func add(_ path: String) { if let identity = identity(of: path, following: true) { protected.insert(identity) } }
+        for root in systemRoots {
+            add(root)
+            for name in (try? FileManager.default.contentsOfDirectory(atPath: root)) ?? [] { add((root as NSString).appendingPathComponent(name)) }
+        }
+        var folder = home.standardizedFileURL
+        while true {
+            add(folder.path)
+            if folder.path == "/" { break }
+            folder.deleteLastPathComponent()
+        }
+        for vital in vitalHomeFolders { add(home.appendingPathComponent(vital).path) }
+        return protected
+    }
+
+    static func consequences(of target: URL, home: URL) -> [TrashPlan.Consequence] {
+        var found: [TrashPlan.Consequence] = []
+        let components = target.pathComponents
+        let library = home.appendingPathComponent("Library").pathComponents
+        if components.starts(with: library + ["Mobile Documents"]) || (try? target.resourceValues(forKeys: [.isUbiquitousItemKey]).isUbiquitousItem) == true {
+            found.append(.iCloud)
+        } else if components.starts(with: library + ["CloudStorage"]), components.count > library.count + 1 {
+            let folder = home.appendingPathComponent("Library/CloudStorage").appendingPathComponent(components[library.count + 1])
+            found.append(.cloudStorage(provider: FileManager.default.displayName(atPath: folder.path)))
+        }
+        if components.contains(where: { $0.hasSuffix(".photoslibrary") }) { found.append(.photosLibrary) }
+        return found
     }
 }
 

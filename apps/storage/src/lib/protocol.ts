@@ -4,6 +4,7 @@
  * Each parser returns `null` instead of throwing, so callers decide what a bad line means.
  */
 
+import { CATEGORY_VAR, type Category } from "./format.ts";
 import {
   type DirNode,
   type FileEntry,
@@ -14,7 +15,10 @@ import {
   type ScanSummary,
   type TrashResult,
   type TreeNode,
-} from "./types";
+  type UnreadableFolder,
+  type UnreadableReason,
+  type VolumeEntry,
+} from "./types.ts";
 
 type Json = Record<string, unknown>;
 
@@ -36,16 +40,49 @@ function parseEntry(value: unknown): FileEntry | null {
   return { name, path, size };
 }
 
+function isReason(value: unknown): value is UnreadableReason {
+  return value === "protected" || value === "denied" || value === "other";
+}
+
+/** A group's bytes by kind: known kinds only, each a count. */
+function parseKinds(value: unknown): Partial<Record<Category, number>> | null {
+  if (!isObject(value)) return null;
+  const kinds: Partial<Record<Category, number>> = {};
+  for (const [name, bytes] of Object.entries(value)) {
+    if (!(name in CATEGORY_VAR) || !isCount(bytes)) return null;
+    kinds[name as Category] = bytes;
+  }
+  return kinds;
+}
+
 function parseTreeNode(value: unknown): TreeNode | null {
   const base = parseEntry(value);
   if (!base || !isObject(value)) return null;
   switch (value.kind) {
     case "file":
       return { ...base, kind: "file" };
-    case "aggregate":
-      return { ...base, kind: "aggregate" };
+    case "aggregate": {
+      if (!isCount(value.files)) return null;
+      if (value.kinds === undefined) {
+        return { ...base, kind: "aggregate", files: value.files };
+      }
+      const kinds = parseKinds(value.kinds);
+      return kinds
+        ? { ...base, kind: "aggregate", files: value.files, kinds }
+        : null;
+    }
+    case "unreadable":
+      return isReason(value.reason)
+        ? { ...base, kind: "unreadable", reason: value.reason }
+        : null;
+    case "volume":
+      return typeof value.sharesDisk === "boolean"
+        ? { ...base, kind: "volume", sharesDisk: value.sharesDisk }
+        : null;
     case "dir":
-      return parseDirChildren(base, value.children);
+      return isCount(value.files)
+        ? parseDirChildren(base, value.files, value.children)
+        : null;
     default:
       return null;
   }
@@ -53,10 +90,13 @@ function parseTreeNode(value: unknown): TreeNode | null {
 
 function parseDirChildren(
   base: FileEntry,
+  files: number,
   rawChildren: unknown,
 ): DirNode | null {
   // The scanner omits `children` for empty directories.
-  if (rawChildren === undefined) return { ...base, kind: "dir", children: [] };
+  if (rawChildren === undefined) {
+    return { ...base, kind: "dir", files, children: [] };
+  }
   if (!Array.isArray(rawChildren)) return null;
   const children: TreeNode[] = [];
   for (const raw of rawChildren) {
@@ -64,23 +104,96 @@ function parseDirChildren(
     if (!child) return null;
     children.push(child);
   }
-  return { ...base, kind: "dir", children };
+  return { ...base, kind: "dir", files, children };
 }
 
 function parseSummary(value: unknown): ScanSummary | null {
   if (!isObject(value)) return null;
-  const { dirs, files, bytes, errors, elapsedMs, engine } = value;
+  const {
+    dirs,
+    files,
+    bytes,
+    errors,
+    unreadable,
+    entryErrors,
+    cloudOnly,
+    elapsedMs,
+    engine,
+  } = value;
   if (
     !isCount(dirs) ||
     !isCount(files) ||
     !isCount(bytes) ||
     !isCount(errors) ||
+    !isCount(entryErrors) ||
     !isCount(elapsedMs) ||
-    (engine !== "bulk" && engine !== "std")
+    (engine !== "bulk" && engine !== "std") ||
+    !isObject(unreadable) ||
+    !isCount(unreadable.protected) ||
+    !isCount(unreadable.denied) ||
+    !isCount(unreadable.other) ||
+    !isObject(cloudOnly) ||
+    !isCount(cloudOnly.files) ||
+    !isCount(cloudOnly.bytes) ||
+    !isCount(cloudOnly.folders)
   ) {
     return null;
   }
-  return { dirs, files, bytes, errors, elapsedMs, engine };
+  return {
+    dirs,
+    files,
+    bytes,
+    errors,
+    unreadable: {
+      protected: unreadable.protected,
+      denied: unreadable.denied,
+      other: unreadable.other,
+    },
+    entryErrors,
+    cloudOnly: {
+      files: cloudOnly.files,
+      bytes: cloudOnly.bytes,
+      folders: cloudOnly.folders,
+    },
+    elapsedMs,
+    engine,
+  };
+}
+
+function parseVolume(value: unknown): VolumeEntry | null {
+  if (!isObject(value)) return null;
+  const { path, name, bytes, sharesDisk } = value;
+  if (
+    typeof path !== "string" ||
+    typeof name !== "string" ||
+    !isCount(bytes) ||
+    typeof sharesDisk !== "boolean"
+  ) {
+    return null;
+  }
+  return { path, name, bytes, sharesDisk };
+}
+
+function parseUnreadable(value: unknown): UnreadableFolder | null {
+  if (!isObject(value) || typeof value.path !== "string") return null;
+  return isReason(value.reason)
+    ? { path: value.path, reason: value.reason }
+    : null;
+}
+
+/** Every element parsed, or null if any isn't valid. */
+function parseList<T>(
+  value: unknown,
+  parse: (item: unknown) => T | null,
+): T[] | null {
+  if (!Array.isArray(value)) return null;
+  const out: T[] = [];
+  for (const raw of value) {
+    const item = parse(raw);
+    if (item === null) return null;
+    out.push(item);
+  }
+  return out;
 }
 
 function parseProgress(value: Json): ProgressEvent | null {
@@ -107,16 +220,27 @@ export function parseResultEvent(value: unknown): ResultEvent | null {
   }
   const root = parseTreeNode(value.root);
   const summary = parseSummary(value.summary);
-  if (root?.kind !== "dir" || !summary || !Array.isArray(value.topFiles)) {
+  const topFiles = parseList<FileEntry>(value.topFiles, parseEntry);
+  const volumes = parseList(value.volumes, parseVolume);
+  const unreadableFolders = parseList(value.unreadableFolders, parseUnreadable);
+  if (
+    root?.kind !== "dir" ||
+    !summary ||
+    !topFiles ||
+    !volumes ||
+    !unreadableFolders
+  ) {
     return null;
   }
-  const topFiles: FileEntry[] = [];
-  for (const raw of value.topFiles) {
-    const file = parseEntry(raw);
-    if (!file) return null;
-    topFiles.push(file);
-  }
-  return { type: "result", version: RESULT_VERSION, root, topFiles, summary };
+  return {
+    type: "result",
+    version: RESULT_VERSION,
+    root,
+    topFiles,
+    volumes,
+    unreadableFolders,
+    summary,
+  };
 }
 
 /** Parse one NDJSON line from `/api/scan`. Returns `null` for anything unrecognised. */

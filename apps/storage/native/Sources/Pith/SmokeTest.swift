@@ -53,7 +53,7 @@ extension AppDelegate {
             guard let main = mainWindow else { throw DiskFailure("Activity didn't open the main window.") }
             // Title, subtitle, toolbar items and search reach the NSWindow through scene bridging.
             checks["window_toolbar_bridged"] = await eventually {
-                main.window.title == "Activity" && main.window.subtitle.hasPrefix("Live")
+                main.window.title == "Pith" && main.window.subtitle.hasPrefix("Live")
                     && main.window.toolbar?.items.contains { $0 is NSSearchToolbarItem } == true
             }
 
@@ -63,7 +63,7 @@ extension AppDelegate {
             let range = (window.upperBound - 3 * ActivityModel.interval)...window.upperBound
             main.state.activity.rank(by: range)
             let ranked = ActivityListing(history: activity.history, latest: activity.snapshot, range: range, search: "", includeExited: false, sort: main.state.activity.sort)
-            checks["range_ranking_scope"] = await eventually { main.window.subtitle.hasPrefix("Paused at") }
+            checks["range_ranking_scope"] = await eventually { main.window.subtitle.hasPrefix("From ") }
                 && activity.history.systemCPU(in: range) != nil && !ranked.apps.isEmpty && main.state.activity.sort == .cpuDescending
             // Escape with the table focused arrives as SwiftUI's exit command.
             if let content = main.window.contentView, let table = firstView(NSOutlineView.self, in: content) { main.window.makeFirstResponder(table) }
@@ -81,20 +81,20 @@ extension AppDelegate {
             activity.start()
 
             showDisk()
-            checks["tab_switches_title"] = await eventually { main.window.title == "Disk" && main.state.tab == .disk }
+            checks["tab_switches"] = await eventually { main.window.title == "Pith" && main.state.tab == .disk }
             disk.scan(root)
             try await waitUntil("the scan to finish") { !self.disk.isScanning }
-            if let error = disk.error { throw DiskFailure(error) }
+            if let problem = disk.problem { throw DiskFailure(problem.message) }
             checks["native_scan"] = disk.result?.root.path == root.resolvingSymlinksInPath().path
             checks.merge(try await inspectDisk(), uniquingKeysWith: { _, new in new })
-            // Leaving the Disk tab drops DiskView; closing the window drops the whole tree. Both must free WebKit.
+            // Leaving the Disk tab keeps the map, so its open folder survives; closing the window frees WebKit.
+            let shown = webView
             main.show(.activity)
-            let releasedOnTabSwitch = await eventually { self.webView == nil }
+            try await Task.sleep(for: .milliseconds(200))
+            checks["disk_kept_across_tabs"] = webView != nil && webView === shown && webView?.isHidden == true
             showDisk()
-            try await waitUntil("the disk map to load again") { self.webView != nil }
             main.window.performClose(nil)
-            let releasedOnClose = await eventually { self.webView == nil }
-            checks["disk_webview_released"] = releasedOnTabSwitch && releasedOnClose
+            checks["disk_webview_released"] = await eventually { self.webView == nil }
             checks["main_window_released"] = mainWindow == nil
             let samples = activity.history.system.count
             checks["monitoring_survives_window_close"] = await eventually { !self.activity.paused && self.activity.history.system.count > samples }
@@ -125,10 +125,10 @@ extension AppDelegate {
             if rendered { break }
             try await Task.sleep(for: .milliseconds(100))
         }
-        guard rendered else { throw DiskFailure("The real WKWebView did not render a treemap. \(disk.error ?? "No native error.")") }
+        guard rendered else { throw DiskFailure("The real WKWebView did not render a treemap. \(disk.problem?.message ?? "No native error.")") }
         // The labels' face must load. `document.fonts.check` would also pass with no matching face declared at all.
         let fonts = (try? await web.callAsyncJavaScript("return (await document.fonts.load('11px MonaspaceNeonVariable')).some((face) => face.status === 'loaded')", in: nil, contentWorld: .page)) as? Bool == true
-        let labels = (try await web.callAsyncJavaScript("return document.querySelector('canvas').getAttribute('aria-label').includes('Treemap') && document.querySelector('nav[aria-label]') !== null", in: nil, contentWorld: .page)) as? Bool == true
+        let labels = (try await web.callAsyncJavaScript("return document.querySelector('canvas').getAttribute('aria-label').includes('Treemap') && document.querySelector('[aria-label=\"Largest files\"]') !== null", in: nil, contentWorld: .page)) as? Bool == true
         _ = try await web.callAsyncJavaScript("document.querySelector('aside button')?.click()", in: nil, contentWorld: .page)
         try await Task.sleep(for: .milliseconds(100))
         let selection = disk.selected != nil

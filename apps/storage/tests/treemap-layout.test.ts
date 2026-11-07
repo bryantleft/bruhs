@@ -26,9 +26,30 @@ import type {
 
 const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
+/** Files a folder holds, as the scanner counts them. */
+function countFiles(children: readonly TreeNode[]): number {
+  return children.reduce(
+    (sum, child) =>
+      sum +
+      (child.kind === "file"
+        ? 1
+        : child.kind === "dir" || child.kind === "aggregate"
+          ? child.files
+          : 0),
+    0,
+  );
+}
+
 function dir(path: string, children: TreeNode[]): DirNode {
   const size = children.reduce((sum, child) => sum + child.size, 0);
-  return { kind: "dir", name: nameOf(path), path, size, children };
+  return {
+    kind: "dir",
+    name: nameOf(path),
+    path,
+    size,
+    files: countFiles(children),
+    children,
+  };
 }
 
 function file(path: string, size: number): FileNode {
@@ -39,6 +60,7 @@ function file(path: string, size: number): FileNode {
 function smaller(parent: string, size: number): AggregateNode {
   return {
     kind: "aggregate",
+    files: 1,
     name: "(smaller items)",
     path: `${parent}/__other__`,
     size,
@@ -319,7 +341,7 @@ describe("labels", () => {
   test("shows name and size on two lines when the tile is tall enough", () => {
     assert.deepEqual(tileLabel(tile(220, 60), metrics), {
       name: "before-app-review-screenshot.png",
-      size: "1.20 GB",
+      size: "1.29 GB",
       lines: 2,
     });
   });
@@ -327,7 +349,7 @@ describe("labels", () => {
   test("fits name and size on one line in a short tile, cutting the name", () => {
     assert.deepEqual(tileLabel(tile(160, 22), metrics), {
       name: "before-a…shot.png",
-      size: "1.20 GB",
+      size: "1.29 GB",
       lines: 1,
     });
   });
@@ -400,7 +422,7 @@ describe("labels", () => {
     const apps = only(layout(root, 400, 300), "folder", "/r/apps");
     assert.deepEqual(headerLabel(apps, metrics), {
       name: "apps",
-      size: "1.46 KB",
+      size: "1.50 KB",
     });
   });
 });

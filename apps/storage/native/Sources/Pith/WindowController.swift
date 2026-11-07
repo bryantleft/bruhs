@@ -16,9 +16,13 @@ enum WindowTab: String, CaseIterable, Identifiable {
 
 /// Which tab the main window shows, plus the Activity tab's own state.
 @MainActor @Observable final class MainWindowState {
-    var tab: WindowTab
+    var tab: WindowTab {
+        didSet { if tab == .disk { diskOpened = true } }
+    }
+    /// Disk stays alive once shown, so switching tabs keeps the map's open folder and highlight.
+    private(set) var diskOpened: Bool
     let activity = ActivityState()
-    init(tab: WindowTab) { self.tab = tab }
+    init(tab: WindowTab) { self.tab = tab; diskOpened = tab == .disk }
 }
 
 /// Pith's one main window, with Activity and Disk as tabs. SwiftUI's title, subtitle, toolbar
@@ -74,15 +78,21 @@ struct MainWindowView: View {
     let webCreated: (WKWebView) -> Void
 
     var body: some View {
-        Group {
-            switch state.tab {
-            case .activity: ActivityView(model: activity, state: state.activity)
-            // Only the visible tab exists, so leaving Disk releases its WKWebView.
-            case .disk: DiskView(model: disk, webCreated: webCreated)
+        ZStack {
+            // Activity exists only while shown: its search field and toolbar items belong to it.
+            if state.tab == .activity { ActivityView(model: activity, state: state.activity) }
+            // Disk, once opened, lives until the window closes, hidden while Activity shows.
+            if state.diskOpened {
+                let showing = state.tab == .disk
+                DiskView(model: disk, visible: showing, webCreated: webCreated)
+                    .opacity(showing ? 1 : 0)
+                    .allowsHitTesting(showing)
+                    .accessibilityHidden(!showing)
             }
         }
         .frame(minWidth: 820, minHeight: 560)
-        .navigationTitle(state.tab.title)
+        // The tabs name themselves in the toolbar, so the title is the app's.
+        .navigationTitle("Pith")
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Picker("View", selection: $state.tab) {

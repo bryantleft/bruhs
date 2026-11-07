@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use storage_scanner::model::PruneConfig;
-use storage_scanner::output::{self, Summary};
+use storage_scanner::output::{self, CloudOnly, Summary, Unreadable};
 use storage_scanner::trash;
 use storage_scanner::walk::{self, Engine, Scanner};
 
@@ -66,6 +66,11 @@ fn cmd_scan(args: &[String]) {
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| root.clone());
 
+    if let Err(reason) = stop_cloud_downloads() {
+        println!("{}", serde_json::json!({ "type": "fatal", "reason": reason }));
+        std::process::exit(1);
+    }
+
     let scanner = Arc::new(Scanner::new(engine));
     let done = Arc::new(AtomicBool::new(false));
     let progress = walk::spawn_progress(scanner.clone(), done.clone());
@@ -76,14 +81,28 @@ fn cmd_scan(args: &[String]) {
     done.store(true, Ordering::Relaxed);
     let _ = progress.join();
 
+    let load = |counter: &std::sync::atomic::AtomicU64| counter.load(Ordering::Relaxed);
     let summary = Summary {
-        dirs: scanner.dirs.load(Ordering::Relaxed),
-        files: scanner.files.load(Ordering::Relaxed),
-        bytes: scanner.bytes.load(Ordering::Relaxed),
-        errors: scanner.errors.load(Ordering::Relaxed),
+        dirs: load(&scanner.dirs),
+        files: load(&scanner.files),
+        bytes: tree.size,
+        errors: load(&scanner.errors),
+        unreadable: Unreadable {
+            protected: load(&scanner.unreadable.protected),
+            denied: load(&scanner.unreadable.denied),
+            other: load(&scanner.unreadable.other),
+        },
+        entry_errors: load(&scanner.entry_errors),
+        cloud_only: CloudOnly {
+            files: load(&scanner.cloud.files),
+            bytes: load(&scanner.cloud.bytes),
+            folders: load(&scanner.cloud.folders),
+        },
         elapsed_ms: start.elapsed().as_millis(),
         engine: engine_name,
     };
+    let volumes = scanner.volumes();
+    let unreadable_folders = scanner.unreadable_folders();
 
     let prune = PruneConfig::from_total(tree.size);
     let tree_node = tree.into_tree(&prune);
@@ -94,5 +113,26 @@ fn cmd_scan(args: &[String]) {
         Err(_) => Vec::new(),
     };
 
-    output::emit_result(tree_node, &top_files, summary);
+    output::emit_result(tree_node, &top_files, &volumes, &unreadable_folders, summary);
+}
+
+/// Reading an iCloud file that isn't downloaded makes macOS download it, and so can reading its
+/// attributes when a folder above it isn't downloaded either (Apple TN3150). This process opts out
+/// before it reads anything; a scan that can't opt out doesn't run.
+fn stop_cloud_downloads() -> Result<(), String> {
+    const IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES: libc::c_int = 3;
+    const IOPOL_SCOPE_PROCESS: libc::c_int = 0;
+    const IOPOL_MATERIALIZE_DATALESS_FILES_OFF: libc::c_int = 1;
+    extern "C" {
+        fn setiopolicy_np(iotype: libc::c_int, scope: libc::c_int, policy: libc::c_int) -> libc::c_int;
+    }
+    let status = unsafe { setiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES, IOPOL_SCOPE_PROCESS, IOPOL_MATERIALIZE_DATALESS_FILES_OFF) };
+    if status == 0 {
+        Ok(())
+    } else {
+        Err(format!(
+            "The scan didn't start: macOS wouldn't let it skip iCloud downloads ({}).",
+            std::io::Error::last_os_error()
+        ))
+    }
 }

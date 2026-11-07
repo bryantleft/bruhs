@@ -20,15 +20,25 @@ import {
   categoryForName,
   formatBytes,
 } from "./format.ts";
-import type { AggregateNode, DirNode, FileNode, TreeNode } from "./types.ts";
+import type {
+  AggregateNode,
+  DirNode,
+  FileNode,
+  TreeNode,
+  UnreadableNode,
+  VolumeNode,
+} from "./types.ts";
 
-/** A file kind, or "grouped": small items the scanner folded together without listing them. */
-export type Kind = Category | "grouped";
+/**
+ * A file kind, "grouped" (small items the scanner folded together without listing them) or
+ * "volume" (another volume on the same disk, which the scan measured but didn't enter).
+ */
+export type Kind = Category | "grouped" | "volume";
 export type KindBytes = Readonly<Record<Kind, number>>;
 
 /** Every file kind, in CATEGORY_VAR's order, which names a colour for each. */
 export const CATEGORIES = Object.keys(CATEGORY_VAR) as readonly Category[];
-export const KINDS: readonly Kind[] = [...CATEGORIES, "grouped"];
+export const KINDS: readonly Kind[] = [...CATEGORIES, "grouped", "volume"];
 
 /** Tiles leave this gap on their right and bottom edges, so neighbours stay apart. */
 export const GAP = 1;
@@ -86,6 +96,12 @@ export interface FileTile extends TileBase {
   readonly category: Category;
 }
 
+/** Another volume on the scanned disk, such as the startup disk's Preboot: one block, never opened. */
+export interface VolumeTile extends TileBase {
+  readonly kind: "volume";
+  readonly node: VolumeNode;
+}
+
 /**
  * Siblings too small to draw, merged into one block. `partial` means it includes the
  * scanner's own grouped items, whose count the scan doesn't report.
@@ -98,7 +114,12 @@ export interface GroupTile extends TileBase {
   readonly partial: boolean;
 }
 
-export type Tile = FolderTile | CollapsedTile | FileTile | GroupTile;
+export type Tile =
+  | FolderTile
+  | CollapsedTile
+  | FileTile
+  | VolumeTile
+  | GroupTile;
 
 export interface TreemapLayout {
   readonly root: DirNode;
@@ -125,8 +146,17 @@ export function kindBytesByFolder(
       if (child.kind === "file") {
         bytes[categoryForName(child.name)] += child.size;
       } else if (child.kind === "aggregate") {
-        bytes.grouped += child.size;
-      } else {
+        // The scanner tallies a group's bytes by kind; whatever it doesn't name stays "grouped".
+        let named = 0;
+        for (const category of CATEGORIES) {
+          const value = child.kinds?.[category] ?? 0;
+          bytes[category] += value;
+          named += value;
+        }
+        bytes.grouped += Math.max(0, child.size - named);
+      } else if (child.kind === "volume") {
+        bytes.volume += child.size;
+      } else if (child.kind === "dir") {
         const inner = visit(child);
         for (const kind of KINDS) bytes[kind] += inner[kind];
       }
@@ -175,8 +205,10 @@ const isThin = (box: Box) =>
   box.x1 - box.x0 - GAP < MIN_TILE || box.y1 - box.y0 - GAP < MIN_TILE;
 const isEmpty = (box: Box) => box.x1 <= box.x0 || box.y1 <= box.y0;
 
-type Item = Exclude<TreeNode, AggregateNode>;
-const isItem = (node: TreeNode): node is Item => node.kind !== "aggregate";
+/** What the map draws as its own block: files, folders and volumes. Unreadable folders have no size to draw. */
+type Item = Exclude<TreeNode, AggregateNode | UnreadableNode>;
+const isItem = (node: TreeNode): node is Item =>
+  node.kind !== "aggregate" && node.kind !== "unreadable";
 
 /** Lay out `folder`'s items in `box`, merging the ones too small to draw on their own. */
 function layoutItems(
@@ -247,6 +279,8 @@ function tileFor(
       ...box,
     };
   }
+  if (item.kind === "volume")
+    return { kind: "volume", node: item, depth, ...box };
   const header = HEADER_BY_DEPTH[depth] ?? 0;
   const content = {
     x0: box.x0 + OUTLINE + GAP,
@@ -373,7 +407,9 @@ export function groupName(tile: GroupTile): string {
 /** The name a block stands for. Folders end in "/" so they read as folders without colour. */
 export function tileName(tile: Tile): string {
   if (tile.kind === "group") return groupName(tile);
-  return tile.kind === "file" ? tile.node.name : `${tile.node.name}/`;
+  return tile.kind === "file" || tile.kind === "volume"
+    ? tile.node.name
+    : `${tile.node.name}/`;
 }
 
 /** Text metrics for labels, measured from the canvas font. */
@@ -408,7 +444,7 @@ function fitName(tile: Tile, maxChars: number): string | null {
     }
     return null;
   }
-  if (tile.kind === "file") {
+  if (tile.kind === "file" || tile.kind === "volume") {
     if (graphemeLength(tile.node.name) <= maxChars) return tile.node.name;
     return maxChars - 1 >= MIN_KEPT
       ? middleTruncate(tile.node.name, maxChars)

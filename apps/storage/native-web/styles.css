@@ -28,6 +28,7 @@
 
 @media (prefers-color-scheme: light) {
   :root {
+    --kind-other: var(--color-longan-300);
     --role-text: var(--color-longan-950);
     --role-text-secondary: var(--color-longan-800);
     --role-text-tertiary: var(--color-longan-700);
@@ -64,6 +65,21 @@
     --role-status-critical: var(--color-lychee-800);
     --role-scrollbar: var(--color-longan-700);
     --role-scrollbar-hover: var(--color-longan-800);
+  }
+}
+
+/*
+ * Pith's native rule (packages/ui/AGENTS.md, section 18): data in Monaspace, labels and sentences in the system font,
+ * so the map's legend, headings, breadcrumbs and notes read like the native views around it. Sizes, paths and
+ * names on the canvas stay Monaspace Neon.
+ */
+:root {
+  --font-argon: system-ui, -apple-system, sans-serif;
+}
+
+@layer utilities {
+  .text-body-sm {
+    font-family: system-ui, -apple-system, sans-serif;
   }
 }
 

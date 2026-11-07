@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { LargestFiles } from "../src/components/largest-files";
 import { TreemapCanvas } from "../src/components/treemap-canvas";
 import { retraceFolders } from "../src/lib/folder-trail";
+import { formatBytes } from "../src/lib/format";
 import { LARGEST_FILES_SHOWN, largestFilesIn } from "../src/lib/largest-files";
 import { parseResultEvent } from "../src/lib/protocol";
 import { type Kind, kindBytesByFolder } from "../src/lib/treemap-layout";
@@ -16,21 +17,40 @@ import { KindLegend } from "./kind-legend";
 import { PathBar } from "./path-bar";
 import "./styles.css";
 
-type Selection = { action: "select"; path: string | null };
+/** What the page tells Pith: the selection, the open folder, and requests for native actions. */
+type Message =
+  | { action: "ready" }
+  | { action: "select"; path: string | null }
+  | { action: "location"; path: string }
+  | { action: "menu"; path: string | null }
+  | { action: "quickLook"; path: string }
+  | { action: "trash"; path: string };
+
+/** What grew since the last scan of the same folder: bytes by path, and when that scan was. */
+interface Growth {
+  since: string;
+  changes: ReadonlyMap<string, number>;
+}
+
 declare global {
   interface Window {
     pithReceive: (payload: string | null) => void;
+    pithReceiveGrowth: (
+      growth: { since: string; changes: Record<string, number> } | null,
+    ) => void;
+    /** Pith's menu commands that act on the map, such as Go, Enclosing Folder. */
+    pithCommand: (command: "up") => void;
     webkit?: {
       messageHandlers?: {
         pith?: {
-          postMessage: (message: Selection | { action: "ready" }) => void;
+          postMessage: (message: Message) => void;
         };
       };
     };
   }
 }
 
-function post(message: Selection | { action: "ready" }): void {
+function post(message: Message): void {
   window.webkit?.messageHandlers?.pith?.postMessage(message);
 }
 
@@ -41,6 +61,7 @@ function DiskMap() {
   const [hovered, setHovered] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<Kind | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [growth, setGrowth] = useState<Growth | null>(null);
   // The open folders, kept across the empty payload a rescan sends first, so the map
   // stays where it was after Move to Trash.
   const openPaths = useRef<readonly string[]>([]);
@@ -75,9 +96,22 @@ function DiskMap() {
         setError("The disk map could not read this scan. Try scanning again.");
       }
     };
+    window.pithReceiveGrowth = (value) => {
+      if (!value || typeof value.since !== "string") {
+        setGrowth(null);
+        return;
+      }
+      const changes = new Map<string, number>();
+      for (const [path, delta] of Object.entries(value.changes ?? {})) {
+        if (typeof delta === "number" && Number.isFinite(delta))
+          changes.set(path, delta);
+      }
+      setGrowth({ since: value.since, changes });
+    };
     post({ action: "ready" });
     return () => {
       window.pithReceive = () => {};
+      window.pithReceiveGrowth = () => {};
     };
   }, []);
 
@@ -88,8 +122,24 @@ function DiskMap() {
   }, []);
   const selectNode = useCallback(
     (node: TreeNode | null) =>
-      select(node && node.kind !== "aggregate" ? node.path : null),
+      select(
+        node && (node.kind === "dir" || node.kind === "file")
+          ? node.path
+          : null,
+      ),
     [select],
+  );
+  const showMenu = useCallback(
+    (path: string | null) => post({ action: "menu", path }),
+    [],
+  );
+  const preview = useCallback(
+    (path: string) => post({ action: "quickLook", path }),
+    [],
+  );
+  const trash = useCallback(
+    (path: string) => post({ action: "trash", path }),
+    [],
   );
   const selectFile = useCallback(
     (file: FileEntry) => select(file.path),
@@ -114,19 +164,28 @@ function DiskMap() {
     [showFolders],
   );
 
-  // Command–Up Arrow opens the enclosing folder, as in Finder.
+  // Go, Enclosing Folder (Command–Up Arrow) is Pith's menu command, so it works wherever focus is.
   useEffect(() => {
-    if (trail.length < 2) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (!event.metaKey || event.key !== "ArrowUp") return;
-      event.preventDefault();
-      goBack(trail.length - 2);
+    window.pithCommand = (command) => {
+      if (command === "up" && trail.length > 1) goBack(trail.length - 2);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
   }, [trail.length, goBack]);
 
   const current = trail.at(-1) ?? null;
+  useEffect(() => {
+    if (current) post({ action: "location", path: current.path });
+  }, [current]);
+
+  // Copy with an item selected copies its path, as Finder's Copy does with a file's name.
+  useEffect(() => {
+    const onCopy = (event: ClipboardEvent) => {
+      if (!selected || window.getSelection()?.toString()) return;
+      event.clipboardData?.setData("text/plain", selected);
+      event.preventDefault();
+    };
+    document.addEventListener("copy", onCopy);
+    return () => document.removeEventListener("copy", onCopy);
+  }, [selected]);
   const kindBytes = useMemo(
     () => (current ? (kindBytesByFolder(current).get(current) ?? null) : null),
     [current],
@@ -157,9 +216,23 @@ function DiskMap() {
   // Before a scan the page stays empty: Pith's bar above says there's no scan yet and holds the scan buttons.
   if (!result || !current) return null;
 
+  // Unreadable folders in the open folder, which the map can't size, so it lists them instead.
+  const unreadable = current.children.filter(
+    (child) => child.kind === "unreadable",
+  );
+  // What grew most inside the open folder since the last scan of the scan's folder.
+  const prefix = current.path === "/" ? "/" : `${current.path}/`;
+  const grew = growth
+    ? [...growth.changes]
+        .filter(([path, delta]) => delta > 0 && path.startsWith(prefix))
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+    : [];
+
   return (
-    <main className="flex h-full min-h-0 flex-col gap-2 px-4 pt-1 pb-4">
-      <PathBar trail={trail} onOpen={goBack} />
+    <main className="flex h-full min-h-0 flex-col gap-2 px-4 pt-3 pb-4">
+      {/* At the scan's own folder, Pith's bar above already shows its path and size. */}
+      {trail.length > 1 && <PathBar trail={trail} onOpen={goBack} />}
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_17rem] gap-5">
         <section aria-label="Disk space treemap" className="min-h-0">
           <TreemapCanvas
@@ -171,6 +244,11 @@ function DiskMap() {
             selectedPath={selected}
             onSelect={selectNode}
             onEnterDir={openFolder}
+            onMenu={showMenu}
+            onPreview={preview}
+            onTrash={trash}
+            growth={growth?.changes}
+            growthSince={growth?.since}
           />
         </section>
         <div className="flex min-h-0 flex-col gap-5">
@@ -182,6 +260,71 @@ function DiskMap() {
                 setHighlight(kind === shownKind ? null : kind)
               }
             />
+          )}
+          {grew.length > 0 && growth && (
+            <section
+              aria-labelledby="grew-heading"
+              className="flex shrink-0 flex-col gap-1.5"
+            >
+              <h2
+                id="grew-heading"
+                className="text-eyebrow text-(--role-text-tertiary)"
+              >
+                Grew since {growth.since}
+              </h2>
+              <ul className="-mx-2 space-y-px">
+                {grew.map(([path, delta]) => (
+                  <li key={path}>
+                    <button
+                      type="button"
+                      title={path}
+                      onClick={() => select(path)}
+                      onMouseEnter={() => setHovered(path)}
+                      onMouseLeave={() => setHovered(null)}
+                      aria-pressed={path === selected}
+                      className="menu-item gap-2 px-2 py-1 aria-pressed:bg-(--role-selection)"
+                    >
+                      <span className="text-code-sm min-w-0 flex-1 truncate text-(--role-text)">
+                        {path.slice(prefix.length)}
+                      </span>
+                      <span className="text-code-sm shrink-0 text-(--role-text-secondary) tabular-nums">
+                        +{formatBytes(delta)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {unreadable.length > 0 && (
+            <section
+              aria-labelledby="unreadable-heading"
+              className="flex shrink-0 flex-col gap-1.5"
+            >
+              <h2
+                id="unreadable-heading"
+                className="text-eyebrow text-(--role-text-tertiary)"
+              >
+                Couldn’t read
+              </h2>
+              <ul className="space-y-0.5">
+                {unreadable.slice(0, 6).map((folder) => (
+                  <li
+                    key={folder.path}
+                    title={folder.path}
+                    className="text-code-sm truncate text-(--role-text-secondary)"
+                  >
+                    {folder.name}
+                  </li>
+                ))}
+              </ul>
+              {unreadable.length > 6 && (
+                <p className="text-label-sm text-(--role-text-tertiary)">
+                  And {unreadable.length - 6} more. Pith’s notice above lists
+                  them all.
+                </p>
+              )}
+            </section>
           )}
           <aside
             aria-label="Largest files"
@@ -195,6 +338,7 @@ function DiskMap() {
                 hoveredPath={hovered}
                 onHoverPath={setHovered}
                 onSelect={selectFile}
+                onMenu={(file) => showMenu(file.path)}
               />
             ) : (
               <p className="text-body-sm text-pretty text-(--role-text-secondary)">
@@ -208,8 +352,14 @@ function DiskMap() {
   );
 }
 
-// The map is app content, not a web page: WebKit's own menu would offer Reload, which empties it.
-document.addEventListener("contextmenu", (event) => event.preventDefault());
+// The map is app content, not a web page: WebKit's own menu would offer Reload, which empties it. The map and the
+// file list ask Pith for its native menu instead; anywhere else gets the open folder's menu.
+document.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  const target = event.target instanceof Element ? event.target : null;
+  if (target?.closest("canvas, button")) return;
+  post({ action: "menu", path: null });
+});
 
 const container = document.getElementById("root");
 if (container) createRoot(container).render(<DiskMap />);

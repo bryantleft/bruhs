@@ -1,7 +1,9 @@
 /** Shapes mirroring the `storage-scanner` NDJSON protocol. */
 
+import type { Category } from "./format.ts";
+
 /** Version of the `result` shape this client understands (`RESULT_VERSION` in Rust). */
-export const RESULT_VERSION = 2;
+export const RESULT_VERSION = 3;
 
 interface NodeBase {
   name: string;
@@ -11,6 +13,8 @@ interface NodeBase {
 
 export interface DirNode extends NodeBase {
   kind: "dir";
+  /** Files inside it, counted once each. */
+  files: number;
   children: readonly TreeNode[];
 }
 
@@ -21,9 +25,35 @@ export interface FileNode extends NodeBase {
 /** Synthetic "(smaller items)" node. It has no real path on disk and can't be trashed. */
 export interface AggregateNode extends NodeBase {
   kind: "aggregate";
+  files: number;
+  /** Its bytes by file kind, so the legend counts grouped items as what they are. */
+  kinds?: Readonly<Partial<Record<Category, number>>>;
 }
 
-export type TreeNode = DirNode | FileNode | AggregateNode;
+/** Why the scanner couldn't read a folder. */
+export type UnreadableReason = "protected" | "denied" | "other";
+
+/** A folder the scan couldn't read: its size is unknown, so it's 0. */
+export interface UnreadableNode extends NodeBase {
+  kind: "unreadable";
+  reason: UnreadableReason;
+}
+
+/**
+ * Another volume mounted here, which the scan didn't enter. Its size is its used space
+ * when it shares the scanned disk (the startup disk's Preboot and VM), and 0 otherwise.
+ */
+export interface VolumeNode extends NodeBase {
+  kind: "volume";
+  sharesDisk: boolean;
+}
+
+export type TreeNode =
+  | DirNode
+  | FileNode
+  | AggregateNode
+  | UnreadableNode
+  | VolumeNode;
 
 export interface FileEntry {
   name: string;
@@ -37,9 +67,26 @@ export interface ScanSummary {
   dirs: number;
   files: number;
   bytes: number;
+  /** Folders the scan couldn't read, split by reason in `unreadable`. */
   errors: number;
+  unreadable: Readonly<Record<UnreadableReason, number>>;
+  entryErrors: number;
+  /** iCloud items counted without downloading them. */
+  cloudOnly: { files: number; bytes: number; folders: number };
   elapsedMs: number;
   engine: ScanEngine;
+}
+
+export interface VolumeEntry {
+  path: string;
+  name: string;
+  bytes: number;
+  sharesDisk: boolean;
+}
+
+export interface UnreadableFolder {
+  path: string;
+  reason: UnreadableReason;
 }
 
 /** Periodic progress event streamed during a scan. */
@@ -57,6 +104,10 @@ export interface ResultEvent {
   version: typeof RESULT_VERSION;
   root: DirNode;
   topFiles: readonly FileEntry[];
+  /** Volumes mounted inside the scan, which it didn't enter. */
+  volumes: readonly VolumeEntry[];
+  /** Folders it couldn't read, shallowest first and capped; `summary.unreadable` counts them all. */
+  unreadableFolders: readonly UnreadableFolder[];
   summary: ScanSummary;
 }
 
@@ -86,6 +137,7 @@ export type TrashFailure =
   | "aggregate"
   | "outside_scan_root"
   | "protected_path"
+  | "volume"
   | "not_found"
   | "scanner_failed"
   // The scanner passes through the OS error text for any other failure.

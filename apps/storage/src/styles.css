@@ -1,2 +1,7 @@
 @import "tailwindcss";
 @import "@bruhs/theme/styles/index.css";
+
+/* Disk-map kinds whose colour depends on the appearance (CATEGORY_TOKEN in src/lib/format.ts). This app is dark. */
+:root {
+  --kind-other: var(--color-longan-600);
+}

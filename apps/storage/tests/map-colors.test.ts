@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import { contrast, parseColorTokens } from "@bruhs/theme/oklch";
 import { semanticColors, type TokenRef } from "@bruhs/theme/semantic";
-import { CATEGORY_VAR } from "../src/lib/format.ts";
+import { CATEGORY_TOKEN, CATEGORY_VAR } from "../src/lib/format.ts";
 import {
   inkFor,
   LABEL_INKS,
@@ -81,11 +81,41 @@ describe("label inks", () => {
       dark: token(LABEL_INKS.dark),
       light: token(LABEL_INKS.light),
     };
-    for (const [kind, variable] of Object.entries(CATEGORY_VAR)) {
-      const fill = token(variable.replace("--color-", ""));
-      const ink = inkFor(fill, inks);
-      const ratio = contrast(fill, inks[ink]);
-      assert.ok(ratio >= 4.5, `${kind} labels are ${ratio.toFixed(2)}:1`);
+    for (const [kind, colours] of Object.entries(CATEGORY_TOKEN)) {
+      for (const [appearance, variable] of Object.entries(colours)) {
+        const fill = token(variable.replace("--color-", ""));
+        const ink = inkFor(fill, inks);
+        const ratio = contrast(fill, inks[ink]);
+        assert.ok(
+          ratio >= 4.5,
+          `${kind} labels in ${appearance} are ${ratio.toFixed(2)}:1`,
+        );
+      }
+    }
+  });
+
+  test("kinds that change with the appearance are defined for each", () => {
+    const app = readFileSync(
+      new URL("../src/styles.css", import.meta.url),
+      "utf8",
+    );
+    const native = readFileSync(
+      new URL("../native-web/styles.css", import.meta.url),
+      "utf8",
+    );
+    for (const [kind, { dark, light }] of Object.entries(CATEGORY_TOKEN)) {
+      if (dark === light) {
+        assert.equal(CATEGORY_VAR[kind as keyof typeof CATEGORY_VAR], dark);
+        continue;
+      }
+      assert.ok(
+        app.includes(`--kind-${kind}: var(${dark});`),
+        `${kind} in src/styles.css`,
+      );
+      assert.ok(
+        native.includes(`--kind-${kind}: var(${light});`),
+        `${kind} in native-web light`,
+      );
     }
   });
 

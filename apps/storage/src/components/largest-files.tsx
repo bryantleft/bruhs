@@ -14,6 +14,8 @@ interface Props {
   onHoverPath?: (path: string | null) => void;
   /** Show each file's folder from this folder down; otherwise its full path. */
   base?: string;
+  /** Right-click on a row: show the file's actions. Without it there's no menu. */
+  onMenu?: (file: FileEntry) => void;
 }
 
 const inside = (path: string, folder: string) =>
@@ -30,6 +32,7 @@ export function LargestFiles({
   hoveredPath = null,
   onHoverPath,
   base,
+  onMenu,
 }: Props) {
   // Worked out once per list, so hovering only changes which rows are highlighted.
   const rows = useMemo(
@@ -60,6 +63,15 @@ export function LargestFiles({
               <button
                 type="button"
                 onClick={() => onSelect(f)}
+                onContextMenu={
+                  onMenu
+                    ? (event) => {
+                        event.preventDefault();
+                        onSelect(f);
+                        onMenu(f);
+                      }
+                    : undefined
+                }
                 onMouseEnter={() => onHoverPath?.(f.path)}
                 onMouseLeave={() => onHoverPath?.(null)}
                 onFocus={() => onHoverPath?.(f.path)}

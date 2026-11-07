@@ -37,7 +37,7 @@ final class ScannerTests: XCTestCase {
         let result = try await ScannerRunner().scan(binary: binary, root: folder) { _ in }
         XCTAssertEqual(result.summary.files, 1)
         XCTAssertTrue(result.root.entries.contains { $0.path == file.path })
-        XCTAssertEqual(try TrashPolicy.resolve(file.path, result: result, home: FileManager.default.homeDirectoryForCurrentUser).path, file.path)
+        XCTAssertEqual(try TrashPolicy.plan(file.path, result: result, home: FileManager.default.homeDirectoryForCurrentUser).target.path, file.path)
     }
 
     private func temporaryFolder() throws -> URL {

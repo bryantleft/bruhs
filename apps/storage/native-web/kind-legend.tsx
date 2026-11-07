@@ -1,4 +1,5 @@
-import { CATEGORY_LABEL, CATEGORY_VAR, formatBytes } from "../src/lib/format";
+import { kindLabel } from "../src/components/treemap-canvas";
+import { CATEGORY_VAR, formatBytes } from "../src/lib/format";
 import { KINDS, type Kind, type KindBytes } from "../src/lib/treemap-layout";
 
 interface Props {
@@ -10,16 +11,17 @@ interface Props {
   onToggle: (kind: Kind) => void;
 }
 
-const label = (kind: Kind) =>
-  kind === "grouped" ? "Smaller items" : CATEGORY_LABEL[kind];
+/** Grouped small items and other volumes come last: neither is a kind of file. */
+const last = (kind: Kind) =>
+  kind === "volume" ? 2 : kind === "grouped" ? 1 : 0;
 
 /**
  * What each colour means and how much of the folder it holds. Each row also highlights
  * its kind on the map. Grouped small items come last: the scan doesn't know their kinds.
  */
 export function KindLegend({ bytes, active, onToggle }: Props) {
-  const rows = KINDS.filter((kind) => bytes[kind] > 0).sort((a, b) =>
-    a === "grouped" ? 1 : b === "grouped" ? -1 : bytes[b] - bytes[a],
+  const rows = KINDS.filter((kind) => bytes[kind] > 0).sort(
+    (a, b) => last(a) - last(b) || bytes[b] - bytes[a],
   );
   if (rows.length === 0) return null;
   return (
@@ -43,21 +45,21 @@ export function KindLegend({ bytes, active, onToggle }: Props) {
               title={
                 kind === active
                   ? "Show every kind again"
-                  : `Highlight ${label(kind).toLowerCase()} on the map`
+                  : `Highlight ${kindLabel(kind).toLowerCase()} on the map`
               }
               className="menu-item gap-2 px-2 py-1 aria-pressed:bg-(--role-selection)"
             >
               <span
                 aria-hidden="true"
-                className={`rounded-seed size-2.5 shrink-0 ${kind === "grouped" ? "hatched" : ""}`}
+                className={`rounded-seed size-2.5 shrink-0 ${kind === "grouped" ? "hatched" : kind === "volume" ? "border border-dashed border-(--role-text-tertiary) bg-(--role-well)" : ""}`}
                 style={
-                  kind === "grouped"
+                  kind === "grouped" || kind === "volume"
                     ? undefined
                     : { background: `var(${CATEGORY_VAR[kind]})` }
                 }
               />
               <span className="text-label-sm min-w-0 flex-1 truncate">
-                {label(kind)}
+                {kindLabel(kind)}
               </span>
               <span className="text-code-sm shrink-0 text-(--role-text-secondary) tabular-nums">
                 {formatBytes(bytes[kind])}

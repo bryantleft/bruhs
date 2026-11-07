@@ -17,7 +17,8 @@ const FAILURE_MESSAGE: Partial<Record<TrashFailure, string>> = {
   no_scan: "Run a scan first, then try again.",
   outside_scan_root: "Only items inside the scanned folder can be trashed.",
   protected_path:
-    "Top-level folders and your home folder can't be moved to the Trash.",
+    "macOS or your account needs this folder, so it can't be moved to the Trash. Items inside it can.",
+  volume: "This is a volume. Eject it in Finder instead.",
   aggregate: "This groups many small items; zoom in to pick one.",
   scanner_failed: "The scanner couldn't move it to the Trash.",
 };

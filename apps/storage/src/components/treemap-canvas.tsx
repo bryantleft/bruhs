@@ -55,6 +55,19 @@ interface Props {
   linkedPath?: string | null;
   /** The path under the pointer or keyboard focus changed, for linking other views. */
   onHoverPath?: (path: string | null) => void;
+  /**
+   * The user asked for an item's actions (right-click, or Control-click), with the item's path, or
+   * null for the open folder itself. Without it the map shows no menu.
+   */
+  onMenu?: (path: string | null) => void;
+  /** Space on the selected item: show it in Quick Look. */
+  onPreview?: (path: string) => void;
+  /** Command-Delete on the selected item: move it to the Trash. */
+  onTrash?: (path: string) => void;
+  /** How much items changed since the last scan of the scan's folder, in bytes by path. */
+  growth?: ReadonlyMap<string, number>;
+  /** When that scan was, e.g. "Nov 3". */
+  growthSince?: string;
 }
 
 /** Labels are Monaspace Neon at 11 px, the size of the native data captions. */
@@ -199,7 +212,15 @@ const drawnBox = (tile: Tile): Drawn => ({
 
 function matchesKind(tile: Tile, kind: Kind): boolean {
   if (tile.kind === "group") return kind === "grouped";
+  if (tile.kind === "volume") return kind === "volume";
   return tile.kind !== "folder" && tile.category === kind;
+}
+
+/** A kind's name, as the legend and the map's spoken summary use it. */
+export function kindLabel(kind: Kind): string {
+  if (kind === "grouped") return "Smaller items";
+  if (kind === "volume") return "Other volumes";
+  return CATEGORY_LABEL[kind];
 }
 
 function drawMap(
@@ -314,6 +335,13 @@ function drawMap(
       ctx.fillStyle = palette.folderFill[tile.category];
       ctx.fillRect(box.x, box.y, box.w, box.h);
       outline(box, palette.fill[tile.category]);
+    } else if (tile.kind === "volume") {
+      // Measured but not entered: a recessed block with a dashed edge, apart from folders and files.
+      ctx.fillStyle = palette.role.well;
+      ctx.fillRect(box.x, box.y, box.w, box.h);
+      ctx.setLineDash([3, 2]);
+      outline(box, palette.role.textTertiary);
+      ctx.setLineDash([]);
     } else {
       ctx.fillStyle = palette.role.hairline;
       ctx.fillRect(box.x, box.y, box.w, box.h);
@@ -381,16 +409,36 @@ interface Card {
   readonly size: string;
   /** The block's share of the open folder, e.g. "12% of Users". */
   readonly share: string;
-  /** What clicks do. */
-  readonly hint: string;
+  /** What clicks do; null once the user has done both. */
+  readonly hint: string | null;
+  /** Folders inside it the scan couldn't read, e.g. "2 folders inside couldn't be read". */
+  readonly unreadable: string | null;
+  /** How much it changed since the last scan, e.g. "+12.3 GB since Nov 3". */
+  readonly change: string | null;
 }
 
-function describe(tile: Tile, open: DirNode | null, root: DirNode): Card {
+/** "2 folders inside couldn't be read", or null when the scan read them all. */
+function unreadableInside(node: DirNode): string | null {
+  const count = node.children.filter(
+    (child) => child.kind === "unreadable",
+  ).length;
+  if (count === 0) return null;
+  return `${count} ${count === 1 ? "folder" : "folders"} inside couldn’t be read`;
+}
+
+function describe(
+  tile: Tile,
+  open: DirNode | null,
+  root: DirNode,
+  hints: boolean,
+  change: string | null,
+): Card {
   const size = formatBytes(tileSize(tile));
   const share = `${percentOf(tileSize(tile), root.size)} of ${root.name || "/"}`;
   const openFolder = open ? ` Double-click to open ${open.name}/.` : "";
   const title = middleTruncate(tileName(tile), 34);
   const fill = (category: Category) => `var(${CATEGORY_VAR[category]})`;
+  const hint = (text: string) => (hints ? text : null);
   switch (tile.kind) {
     case "file":
       return {
@@ -401,7 +449,20 @@ function describe(tile: Tile, open: DirNode | null, root: DirNode): Card {
         },
         size,
         share,
-        hint: `Click to select.${openFolder}`,
+        hint: hint(`Click to select.${openFolder}`),
+        unreadable: null,
+        change,
+      };
+    case "volume":
+      return {
+        title,
+        kind: { label: "Another volume on this disk", fill: null },
+        size,
+        share,
+        // Always said: why this block can't be opened isn't something a user learns once.
+        hint: "Measured, not scanned: macOS keeps this volume apart from your files.",
+        unreadable: null,
+        change,
       };
     case "group":
       return {
@@ -409,7 +470,9 @@ function describe(tile: Tile, open: DirNode | null, root: DirNode): Card {
         kind: null,
         size,
         share,
-        hint: `Too small to show one by one.${openFolder}`,
+        hint: hint(`Too small to show one by one.${openFolder}`),
+        unreadable: null,
+        change,
       };
     case "collapsed":
       return {
@@ -423,7 +486,9 @@ function describe(tile: Tile, open: DirNode | null, root: DirNode): Card {
         },
         size,
         share,
-        hint: "Click to select. Double-click to open.",
+        hint: hint("Click to select. Double-click to open."),
+        unreadable: unreadableInside(tile.node),
+        change,
       };
     case "folder":
       // Drawn as a container around its contents, so its swatch is an outline.
@@ -432,9 +497,69 @@ function describe(tile: Tile, open: DirNode | null, root: DirNode): Card {
         kind: { label: "Folder", fill: null },
         size,
         share,
-        hint: "Click to select. Double-click to open.",
+        hint: hint("Click to select. Double-click to open."),
+        unreadable: unreadableInside(tile.node),
+        change,
       };
   }
+}
+
+/**
+ * Click and double-click hints show until the user has selected and opened something on
+ * the map once. Stored per viewer; when storage is unavailable the hints keep showing.
+ */
+const HINTS_KEY = "pith.mapHintsLearned";
+function hintsLearned(): { selected: boolean; opened: boolean } {
+  try {
+    const saved = JSON.parse(localStorage.getItem(HINTS_KEY) ?? "{}");
+    return { selected: saved.selected === true, opened: saved.opened === true };
+  } catch {
+    return { selected: false, opened: false };
+  }
+}
+function learnHint(step: "selected" | "opened") {
+  try {
+    const learned = { ...hintsLearned(), [step]: true };
+    localStorage.setItem(HINTS_KEY, JSON.stringify(learned));
+  } catch {
+    // Without storage the hints stay, which is harmless.
+  }
+}
+
+/** The tile nearest `from` in an arrow key's direction, among the open folder's own items. */
+function tileInDirection(
+  tiles: readonly Tile[],
+  from: Tile,
+  key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
+): Tile | null {
+  const center = (t: Tile) => ({ x: (t.x0 + t.x1) / 2, y: (t.y0 + t.y1) / 2 });
+  const origin = center(from);
+  let best: Tile | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const tile of tiles) {
+    if (tile === from) continue;
+    const c = center(tile);
+    const dx = c.x - origin.x;
+    const dy = c.y - origin.y;
+    const along =
+      key === "ArrowLeft"
+        ? -dx
+        : key === "ArrowRight"
+          ? dx
+          : key === "ArrowUp"
+            ? -dy
+            : dy;
+    const across =
+      key === "ArrowLeft" || key === "ArrowRight" ? Math.abs(dy) : Math.abs(dx);
+    if (along <= 0) continue;
+    // Straight ahead beats diagonal: sideways distance counts double.
+    const score = along + 2 * across;
+    if (score < bestScore) {
+      bestScore = score;
+      best = tile;
+    }
+  }
+  return best;
 }
 
 /** A ring drawn over the canvas, so hover and selection never repaint the map. */
@@ -458,6 +583,10 @@ function Ring({ tile, shadow }: { tile: Tile; shadow: string }) {
 const pathOf = (tile: Tile | null) =>
   tile && tile.kind !== "group" ? tile.node.path : null;
 
+/** A selectable item: a file or folder. Groups and volumes can't be moved to the Trash or revealed. */
+const selectable = (tile: Tile | null): TreeNode | null =>
+  tile && tile.kind !== "group" && tile.kind !== "volume" ? tile.node : null;
+
 export function TreemapCanvas({
   root,
   onEnterDir,
@@ -467,12 +596,18 @@ export function TreemapCanvas({
   highlightKind = null,
   linkedPath = null,
   onHoverPath,
+  onMenu,
+  onPreview,
+  onTrash,
+  growth,
+  growthSince,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
   const [focusPath, setFocusPath] = useState<string | null>(null);
+  const [learned, setLearned] = useState(hintsLearned);
   const reported = useRef<string | null>(null);
   const { appearance, increasedContrast } = useAppearance(
     followSystemAppearance,
@@ -556,23 +691,98 @@ export function TreemapCanvas({
     report(focusPath);
   };
 
+  const learn = (step: "selected" | "opened") => {
+    if (learned[step]) return;
+    learnHint(step);
+    setLearned((current) => ({ ...current, [step]: true }));
+  };
+
   // Single click selects (for inspect/delete). Double click opens a folder.
   // Keeping these separate means nothing is ever left "selected" just by navigating.
   const onClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!layout) return;
-    const tile = tileAt(layout, e.nativeEvent.offsetX, e.nativeEvent.offsetY);
-    onSelect(tile && tile.kind !== "group" ? tile.node : null);
+    const node = selectable(
+      tileAt(layout, e.nativeEvent.offsetX, e.nativeEvent.offsetY),
+    );
+    if (node) learn("selected");
+    onSelect(node);
+  };
+
+  const open = (folder: DirNode | null) => {
+    if (!folder) return;
+    learn("opened");
+    for (const step of foldersBetween(root, folder)) onEnterDir(step);
   };
 
   const onDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!layout) return;
-    const folder = folderToOpenAt(
-      layout,
-      e.nativeEvent.offsetX,
-      e.nativeEvent.offsetY,
+    open(folderToOpenAt(layout, e.nativeEvent.offsetX, e.nativeEvent.offsetY));
+  };
+
+  const onContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    if (!layout || !onMenu) return;
+    const node = selectable(
+      tileAt(layout, e.nativeEvent.offsetX, e.nativeEvent.offsetY),
     );
-    if (!folder) return;
-    for (const step of foldersBetween(root, folder)) onEnterDir(step);
+    // The menu acts on what's under the pointer, so that becomes the selection, as in Finder.
+    if (node) onSelect(node);
+    onMenu(node ? node.path : null);
+  };
+
+  /**
+   * One tab stop for the whole map: arrows move the selection to the nearest item in that
+   * direction, Return opens a folder, Space previews, Command-Delete trashes, Escape deselects.
+   */
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!layout || e.target !== e.currentTarget) return;
+    const items = layout.tiles;
+    const current =
+      (selectedPath ? tileForPath(layout, selectedPath) : null) ?? null;
+    const own = current && items.includes(current) ? current : null;
+    switch (e.key) {
+      case "ArrowLeft":
+      case "ArrowRight":
+      case "ArrowUp":
+      case "ArrowDown": {
+        if (e.metaKey) return;
+        e.preventDefault();
+        const next = own
+          ? tileInDirection(items, own, e.key)
+          : (items.find((tile) => selectable(tile)) ?? null);
+        const node = selectable(next);
+        if (node) {
+          onSelect(node);
+          report(node.path);
+        }
+        return;
+      }
+      case "Enter": {
+        e.preventDefault();
+        if (own && (own.kind === "folder" || own.kind === "collapsed"))
+          open(own.node);
+        return;
+      }
+      case " ": {
+        e.preventDefault();
+        if (selectedPath) onPreview?.(selectedPath);
+        return;
+      }
+      case "Backspace":
+      case "Delete": {
+        if (!e.metaKey || !selectedPath) return;
+        e.preventDefault();
+        onTrash?.(selectedPath);
+        return;
+      }
+      case "Escape": {
+        if (selectedPath) {
+          e.preventDefault();
+          onSelect(null);
+        }
+        return;
+      }
+    }
   };
 
   if ("error" in colors) {
@@ -589,22 +799,48 @@ export function TreemapCanvas({
   const highlightLabel =
     highlightKind === null
       ? ""
-      : ` Highlighting ${highlightKind === "grouped" ? "smaller items" : CATEGORY_LABEL[highlightKind].toLowerCase()}.`;
+      : ` Highlighting ${kindLabel(highlightKind).toLowerCase()}.`;
   const summary = `Treemap of ${root.path}, ${formatBytes(root.size)} in ${
     root.children.length
-  } items.${highlightLabel} Use the list after it to select or open them.`;
+  } items.${highlightLabel} Arrow keys select items, Return opens a folder and Space previews. The list after it names every item.`;
 
+  const delta =
+    pointed && pointed.kind !== "group"
+      ? growth?.get(pointed.node.path)
+      : undefined;
+  const change =
+    delta !== undefined && growthSince
+      ? `${delta > 0 ? "+" : "\u2212"}${formatBytes(Math.abs(delta))} since ${growthSince}`
+      : null;
   const card =
     pointed && layout && pointer
-      ? describe(pointed, folderToOpenAt(layout, pointer.x, pointer.y), root)
+      ? describe(
+          pointed,
+          folderToOpenAt(layout, pointer.x, pointer.y),
+          root,
+          !(learned.selected && learned.opened),
+          change,
+        )
       : null;
   const ink = (tile: Tile) =>
     tile.kind === "file"
       ? colors.palette.ink[tile.category]
       : colors.palette.role.text;
 
+  const selectedNode =
+    selected && selected.kind !== "group" ? selected.node : null;
   return (
-    <div ref={wrapRef} className="relative h-full w-full overflow-hidden">
+    // One tab stop that handles its own keys, so it's an application to assistive technology.
+    <div
+      ref={wrapRef}
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: role="application" makes it interactive; Biome doesn't count that role.
+      tabIndex={0}
+      role="application"
+      aria-roledescription="disk map"
+      aria-label={`Disk map of ${root.name || root.path}`}
+      onKeyDown={onKeyDown}
+      className="rounded-seed relative h-full w-full overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-(--role-accent,var(--color-persimmon-400))"
+    >
       <canvas
         ref={canvasRef}
         role="img"
@@ -613,12 +849,14 @@ export function TreemapCanvas({
           width: size.w,
           height: size.h,
           display: "block",
-          cursor: pointed ? "pointer" : "default",
+          // An arrow, as Finder's icon view: macOS keeps the pointing hand for links.
+          cursor: "default",
         }}
         onMouseMove={onMove}
         onMouseLeave={onLeave}
         onClick={onClick}
         onDoubleClick={onDoubleClick}
+        onContextMenu={onContextMenu}
       />
       {layout && layout.tiles.length === 0 && (
         <p className="text-body-sm pointer-events-none absolute inset-0 flex items-center justify-center text-(--role-text-secondary,var(--color-rambutan-400))">
@@ -630,7 +868,9 @@ export function TreemapCanvas({
           tile={selected}
           // On a coloured block, a line of its label ink keeps the accent apart from the fill.
           shadow={`inset 0 0 0 2px ${colors.palette.role.accent}${
-            selected.kind === "file" || selected.kind === "collapsed"
+            selected.kind === "file" ||
+            selected.kind === "collapsed" ||
+            selected.kind === "volume"
               ? `, inset 0 0 0 3px ${ink(selected)}`
               : ""
           }`}
@@ -674,11 +914,29 @@ export function TreemapCanvas({
               {card.share}
             </span>
           </p>
-          <p className="text-label-sm mt-1 text-pretty text-(--role-text-tertiary,var(--color-rambutan-400))">
-            {card.hint}
-          </p>
+          {card.change && (
+            <p className="text-code-sm mt-0.5 text-(--role-text-secondary,var(--color-rambutan-300)) tabular-nums">
+              {card.change}
+            </p>
+          )}
+          {card.unreadable && (
+            <p className="text-label-sm mt-1 flex items-center gap-1.5 text-(--role-text-secondary,var(--color-rambutan-300))">
+              <LockGlyph />
+              {card.unreadable}
+            </p>
+          )}
+          {card.hint && (
+            <p className="text-label-sm mt-1 text-pretty text-(--role-text-tertiary,var(--color-rambutan-400))">
+              {card.hint}
+            </p>
+          )}
         </div>
       )}
+      <p aria-live="polite" className="sr-only">
+        {selectedNode
+          ? `${selectedNode.name}, ${formatBytes(selectedNode.size)}`
+          : ""}
+      </p>
       <TreemapItems
         root={root}
         selectedPath={selectedPath}
@@ -697,11 +955,25 @@ function isOpenable(node: TreeNode, root: DirNode): node is DirNode {
   );
 }
 
+/** A small padlock for folders the scan couldn't read, drawn in the text colour. */
+function LockGlyph() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 10 12"
+      className="size-2.5 shrink-0"
+      fill="currentColor"
+    >
+      <path d="M2 5V3.5a3 3 0 0 1 6 0V5h.5A1.5 1.5 0 0 1 10 6.5v4A1.5 1.5 0 0 1 8.5 12h-7A1.5 1.5 0 0 1 0 10.5v-4A1.5 1.5 0 0 1 1.5 5H2Zm1.5 0h3V3.5a1.5 1.5 0 0 0-3 0V5Z" />
+    </svg>
+  );
+}
+
 /**
- * The canvas can't be reached by keyboard or read by a screen reader, so the current
- * folder's items are also listed as buttons, including the ones too small to draw. The
- * list is visually hidden until it holds focus, then it appears over the treemap, and the
- * focused item is outlined on the map.
+ * A screen reader can't read the canvas, so the current folder's items are also listed as
+ * buttons, including the ones too small to draw and the folders the scan couldn't read.
+ * The list stays out of the tab order, since the map itself is the one tab stop; VoiceOver
+ * still reaches every button, and the item it's on is outlined on the map.
  */
 const TreemapItems = memo(function TreemapItems({
   root,
@@ -722,7 +994,9 @@ const TreemapItems = memo(function TreemapItems({
         <li key={child.path} className="flex items-center gap-1">
           <button
             type="button"
+            tabIndex={-1}
             aria-pressed={child.path === selectedPath}
+            disabled={child.kind === "unreadable" || child.kind === "volume"}
             onClick={() => onSelect(child)}
             onFocus={() =>
               onFocusItem(child.kind === "aggregate" ? null : child.path)
@@ -731,12 +1005,17 @@ const TreemapItems = memo(function TreemapItems({
           >
             {child.name}{" "}
             <span className="text-code-sm text-(--role-text-secondary,var(--color-rambutan-400)) tabular-nums">
-              {formatBytes(child.size)}
+              {child.kind === "unreadable"
+                ? "couldn’t be read"
+                : child.kind === "volume"
+                  ? `${formatBytes(child.size)}, another volume`
+                  : formatBytes(child.size)}
             </span>
           </button>
           {isOpenable(child, root) && (
             <button
               type="button"
+              tabIndex={-1}
               onClick={() => onEnterDir(child)}
               onFocus={() => onFocusItem(child.path)}
               aria-label={`Open ${child.name}`}
