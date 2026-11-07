@@ -9,14 +9,20 @@ struct ActivityTable: NSViewRepresentable {
     let listing: ActivityListing
     /// While searching, System opens so matching macOS processes are visible.
     let opensSystem: Bool
+    /// True while the table ranks a range, so its columns say they hold averages.
+    var ranged = false
+    /// The View menu's text size; rows grow with it.
+    var textScale: Double = 1
     @Binding var selection: ActivityRowID?
     @Binding var expanded: Set<ActivityRowID>
     @Binding var sort: ActivitySort
+    /// Asks to quit a row's app, from its context menu.
+    var quit: (ActivityListing.App) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let outline = NSOutlineView()
+        let outline = ActivityOutlineView()
         outline.style = .fullWidth
         outline.rowHeight = 26
         outline.intercellSpacing = NSSize(width: 10, height: 0)
@@ -30,7 +36,7 @@ struct ActivityTable: NSViewRepresentable {
             let tableColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(column.rawValue))
             tableColumn.title = column.title
             tableColumn.headerToolTip = column.help
-            tableColumn.width = column == .name ? 320 : 92
+            tableColumn.width = column == .name ? 320 : column == .power ? 76 : 92
             tableColumn.minWidth = column == .name ? 200 : 64
             tableColumn.sortDescriptorPrototype = NSSortDescriptor(key: column.rawValue, ascending: column == .name)
             if column != .name { tableColumn.headerCell.alignment = .right }
@@ -40,6 +46,10 @@ struct ActivityTable: NSViewRepresentable {
         outline.sortDescriptors = [Self.descriptor(sort)]
         outline.dataSource = context.coordinator
         outline.delegate = context.coordinator
+        context.coordinator.currentOutline = outline
+        let menu = NSMenu()
+        menu.delegate = context.coordinator
+        outline.menu = menu
         let scroll = NSScrollView()
         scroll.documentView = outline
         scroll.hasVerticalScroller = true
@@ -58,7 +68,7 @@ struct ActivityTable: NSViewRepresentable {
         NSSortDescriptor(key: sort.column.rawValue, ascending: sort.ascending)
     }
 
-    @MainActor final class Coordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate {
+    @MainActor final class Coordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate, NSMenuDelegate {
         private var table: ActivityTable
         private var roots: [ActivityNode] = []
         private var nodes: [ActivityRowID: ActivityNode] = [:]
@@ -69,10 +79,26 @@ struct ActivityTable: NSViewRepresentable {
 
         init(_ table: ActivityTable) { self.table = table }
 
+        private var scale: Double = 1
+        private var ranged = false
+
         func update(_ outline: NSOutlineView, with table: ActivityTable) {
             self.table = table
             isUpdating = true
             defer { isUpdating = false }
+            (outline as? ActivityOutlineView)?.copyText = { [weak self, weak outline] in outline.flatMap { self?.copyText(in: $0) } }
+            if scale != table.textScale {
+                scale = table.textScale
+                outline.rowHeight = (26 * scale).rounded()
+            }
+            if ranged != table.ranged || outline.tableColumns.contains(where: { $0.title.isEmpty }) {
+                ranged = table.ranged
+                for column in outline.tableColumns {
+                    guard let id = ActivityColumn(rawValue: column.identifier.rawValue) else { continue }
+                    column.title = id.title(ranged: ranged)
+                    column.headerToolTip = id.help(ranged: ranged)
+                }
+            }
             rebuild(table.listing)
             let descriptor = ActivityTable.descriptor(table.sort)
             if outline.sortDescriptors.first != descriptor { outline.sortDescriptors = [descriptor] }
@@ -141,11 +167,11 @@ struct ActivityTable: NSViewRepresentable {
             guard let node = item as? ActivityNode, let id = tableColumn?.identifier, let column = ActivityColumn(rawValue: id.rawValue) else { return nil }
             if column == .name {
                 let cell = outlineView.makeView(withIdentifier: ActivityNameCell.identifier, owner: nil) as? ActivityNameCell ?? ActivityNameCell()
-                cell.show(node)
+                cell.show(node, scale: scale)
                 return cell
             }
             let cell = outlineView.makeView(withIdentifier: ActivityNumberCell.identifier, owner: nil) as? ActivityNumberCell ?? ActivityNumberCell()
-            cell.show(node, column: column)
+            cell.show(node, column: column, scale: scale)
             return cell
         }
 
@@ -184,27 +210,85 @@ struct ActivityTable: NSViewRepresentable {
             guard !isUpdating, let first = outlineView.sortDescriptors.first, let key = first.key, let column = ActivityColumn(rawValue: key) else { return }
             table.sort = ActivitySort(column: column, ascending: first.ascending)
         }
+
+        // MARK: Context menu and copy
+
+        /// The clicked row's actions, as Activity Monitor offers them, built when the menu opens.
+        func menuNeedsUpdate(_ menu: NSMenu) {
+            menu.removeAllItems()
+            guard let outline = currentOutline, outline.clickedRow >= 0, let node = outline.item(atRow: outline.clickedRow) as? ActivityNode else { return }
+            let actions = DiskItemMenu()
+            if case .app(let app) = node.content {
+                let refusal = ProcessControl.refusal(kind: app.identity.kind, members: app.members, isRunning: app.isRunning)
+                actions.add("Quit…", enabled: refusal == nil) { [table] in table.quit(app) }
+                actions.separator()
+                actions.add("Reveal in Finder", enabled: !app.executable.isEmpty) { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: app.executable)]) }
+            }
+            actions.add("Copy Name") { Self.copy(node.name) }
+            if case .app(let app) = node.content, !app.executable.isEmpty { actions.add("Copy Path") { Self.copy(app.executable) } }
+            if let pids = node.pids, !pids.isEmpty { actions.add(pids.count == 1 ? "Copy PID" : "Copy PIDs") { Self.copy(pids.map(String.init).joined(separator: " ")) } }
+            for item in actions.menu.items { actions.menu.removeItem(item); menu.addItem(item) }
+            menuActions = actions
+        }
+
+        /// Keeps the menu's closures alive while it's open.
+        private var menuActions: DiskItemMenu?
+        weak var currentOutline: NSOutlineView?
+
+        /// The selected row as text: its name, then its path when it has one.
+        func copyText(in outline: NSOutlineView) -> String? {
+            guard let node = outline.item(atRow: outline.selectedRow) as? ActivityNode else { return nil }
+            if case .app(let app) = node.content, !app.executable.isEmpty { return "\(node.name)\n\(app.executable)" }
+            return node.name
+        }
+
+        static func copy(_ text: String) {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        }
+    }
+}
+
+/// The table's outline view: Copy copies the selected row.
+final class ActivityOutlineView: NSOutlineView {
+    var copyText: (() -> String?)?
+
+    @objc func copy(_ sender: Any?) {
+        guard let text = copyText?() else { NSSound.beep(); return }
+        ActivityTable.Coordinator.copy(text)
+    }
+
+    override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(copy(_:)) { return selectedRow >= 0 }
+        return super.validateUserInterfaceItem(item)
     }
 }
 
 extension ActivityColumn {
-    var title: String {
+    var title: String { title(ranged: false) }
+
+    /// While a range is ranked the figures are averages across it, so the headers say so.
+    func title(ranged: Bool) -> String {
         switch self {
         case .name: "App"
-        case .cpu: "CPU"
-        case .memory: "Memory"
-        case .read: "Disk read"
-        case .written: "Disk write"
+        case .cpu: ranged ? "Avg CPU" : "CPU"
+        case .memory: ranged ? "Avg memory" : "Memory"
+        case .power: ranged ? "Avg power" : "Power"
+        case .read: ranged ? "Avg read" : "Disk read"
+        case .written: ranged ? "Avg write" : "Disk write"
         }
     }
 
-    var help: String {
+    var help: String { help(ranged: false) }
+
+    func help(ranged: Bool) -> String {
         switch self {
         case .name: "Apps and the processes they run. macOS's own processes are grouped under System."
-        case .cpu: "Share of your whole Mac: 100% means every core is busy."
-        case .memory: "Physical memory footprint, summed across an app's processes. Memory they share can count more than once."
-        case .read: "Data read from disk per second."
-        case .written: "Data written to disk per second."
+        case .cpu: ranged ? "Average share of your whole Mac across the range, counting the time an app wasn't running as idle." : "Share of your whole Mac: 100% means every core is busy. A badge marks an app with a process holding a whole core."
+        case .memory: ranged ? "Average footprint while the app ran in the range." : "Physical memory footprint, summed across an app's processes. Memory they share can count more than once."
+        case .power: "An estimate in watts, from the energy macOS counts for each process. Protected processes have none."
+        case .read: ranged ? "Average data read from disk per second across the range." : "Data read from disk per second."
+        case .written: ranged ? "Average data written to disk per second across the range." : "Data written to disk per second."
         }
     }
 }
@@ -280,6 +364,18 @@ extension ActivityColumn {
 
     /// Whether the row's figures are missing because macOS protects it, so its name carries a lock.
     var isLocked: Bool { isProtected && values?.memory == nil }
+
+    /// One of its processes holds most of a core, which a share of the whole Mac hides.
+    var holdsACore: Bool { (values?.cores ?? 0) >= 0.9 }
+
+    /// The row's process IDs, for Copy PID.
+    var pids: [Int32]? {
+        switch content {
+        case .header, .system: nil
+        case .app(let app): app.members.map(\.pid).sorted()
+        case .helper(let helper, _): helper.pids
+        }
+    }
 }
 
 /// Keeps bruhs text colours on the translucent persimmon selection, rather than AppKit's
@@ -297,9 +393,20 @@ final class ActivityRowView: NSTableRowView {
 
     override var interiorBackgroundStyle: NSView.BackgroundStyle { .normal }
 
+    /// The accent marks the selection only while the table has focus, as AppKit's own tables do; otherwise a neutral
+    /// fill keeps the row marked without claiming the keyboard. A ring with the fill keeps it visible in light mode,
+    /// where the translucent fill alone is faint against the canvas.
     override func drawSelection(in dirtyRect: NSRect) {
-        NSColor(BruhsColor.selection).setFill()
-        NSBezierPath(cgPath: Path(roundedRect: bounds.insetBy(dx: 4, dy: 1), cornerRadius: BruhsRadius.seed, style: .continuous).cgPath).fill()
+        let shape = NSBezierPath(cgPath: Path(roundedRect: bounds.insetBy(dx: 4.5, dy: 1.5), cornerRadius: BruhsRadius.seed, style: .continuous).cgPath)
+        if isEmphasized {
+            BruhsNSColor.selection.setFill(); shape.fill()
+            BruhsNSColor.accent.withAlphaComponent(0.55).setStroke()
+        } else {
+            BruhsNSColor.text.withAlphaComponent(0.08).setFill(); shape.fill()
+            BruhsNSColor.hairline.setStroke()
+        }
+        shape.lineWidth = 1
+        shape.stroke()
     }
 
     override func drawBackground(in dirtyRect: NSRect) {
@@ -315,6 +422,7 @@ final class ActivityNameCell: NSTableCellView {
     private let icon = NSImageView()
     private let name = NSTextField(labelWithString: "")
     private let count = CountBadgeView()
+    private let core = CountBadgeView()
     private let lock = NSImageView()
     private let detail = NSTextField(labelWithString: "")
 
@@ -331,6 +439,9 @@ final class ActivityNameCell: NSTableCellView {
         detail.textColor = NSColor(BruhsColor.textTertiary)
         detail.setAccessibilityElement(false)
         count.setAccessibilityElement(false)
+        core.setAccessibilityElement(false)
+        core.text = "Full core"
+        core.toolTip = "One of its processes keeps a whole core busy. On a Mac with many cores that reads as a small share."
         lock.image = NSImage(systemSymbolName: "lock.fill", accessibilityDescription: nil)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold))
         lock.contentTintColor = BruhsNSColor.textTertiary
@@ -339,11 +450,11 @@ final class ActivityNameCell: NSTableCellView {
         // The name keeps its width and the marks after it never shrink; the secondary text gives way first.
         name.setContentCompressionResistancePriority(.defaultLow + 1, for: .horizontal)
         detail.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        for mark in [count, lock] as [NSView] {
+        for mark in [count, core, lock] as [NSView] {
             mark.setContentCompressionResistancePriority(.required, for: .horizontal)
             mark.setContentHuggingPriority(.required, for: .horizontal)
         }
-        let stack = NSStackView(views: [icon, name, count, lock, detail])
+        let stack = NSStackView(views: [icon, name, count, core, lock, detail])
         stack.orientation = .horizontal
         stack.spacing = 6
         stack.alignment = .centerY
@@ -359,54 +470,72 @@ final class ActivityNameCell: NSTableCellView {
 
     required init?(coder: NSCoder) { fatalError("ActivityNameCell is created in code") }
 
-    func show(_ node: ActivityNode) {
+    func show(_ node: ActivityNode, scale: Double = 1) {
+        let size = { (points: CGFloat) in (points * scale).rounded() }
         name.stringValue = node.name
+        count.scale = scale
         count.count = node.groupedCount ?? 0
         count.isHidden = node.groupedCount == nil
+        core.scale = scale
+        core.isHidden = !node.holdsACore
         lock.isHidden = !node.isLocked
         detail.stringValue = node.detail ?? ""
         detail.isHidden = node.detail == nil
+        detail.font = .systemFont(ofSize: size(12))
         switch node.content {
         case .header:
             icon.isHidden = true
-            name.font = .systemFont(ofSize: 11, weight: .semibold)
+            name.font = .systemFont(ofSize: size(11), weight: .semibold)
             name.textColor = NSColor(BruhsColor.textSecondary)
         case .app(let app):
             icon.isHidden = false
             icon.image = AppIconCache.shared.icon(for: app.executable)
-            name.font = .systemFont(ofSize: 13)
+            name.font = .systemFont(ofSize: size(13))
             name.textColor = NSColor(app.isRunning ? BruhsColor.text : BruhsColor.textSecondary)
         case .helper:
             icon.isHidden = true
-            name.font = .systemFont(ofSize: 13)
+            name.font = .systemFont(ofSize: size(13))
             name.textColor = NSColor(BruhsColor.textSecondary)
         case .system:
             icon.isHidden = true
-            name.font = .systemFont(ofSize: 13, weight: .semibold)
+            name.font = .systemFont(ofSize: size(13), weight: .semibold)
             name.textColor = NSColor(BruhsColor.text)
         }
-        let spoken = node.isLocked ? "\(node.summary), protected by macOS" : node.summary
+        var spoken = node.isLocked ? "\(node.summary), protected by macOS" : node.summary
+        if node.holdsACore { spoken += ", holds a whole core" }
         name.setAccessibilityLabel(spoken)
         toolTip = spoken
     }
 }
 
-/// A process count beside a row's name, drawn like BruhsBadge: Monaspace digits in a rounded box with a hairline ring.
+/// A process count or short tag beside a row's name, drawn like BruhsBadge: Monaspace digits, or system text for
+/// words, in a rounded box with a hairline ring.
 final class CountBadgeView: NSView {
     var count = 0 {
         didSet { if count != oldValue { invalidateIntrinsicContentSize(); needsDisplay = true } }
     }
+    /// A word instead of a count, such as "Full core".
+    var text: String? {
+        didSet { if text != oldValue { invalidateIntrinsicContentSize(); needsDisplay = true } }
+    }
+    var scale: Double = 1 {
+        didSet { if scale != oldValue { invalidateIntrinsicContentSize(); needsDisplay = true } }
+    }
 
-    private var text: NSAttributedString {
-        let font = BruhsFonts.isAvailable ? NSFont(name: "MonaspaceNeonVar-Regular", size: 10.5) : nil
+    private var label: NSAttributedString {
+        let size = (10.5 * scale).rounded(.toNearestOrAwayFromZero)
+        if let text {
+            return NSAttributedString(string: text, attributes: [.font: NSFont.systemFont(ofSize: size, weight: .medium), .foregroundColor: BruhsNSColor.textSecondary])
+        }
+        let font = BruhsFonts.isAvailable ? NSFont(name: "MonaspaceNeonVar-Regular", size: size) : nil
         return NSAttributedString(string: String(count), attributes: [
-            .font: font ?? .monospacedDigitSystemFont(ofSize: 10.5, weight: .regular),
+            .font: font ?? .monospacedDigitSystemFont(ofSize: size, weight: .regular),
             .foregroundColor: BruhsNSColor.textSecondary,
         ])
     }
 
     override var intrinsicContentSize: NSSize {
-        let size = text.size()
+        let size = label.size()
         return NSSize(width: ceil(size.width) + 10, height: ceil(size.height) + 3)
     }
 
@@ -420,9 +549,9 @@ final class CountBadgeView: NSView {
         BruhsNSColor.hairline.setStroke()
         shape.lineWidth = 1
         shape.stroke()
-        let text = text
-        let size = text.size()
-        text.draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2))
+        let label = label
+        let size = label.size()
+        label.draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2))
     }
 }
 
@@ -449,13 +578,13 @@ final class ActivityNumberCell: NSTableCellView {
 
     required init?(coder: NSCoder) { fatalError("ActivityNumberCell is created in code") }
 
-    func show(_ node: ActivityNode, column: ActivityColumn) {
+    func show(_ node: ActivityNode, column: ActivityColumn, scale: Double = 1) {
         guard let values = node.values else {
             label.stringValue = ""; toolTip = nil; label.setAccessibilityLabel(nil)
             return
         }
         let figure = ActivityFigure(column, values)
-        label.font = Self.font
+        label.font = Self.font(scale)
         label.textColor = BruhsNSColor.text
         switch figure {
         case .unavailable:
@@ -471,8 +600,8 @@ final class ActivityNumberCell: NSTableCellView {
         label.setAccessibilityLabel("\(column.title) \(figure.spoken(protected: node.isProtected))")
     }
 
-    private static var font: NSFont {
-        let size: CGFloat = 12
+    private static func font(_ scale: Double) -> NSFont {
+        let size: CGFloat = (12 * scale).rounded()
         return BruhsFonts.isAvailable ? NSFont(name: "MonaspaceNeonVar-Regular", size: size) ?? .monospacedDigitSystemFont(ofSize: size, weight: .regular)
             : .monospacedDigitSystemFont(ofSize: size, weight: .regular)
     }
@@ -496,7 +625,10 @@ enum ActivityFigure: Equatable {
             self = cpu < 0.05 ? .zero("0%") : .value(percent(cpu), spoken: percent(cpu))
         case .memory:
             guard let memory = values.memory else { self = .unavailable; return }
-            self = memory == 0 ? .zero(bytes(0)) : .value(bytes(memory), spoken: bytes(memory))
+            self = memory == 0 ? .zero(memorySize(0)) : .value(memorySize(memory), spoken: memorySize(memory))
+        case .power:
+            guard let power = values.power else { self = .unavailable; return }
+            self = power < 0.05 ? .zero("0 W") : .value(watts(power), spoken: "\(watts(power).replacingOccurrences(of: " W", with: "")) watts")
         case .read, .written:
             guard let speed = column == .read ? values.read : values.written else { self = .unavailable; return }
             self = speed < 1 ? .zero(rate(0)) : .value(rate(speed), spoken: "\(bytes(UInt64(speed))) per second")

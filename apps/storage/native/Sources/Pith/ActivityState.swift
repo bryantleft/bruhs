@@ -18,9 +18,19 @@ enum ActivityRowID: Hashable {
     }
 }
 
+/// What the Activity chart plots.
+enum ChartMetric: String, CaseIterable, Identifiable {
+    case cpu, memory
+    var id: Self { self }
+    var title: String { self == .cpu ? "CPU" : "Memory" }
+    /// The table column a dragged range ranks by.
+    var column: ActivityColumn { self == .cpu ? .cpu : .memory }
+}
+
 /// What the Activity tab shows. It lives with the window, so switching to Disk and back
 /// keeps the search, selection, disclosure and ranked range.
 @MainActor @Observable final class ActivityState {
+    var chartMetric = ChartMetric.cpu
     var search = ""
     var includeExited = false
     var selection: ActivityRowID?
@@ -30,11 +40,16 @@ enum ActivityRowID: Hashable {
     private(set) var range: ClosedRange<Double>?
     /// The sort to restore on Back to Live: ranking a range sorts by CPU, as the scope bar says.
     private var liveSort: ActivitySort?
+    /// A quit waiting for the user to confirm, from the inspector or a row's menu.
+    var quitRequest: QuitRequest?
+    /// How the last quit went, until it's dismissed or another starts.
+    var quitOutcome: QuitOutcome?
 
+    /// Ranks the table by `range`, by the metric the chart shows.
     func rank(by range: ClosedRange<Double>) {
         if self.range == nil {
             liveSort = sort
-            sort = .cpuDescending
+            sort = ActivitySort(column: chartMetric.column, ascending: false)
         }
         self.range = range
     }

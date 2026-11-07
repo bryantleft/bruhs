@@ -10,12 +10,14 @@ struct ActivityInspector: View {
     let selection: ActivityRowID?
     /// The ranked range, when the table is showing one.
     let range: ClosedRange<Double>?
+    /// Asks to quit the app, which Activity confirms.
+    var quit: (QuitRequest) -> Void = { _ in }
 
     var body: some View {
         if selection == .system, let system = listing.system {
-            SystemInspector(system: system)
+            SystemInspector(system: system, snapshot: model.paused ? nil : model.snapshot)
         } else if let id = selection?.appID, let timeline = model.history.apps[id] {
-            AppInspector(model: model, timeline: timeline, range: range)
+            AppInspector(model: model, timeline: timeline, range: range, quit: quit)
         }
     }
 }
@@ -35,7 +37,9 @@ private struct AppInspector: View {
     let model: ActivityModel
     let timeline: AppTimeline
     let range: ClosedRange<Double>?
-    @State private var confirmingQuit = false
+    let quit: (QuitRequest) -> Void
+    /// Read when the inspector opens for an app, off the main thread.
+    @State private var details: (id: String, arguments: [String]?, signer: String?)?
 
     private var app: AppSample { timeline.latest }
     /// This app's processes in the latest sample, busiest first; empty once it has quit.
@@ -62,12 +66,17 @@ private struct AppInspector: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .bruhsScrollers(inset: 6)
         }
-        .alert("Quit \(app.name)?", isPresented: $confirmingQuit) {
-            Button("Quit") { _ = runningApp?.terminate() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Pith asks \(app.name) to quit, the same as choosing Quit in the app, so it can still ask you to save your work.")
-        }
+        .task(id: app.id) { await loadDetails() }
+    }
+
+    /// The owner process's arguments and who signed the app: too slow for every sample, cheap once per selection.
+    private func loadDetails() async {
+        let id = app.id, executable = app.executable
+        let owner = app.members.min { $0.started < $1.started }
+        let found = await Task.detached(priority: .userInitiated) {
+            (owner.flatMap { ProcessDetails.arguments($0.pid) }, ProcessDetails.signer(executable))
+        }.value
+        details = (id, found.0, found.1)
     }
 
     // MARK: Sections
@@ -126,8 +135,9 @@ private struct AppInspector: View {
         let usage = range.flatMap { model.history.usage(of: timeline.id, in: $0) }
         let cpu = MiniTrend.points(timeline.points.map { (time: $0.uptime, value: $0.cpu) }, maxGap: ActivityModel.maxGap)
         let footprints = timeline.points.compactMap(\.memory)
-        // Memory has no fixed ceiling, so the trend's top is 10% above the window's largest footprint.
-        let ceiling = Double(footprints.max() ?? 0) * 1.1
+        // A share of the Mac's memory, as CPU is a share of the Mac: a steady footprint draws as a steady line at its
+        // honest height, rather than a block near the top of a scale fitted to its own peak.
+        let ceiling = Double(model.snapshot?.memory?.physical ?? ProcessInfo.processInfo.physicalMemory)
         let memory = MiniTrend.points(timeline.points.map { (time: $0.uptime, value: ceiling > 0 ? $0.memory.map { Double($0) / ceiling * 100 } : nil) }, maxGap: ActivityModel.maxGap)
         // Live figures match the table, where an app that has quit uses nothing.
         let now = timeline.isRunning ? ActivityListing.Values(cpu: app.cpu, memory: app.memory, read: nil, written: nil) : ActivityListing.Values(cpu: 0, memory: 0, read: nil, written: nil)
@@ -145,11 +155,11 @@ private struct AppInspector: View {
             }
             MiniTrend(points: cpu, window: window, height: 40, highlight: range, label: "\(app.name) CPU over the last \(minutes) minutes")
                 .accessibilityValue(spokenRange(timeline.points.compactMap(\.cpu)) { "\(Int($0.rounded())) percent" })
-            trendHeader("Memory") {
+            trendHeader("Memory", detail: "share of your Mac's memory") {
                 if range == nil {
                     FigureText(figure: ActivityFigure(.memory, now), showsZero: true)
                 } else if let memory = usage?.memory {
-                    LabeledFigure(label: "Avg", value: bytes(memory))
+                    LabeledFigure(label: "Avg", value: memorySize(memory))
                 } else {
                     noReadings
                 }
@@ -157,7 +167,7 @@ private struct AppInspector: View {
             .padding(.top, 6)
             MiniTrend(points: memory, window: window, height: 40, tint: ActivityPalette.memory, fill: ActivityPalette.memoryFill, highlight: range,
                       label: "\(app.name) memory over the last \(minutes) minutes")
-                .accessibilityValue(spokenRange(footprints) { bytes($0) })
+                .accessibilityValue(spokenRange(footprints) { memorySize($0) })
             // Both trends share the session window; its ends, labelled once, say how far back they go.
             HStack {
                 Text("\(minutes) min ago")
@@ -171,9 +181,10 @@ private struct AppInspector: View {
     }
 
     /// A trend's name with its figures: the latest value while live, or the ranked range's average and peak.
-    private func trendHeader<Figures: View>(_ title: String, @ViewBuilder figures: () -> Figures) -> some View {
+    private func trendHeader<Figures: View>(_ title: String, detail: String? = nil, @ViewBuilder figures: () -> Figures) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(title).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.textSecondary)
+                .help(detail ?? "")
             Spacer(minLength: 8)
             figures()
         }
@@ -208,6 +219,30 @@ private struct AppInspector: View {
                     Text(openedBy).font(BruhsType.dataSmall).foregroundStyle(BruhsColor.text).textSelection(.enabled)
                 }
             }
+            if let details, details.id == app.id {
+                if let signer = details.signer {
+                    GridRow {
+                        factLabel("Signed by")
+                        Text(signer).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.text).textSelection(.enabled)
+                    }
+                }
+                if let arguments = details.arguments, !arguments.isEmpty {
+                    GridRow {
+                        factLabel("Arguments")
+                        Text(arguments.joined(separator: " ")).font(BruhsType.dataSmall).foregroundStyle(BruhsColor.text)
+                            .lineLimit(4).truncationMode(.middle).textSelection(.enabled)
+                            .help(arguments.joined(separator: " "))
+                    }
+                }
+            }
+            if timeline.isRunning, !app.keepsAwake.isEmpty {
+                GridRow {
+                    factLabel("Keeps awake")
+                    Text(Array(Set(app.keepsAwake)).sorted().joined(separator: ", ")).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .help("It has asked macOS not to sleep, for the reasons it gave.")
+                }
+            }
         }
     }
 
@@ -218,7 +253,7 @@ private struct AppInspector: View {
     private var processList: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text(range == nil ? "Processes" : "Processes Now").font(BruhsType.sectionTitle).foregroundStyle(BruhsColor.textSecondary)
+                Text(range == nil ? "Processes" : "Processes now").font(BruhsType.sectionTitle).foregroundStyle(BruhsColor.textSecondary)
                 if processes.count > 1 { BruhsBadge(text: String(processes.count), isData: true) }
             }
             .accessibilityElement(children: .combine)
@@ -249,34 +284,24 @@ private struct AppInspector: View {
     }
 
     private var actions: some View {
-        HStack(spacing: 8) {
+        let refusal = ProcessControl.refusal(kind: app.identity.kind, members: app.members, isRunning: timeline.isRunning)
+        return HStack(spacing: 8) {
             Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: app.executable)]) }
                 .buttonStyle(.bruhsGhost)
                 .disabled(app.executable.isEmpty)
-            Button("Quit…") { confirmingQuit = true }
+            // Any app or tool the user owns, menu bar apps and command-line tools included; macOS refuses the rest.
+            Button("Quit…") { quit(QuitRequest(appID: app.id, name: app.name, kind: app.identity.kind, members: app.members)) }
                 .buttonStyle(.bruhsSoftDanger)
-                .disabled(runningApp == nil)
-                .help(quitHelp)
+                .disabled(refusal != nil)
+                .help(refusal ?? "Quit or Force Quit \(app.name)")
         }
-    }
-
-    /// The app's own process, if it's a regular app (one with a Dock icon) that can be asked to quit.
-    private var runningApp: NSRunningApplication? {
-        guard timeline.isRunning, app.identity.kind != .system else { return nil }
-        let pids = Set(app.members.map(\.pid))
-        return NSWorkspace.shared.runningApplications.first { pids.contains($0.processIdentifier) && $0.activationPolicy == .regular }
-    }
-
-    private var quitHelp: String {
-        if app.identity.kind == .system { return "macOS needs its system processes, so Pith doesn't quit them" }
-        if !timeline.isRunning { return "\(app.name) has already quit" }
-        if runningApp == nil { return "Only apps with a Dock icon can be asked to quit" }
-        return "Ask \(app.name) to quit"
     }
 }
 
 private struct SystemInspector: View {
     let system: ActivityListing.System
+    /// The latest sample, for the CPU no readable app accounts for, the core tiers and memory. Nil while paused.
+    let snapshot: ActivitySnapshot?
 
     var body: some View {
         ScrollView {
@@ -310,6 +335,7 @@ private struct SystemInspector: View {
                         .accessibilityLabel("\(column.title) \(figure.spoken(protected: false))")
                     }
                 }
+                if let snapshot { macFacts(snapshot) }
                 if !busiest.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Busiest").font(BruhsType.sectionTitle).foregroundStyle(BruhsColor.textSecondary)
@@ -333,6 +359,54 @@ private struct SystemInspector: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .bruhsScrollers(inset: 6)
         }
+    }
+
+    /// The whole Mac: CPU that no readable process accounts for, each tier of cores, and how memory is used.
+    private func macFacts(_ snapshot: ActivitySnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("This Mac").font(BruhsType.sectionTitle).foregroundStyle(BruhsColor.textSecondary).accessibilityAddTraits(.isHeader)
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 6) {
+                if let unattributed = snapshot.unattributedCPU {
+                    factRow("Protected and kernel", percent(unattributed),
+                            help: "CPU the Mac used that no process Pith can read accounts for: protected processes and the macOS kernel.")
+                }
+                ForEach(snapshot.tiers, id: \.name) { tier in
+                    if let busy = tier.busy { factRow("\(tier.name) cores", percent(busy), help: "How busy the \(tier.cores) \(tier.name.lowercased()) cores are.") }
+                }
+                if let gpu = snapshot.gpu { factRow("GPU", percent(gpu), help: "How busy the graphics processor is.") }
+                if let received = snapshot.networkIn, let sent = snapshot.networkOut {
+                    factRow("Network in", rate(received), help: "Data received per second over every network connection.")
+                    factRow("Network out", rate(sent), help: "Data sent per second over every network connection.")
+                }
+                if let battery = snapshot.battery {
+                    factRow("Battery", batteryText(battery), help: "As macOS's battery menu reports it.")
+                }
+                if let memory = snapshot.memory {
+                    factRow("Memory used", "\(memorySize(memory.used)) of \(memorySize(memory.physical))", help: "App memory, wired and compressed memory together.")
+                    factRow("App memory", memorySize(memory.app), help: "Memory apps hold.")
+                    factRow("Wired", memorySize(memory.wired), help: "Memory macOS keeps in place and can't compress or swap.")
+                    factRow("Compressed", memorySize(memory.compressed), help: "Memory macOS compressed to make room before it swaps.")
+                    factRow("Cached files", memorySize(memory.cached), help: "Files kept in memory so they open quickly. macOS gives this up when it needs room.")
+                    if let swap = memory.swapUsed { factRow("Swap used", memorySize(swap), help: "Memory macOS moved to the disk.") }
+                }
+            }
+        }
+    }
+
+    /// "82%, charging", "64%, 3 h 10 min left" or "100%, on power".
+    private func batteryText(_ battery: BatteryState) -> String {
+        let state = battery.isCharging ? "charging" : battery.onPower ? "on power"
+            : battery.minutesLeft.map { Duration.seconds($0 * 60).formatted(.units(allowed: [.hours, .minutes], width: .abbreviated)) + " left" } ?? "on battery"
+        return "\(battery.percent)%, \(state)"
+    }
+
+    private func factRow(_ label: String, _ value: String, help: String) -> some View {
+        GridRow {
+            Text(label).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.textSecondary)
+            Text(verbatim: value).font(BruhsType.dataSmall).foregroundStyle(BruhsColor.text)
+        }
+        .help(help)
+        .accessibilityElement(children: .combine)
     }
 
     private var summary: String {

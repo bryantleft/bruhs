@@ -21,6 +21,8 @@ public struct AppUsage: Equatable, Sendable {
     public let memoryAcrossRange: Double?
     public let read: Double?
     public let written: Double?
+    /// Watts, averaged like CPU.
+    public let power: Double?
     /// Distinct processes that belonged to the app at any sample in the range.
     public let processes: Int
 }
@@ -70,7 +72,22 @@ extension SessionHistory {
             memoryAcrossRange: average { point in point.memory.map { Double($0) } },
             read: average(\.read),
             written: average(\.written),
+            power: average(\.power),
             processes: Set(points.flatMap(\.members)).count)
+    }
+
+    /// The apps that used the most at one moment, for the chart's hover: each app's reading at the sample nearest
+    /// `uptime`, within `tolerance` seconds. Apps record a point with every sample, so one sample time fits all.
+    public func topApps(at uptime: Double, byMemory: Bool, limit: Int, tolerance: Double) -> [(app: AppSample, value: Double)] {
+        guard let moment = system.min(by: { abs($0.uptime - uptime) < abs($1.uptime - uptime) })?.uptime, abs(moment - uptime) <= tolerance else { return [] }
+        var found: [(app: AppSample, value: Double)] = []
+        for timeline in apps.values {
+            // Points are in time order: search from the end, where the moment usually is.
+            guard let point = timeline.points.last(where: { $0.uptime <= moment }), point.uptime == moment else { continue }
+            let value = byMemory ? point.memory.map { Double($0) } : point.cpu
+            if let value, value > 0 { found.append((timeline.latest, value)) }
+        }
+        return Array(found.sorted { $0.value > $1.value }.prefix(limit))
     }
 
     /// The wall-clock time of an uptime, measured from the latest sample.

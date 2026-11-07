@@ -9,6 +9,7 @@ struct ActivityView: View {
     let model: ActivityModel
     @Bindable var state: ActivityState
     @AppStorage("inspectorWidth") private var inspectorWidth = 300.0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let range = rankedRange
@@ -17,17 +18,12 @@ struct ActivityView: View {
         HStack(spacing: 12) {
             content(listing, range: range)
             // The inspector shows only while a row is selected: a card inset from the window's edges and the toolbar.
-            if inspecting {
-                BruhsSidePanel(width: $inspectorWidth, widths: 260...420, close: { state.selection = nil }) {
-                    ActivityInspector(model: model, listing: listing, selection: state.selection, range: range)
-                }
-                .padding([.top, .trailing, .bottom], 12)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-            }
+            if inspecting { inspector(listing, range: range) }
         }
         .animation(BruhsMotion.standard(duration: BruhsMotion.fast), value: inspecting)
+        .modifier(QuitConfirmation(state: state, run: run))
         .navigationSubtitle(subtitle(range))
-        .searchable(text: $state.search, placement: .toolbar, prompt: "Search apps or PID")
+        .searchable(text: $state.search, placement: .toolbar, prompt: "Search, or filter: cpu>10 mem>1gb kind:tool")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
@@ -49,6 +45,17 @@ struct ActivityView: View {
             // A ranked range that has aged out of the ten-minute history has nothing left to rank.
             if state.range != nil && rankedRange == nil { state.backToLive() }
         }
+    }
+
+    /// The selected row's details, in a card beside the table.
+    private func inspector(_ listing: ActivityListing, range: ClosedRange<Double>?) -> some View {
+        BruhsSidePanel(width: $inspectorWidth, widths: 260...420, close: { state.selection = nil }) {
+            ActivityInspector(model: model, listing: listing, selection: state.selection, range: range,
+                              quit: { state.quitRequest = $0 })
+        }
+        .padding([.top, .trailing, .bottom], 12)
+        // Reduce Motion fades the card in place rather than sliding it.
+        .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
     }
 
     /// The chart, the scope bar while a range is ranked, and the table.
@@ -73,7 +80,14 @@ struct ActivityView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
             }
-            ActivityTable(listing: listing, opensSystem: !query.isEmpty, selection: $state.selection, expanded: $state.expanded, sort: $state.sort)
+            if let outcome = state.quitOutcome {
+                QuitOutcomeBar(outcome: outcome, forceQuit: { forceQuit(outcome.appID) }, dismiss: { state.quitOutcome = nil })
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+            }
+            ActivityTable(listing: listing, opensSystem: !query.isEmpty, ranged: range != nil, textScale: TextSize.shared.scale,
+                          selection: $state.selection, expanded: $state.expanded, sort: $state.sort,
+                          quit: { app in state.quitRequest = QuitRequest(appID: app.id, name: app.identity.displayName, kind: app.identity.kind, members: app.members) })
                 .overlay { emptyState(listing, range: range) }
                 .padding(.top, 10)
         }
@@ -115,6 +129,24 @@ struct ActivityView: View {
         }
     }
 
+    /// Runs a quit and, when it was a polite one, checks back in a few seconds: an app that's still running gets Force Quit.
+    private func run(_ outcome: QuitOutcome, for request: QuitRequest) {
+        state.quitOutcome = outcome
+        guard !outcome.isProblem, !outcome.offersForceQuit else { return }
+        Task {
+            // Long enough for an app to finish quitting, short enough that the user is still looking.
+            try? await Task.sleep(for: .seconds(4))
+            guard state.quitOutcome == outcome, ProcessControl.isRunning(request.members) else { return }
+            state.quitOutcome = QuitOutcome(appID: request.appID, message: "\(request.name) is still running.", offersForceQuit: true)
+        }
+    }
+
+    private func forceQuit(_ appID: String) {
+        guard let app = model.history.apps[appID]?.latest else { return }
+        let request = QuitRequest(appID: appID, name: app.name, kind: app.identity.kind, members: app.members)
+        state.quitOutcome = ProcessControl.forceQuit(request)
+    }
+
     /// The panel asked to show one app: select it live and reveal it, which opens the inspector.
     private func applyFocus() {
         guard let id = model.focusAppID else { return }
@@ -123,6 +155,50 @@ struct ActivityView: View {
         state.search = ""
         if model.history.apps[id]?.latest.identity.kind == .system { state.expanded.insert(.system) }
         state.selection = .app(id)
+    }
+}
+
+/// Quit or Force Quit, confirmed as Activity Monitor confirms them: one alert with both.
+private struct QuitConfirmation: ViewModifier {
+    @Bindable var state: ActivityState
+    let run: (QuitOutcome, QuitRequest) -> Void
+
+    func body(content: Content) -> some View {
+        content.alert(state.quitRequest.map { "Quit \($0.name)?" } ?? "", isPresented: Binding(get: { state.quitRequest != nil }, set: { if !$0 { state.quitRequest = nil } }),
+                      presenting: state.quitRequest) { request in
+            Button("Quit") { run(ProcessControl.quit(request), request) }
+            Button("Force Quit", role: .destructive) { run(ProcessControl.forceQuit(request), request) }
+            Button("Cancel", role: .cancel) {}
+        } message: { request in
+            Text(request.kind == .app
+                 ? "Quit asks \(request.name) to quit, as its own Quit command does, so it can ask you to save. Force Quit ends it at once, and unsaved changes are lost."
+                 : "Quit asks \(request.name) to stop, so it can clean up first. Force Quit ends it at once.")
+        }
+    }
+}
+
+/// How the last quit went, with Force Quit when an app asked to quit is still running.
+struct QuitOutcomeBar: View {
+    let outcome: QuitOutcome
+    let forceQuit: () -> Void
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: outcome.isProblem ? "exclamationmark.triangle.fill" : "checkmark.circle")
+                .foregroundStyle(outcome.isProblem ? BruhsColor.statusWarning : BruhsColor.textSecondary)
+                .accessibilityHidden(true)
+            Text(outcome.message).font(BruhsType.body).foregroundStyle(BruhsColor.text).lineLimit(2)
+            Spacer(minLength: 8)
+            if outcome.offersForceQuit {
+                Button("Force Quit", action: forceQuit).buttonStyle(.bruhsSoftDanger).help("End it at once. Unsaved changes are lost.")
+            }
+            Button(action: dismiss) { Image(systemName: "xmark") }
+                .buttonStyle(.bruhsGhost)
+                .help("Dismiss")
+                .accessibilityLabel("Dismiss")
+        }
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -165,6 +241,7 @@ struct ActivityScopeBar: View {
         case .name: "name"
         case .cpu: "average CPU"
         case .memory: "average memory"
+        case .power: "average power"
         case .read: "average disk read"
         case .written: "average disk write"
         }

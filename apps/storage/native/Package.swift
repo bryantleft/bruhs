@@ -8,7 +8,7 @@ let package = Package(
     targets: [
         .target(name: "PithSystem", linkerSettings: [.linkedLibrary("proc")]),
         .target(name: "PithCore", dependencies: ["PithSystem"]),
-        .executableTarget(name: "Pith", dependencies: ["PithCore"]),
+        .executableTarget(name: "Pith", dependencies: ["PithCore", "PithSystem"]),
         .testTarget(name: "PithCoreTests", dependencies: ["PithCore"])
     ]
 )

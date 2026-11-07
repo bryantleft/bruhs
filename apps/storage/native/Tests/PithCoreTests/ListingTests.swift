@@ -79,7 +79,7 @@ final class ListingTests: XCTestCase {
         XCTAssertEqual(included.apps.map(\.id), ["stays", "gone"])
         let exited = try XCTUnwrap(included.apps.last)
         XCTAssertFalse(exited.isRunning)
-        XCTAssertEqual(exited.values, ActivityListing.Values(cpu: 0, memory: 0, read: 0, written: 0), "An app that has quit uses nothing now.")
+        XCTAssertEqual(exited.values, ActivityListing.Values(cpu: 0, memory: 0, read: 0, written: 0, power: 0), "An app that has quit uses nothing now.")
     }
 
     func testRangesRankByAverageAndIncludeAppsThatHaveSinceExited() throws {
@@ -146,5 +146,22 @@ final class ListingTests: XCTestCase {
             app.members.map { ProcessSample(key: $0, name: app.name, path: app.executable, parent: 1, cpu: app.cpu, memory: app.memory, read: app.read, written: app.written) }
         }
         return ActivitySnapshot(date: Date(timeIntervalSince1970: time), uptime: time, cpu: 10, pressure: .normal, apps: apps, error: nil, unavailableProcesses: unavailable, processes: processes)
+    }
+}
+
+final class HelperSearchTests: XCTestCase {
+    func testSearchFindsAnAppByItsHelpersName() {
+        let app = ProcessKey(pid: 10, started: 1), helper = ProcessKey(pid: 11, started: 2)
+        let sample = AppSample(id: "chrome", name: "Google Chrome", executable: "/Applications/Google Chrome.app", members: [app, helper],
+                               cpu: 1, memory: 1, read: 0, written: 0, restricted: false)
+        let processes = [
+            ProcessSample(key: app, name: "Google Chrome", path: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", parent: 1, cpu: 1, memory: 1, read: 0, written: 0),
+            ProcessSample(key: helper, name: "Google Chrome He", path: "/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)", parent: 10, cpu: 0, memory: 1, read: 0, written: 0),
+        ]
+        var history = SessionHistory()
+        let snapshot = ActivitySnapshot(date: Date(), uptime: 0, cpu: 1, pressure: .normal, apps: [sample], error: nil, processes: processes)
+        history.append(snapshot)
+        let listing = ActivityListing(history: history, latest: snapshot, range: nil, search: "renderer", includeExited: false, sort: .cpuDescending)
+        XCTAssertEqual(listing.apps.map(\.id), ["chrome"])
     }
 }

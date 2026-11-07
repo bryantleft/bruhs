@@ -1,7 +1,7 @@
 import Foundation
 
 public enum ActivityColumn: String, Sendable, CaseIterable {
-    case name, cpu, memory, read, written
+    case name, cpu, memory, power, read, written
 }
 
 public struct ActivitySort: Equatable, Sendable {
@@ -22,8 +22,12 @@ public struct ActivityListing: Sendable {
         public var memory: UInt64?
         public var read: Double?
         public var written: Double?
-        public init(cpu: Double?, memory: UInt64?, read: Double?, written: Double?) {
-            self.cpu = cpu; self.memory = memory; self.read = read; self.written = written
+        /// Watts, an estimate from the energy macOS counts per process.
+        public var power: Double?
+        /// The busiest process's CPU in cores, live only.
+        public var cores: Double?
+        public init(cpu: Double?, memory: UInt64?, read: Double?, written: Double?, power: Double? = nil, cores: Double? = nil) {
+            self.cpu = cpu; self.memory = memory; self.read = read; self.written = written; self.power = power; self.cores = cores
         }
     }
 
@@ -65,7 +69,8 @@ public struct ActivityListing: Sendable {
     ///   - range: rank by usage across this uptime range instead of the latest sample.
     ///   - includeExited: also list apps that have quit, live only; a range lists whatever ran in it.
     public init(history: SessionHistory, latest: ActivitySnapshot?, range: ClosedRange<Double>?, search: String, includeExited: Bool, sort: ActivitySort) {
-        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        let filters = ActivityQuery(search)
+        let query = filters.text
         let processes = Dictionary((latest?.processes ?? []).map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
         let usage = range.map(history.appUsage(in:))
         var apps: [App] = []
@@ -73,7 +78,7 @@ public struct ActivityListing: Sendable {
         var systemMemoryAcrossRange: [Double] = []
         for timeline in history.apps.values {
             let sample = timeline.latest
-            guard Self.matches(sample, query) else { continue }
+            guard Self.matches(sample, query, processes: processes) else { continue }
             func row(_ values: Values, processCount: Int, helpers: [Helper] = []) -> App {
                 App(id: timeline.id, identity: sample.identity, executable: sample.executable, members: sample.members, isRunning: timeline.isRunning,
                     restricted: sample.restricted, processCount: processCount, values: values, helpers: helpers)
@@ -81,19 +86,20 @@ public struct ActivityListing: Sendable {
             let app: App
             if let usage {
                 guard let used = usage[timeline.id] else { continue }
-                app = row(Values(cpu: used.cpu, memory: used.memory, read: used.read, written: used.written), processCount: used.processes)
+                app = row(Values(cpu: used.cpu, memory: used.memory, read: used.read, written: used.written, power: used.power), processCount: used.processes)
                 if sample.identity.kind == .system, let memory = used.memoryAcrossRange { systemMemoryAcrossRange.append(memory) }
             } else if timeline.isRunning {
-                app = row(Values(cpu: sample.cpu, memory: sample.memory, read: sample.read, written: sample.written), processCount: sample.members.count,
-                    helpers: sample.members.count > 1 ? Self.helpers(sample.members, processes, sort) : [])
+                app = row(Values(cpu: sample.cpu, memory: sample.memory, read: sample.read, written: sample.written, power: sample.power, cores: sample.cores),
+                    processCount: sample.members.count, helpers: sample.members.count > 1 ? Self.helpers(sample.members, processes, sort) : [])
             } else if includeExited {
                 // An app that has quit uses nothing now; its history is in the inspector and in ranked ranges.
-                app = row(Values(cpu: 0, memory: 0, read: 0, written: 0), processCount: sample.members.count)
+                app = row(Values(cpu: 0, memory: 0, read: 0, written: 0, power: 0), processCount: sample.members.count)
             } else { continue }
+            guard filters.passes(kind: sample.identity.kind, executable: sample.executable, values: app.values) else { continue }
             if sample.identity.kind == .system { system.append(app) } else { apps.append(app) }
         }
         self.apps = apps.sorted { Self.ordered($0, $1, sort) }
-        let hidden = query.isEmpty ? latest?.unavailableProcesses ?? 0 : 0
+        let hidden = filters.isEmpty ? latest?.unavailableProcesses ?? 0 : 0
         if system.isEmpty && hidden == 0 {
             self.system = nil
         } else {
@@ -107,16 +113,19 @@ public struct ActivityListing: Sendable {
             self.system = System(
                 processCount: system.reduce(hidden) { $0 + $1.processCount },
                 protectedCount: system.filter(\.restricted).reduce(hidden) { $0 + $1.processCount },
-                values: Values(cpu: total(\.cpu), memory: memory, read: total(\.read), written: total(\.written)),
+                values: Values(cpu: total(\.cpu), memory: memory, read: total(\.read), written: total(\.written), power: total(\.power)),
                 apps: system.sorted { Self.ordered($0, $1, sort) })
         }
     }
 
-    private static func matches(_ sample: AppSample, _ query: String) -> Bool {
+    /// Name, tool version or description, a member's PID, or a running helper's name, such as "Renderer".
+    private static func matches(_ sample: AppSample, _ query: String, processes: [ProcessKey: ProcessSample]) -> Bool {
         guard !query.isEmpty else { return true }
         // The generic "macOS system process" line would match every system process, so only curated text counts.
         let text = [sample.identity.displayName, sample.identity.secondaryText].compactMap { $0 }
-        return text.contains { $0.localizedCaseInsensitiveContains(query) } || sample.members.contains { String($0.pid).contains(query) }
+        return text.contains { $0.localizedCaseInsensitiveContains(query) }
+            || sample.members.contains { String($0.pid).contains(query) }
+            || sample.members.contains { processes[$0]?.displayName.localizedCaseInsensitiveContains(query) == true }
     }
 
     private static func helpers(_ members: [ProcessKey], _ processes: [ProcessKey: ProcessSample], _ sort: ActivitySort) -> [Helper] {
@@ -129,7 +138,7 @@ public struct ActivityListing: Sendable {
             let footprints = samples.compactMap(\.memory)
             return Helper(name: name, pids: samples.map(\.key.pid).sorted(),
                 values: Values(cpu: sum(\.cpu), memory: footprints.count == samples.count ? footprints.reduce(0, +) : nil,
-                    read: sum(\.read), written: sum(\.written)))
+                    read: sum(\.read), written: sum(\.written), power: sum(\.power), cores: samples.compactMap(\.cores).max()))
         }
         return helpers.sorted { lhs, rhs in
             switch compare(lhs.values, rhs.values, lhs.name, rhs.name, sort) {
@@ -158,6 +167,7 @@ public struct ActivityListing: Sendable {
         case .cpu: value = \.cpu
         // Not `map(Double.init)`: for a UInt64 that can resolve to `Double(bitPattern:)`.
         case .memory: value = { values in values.memory.map { Double($0) } }
+        case .power: value = \.power
         case .read: value = \.read
         case .written: value = \.written
         }
