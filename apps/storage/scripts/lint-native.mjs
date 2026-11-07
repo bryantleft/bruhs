@@ -15,6 +15,7 @@ const RULES = [
   { pattern: /\.(foregroundStyle|foregroundColor|tint|fill|background)\(\.(red|orange|yellow|green|blue|purple|pink|gray)\)/, fix: "use a BruhsColor role, or a BruhsPalette token for data colours" },
   { pattern: /NSColor\.system(Red|Orange|Yellow|Green|Blue|Purple|Pink|Teal|Indigo|Brown|Gray|Mint|Cyan)\b/, fix: "use BruhsPalette or a BruhsColor role" },
   { pattern: /\.font\(\.largeTitle/, fix: "Mac windows show their title in the toolbar; drop the in-content large title" },
+  { pattern: /\.font\(\.(system\(size|title|title2|title3|headline|subheadline|body|callout|footnote|caption|caption2)\b/, fix: "use a BruhsType style, adding one in Theme/Theme.swift if the scale lacks it", skip: "Theme.swift" },
 ];
 
 function* swiftFiles(dir) {
@@ -31,6 +32,7 @@ for (const file of swiftFiles(root)) {
   lines.forEach((line, i) => {
     if (line.includes("bruhs-native-ignore") || lines[i - 1]?.includes("bruhs-native-ignore")) return;
     for (const rule of RULES) {
+      if (rule.skip && file.endsWith(rule.skip)) continue;
       const match = line.match(rule.pattern);
       if (match) findings.push(`${path.relative(process.cwd(), file)}:${i + 1}  "${match[0]}": ${rule.fix}`);
     }

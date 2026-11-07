@@ -8,10 +8,52 @@ import SwiftUI
 struct ActivityView: View {
     let model: ActivityModel
     @Bindable var state: ActivityState
+    @AppStorage("inspectorWidth") private var inspectorWidth = 300.0
 
     var body: some View {
         let range = rankedRange
         let listing = ActivityListing(history: model.history, latest: model.snapshot, range: range, search: state.search, includeExited: state.includeExited, sort: state.sort)
+        HStack(spacing: 0) {
+            content(listing, range: range)
+            if state.showsInspector {
+                BruhsSidePanel(width: $inspectorWidth, widths: 260...420) {
+                    ActivityInspector(model: model, listing: listing, selection: state.selection, range: range)
+                }
+                .transition(.move(edge: .trailing))
+            }
+        }
+        .animation(BruhsMotion.standard(duration: BruhsMotion.fast), value: state.showsInspector)
+        .navigationSubtitle(subtitle(range))
+        .searchable(text: $state.search, placement: .toolbar, prompt: "Search apps or PID")
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Menu {
+                    Toggle("Include Exited Apps", isOn: $state.includeExited)
+                } label: {
+                    Label("Filter", systemImage: state.includeExited ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                }
+                .help(state.includeExited ? "Including apps that quit in the last 10 minutes" : "Filter the list")
+                Button {
+                    state.showsInspector.toggle()
+                } label: {
+                    Label(state.showsInspector ? "Hide Inspector" : "Show Inspector", systemImage: "sidebar.trailing")
+                }
+                .help(state.showsInspector ? "Hide the inspector (⌥⌘I)" : "Show the inspector (⌥⌘I)")
+            }
+        }
+        // Escape from the table or chart arrives as the exit command; the scope bar's button
+        // covers Escape when nothing has focus.
+        .onExitCommand { state.backToLive() }
+        .onAppear(perform: applyFocus)
+        .onChange(of: model.focusAppID) { applyFocus() }
+        .onChange(of: model.snapshot?.uptime) {
+            // A ranked range that has aged out of the ten-minute history has nothing left to rank.
+            if state.range != nil && rankedRange == nil { state.backToLive() }
+        }
+    }
+
+    /// The chart, the scope bar while a range is ranked, and the table.
+    private func content(_ listing: ActivityListing, range: ClosedRange<Double>?) -> some View {
         VStack(spacing: 0) {
             ActivityChart(model: model, state: state, range: range)
                 .padding(.horizontal, 16)
@@ -35,37 +77,6 @@ struct ActivityView: View {
             ActivityTable(listing: listing, opensSystem: !query.isEmpty, selection: $state.selection, expanded: $state.expanded, sort: $state.sort)
                 .overlay { emptyState(listing, range: range) }
                 .padding(.top, 10)
-        }
-        .navigationSubtitle(subtitle(range))
-        .searchable(text: $state.search, placement: .toolbar, prompt: "Search apps or PID")
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Menu {
-                    Toggle("Include Exited Apps", isOn: $state.includeExited)
-                } label: {
-                    Label("Filter", systemImage: state.includeExited ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                }
-                .help(state.includeExited ? "Including apps that quit in the last 10 minutes" : "Filter the list")
-                Button {
-                    state.showsInspector.toggle()
-                } label: {
-                    Label(state.showsInspector ? "Hide Inspector" : "Show Inspector", systemImage: "sidebar.trailing")
-                }
-                .help(state.showsInspector ? "Hide the inspector (⌥⌘I)" : "Show the inspector (⌥⌘I)")
-            }
-        }
-        .inspector(isPresented: $state.showsInspector) {
-            ActivityInspector(model: model, listing: listing, selection: state.selection, range: range)
-                .inspectorColumnWidth(min: 260, ideal: 300, max: 420)
-        }
-        // Escape from the table or chart arrives as the exit command; the scope bar's button
-        // covers Escape when nothing has focus.
-        .onExitCommand { state.backToLive() }
-        .onAppear(perform: applyFocus)
-        .onChange(of: model.focusAppID) { applyFocus() }
-        .onChange(of: model.snapshot?.uptime) {
-            // A ranked range that has aged out of the ten-minute history has nothing left to rank.
-            if state.range != nil && rankedRange == nil { state.backToLive() }
         }
     }
 

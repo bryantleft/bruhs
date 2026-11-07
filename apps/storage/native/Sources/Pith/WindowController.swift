@@ -23,7 +23,7 @@ enum WindowTab: String, CaseIterable, Identifiable {
 
 /// Pith's one main window, with Activity and Disk as tabs. SwiftUI's title, subtitle, toolbar
 /// items and search field reach the NSWindow's unified toolbar through the hosting controller's
-/// scene bridging (macOS 14), so macOS draws all of the chrome.
+/// scene bridging (macOS 14), so macOS draws the controls; the window itself is the bruhs canvas.
 @MainActor final class MainWindowController: NSObject, NSWindowDelegate {
     let window: NSWindow
     let state: MainWindowState
@@ -42,6 +42,10 @@ enum WindowTab: String, CaseIterable, Identifiable {
         // Assigning the controller shrinks the window to the content's ideal size.
         window.setContentSize(NSSize(width: 1100, height: 760))
         window.toolbarStyle = .unified
+        // The canvas shows under the toolbar and through the disk map's transparent page. Without a transparent
+        // title bar, macOS paints its own grey band behind the toolbar.
+        window.backgroundColor = BruhsNSColor.canvas
+        window.titlebarAppearsTransparent = true
         // Activity and Disk are already tabs; macOS's own window tabs would be a second, competing set.
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
@@ -89,5 +93,6 @@ struct MainWindowView: View {
                 .help("Show Activity (⌘1) or Disk (⌘2)")
             }
         }
+        .tint(BruhsColor.accent)
     }
 }

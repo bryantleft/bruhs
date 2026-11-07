@@ -716,7 +716,7 @@ Use `tabular-nums` for numbers that change. Add thousands separators, as in `1,2
 
 ## 18. Native Mac apps
 
-Native apps keep the system's chrome and use Bruhs for their content. Windows, toolbars, menus, popovers and Settings stay standard AppKit and SwiftUI, with system materials and the system font. Bruhs sets the colours, data type, radii and motion inside them. Pith, in `apps/storage/native`, is the reference app.
+Native apps keep the system's controls and use Bruhs for their surfaces and content. Window buttons, toolbar items, search fields, menus, alerts and form controls stay standard AppKit and SwiftUI, in the system font. Bruhs sets what they sit on and what they show: the canvas and panel tones, colours, data type, radii and motion. Pith, in `apps/storage/native`, is the reference app.
 
 ### Tokens
 
@@ -730,17 +730,22 @@ bruhs-theme-swift Sources/App/Theme/BruhsTokens.swift --check
 | Type | Holds |
 |---|---|
 | `BruhsColor` | The semantic roles in `src/lib/semantic.ts`, resolved for dark, light and Increase Contrast |
+| `BruhsNSColor` | The same roles as `NSColor`, for window backgrounds and AppKit drawing |
 | `BruhsPalette` | Every colour token as a Display P3 `NSColor` |
 | `BruhsRadius` | The fruit radius scale in points |
 | `BruhsMotion` | The duration scale, with standard, entrance and exit animations |
 
-Use `BruhsColor` roles for text, hairlines, wells, accents, selection and status. Use `BruhsPalette` only for data, such as chart series or file kinds.
+Use `BruhsColor` roles for surfaces, text, hairlines, wells, accents, selection and status. Use `BruhsPalette` only for data, such as chart series or file kinds.
 
-Change a role in `semantic.ts`, not in Swift. `scripts/verify-tokens.mjs` checks each role's contrast in all four appearances and that every token fits Display P3.
+Change a role in `semantic.ts`, not in Swift. `scripts/verify-tokens.mjs` checks that every token fits Display P3 and that each readable role keeps its contrast on both background roles, `canvas` and `surface`, in all four appearances.
 
 ### Rules
 
 Follow the system appearance. The roles already resolve for light, dark and Increase Contrast, so don't force dark mode.
+
+Paint windows and panels with `canvas`, under the toolbar too: set the window's `backgroundColor` to `BruhsNSColor.canvas`, set `titlebarAppearsTransparent` so macOS doesn't paint its grey band behind the toolbar, and keep content views transparent. Put side panels on `surface`, flush with the window's edge and divided from the content by a hairline. Avoid SwiftUI's `.inspector` for them: macOS 26 draws it as an inset glass panel whose rounded corner shows as a notch against the canvas. Pith's `BruhsSidePanel` is a resizable replacement. A menu bar popover takes the canvas edge to edge: turn on `hasFullSizeContent` so its arrow is part of the content, and size the popover to the panel plus the safe-area insets it reports.
+
+Tint SwiftUI controls with `.tint(BruhsColor.accent)` at each window's root. The user's accent colour still marks focus and menus.
 
 Set data in Monaspace: readouts, figures, sizes, paths and times. Keep labels, buttons and sentences in the system font. Register the bundled fonts at launch and check them in a smoke test.
 
@@ -752,7 +757,9 @@ Don't animate live data. Values and charts update in place. Use `BruhsMotion` fo
 
 Put a window's title and subtitle in its title bar or toolbar. Mac windows don't use large titles inside their content.
 
-Pith's `scripts/lint-native.mjs` fails on the system accent, system colours and large titles in its views. Copy it into a new app with its paths changed.
+Set text in `BruhsType` styles rather than system text styles or fixed sizes. Add a style to the scale when a view needs one.
+
+Pith's `scripts/lint-native.mjs` fails on the system accent, system colours, large titles and text outside `BruhsType` in its views. Copy it into a new app with its paths changed.
 
 ---
 

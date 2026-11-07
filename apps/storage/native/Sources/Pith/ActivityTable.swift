@@ -288,7 +288,7 @@ final class ActivityRowView: NSTableRowView {
 
     override func drawBackground(in dirtyRect: NSRect) {
         guard !isHeader else { return }
-        NSColor(BruhsColor.hairline).setFill()
+        BruhsNSColor.hairline.setFill()
         NSRect(x: bounds.minX + 4, y: isFlipped ? bounds.maxY - 1 : bounds.minY, width: bounds.width - 8, height: 1).fill()
     }
 }

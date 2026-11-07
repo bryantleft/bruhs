@@ -45,5 +45,7 @@ struct MenuPanel: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .frame(width: size.width, height: size.height)
+        .background(BruhsColor.canvas)
+        .tint(BruhsColor.accent)
     }
 }

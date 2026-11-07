@@ -82,7 +82,7 @@ private struct AppInspector: View {
             AppIconView(executable: app.executable, size: 40)
                 .padding(.bottom, 7)
             Text(app.name)
-                .font(.system(size: 15, weight: .semibold))
+                .font(BruhsType.title)
                 .foregroundStyle(BruhsColor.text)
                 .textSelection(.enabled)
             Text(status).font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
@@ -179,7 +179,7 @@ private struct AppInspector: View {
     }
 
     private func factLabel(_ text: String) -> some View {
-        Text(text).font(.system(size: 12)).foregroundStyle(BruhsColor.textSecondary).gridColumnAlignment(.leading)
+        Text(text).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.textSecondary).gridColumnAlignment(.leading)
     }
 
     private var processList: some View {
@@ -190,7 +190,7 @@ private struct AppInspector: View {
                     GridRow {
                         // Verbatim, so PIDs never pick up thousands separators.
                         Text(verbatim: String(process.key.pid)).font(BruhsType.dataSmall).foregroundStyle(BruhsColor.textTertiary)
-                        Text(process.displayName).font(.system(size: 12)).foregroundStyle(BruhsColor.text)
+                        Text(process.displayName).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.text)
                             .lineLimit(1).truncationMode(.middle)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         FigureText(figure: ActivityFigure(.cpu, values(process))).gridColumnAlignment(.trailing)
@@ -243,12 +243,12 @@ private struct SystemInspector: View {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 3) {
                     Image(systemName: "gearshape.2")
-                        .font(.system(size: 26))
+                        .font(.system(size: 26)) // bruhs-native-ignore: sizes the symbol to the 40 pt app icons, not text
                         .foregroundStyle(BruhsColor.textSecondary)
                         .frame(width: 40, height: 40)
                         .padding(.bottom, 7)
                         .accessibilityHidden(true)
-                    Text("System").font(.system(size: 15, weight: .semibold)).foregroundStyle(BruhsColor.text)
+                    Text("System").font(BruhsType.title).foregroundStyle(BruhsColor.text)
                     Text(summary).font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
                     Text("Processes that are part of macOS").font(BruhsType.body).foregroundStyle(BruhsColor.textTertiary)
                 }
@@ -263,7 +263,7 @@ private struct SystemInspector: View {
                     ForEach([ActivityColumn.cpu, .memory, .read, .written], id: \.self) { column in
                         let figure = ActivityFigure(column, system.values)
                         GridRow {
-                            Text(column.title).font(.system(size: 12)).foregroundStyle(BruhsColor.textSecondary)
+                            Text(column.title).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.textSecondary)
                             FigureText(figure: figure, color: BruhsColor.text)
                         }
                         .accessibilityElement(children: .ignore)
@@ -276,9 +276,9 @@ private struct SystemInspector: View {
                         ForEach(busiest) { app in
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 VStack(alignment: .leading, spacing: 1) {
-                                    Text(app.identity.displayName).font(.system(size: 12)).foregroundStyle(BruhsColor.text).lineLimit(1)
+                                    Text(app.identity.displayName).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.text).lineLimit(1)
                                     if let description = app.identity.secondaryText {
-                                        Text(description).font(.system(size: 11)).foregroundStyle(BruhsColor.textTertiary).lineLimit(2)
+                                        Text(description).font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary).lineLimit(2)
                                     }
                                 }
                                 Spacer(minLength: 8)

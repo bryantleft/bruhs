@@ -55,8 +55,14 @@ extension Font {
     static var data: Font { .monaspace(size: 12.5) }
     static var dataSmall: Font { .monaspace(size: 11) }
     static var caption: Font { .monaspace(size: 11) }
+    /// The name heading a panel, e.g. the inspector's app.
+    static var title: Font { .system(size: 15, weight: .semibold) }
     static var label: Font { .system(size: 13, weight: .semibold) }
     static var body: Font { .system(size: 13) }
+    /// Names and labels in dense rows, e.g. the inspector's process list.
+    static var bodySmall: Font { .system(size: 12) }
+    /// A short hint or description under or beside the content.
+    static var note: Font { .system(size: 11) }
     static var sectionTitle: Font { .system(size: 11, weight: .semibold) }
 }
 
@@ -220,6 +226,43 @@ struct MiniTrend: View {
         .frame(height: height)
         .transaction { $0.animation = nil }
         .accessibilityLabel(label)
+    }
+}
+
+/// A side panel on `surface`, flush with the window's trailing edge, that the user resizes by dragging its leading
+/// hairline. It stands in for SwiftUI's inspector, which macOS 26 draws as an inset glass panel with a rounded
+/// corner that shows as a notch against the canvas.
+struct BruhsSidePanel<Content: View>: View {
+    @Binding var width: Double
+    let widths: ClosedRange<Double>
+    @ViewBuilder var content: Content
+    @State private var dragStart: Double?
+
+    var body: some View {
+        content
+            .frame(width: min(widths.upperBound, max(widths.lowerBound, width)))
+            .frame(maxHeight: .infinity)
+            .background(BruhsColor.surface)
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(BruhsColor.hairline)
+                    .frame(width: 1)
+                    .overlay {
+                        // A wider target than the hairline. Global coordinates, because the edge moves while dragging.
+                        Color.clear
+                            .frame(width: 9)
+                            .contentShape(Rectangle())
+                            .onHover { inside in if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
+                            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                                .onChanged { drag in
+                                    let start = dragStart ?? width
+                                    dragStart = start
+                                    width = min(widths.upperBound, max(widths.lowerBound, start - drag.translation.width))
+                                }
+                                .onEnded { _ in dragStart = nil })
+                    }
+                    .accessibilityHidden(true)
+            }
     }
 }
 

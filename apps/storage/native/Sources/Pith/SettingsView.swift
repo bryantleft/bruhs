@@ -24,7 +24,12 @@ struct SettingsView: View {
                 Text("Activity stays on this Mac. History covers the running session and clears when you quit. Disk scans run only when you request them.")
                 Button("Full Disk Access…") { openDiskAccess() }
             }
-        }.formStyle(.grouped).frame(width: 460, height: 360)
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(BruhsColor.canvas)
+        .tint(BruhsColor.accent)
+        .frame(width: 460, height: 360)
     }
 
     /// Registers in the setter rather than in onChange, so restoring the toggle after a failure doesn't run the

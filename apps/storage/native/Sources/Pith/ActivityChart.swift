@@ -185,7 +185,7 @@ struct ActivityChart: View {
             Spacer(minLength: 12)
             if range == nil {
                 Text("Drag across the chart to rank apps by that time")
-                    .font(.system(size: 11))
+                    .font(BruhsType.note)
                     .foregroundStyle(BruhsColor.textTertiary)
                     .lineLimit(1)
                     .accessibilityHidden(true)

@@ -52,12 +52,22 @@ struct PanelActions {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
     private(set) var panelContentHeight: CGFloat = 0
+    /// The panel's own size, inside the popover's border and arrow.
+    private var panelSize = CGSize.zero
+    /// The popover's border and arrow, which it draws over its content's edges and reports as safe-area insets.
+    /// macOS 26.3 reports 13 pt on every side; the first panel shown corrects this for the running system.
+    private var chrome = NSEdgeInsets(top: 13, left: 13, bottom: 13, right: 13)
 
     var panelWindow: NSWindow? { popover.contentViewController?.view.window }
     var image: NSImage? { item.button?.image }
+    /// False while macOS keeps the item off screen, e.g. when the menu bar has no room or the user hid it.
+    var isOnScreen: Bool {
+        guard let window = item.button?.window else { return false }
+        return NSScreen.screens.contains { $0.frame.contains(window.frame) }
+    }
     /// False while the open panel scrolls. Expected only on displays shorter than MenuPanelLayout.idealSize;
     /// anywhere else it means idealSize has fallen behind the panel's content.
-    var panelContentFits: Bool { panelContentHeight <= popover.contentSize.height + 0.5 }
+    var panelContentFits: Bool { panelContentHeight <= panelSize.height + 0.5 }
 
     init(activity: ActivityModel, actions: PanelActions) {
         self.activity = activity
@@ -67,6 +77,8 @@ struct PanelActions {
         item.button?.target = self
         item.button?.action = #selector(togglePanel)
         popover.behavior = .transient
+        // The panel's canvas runs under the arrow too, so the whole popover is one bruhs surface.
+        popover.hasFullSizeContent = true
         popover.delegate = self
         update()
     }
@@ -90,6 +102,11 @@ struct PanelActions {
         button.toolTip = "Pith · \(activity.paused ? "Monitoring paused" : "CPU \(cpu ?? "—") · Memory pressure \(pressure.label.lowercased())")"
     }
 
+    /// The panel runs under the popover's border and arrow (hasFullSizeContent), so the popover is that much larger.
+    private func popoverSize(_ panel: CGSize) -> CGSize {
+        CGSize(width: panel.width + chrome.left + chrome.right, height: panel.height + chrome.top + chrome.bottom)
+    }
+
     func closePanel() { popover.performClose(nil) }
     func popoverDidClose(_ notification: Notification) { activity.showsDiskSpace = false }
 
@@ -99,6 +116,7 @@ struct PanelActions {
         guard let window = button.window, let screen = window.screen ?? NSScreen.main else { return }
         let anchor = window.convertToScreen(button.convert(button.bounds, to: nil))
         let size = MenuPanelLayout.contentSize(anchor: anchor, visibleFrame: screen.visibleFrame)
+        panelSize = size
         let close: (@escaping () -> Void) -> () -> Void = { [weak self] action in { self?.closePanel(); action() } }
         let panel = MenuPanel(model: activity, size: size, actions: PanelActions(
             openActivity: { [actions, weak self] id in self?.closePanel(); actions.openActivity(id) },
@@ -107,11 +125,16 @@ struct PanelActions {
             contentHeight: { [weak self] in self?.panelContentHeight = $0 })
         let controller = NSHostingController(rootView: panel)
         controller.sizingOptions = []
-        controller.preferredContentSize = size
+        controller.preferredContentSize = popoverSize(size)
         popover.contentViewController = controller
-        popover.contentSize = size
+        popover.contentSize = popoverSize(size)
         activity.showsDiskSpace = true
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        let reported = controller.view.safeAreaInsets
+        if !NSEdgeInsetsEqual(reported, chrome) {
+            chrome = reported
+            popover.contentSize = popoverSize(size)
+        }
         controller.view.window?.makeKey()
     }
 }

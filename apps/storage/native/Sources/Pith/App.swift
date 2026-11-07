@@ -41,6 +41,8 @@ import PithCore
         let menu = NSMenu()
         let appMenu = NSMenuItem(); menu.addItem(appMenu)
         appMenu.submenu = NSMenu()
+        appMenu.submenu?.addItem(withTitle: "About Pith", action: #selector(showAbout), keyEquivalent: "").target = self
+        appMenu.submenu?.addItem(.separator())
         appMenu.submenu?.addItem(withTitle: "Settings…", action: #selector(showSettings), keyEquivalent: ",").target = self
         appMenu.submenu?.addItem(.separator())
         appMenu.submenu?.addItem(withTitle: "Quit Pith", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -89,6 +91,11 @@ import PithCore
     }
 
     @objc private func showActivityFromMenu() { showActivity() }
+    /// An accessory app is never frontmost on its own, so bring it forward for the standard panel.
+    @objc private func showAbout() {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(nil)
+    }
 
     /// Opens Activity; with an id, that app is selected and scrolled into view.
     func showActivity(selecting appID: String? = nil) {
@@ -106,6 +113,8 @@ import PithCore
             // Settings has one pane, so the HIG asks for "App Name Settings" and no minimize or zoom.
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 360), styleMask: [.titled, .closable], backing: .buffered, defer: false)
             window.title = "Pith Settings"; window.contentView = NSHostingView(rootView: SettingsView(model: activity))
+            window.backgroundColor = BruhsNSColor.canvas
+            window.titlebarAppearsTransparent = true
             window.delegate = self; window.isReleasedWhenClosed = false; window.center()
             window.setFrameAutosaveName("Pith Settings")
             settingsWindow = window
