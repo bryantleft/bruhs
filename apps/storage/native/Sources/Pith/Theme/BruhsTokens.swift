@@ -109,25 +109,51 @@ enum BruhsPalette {
     static let longan950 = NSColor(displayP3Red: 0.07880, green: 0.06620, blue: 0.05273, alpha: 1)
 }
 
-/// Semantic roles. They follow the system appearance and Increase Contrast.
+/// Semantic roles for AppKit: window backgrounds, table drawing. They follow the system appearance and
+/// Increase Contrast.
+enum BruhsNSColor {
+    static let canvas = appearanceColor(dark: BruhsPalette.longan950, light: BruhsPalette.longan50)
+    static let surface = appearanceColor(dark: BruhsPalette.longan900, light: BruhsPalette.longan100)
+    static let text = appearanceColor(dark: BruhsPalette.rambutan100, light: BruhsPalette.longan950)
+    static let textSecondary = appearanceColor(dark: BruhsPalette.rambutan400, light: BruhsPalette.longan700, darkHighContrast: BruhsPalette.rambutan300, lightHighContrast: BruhsPalette.longan800)
+    static let textTertiary = appearanceColor(dark: BruhsPalette.rambutan500, light: BruhsPalette.longan600, darkHighContrast: BruhsPalette.rambutan400, lightHighContrast: BruhsPalette.longan700)
+    static let hairline = appearanceColor(dark: BruhsPalette.rambutan100.withAlphaComponent(0.1), light: BruhsPalette.longan950.withAlphaComponent(0.1), darkHighContrast: BruhsPalette.rambutan100.withAlphaComponent(0.25), lightHighContrast: BruhsPalette.longan950.withAlphaComponent(0.25))
+    static let well = appearanceColor(dark: BruhsPalette.longan900.withAlphaComponent(0.6), light: BruhsPalette.longan100.withAlphaComponent(0.55))
+    static let accent = appearanceColor(dark: BruhsPalette.persimmon400, light: BruhsPalette.persimmon700)
+    static let accentFill = appearanceColor(dark: BruhsPalette.persimmon500, light: BruhsPalette.persimmon500)
+    static let onAccentFill = appearanceColor(dark: BruhsPalette.longan950, light: BruhsPalette.longan950)
+    static let accentSoft = appearanceColor(dark: BruhsPalette.persimmon500.withAlphaComponent(0.16), light: BruhsPalette.persimmon500.withAlphaComponent(0.14))
+    static let accentSoftText = appearanceColor(dark: BruhsPalette.persimmon200, light: BruhsPalette.persimmon800)
+    static let selection = appearanceColor(dark: BruhsPalette.persimmon500.withAlphaComponent(0.24), light: BruhsPalette.persimmon500.withAlphaComponent(0.18))
+    static let chartFill = appearanceColor(dark: BruhsPalette.persimmon500.withAlphaComponent(0.16), light: BruhsPalette.persimmon500.withAlphaComponent(0.14))
+    static let statusNormal = appearanceColor(dark: BruhsPalette.pandan400, light: BruhsPalette.pandan700)
+    static let statusWarning = appearanceColor(dark: BruhsPalette.durian400, light: BruhsPalette.durian800)
+    static let statusCritical = appearanceColor(dark: BruhsPalette.lychee400, light: BruhsPalette.lychee700)
+    static let dangerSoft = appearanceColor(dark: BruhsPalette.lychee500.withAlphaComponent(0.16), light: BruhsPalette.lychee500.withAlphaComponent(0.12))
+    static let dangerSoftText = appearanceColor(dark: BruhsPalette.lychee200, light: BruhsPalette.lychee800)
+}
+
+/// The same roles for SwiftUI.
 enum BruhsColor {
-    static let text = Color(nsColor: appearanceColor(dark: BruhsPalette.rambutan100, light: BruhsPalette.longan950))
-    static let textSecondary = Color(nsColor: appearanceColor(dark: BruhsPalette.rambutan400, light: BruhsPalette.longan700, darkHighContrast: BruhsPalette.rambutan300, lightHighContrast: BruhsPalette.longan800))
-    static let textTertiary = Color(nsColor: appearanceColor(dark: BruhsPalette.rambutan500, light: BruhsPalette.longan600, darkHighContrast: BruhsPalette.rambutan400, lightHighContrast: BruhsPalette.longan700))
-    static let hairline = Color(nsColor: appearanceColor(dark: BruhsPalette.rambutan100.withAlphaComponent(0.1), light: BruhsPalette.longan950.withAlphaComponent(0.1), darkHighContrast: BruhsPalette.rambutan100.withAlphaComponent(0.25), lightHighContrast: BruhsPalette.longan950.withAlphaComponent(0.25)))
-    static let well = Color(nsColor: appearanceColor(dark: BruhsPalette.longan950.withAlphaComponent(0.35), light: BruhsPalette.longan100.withAlphaComponent(0.55)))
-    static let accent = Color(nsColor: appearanceColor(dark: BruhsPalette.persimmon400, light: BruhsPalette.persimmon700))
-    static let accentFill = Color(nsColor: appearanceColor(dark: BruhsPalette.persimmon500, light: BruhsPalette.persimmon500))
-    static let onAccentFill = Color(nsColor: appearanceColor(dark: BruhsPalette.longan950, light: BruhsPalette.longan950))
-    static let accentSoft = Color(nsColor: appearanceColor(dark: BruhsPalette.persimmon500.withAlphaComponent(0.16), light: BruhsPalette.persimmon500.withAlphaComponent(0.14)))
-    static let accentSoftText = Color(nsColor: appearanceColor(dark: BruhsPalette.persimmon200, light: BruhsPalette.persimmon800))
-    static let selection = Color(nsColor: appearanceColor(dark: BruhsPalette.persimmon500.withAlphaComponent(0.24), light: BruhsPalette.persimmon500.withAlphaComponent(0.18)))
-    static let chartFill = Color(nsColor: appearanceColor(dark: BruhsPalette.persimmon500.withAlphaComponent(0.16), light: BruhsPalette.persimmon500.withAlphaComponent(0.14)))
-    static let statusNormal = Color(nsColor: appearanceColor(dark: BruhsPalette.pandan400, light: BruhsPalette.pandan700))
-    static let statusWarning = Color(nsColor: appearanceColor(dark: BruhsPalette.durian400, light: BruhsPalette.durian800))
-    static let statusCritical = Color(nsColor: appearanceColor(dark: BruhsPalette.lychee400, light: BruhsPalette.lychee700))
-    static let dangerSoft = Color(nsColor: appearanceColor(dark: BruhsPalette.lychee500.withAlphaComponent(0.16), light: BruhsPalette.lychee500.withAlphaComponent(0.12)))
-    static let dangerSoftText = Color(nsColor: appearanceColor(dark: BruhsPalette.lychee200, light: BruhsPalette.lychee800))
+    static let canvas = Color(nsColor: BruhsNSColor.canvas)
+    static let surface = Color(nsColor: BruhsNSColor.surface)
+    static let text = Color(nsColor: BruhsNSColor.text)
+    static let textSecondary = Color(nsColor: BruhsNSColor.textSecondary)
+    static let textTertiary = Color(nsColor: BruhsNSColor.textTertiary)
+    static let hairline = Color(nsColor: BruhsNSColor.hairline)
+    static let well = Color(nsColor: BruhsNSColor.well)
+    static let accent = Color(nsColor: BruhsNSColor.accent)
+    static let accentFill = Color(nsColor: BruhsNSColor.accentFill)
+    static let onAccentFill = Color(nsColor: BruhsNSColor.onAccentFill)
+    static let accentSoft = Color(nsColor: BruhsNSColor.accentSoft)
+    static let accentSoftText = Color(nsColor: BruhsNSColor.accentSoftText)
+    static let selection = Color(nsColor: BruhsNSColor.selection)
+    static let chartFill = Color(nsColor: BruhsNSColor.chartFill)
+    static let statusNormal = Color(nsColor: BruhsNSColor.statusNormal)
+    static let statusWarning = Color(nsColor: BruhsNSColor.statusWarning)
+    static let statusCritical = Color(nsColor: BruhsNSColor.statusCritical)
+    static let dangerSoft = Color(nsColor: BruhsNSColor.dangerSoft)
+    static let dangerSoftText = Color(nsColor: BruhsNSColor.dangerSoftText)
 }
 
 enum BruhsRadius {

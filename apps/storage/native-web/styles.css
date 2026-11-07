@@ -18,7 +18,7 @@
   --role-text-secondary: var(--color-rambutan-400);
   --role-text-tertiary: var(--color-rambutan-500);
   --role-hairline: color-mix(in oklab, var(--color-rambutan-100) 10%, transparent);
-  --role-well: color-mix(in oklab, var(--color-longan-950) 35%, transparent);
+  --role-well: color-mix(in oklab, var(--color-longan-900) 60%, transparent);
   --role-accent: var(--color-persimmon-400);
   --role-selection: color-mix(in oklab, var(--color-persimmon-500) 24%, transparent);
   --role-status-critical: var(--color-lychee-400);

@@ -13,14 +13,15 @@ export interface Role {
   /** Used when the user turns on Increase Contrast. Falls back to the plain variant. */
   readonly darkHighContrast?: TokenRef;
   readonly lightHighContrast?: TokenRef;
-  /** Minimum WCAG contrast against `contrastBackground`, enforced by `verify-tokens`. */
+  /** Minimum WCAG contrast on every background role, enforced by `verify-tokens`. */
   readonly minContrast?: number;
 }
 
-/** The surfaces roles are checked against: Pith's content wells, close to the system's. */
-export const contrastBackground = { dark: "longan-900", light: "longan-50" } as const;
-
 export const semanticColors = {
+  /** A window's or panel's background, under its toolbar and content: the web theme's page canvas. */
+  canvas: { dark: "longan-950", light: "longan-50" },
+  /** A side panel beside the content, such as an inspector: the web theme's `surface-panel`. */
+  surface: { dark: "longan-900", light: "longan-100" },
   text: { dark: "rambutan-100", light: "longan-950", minContrast: 4.5 },
   textSecondary: { dark: "rambutan-400", light: "longan-700", darkHighContrast: "rambutan-300", lightHighContrast: "longan-800", minContrast: 4.5 },
   textTertiary: { dark: "rambutan-500", light: "longan-600", darkHighContrast: "rambutan-400", lightHighContrast: "longan-700", minContrast: 3 },
@@ -30,7 +31,8 @@ export const semanticColors = {
     darkHighContrast: { token: "rambutan-100", alpha: 0.25 },
     lightHighContrast: { token: "longan-950", alpha: 0.25 },
   },
-  well: { dark: { token: "longan-950", alpha: 0.35 }, light: { token: "longan-100", alpha: 0.55 } },
+  /** A recessed area on the canvas, such as a folder on the disk map: the web theme's `surface-well`. */
+  well: { dark: { token: "longan-900", alpha: 0.6 }, light: { token: "longan-100", alpha: 0.55 } },
   /** Lines, marks and text links in the brand colour. */
   accent: { dark: "persimmon-400", light: "persimmon-700", minContrast: 3 },
   /** Filled primary controls, with `onAccentFill` for their labels. */
@@ -48,3 +50,6 @@ export const semanticColors = {
 } as const satisfies Record<string, Role>;
 
 export type SemanticColor = keyof typeof semanticColors;
+
+/** The roles other roles sit on. Each role with a `minContrast` must keep it on all of them. */
+export const backgroundRoles = ["canvas", "surface"] as const satisfies readonly SemanticColor[];

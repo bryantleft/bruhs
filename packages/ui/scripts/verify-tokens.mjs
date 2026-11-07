@@ -2,11 +2,11 @@
 /**
  * Fails when a colour token can't be shown faithfully or a semantic role stops being readable:
  * every token must fit Display P3, every role must name real tokens, and roles with a
- * `minContrast` must keep it against the surface they're designed for.
+ * `minContrast` must keep it on every background role (`canvas`, `surface`).
  */
 import { readFileSync } from "node:fs";
 import { contrast, inGamut, parseColorTokens } from "../src/lib/oklch.ts";
-import { contrastBackground, semanticColors } from "../src/lib/semantic.ts";
+import { backgroundRoles, semanticColors } from "../src/lib/semantic.ts";
 
 const tokens = parseColorTokens(readFileSync(new URL("../src/styles/index.css", import.meta.url), "utf8"));
 const problems = [];
@@ -22,10 +22,11 @@ for (const [role, spec] of Object.entries(semanticColors)) {
     if (ref === undefined) continue;
     const token = tokens.get(tokenName(ref));
     if (!token) { problems.push(`semantic role "${role}" (${appearance}) names --color-${tokenName(ref)}, which doesn't exist.`); continue; }
-    const base = appearance.startsWith("dark") ? "dark" : "light";
-    if (spec.minContrast && typeof ref === "string") {
-      const ratio = contrast(token, tokens.get(contrastBackground[base]));
-      if (ratio < spec.minContrast) problems.push(`semantic role "${role}" (${appearance}) is ${ratio.toFixed(2)}:1 on --color-${contrastBackground[base]}; it needs ${spec.minContrast}:1.`);
+    if (!spec.minContrast || typeof ref !== "string") continue;
+    for (const background of backgroundRoles) {
+      const surface = semanticColors[background][appearance] ?? semanticColors[background][appearance.startsWith("dark") ? "dark" : "light"];
+      const ratio = contrast(token, tokens.get(surface));
+      if (ratio < spec.minContrast) problems.push(`semantic role "${role}" (${appearance}) is ${ratio.toFixed(2)}:1 on ${background} (--color-${surface}); it needs ${spec.minContrast}:1.`);
     }
   }
 }

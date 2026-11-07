@@ -53,8 +53,9 @@ const roles = Object.entries(semanticColors).map(([role, spec]) => {
   const args = [`dark: ${ref(spec.dark)}`, `light: ${ref(spec.light)}`];
   if ("darkHighContrast" in spec) args.push(`darkHighContrast: ${ref(spec.darkHighContrast)}`);
   if ("lightHighContrast" in spec) args.push(`lightHighContrast: ${ref(spec.lightHighContrast)}`);
-  return `    static let ${role} = Color(nsColor: appearanceColor(${args.join(", ")}))`;
+  return `    static let ${role} = appearanceColor(${args.join(", ")})`;
 });
+const colorRoles = Object.keys(semanticColors).map((role) => `    static let ${role} = Color(nsColor: BruhsNSColor.${role})`);
 
 const radii = ["seed", "grape", "lychee", "mango", "pomelo"].map((r) => `    static let ${r}: CGFloat = ${points(token(`radius-${r}`))}`);
 const durations = ["blink", "fast", "standard", "slow", "bloom"].map((d) => `    static let ${d}: Double = ${seconds(token(`duration-${d}`))}`);
@@ -73,9 +74,15 @@ enum BruhsPalette {
 ${palette.join("\n")}
 }
 
-/// Semantic roles. They follow the system appearance and Increase Contrast.
-enum BruhsColor {
+/// Semantic roles for AppKit: window backgrounds, table drawing. They follow the system appearance and
+/// Increase Contrast.
+enum BruhsNSColor {
 ${roles.join("\n")}
+}
+
+/// The same roles for SwiftUI.
+enum BruhsColor {
+${colorRoles.join("\n")}
 }
 
 enum BruhsRadius {
