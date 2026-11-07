@@ -102,6 +102,48 @@ final class PanelSummaryTests: XCTestCase {
         XCTAssertNil(summary.own)
     }
 
+    func testMacOSProcessesGetTheirOwnRowRatherThanCountingAsApps() {
+        let windowServer = sample("ws", executable: "/System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer", pid: 150, cpu: 12)
+        let launchd = sample("ld", executable: "/sbin/launchd", pid: 1, cpu: 0.1)
+        let summary = PanelSummary.apps([windowServer, launchd, app("a", cpu: 3), app("b", cpu: 1)], ownPID: 42, limit: 1)
+        XCTAssertEqual(summary.top.map(\.id), ["a"], "WindowServer is busier, but it isn't an app")
+        XCTAssertEqual(summary.otherCount, 1)
+        XCTAssertEqual(summary.systemCount, 2)
+        XCTAssertEqual(summary.systemCPU ?? 0, 12.1, accuracy: 0.001)
+    }
+
+    func testUnderMemoryPressureTheListRanksByMemory() {
+        let apps = [app("light", cpu: 50, memory: 100), app("heavy", cpu: 1, memory: 9_000), app("middle", cpu: 5, memory: 500)]
+        XCTAssertEqual(PanelSummary.Ranking(pressure: .warning), .memory)
+        XCTAssertEqual(PanelSummary.Ranking(pressure: .normal), .cpu)
+        let summary = PanelSummary.apps(apps, ownPID: 42, limit: 2, ranking: .memory)
+        XCTAssertEqual(summary.top.map(\.id), ["heavy", "middle"])
+        XCTAssertEqual(summary.otherMemory, 100)
+    }
+
+    func testTheCulpritIsTheAppThatGrewMost() {
+        var history = SessionHistory()
+        let grows = { (memory: UInt64) in [self.app("chrome", cpu: 1, memory: memory), self.app("xcode", cpu: 1, memory: 5_000_000_000)] }
+        history.append(ActivitySnapshot(date: date(0), uptime: 0, cpu: 10, pressure: .normal, apps: grows(1_000_000_000), error: nil))
+        let now = ActivitySnapshot(date: date(60), uptime: 60, cpu: 10, pressure: .warning, apps: grows(3_100_000_000), error: nil)
+        history.append(now)
+        let culprit = PanelSummary.memoryCulprit(now, history: history, window: 0...60, ownPID: 42)
+        XCTAssertEqual(culprit?.app.id, "chrome", "Xcode uses more, but Chrome grew")
+        XCTAssertEqual(culprit?.growth, 2_100_000_000)
+        XCTAssertNil(PanelSummary.memoryCulprit(ActivitySnapshot(date: date(60), uptime: 60, cpu: 10, pressure: .normal, apps: grows(1), error: nil), history: history, window: 0...60, ownPID: 42))
+    }
+
+    func testWithoutRealGrowthTheCulpritIsTheLargest() {
+        var history = SessionHistory()
+        let apps = [app("chrome", cpu: 1, memory: 1_000_000_000), app("xcode", cpu: 1, memory: 5_000_000_000)]
+        history.append(ActivitySnapshot(date: date(0), uptime: 0, cpu: 10, pressure: .warning, apps: apps, error: nil))
+        let now = ActivitySnapshot(date: date(2), uptime: 2, cpu: 10, pressure: .warning, apps: apps, error: nil)
+        history.append(now)
+        let culprit = PanelSummary.memoryCulprit(now, history: history, window: 0...2, ownPID: 42)
+        XCTAssertEqual(culprit?.app.id, "xcode")
+        XCTAssertNil(culprit?.growth)
+    }
+
     func testRowsThatWouldReadTheSameAddTheirProcessID() {
         let daemon = "/System/Library/Frameworks/CoreSpotlight.framework/spotlightknowledged"
         let first = sample("a", executable: daemon, pid: 3137)
@@ -145,18 +187,17 @@ final class PanelSummaryTests: XCTestCase {
     func testMenuBarValueFillsFourDigitCells() {
         XCTAssertEqual(PanelSummary.menuBarValue("100%"), "100%")
         XCTAssertEqual(PanelSummary.menuBarValue("17%"), "\u{2007}17%")
-        XCTAssertEqual(PanelSummary.menuBarValue(nil), "\u{2007}\u{2007}\u{2012}%")
+        XCTAssertNil(PanelSummary.menuBarValue(nil), "Without a reading the glyph shows alone, not a placeholder dash.")
     }
 
     func testMenuBarValueKeepsOneWidthAsItTicks() {
         // The status item's font: the menu bar size with tabular digits.
         let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.menuBarFont(ofSize: 0).pointSize, weight: .medium)
         func width(_ text: String) -> CGFloat { NSAttributedString(string: text, attributes: [.font: font]).size().width }
-        let widest = width(PanelSummary.menuBarValue("100%"))
+        let widest = width(PanelSummary.menuBarValue("100%") ?? "")
         for value in 0..<100 {
-            XCTAssertEqual(width(PanelSummary.menuBarValue("\(value)%")), widest, accuracy: 0.01, "\(value)%")
+            XCTAssertEqual(width(PanelSummary.menuBarValue("\(value)%") ?? ""), widest, accuracy: 0.01, "\(value)%")
         }
-        XCTAssertEqual(width(PanelSummary.menuBarValue(nil)), widest, accuracy: 0.01)
     }
 
     // MARK: Fixtures
@@ -175,16 +216,16 @@ final class PanelSummaryTests: XCTestCase {
         PanelSummary.PressureRun(start: start, end: end, pressure: pressure)
     }
 
-    private func app(_ id: String, cpu: Double?, pid: Int32 = 1) -> AppSample {
+    private func app(_ id: String, cpu: Double?, pid: Int32 = 1, memory: UInt64? = nil) -> AppSample {
         AppSample(id: id, name: id, executable: "/Applications/\(id).app", members: [ProcessKey(pid: pid, started: 1)],
-                  cpu: cpu, memory: nil, read: nil, written: nil, restricted: cpu == nil)
+                  cpu: cpu, memory: memory, read: nil, written: nil, restricted: cpu == nil)
     }
 
     /// A group named the way the sampler would name `executable`.
-    private func sample(_ id: String, executable: String, pid: Int32) -> AppSample {
+    private func sample(_ id: String, executable: String, pid: Int32, cpu: Double = 1) -> AppSample {
         let identity = ProcessIdentity(path: executable, processName: URL(fileURLWithPath: executable).lastPathComponent, bundleName: nil)
         return AppSample(id: id, identity: identity, executable: executable, members: [ProcessKey(pid: pid, started: 1)],
-                         cpu: 1, memory: nil, read: nil, written: nil, restricted: false, openedBy: nil)
+                         cpu: cpu, memory: nil, read: nil, written: nil, restricted: false, openedBy: nil)
     }
 
     private func snapshot(cpu: Double?, apps: [AppSample], error: String? = nil) -> ActivitySnapshot {

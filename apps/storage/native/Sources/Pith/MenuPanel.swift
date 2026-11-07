@@ -33,7 +33,7 @@ struct MenuPanel: View {
                         Text("Collecting activity…").font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
                     }
                 }
-                PanelFooter(actions: actions)
+                PanelFooter(actions: actions, model: model)
                     .padding(.top, 12)
                 PanelStatusLine(model: model)
                     .padding(.top, 10)

@@ -24,24 +24,41 @@ struct PanelActions {
     return image
 }
 
-/// The menu bar title after the glyph: the CPU value in fixed digit cells unless `showsValue` is off, plus the
-/// memory-pressure symbol in its status colour only while pressure is elevated, so the item draws attention only
-/// when something is wrong.
-@MainActor func statusTitle(cpu: String?, pressure: MemoryPressure, showsValue: Bool) -> NSAttributedString {
+/// The menu bar title, which AppKit draws to the left of the glyph: the memory-pressure symbol in its status colour only
+/// while pressure is elevated, so the item draws attention only when something is wrong, then the value in fixed digit
+/// cells unless `showsValue` is off. The cells pad on the left, so the digits stay against the glyph as they tick.
+@MainActor func statusTitle(cpu: String?, memory: String? = nil, pressure: MemoryPressure, showsValue: Bool) -> NSAttributedString {
     // The menu bar's own size, with tabular digits so values tick in place.
     let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.menuBarFont(ofSize: 0).pointSize, weight: .medium)
-    // AppKit leaves 2 pt between the glyph and the title; the space gives the value room.
-    let title = NSMutableAttributedString(string: showsValue ? " " + PanelSummary.menuBarValue(cpu) : "", attributes: [.font: font])
-    guard pressure.isElevated,
-          let symbol = NSImage(systemSymbolName: pressure.symbol, accessibilityDescription: pressure.label)?.withSymbolConfiguration(
-            NSImage.SymbolConfiguration(pointSize: font.pointSize, weight: .medium).applying(.init(paletteColors: [NSColor(pressure.tint)])))
-    else { return title }
-    symbol.isTemplate = false
-    let attachment = NSTextAttachment()
-    attachment.image = symbol
-    attachment.bounds = CGRect(x: 0, y: (font.capHeight - symbol.size.height) / 2, width: symbol.size.width, height: symbol.size.height)
-    title.append(NSAttributedString(string: " ", attributes: [.font: font]))
-    title.append(NSAttributedString(attachment: attachment))
+    let title = NSMutableAttributedString()
+    func text(_ string: String) { title.append(NSAttributedString(string: string, attributes: [.font: font])) }
+    func symbol(_ image: NSImage) {
+        let attachment = NSTextAttachment()
+        attachment.image = image
+        attachment.bounds = CGRect(x: 0, y: (font.capHeight - image.size.height) / 2, width: image.size.width, height: image.size.height)
+        title.append(NSAttributedString(attachment: attachment))
+    }
+    if pressure.isElevated,
+       let warning = NSImage(systemSymbolName: pressure.symbol, accessibilityDescription: pressure.label)?.withSymbolConfiguration(
+        NSImage.SymbolConfiguration(pointSize: font.pointSize, weight: .medium).applying(.init(paletteColors: [NSColor(pressure.tint)]))) {
+        warning.isTemplate = false
+        symbol(warning)
+    }
+    // Without a reading, at launch and after waking, the glyph shows alone.
+    if showsValue, let cpu = PanelSummary.menuBarValue(cpu) {
+        if title.length > 0 { text(" ") }
+        text(cpu)
+    }
+    // Memory in use follows its own small symbol, so the two percents can't be confused.
+    if showsValue, let memory = PanelSummary.menuBarValue(memory),
+       let chip = NSImage(systemSymbolName: "memorychip", accessibilityDescription: "Memory")?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: font.pointSize - 2, weight: .medium)) {
+        chip.isTemplate = true
+        if title.length > 0 { text(" ") }
+        symbol(chip)
+        text(memory)
+    }
+    // AppKit leaves 2 pt between the title and the glyph; the space gives the value room.
+    if title.length > 0 { text(" ") }
     return title
 }
 
@@ -74,6 +91,8 @@ struct PanelActions {
         self.actions = actions
         super.init()
         item.button?.image = statusGlyph()
+        // The value reads first and the glyph closes the item, nearest the menu bar's other icons.
+        item.button?.imagePosition = .imageRight
         item.button?.target = self
         item.button?.action = #selector(togglePanel)
         popover.behavior = .transient
@@ -85,7 +104,10 @@ struct PanelActions {
 
     func update() {
         guard let button = item.button else { return }
-        let cpu = activity.paused ? nil : activity.snapshot?.cpu.map { percent($0, glance: true) }
+        let shows = activity.menuBarShows
+        let cpu = activity.paused || shows == .memory ? nil : activity.snapshot?.cpu.map { percent($0, glance: true) }
+        let memoryUse = activity.paused ? nil : activity.snapshot?.memory.map { Double($0.used) / Double(max(1, $0.physical)) * 100 }
+        let memory = shows == .cpu ? nil : memoryUse.map { percent($0, glance: true) }
         let pressure = activity.paused ? MemoryPressure.unknown : activity.snapshot?.pressure ?? .unknown
         // Every title has the same width (see PanelSummary.menuBarValue), so a variable-length item never
         // changes size as values tick; it grows only while the pressure symbol shows. Icon-only mode drops the
@@ -93,13 +115,18 @@ struct PanelActions {
         let glyphOnly = activity.iconOnly && !pressure.isElevated
         let length = glyphOnly ? NSStatusItem.squareLength : NSStatusItem.variableLength
         if item.length != length { item.length = length }
-        button.attributedTitle = glyphOnly ? NSAttributedString() : statusTitle(cpu: cpu, pressure: pressure, showsValue: !activity.iconOnly)
+        let position: NSControl.ImagePosition = glyphOnly ? .imageOnly : .imageRight
+        if button.imagePosition != position { button.imagePosition = position }
+        button.attributedTitle = glyphOnly ? NSAttributedString() : statusTitle(cpu: cpu, memory: memory, pressure: pressure, showsValue: !activity.iconOnly)
+        let spoken = { (value: String?) in value.map { $0.replacingOccurrences(of: "%", with: " percent") } ?? "unavailable" }
         let state = activity.paused
             ? "monitoring paused"
-            : "CPU \(cpu.map { $0.replacingOccurrences(of: "%", with: " percent") } ?? "unavailable"), memory pressure \(pressure.label.lowercased())"
+            : [shows == .memory ? nil : "CPU \(spoken(cpu))", shows == .cpu ? nil : "memory used \(spoken(memory))", "memory pressure \(pressure.label.lowercased())"]
+                .compactMap { $0 }.joined(separator: ", ")
         button.setAccessibilityLabel("Pith")
         button.setAccessibilityValue(state)
-        let readings = activity.paused ? ["Monitoring paused"] : [cpu.map { "CPU \($0)" }, "Memory pressure \(pressure.label.lowercased())"].compactMap { $0 }
+        let readings = activity.paused ? ["Monitoring paused"]
+            : [cpu.map { "CPU \($0)" }, memory.map { "Memory used \($0)" }, "Memory pressure \(pressure.label.lowercased())"].compactMap { $0 }
         button.toolTip = (["Pith"] + readings).joined(separator: "\n")
     }
 

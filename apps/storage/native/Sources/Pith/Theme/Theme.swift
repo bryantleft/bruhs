@@ -47,23 +47,60 @@ extension Font {
     }
 }
 
-/// Type roles for Pith's content. Numbers and data are Monaspace with tabular digits; names,
-/// labels and controls use the system font so they sit naturally next to macOS chrome.
+/// The View menu's Bigger and Smaller Text. macOS has no Dynamic Type, so Pith scales its own type roles; the window
+/// chrome, menus and alerts follow the system as they always do.
+@MainActor @Observable final class TextSize {
+    static let shared = TextSize()
+    /// Steps either side of the default, as Mail and Notes offer. Past 1.4 the panel no longer fits under the menu bar.
+    static let steps: [Double] = [0.85, 1, 1.15, 1.3, 1.4]
+    private static let key = "textScale"
+    private(set) var scale: Double
+
+    private init() {
+        let saved = UserDefaults.standard.double(forKey: Self.key)
+        scale = Self.steps.contains(saved) ? saved : 1
+    }
+
+    var canGrow: Bool { scale < Self.steps[Self.steps.count - 1] }
+    var canShrink: Bool { scale > Self.steps[0] }
+
+    func step(_ direction: Int) {
+        guard let index = Self.steps.firstIndex(of: scale) else { return reset() }
+        set(Self.steps[min(Self.steps.count - 1, max(0, index + direction))])
+    }
+
+    func reset() { set(1) }
+
+    private func set(_ value: Double) {
+        scale = value
+        UserDefaults.standard.set(value, forKey: Self.key)
+    }
+
+    /// A point size at the current scale.
+    func size(_ points: CGFloat) -> CGFloat { (points * scale).rounded(.toNearestOrAwayFromZero) }
+}
+
+/// Type roles for Pith's content. Numbers and data are Monaspace with tabular digits; names, labels, sentences and
+/// controls use the system font so they sit naturally next to macOS chrome. Every role follows the View menu's text size.
 @MainActor enum BruhsType {
+    private static func size(_ points: CGFloat) -> CGFloat { TextSize.shared.size(points) }
     /// The headline value in the panel, e.g. "17%".
-    static var readout: Font { .monaspace(size: 30, weight: .medium) }
-    static var data: Font { .monaspace(size: 12.5) }
-    static var dataSmall: Font { .monaspace(size: 11) }
-    static var caption: Font { .monaspace(size: 11) }
+    static var readout: Font { .monaspace(size: size(30), weight: .medium) }
+    static var data: Font { .monaspace(size: size(12.5)) }
+    static var dataSmall: Font { .monaspace(size: size(11)) }
+    /// A small figure under or beside content, e.g. a chart's axis times. Sentences use `note`.
+    static var caption: Font { .monaspace(size: size(11)) }
     /// The name heading a panel, e.g. the inspector's app.
-    static var title: Font { .system(size: 15, weight: .semibold) }
-    static var label: Font { .system(size: 13, weight: .semibold) }
-    static var body: Font { .system(size: 13) }
+    static var title: Font { .system(size: size(15), weight: .semibold) }
+    static var label: Font { .system(size: size(13), weight: .semibold) }
+    static var body: Font { .system(size: size(13)) }
     /// Names and labels in dense rows, e.g. the inspector's process list.
-    static var bodySmall: Font { .system(size: 12) }
-    /// A short hint or description under or beside the content.
-    static var note: Font { .system(size: 11) }
-    static var sectionTitle: Font { .system(size: 11, weight: .semibold) }
+    static var bodySmall: Font { .system(size: size(12)) }
+    /// A short hint, description or sentence under or beside the content.
+    static var note: Font { .system(size: size(11)) }
+    static var sectionTitle: Font { .system(size: size(11), weight: .semibold) }
+    /// Chips and buttons, which sit beside macOS's own controls.
+    static var control: Font { .system(size: size(12), weight: .medium) }
 }
 
 extension MemoryPressure {
@@ -78,19 +115,53 @@ extension MemoryPressure {
     }
 }
 
-/// Memory pressure as symbol, colour and word together, so it reads without colour.
+/// Memory pressure as symbol, colour and word together, so it reads without colour. Paused, it says so in a neutral
+/// tone: a stale reading must never look healthy.
 struct StatusChip: View {
     let pressure: MemoryPressure
+    var paused = false
     var body: some View {
         Label {
-            Text(pressure.label).foregroundStyle(BruhsColor.text)
+            Text(paused ? "Paused" : pressure.label).foregroundStyle(paused ? BruhsColor.textSecondary : BruhsColor.text)
         } icon: {
-            Image(systemName: pressure.symbol).foregroundStyle(pressure.tint)
+            Image(systemName: paused ? "pause.circle" : pressure.symbol).foregroundStyle(paused ? BruhsColor.textTertiary : pressure.tint)
         }
-        .font(.system(size: 12, weight: .medium))
-        .help("Memory pressure: how easily macOS can meet memory demand. Cached files in RAM are useful, not a problem.")
+        .font(BruhsType.control)
+        .help(paused ? "Monitoring is paused, so there's no current reading." : "Memory pressure: how easily macOS can meet memory demand. Cached files in RAM are useful, not a problem.")
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Memory pressure \(pressure.label)")
+        .accessibilityLabel(paused ? "Memory pressure paused" : "Memory pressure \(pressure.label)")
+    }
+}
+
+extension ThermalPressure {
+    var symbol: String { self >= .critical ? "thermometer.high" : "thermometer.medium" }
+    var tint: Color { self >= .critical ? BruhsColor.statusCritical : self >= .serious ? BruhsColor.statusWarning : BruhsColor.textTertiary }
+}
+
+/// Shown only while macOS slows the Mac to cool it: symbol, colour and word, like memory pressure.
+struct ThermalChip: View {
+    let thermal: ThermalPressure
+    var body: some View {
+        Label {
+            Text(thermal.label).foregroundStyle(BruhsColor.text)
+        } icon: {
+            Image(systemName: thermal.symbol).foregroundStyle(thermal.tint)
+        }
+        .font(BruhsType.control)
+        .help("The Mac is \(thermal.label.lowercased()), so macOS is slowing it down to cool it. Apps run slower until it cools.")
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Thermal state \(thermal.label)")
+    }
+}
+
+/// Low Power Mode is on, which slows the Mac on purpose.
+struct LowPowerChip: View {
+    var body: some View {
+        Label("Low Power", systemImage: "leaf")
+            .font(BruhsType.control)
+            .foregroundStyle(BruhsColor.textSecondary)
+            .help("Low Power Mode is on, so macOS runs the Mac slower to save energy.")
+            .accessibilityLabel("Low Power Mode on")
     }
 }
 
@@ -151,7 +222,7 @@ struct BruhsButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12, weight: .medium))
+            .font(BruhsType.control)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .foregroundStyle(foreground)
@@ -294,6 +365,10 @@ struct BruhsSidePanel<Content: View>: View {
     let close: () -> Void
     @ViewBuilder var content: Content
     @State private var dragStart: Double?
+    /// Whether this panel pushed the resize cursor, so it pops exactly once: on leaving the edge, when a drag that
+    /// left the edge ends, or when the panel goes away mid-hover.
+    @State private var cursorPushed = false
+    @State private var hoveringEdge = false
 
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: BruhsRadius.lychee, style: .continuous) }
 
@@ -317,16 +392,37 @@ struct BruhsSidePanel<Content: View>: View {
                     .frame(width: 9)
                     .contentShape(Rectangle())
                     .offset(x: -5)
-                    .onHover { inside in if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
+                    .onHover { inside in
+                        hoveringEdge = inside
+                        if inside { pushCursor() } else if dragStart == nil { popCursor() }
+                    }
                     .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
                         .onChanged { drag in
                             let start = dragStart ?? width
                             dragStart = start
                             width = min(widths.upperBound, max(widths.lowerBound, start - drag.translation.width))
                         }
-                        .onEnded { _ in dragStart = nil })
+                        .onEnded { _ in
+                            dragStart = nil
+                            if !hoveringEdge { popCursor() }
+                        })
+                    .onDisappear { popCursor() }
                     .accessibilityHidden(true)
             }
+    }
+}
+
+extension BruhsSidePanel {
+    private func pushCursor() {
+        guard !cursorPushed else { return }
+        NSCursor.resizeLeftRight.push()
+        cursorPushed = true
+    }
+
+    private func popCursor() {
+        guard cursorPushed else { return }
+        NSCursor.pop()
+        cursorPushed = false
     }
 }
 

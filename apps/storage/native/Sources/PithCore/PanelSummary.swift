@@ -28,6 +28,7 @@ public enum PanelSummary {
         public let start: Double
         public let end: Double
         public let pressure: MemoryPressure
+        public init(start: Double, end: Double, pressure: MemoryPressure) { self.start = start; self.end = end; self.pressure = pressure }
     }
 
     /// Readings merged into runs for the panel's pressure band. A reading covers the time back to the previous
@@ -74,33 +75,74 @@ public enum PanelSummary {
 
     // MARK: Apps
 
-    public struct Apps: Sendable {
-        /// The busiest apps, most CPU first.
-        public let top: [AppSample]
-        /// Every other app except Pith, and the summed CPU of those Pith can measure.
-        public let otherCount: Int
-        public let otherCPU: Double?
-        /// Pith's own process group, so the panel can show what monitoring costs.
-        public let own: AppSample?
+    /// What the panel ranks apps by: CPU, or memory while memory pressure is elevated, so the list names the culprit.
+    public enum Ranking: Sendable, Equatable {
+        case cpu, memory
+        public init(pressure: MemoryPressure) { self = pressure.isElevated ? .memory : .cpu }
     }
 
-    /// The busiest apps by CPU, without Pith itself; everything else is summed into one row so the list adds up.
-    /// `holding` is an earlier order of app ids, kept while the pointer is over the list so a row doesn't change
-    /// under a click; apps that quit drop out of it.
-    public static func apps(_ apps: [AppSample], ownPID: Int32, limit: Int, holding: [String]? = nil) -> Apps {
+    public struct Apps: Sendable {
+        /// The busiest apps and tools by `ranking`, most first. macOS's own processes are in `system` instead.
+        public let top: [AppSample]
+        /// Every other app and tool except Pith, with the CPU and memory of those Pith can measure.
+        public let otherCount: Int
+        public let otherCPU: Double?
+        public let otherMemory: UInt64?
+        /// macOS's own processes, summed into one row, as Activity groups them.
+        public let systemCount: Int
+        public let systemCPU: Double?
+        public let systemMemory: UInt64?
+        /// Pith's own process group, so the panel can show what monitoring costs.
+        public let own: AppSample?
+        public let ranking: Ranking
+    }
+
+    /// The busiest apps and tools, without Pith itself; the rest of them are summed into one row and macOS's own
+    /// processes into another, so the list adds up without daemons posing as apps. `holding` is an earlier order of app
+    /// ids, kept while the pointer is over the list so a row doesn't change under a click; apps that quit drop out of it.
+    public static func apps(_ apps: [AppSample], ownPID: Int32, limit: Int, holding: [String]? = nil, ranking: Ranking = .cpu) -> Apps {
         let own = own(apps, pid: ownPID)
-        let others = apps.filter { $0.id != own?.id }
+        let system = apps.filter { $0.identity.kind == .system && $0.id != own?.id }
+        let others = apps.filter { $0.identity.kind != .system && $0.id != own?.id }
         let top: [AppSample]
         if let holding {
             let byID = Dictionary(others.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             top = holding.compactMap { byID[$0] }
         } else {
-            top = Array(others.filter { $0.cpu != nil }.sorted(by: busier).prefix(limit))
+            let measured = others.filter { ranking == .cpu ? $0.cpu != nil : $0.memory != nil }
+            top = Array(measured.sorted { busier($0, $1, by: ranking) }.prefix(limit))
         }
         let shown = Set(top.map(\.id))
         let rest = others.filter { !shown.contains($0.id) }
-        let measured = rest.compactMap(\.cpu)
-        return Apps(top: top, otherCount: rest.count, otherCPU: measured.isEmpty ? nil : measured.reduce(0, +), own: own)
+        func cpu(_ group: [AppSample]) -> Double? {
+            let values = group.compactMap(\.cpu)
+            return values.isEmpty ? nil : values.reduce(0, +)
+        }
+        func memory(_ group: [AppSample]) -> UInt64? {
+            let values = group.compactMap(\.memory)
+            return values.isEmpty ? nil : values.reduce(0, +)
+        }
+        return Apps(top: top, otherCount: rest.count, otherCPU: cpu(rest), otherMemory: memory(rest),
+                    systemCount: system.reduce(0) { $0 + $1.members.count }, systemCPU: cpu(system), systemMemory: memory(system),
+                    own: own, ranking: ranking)
+    }
+
+    /// How much an app's footprint changed across the window: its latest reading less its first one inside it. Nil
+    /// with fewer than two readings, since one reading shows no change.
+    public static func memoryGrowth(_ timeline: AppTimeline?, window: ClosedRange<Double>) -> Int64? {
+        guard let points = timeline?.points.filter({ window.contains($0.uptime) }).compactMap({ $0.memory }), let first = points.first, let last = points.last, points.count > 1 else { return nil }
+        return Int64(bitPattern: last &- first)
+    }
+
+    /// The panel's answer while memory pressure is elevated: since when, and which app grew the most, or failing
+    /// that which uses the most. Nil while pressure is normal.
+    public static func memoryCulprit(_ snapshot: ActivitySnapshot?, history: SessionHistory, window: ClosedRange<Double>, ownPID: Int32) -> (app: AppSample, growth: Int64?)? {
+        guard let snapshot, snapshot.pressure.isElevated else { return nil }
+        let candidates = snapshot.apps.filter { $0.memory != nil && !$0.members.contains { $0.pid == ownPID } }
+        let grown = candidates.compactMap { app in memoryGrowth(history.apps[app.id], window: window).map { (app, $0) } }
+        // Growth names a culprit only when it's real: 100 MB in ten minutes is a browser tab, not noise.
+        if let biggest = grown.max(by: { $0.1 < $1.1 }), biggest.1 >= 100_000_000 { return (biggest.0, biggest.1) }
+        return candidates.max { ($0.memory ?? 0) < ($1.memory ?? 0) }.map { ($0, nil) }
     }
 
     /// What follows an app's name in the panel. A tool's version tells copies apart, as in Activity, and rows that
@@ -117,9 +159,12 @@ public enum PanelSummary {
         apps.first { $0.members.contains { $0.pid == pid } }
     }
 
-    /// More CPU first; equal values fall back to the name, then the id, so rows don't swap between samples.
-    private static func busier(_ a: AppSample, _ b: AppSample) -> Bool {
-        if a.cpu != b.cpu { return (a.cpu ?? -1) > (b.cpu ?? -1) }
+    /// More CPU (or memory) first; equal values fall back to the name, then the id, so rows don't swap between samples.
+    private static func busier(_ a: AppSample, _ b: AppSample, by ranking: Ranking) -> Bool {
+        switch ranking {
+        case .cpu: if a.cpu != b.cpu { return (a.cpu ?? -1) > (b.cpu ?? -1) }
+        case .memory: if a.memory != b.memory { return (a.memory ?? 0) > (b.memory ?? 0) }
+        }
         if a.name != b.name { return a.name < b.name }
         return a.id < b.id
     }
@@ -144,12 +189,12 @@ public enum PanelSummary {
         return formatter.string(from: date)
     }
 
-    /// The menu bar value in four digit-wide cells, e.g. "\u{2007}17%", or a figure dash without a reading.
-    /// Figure spaces and the figure dash are as wide as tabular digits, so the status item keeps one width as
-    /// the value ticks.
-    public static func menuBarValue(_ percent: String?) -> String {
-        let value = percent ?? "\u{2012}%"
-        return String(repeating: "\u{2007}", count: max(0, 4 - value.count)) + value
+    /// The menu bar value in four digit-wide cells, e.g. "\u{2007}17%", or nil without a reading, when the glyph
+    /// shows alone rather than a placeholder. Figure spaces are as wide as tabular digits, so the status item keeps
+    /// one width as the value ticks.
+    public static func menuBarValue(_ percent: String?) -> String? {
+        guard let percent else { return nil }
+        return String(repeating: "\u{2007}", count: max(0, 4 - percent.count)) + percent
     }
 
     /// Readings that begin more than `maxGap` after the window opens: the session is younger than the window.
