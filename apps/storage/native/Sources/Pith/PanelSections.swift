@@ -275,29 +275,35 @@ struct PanelFooter: View {
     let actions: PanelActions
 
     var body: some View {
+        // Both buttons open the main window. "Open" keeps the pair from reading as tabs with one selected.
         HStack(spacing: 6) {
-            Button("Activity") { actions.openActivity(nil) }
+            Button("Open Activity") { actions.openActivity(nil) }
                 .buttonStyle(.bruhsSoft)
                 .activatesOnReturn { actions.openActivity(nil) }
-            Button("Disk", action: actions.openDisk)
+                .help("Every app and process, with CPU, memory and disk use over the last 10 minutes")
+            Button("Open Disk", action: actions.openDisk)
                 .buttonStyle(.bruhsGhost)
                 .activatesOnReturn(actions.openDisk)
+                .help("A map of what takes up space on your disk")
             Spacer()
+            // Pith has no Dock icon, and its app menu shows only while one of its windows is in front, so the panel is
+            // where Settings and Quit live.
             Menu {
                 Button("Settings…", action: actions.openSettings).keyboardShortcut(",")
                 Divider()
                 Button("Quit Pith") { NSApp.terminate(nil) }.keyboardShortcut("q")
             } label: {
-                Image(systemName: "ellipsis")
+                Image(systemName: "gearshape")
             }
             .menuStyle(.button)
             .buttonStyle(.borderless)
             .menuIndicator(.hidden)
-            // A button-sized target; the dots line up with the numbers above.
+            .tint(BruhsColor.textSecondary)
+            // A button-sized target; the gear lines up with the numbers above.
             .frame(width: 28, height: 24)
             .padding(.trailing, -8)
             .help("Settings and Quit")
-            .accessibilityLabel("More")
+            .accessibilityLabel("Settings and Quit")
         }
     }
 }
