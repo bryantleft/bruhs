@@ -33,6 +33,13 @@ export const semanticColors = {
   },
   /** A recessed area on the canvas, such as a folder on the disk map: the web theme's `surface-well`. */
   well: { dark: { token: "longan-900", alpha: 0.6 }, light: { token: "longan-100", alpha: 0.55 } },
+  /**
+   * A scroll bar's thumb, on no track: the web theme's thin scrollbar, with a light variant. 3:1 is WCAG's
+   * contrast for parts of a control; `longan-500`, the lighter step, falls short of it on `surface`.
+   */
+  scrollbar: { dark: "longan-600", light: "longan-600", darkHighContrast: "longan-500", lightHighContrast: "longan-700", minContrast: 3 },
+  /** The thumb while the pointer is over its scroll area or it's being dragged. */
+  scrollbarHover: { dark: "longan-500", light: "longan-700", darkHighContrast: "longan-400", lightHighContrast: "longan-800", minContrast: 3 },
   /** Lines, marks and text links in the brand colour. */
   accent: { dark: "persimmon-400", light: "persimmon-700", minContrast: 3 },
   /** Filled primary controls, with `onAccentFill` for their labels. */
