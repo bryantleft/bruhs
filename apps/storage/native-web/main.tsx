@@ -154,21 +154,8 @@ function DiskMap() {
       </p>
     );
   }
-  if (!result || !current) {
-    return (
-      <main className="empty-state h-full">
-        <h1 className="text-h4 text-balance text-(--role-text)">
-          See what takes up space
-        </h1>
-        <p className="text-body-sm text-pretty">
-          Choose a folder above. Bigger blocks use more space.
-        </p>
-        <p className="text-body-sm text-pretty">
-          Click a block to select it. Double-click a folder to open it.
-        </p>
-      </main>
-    );
-  }
+  // Before a scan the page stays empty: Pith's bar above says there's no scan yet and holds the scan buttons.
+  if (!result || !current) return null;
 
   return (
     <main className="flex h-full min-h-0 flex-col gap-2 px-4 pt-1 pb-4">

@@ -95,10 +95,6 @@
       background-color: var(--role-hairline);
       color: var(--role-text);
     }
-
-    .empty-state p {
-      color: var(--role-text-secondary);
-    }
   }
 
   @media (prefers-color-scheme: light) and (hover: hover) {
