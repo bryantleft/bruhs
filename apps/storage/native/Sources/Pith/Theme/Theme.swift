@@ -330,6 +330,84 @@ struct BruhsSidePanel<Content: View>: View {
     }
 }
 
+/// A scroll bar in the web theme's style: a thin, fully rounded thumb in the `scrollbar` role on no track, in
+/// `scrollbarHover` while the pointer is over it or dragging it. AppKit still runs it, so it keeps overlay fading,
+/// paging and the user's Show scroll bars setting.
+final class BruhsScroller: NSScroller {
+    /// The web theme's 10 px scrollbar less its 2 px clear border on each side.
+    private static let thickness: CGFloat = 6
+    private var hoverArea: NSTrackingArea?
+    private var isHovering = false {
+        didSet { if isHovering != oldValue { needsDisplay = true } }
+    }
+
+    override class var isCompatibleWithOverlayScrollers: Bool { true }
+    override var isOpaque: Bool { false }
+
+    /// Gives a scroll view these scroll bars in place of the system's. `inset` keeps them clear of a rounded
+    /// container's corners: that far from the top and bottom, and half of it from the trailing edge.
+    static func install(in scrollView: NSScrollView, inset: CGFloat = 0) {
+        if !(scrollView.verticalScroller is BruhsScroller) { scrollView.verticalScroller = BruhsScroller() }
+        if !(scrollView.horizontalScroller is BruhsScroller) { scrollView.horizontalScroller = BruhsScroller() }
+        if inset > 0 { scrollView.scrollerInsets = NSEdgeInsets(top: inset, left: 0, bottom: inset, right: inset / 2) }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { super.mouseEntered(with: event); isHovering = true }
+    override func mouseExited(with event: NSEvent) { super.mouseExited(with: event); isHovering = false }
+
+    /// The track stays clear, as on the web.
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
+
+    // AppKit draws with the view's appearance current, so the dynamic roles resolve for light, dark and Increase Contrast here.
+    override func drawKnob() {
+        let knob = rect(for: .knob)
+        guard knob.width > 0, knob.height > 0 else { return }
+        let vertical = bounds.height >= bounds.width
+        let thickness = min(Self.thickness, vertical ? knob.width : knob.height)
+        let thumb = vertical
+            ? NSRect(x: knob.midX - thickness / 2, y: knob.minY + 2, width: thickness, height: max(thickness, knob.height - 4))
+            : NSRect(x: knob.minX + 2, y: knob.midY - thickness / 2, width: max(thickness, knob.width - 4), height: thickness)
+        (isHovering || hitPart == .knob ? BruhsNSColor.scrollbarHover : BruhsNSColor.scrollbar).setFill()
+        NSBezierPath(roundedRect: thumb, xRadius: thickness / 2, yRadius: thickness / 2).fill()
+    }
+}
+
+extension View {
+    /// Gives a SwiftUI ScrollView bruhs scroll bars. Apply it to the scroll view's content: SwiftUI has no API for a
+    /// scroll bar's look, so a probe inside the content finds the AppKit scroll view that hosts it. Pass the
+    /// container's corner clearance as `inset` when the scroll view fills a rounded card or popover.
+    func bruhsScrollers(inset: CGFloat = 0) -> some View { background(BruhsScrollerProbe(inset: inset)) }
+}
+
+private struct BruhsScrollerProbe: NSViewRepresentable {
+    let inset: CGFloat
+
+    final class Probe: NSView {
+        var inset: CGFloat = 0
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let scrollView = enclosingScrollView { BruhsScroller.install(in: scrollView, inset: inset) }
+        }
+    }
+
+    func makeNSView(context: Context) -> Probe {
+        let probe = Probe()
+        probe.inset = inset
+        return probe
+    }
+
+    func updateNSView(_ view: Probe, context: Context) {}
+}
+
 /// Used-versus-total capacity, e.g. the startup disk.
 struct CapacityBar: View {
     let used: Double

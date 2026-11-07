@@ -45,6 +45,7 @@ struct ActivityTable: NSViewRepresentable {
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
+        BruhsScroller.install(in: scroll)
         return scroll
     }
 

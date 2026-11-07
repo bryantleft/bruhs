@@ -747,6 +747,8 @@ Paint windows and panels with `canvas`, under the toolbar too: set the window's 
 
 Tint SwiftUI controls with `.tint(BruhsColor.accent)` at each window's root. The user's accent colour still marks focus and menus.
 
+Draw scroll bars as the web theme does: a thin, rounded thumb in the `scrollbar` role, on no track. Pith's `BruhsScroller` does this and keeps AppKit's overlay fading and paging. Install it on AppKit scroll views, and add `.bruhsScrollers()` inside SwiftUI scroll views.
+
 Set data in Monaspace: readouts, figures, sizes, paths and times. Keep labels, buttons and sentences in the system font. Register the bundled fonts at launch and check them in a smoke test.
 
 Use the Bruhs accent for selection, the primary action and highlights in content, not the system accent colour. Show status with `statusNormal`, `statusWarning` and `statusCritical`, always alongside a symbol or words.

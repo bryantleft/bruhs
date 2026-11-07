@@ -60,6 +60,7 @@ private struct AppInspector: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .bruhsScrollers(inset: 6)
         }
         .alert("Quit \(app.name)?", isPresented: $confirmingQuit) {
             Button("Quit") { _ = runningApp?.terminate() }
@@ -330,6 +331,7 @@ private struct SystemInspector: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .bruhsScrollers(inset: 6)
         }
     }
 

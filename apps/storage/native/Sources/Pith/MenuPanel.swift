@@ -42,6 +42,7 @@ struct MenuPanel: View {
             }
             .padding(14)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight($0) }
+            .bruhsScrollers(inset: 6)
         }
         .scrollBounceBehavior(.basedOnSize)
         .frame(width: size.width, height: size.height)
