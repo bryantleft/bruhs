@@ -51,12 +51,18 @@ public enum ProcessDetails {
             var info: CFDictionary?
             guard SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
                   let details = info as? [String: Any] else { return nil }
+            // Code signed as part of macOS carries a platform identifier, whatever its certificate is called.
+            if details[kSecCodeInfoPlatformIdentifier as String] != nil { return "Apple" }
             if let flags = details[kSecCodeInfoFlags as String] as? UInt32, flags & 0x2 != 0 { return "Signed on this Mac" } // kSecCodeSignatureAdhoc
             guard let certificates = details[kSecCodeInfoCertificates as String] as? [SecCertificate], let leaf = certificates.first else {
                 return details[kSecCodeInfoIdentifier as String] == nil ? "Not signed" : "Signed on this Mac"
             }
             let summary = SecCertificateCopySubjectSummary(leaf) as String? ?? ""
-            if summary.hasPrefix("Software Signing") || summary.hasPrefix("Apple") { return "Apple" }
+            // Apple's own signing certificates: "Software Signing" on macOS 26, "macOS Software Signing" on the macOS
+            // that GitHub's runners use.
+            if summary.hasSuffix("Software Signing") || summary.hasPrefix("Apple Code Signing") { return "Apple" }
+            // The Mac App Store signs apps with Apple's certificate on the developer's behalf.
+            if summary.hasPrefix("Apple Mac OS Application Signing") { return "Mac App Store" }
             // "Developer ID Application: Google LLC (EQHXZ8M8AV)" names the developer between the colon and the team.
             if let colon = summary.firstIndex(of: ":") {
                 let name = summary[summary.index(after: colon)...].trimmingCharacters(in: .whitespaces)

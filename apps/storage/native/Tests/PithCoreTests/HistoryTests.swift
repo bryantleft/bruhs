@@ -58,6 +58,9 @@ final class HistoryTests: XCTestCase {
 
     func testLiveCPUTimeMatchesGetrusageRatherThanRawMachTicks() async throws {
         let sampler = SystemSampler()
+        // A first sample does one-time work after its reading (bundle names, identities, IOKit), which this process's
+        // CPU between two readings includes but getrusage's window below doesn't. Warm up first, as the app runs warm.
+        _ = await sampler.sample()
         let first = await sampler.sample()
         func cpuTime() -> Double {
             var usage = rusage()
