@@ -24,14 +24,13 @@ struct PanelCPUSection: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text("CPU").font(BruhsType.label).foregroundStyle(BruhsColor.text)
                     Spacer()
-                    Text(model.paused ? "paused" : "last \(windowMinutes) min")
+                    Text(cpu.since.map { "since \(PanelSummary.clock($0))" } ?? "last \(windowMinutes) min")
                         .font(BruhsType.caption).foregroundStyle(BruhsColor.textTertiary)
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(percent(live, glance: true)).font(BruhsType.readout).foregroundStyle(BruhsColor.text).fixedSize()
+                    readout(live)
                     Spacer(minLength: 0)
-                    Text(caption(cpu)).font(BruhsType.caption).foregroundStyle(BruhsColor.textSecondary)
-                        .lineLimit(1).minimumScaleFactor(0.85)
+                    figures(cpu)
                 }
             }
             // The chart's label carries the window, average and peak, so this element is just the value.
@@ -48,10 +47,27 @@ struct PanelCPUSection: View {
         }
     }
 
-    private func caption(_ cpu: PanelSummary.CPU) -> String {
-        guard let average = cpu.average, let peak = cpu.peak else { return "no readings yet" }
-        let since = cpu.since.map { " · since \(PanelSummary.clock($0))" } ?? ""
-        return "avg \(percent(average, glance: true)) · peak \(percent(peak, glance: true))\(since)"
+    /// The live value, or a word on the same baseline and at the same height, so the section keeps its size.
+    @ViewBuilder private func readout(_ live: Double?) -> some View {
+        if let live {
+            Text(verbatim: percent(live, glance: true)).font(BruhsType.readout).foregroundStyle(BruhsColor.text).fixedSize()
+        } else {
+            Text(verbatim: "0%").font(BruhsType.readout).hidden()
+                .overlay(alignment: .leadingLastTextBaseline) {
+                    Text(model.paused ? "Paused" : "Unavailable").font(BruhsType.label).foregroundStyle(BruhsColor.textSecondary).fixedSize()
+                }
+        }
+    }
+
+    @ViewBuilder private func figures(_ cpu: PanelSummary.CPU) -> some View {
+        if let average = cpu.average, let peak = cpu.peak {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                LabeledFigure(label: "Avg", value: percent(average, glance: true))
+                LabeledFigure(label: "Peak", value: percent(peak, glance: true))
+            }
+        } else {
+            Text("No readings yet").font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary)
+        }
     }
 
     private func spoken(_ cpu: PanelSummary.CPU) -> String {
@@ -97,7 +113,7 @@ struct PanelMemorySection: View {
             guard let end else { return "Elevated since \(PanelSummary.clock(start))\(critical)" }
             let (from, to) = (PanelSummary.clock(start), PanelSummary.clock(end))
             if from == to { return "Elevated at \(from)\(critical)" }
-            return spoken ? "Elevated from \(from) to \(to)\(critical)" : "Elevated \(from)–\(to)\(critical)"
+            return spoken ? "Elevated from \(from) to \(to)\(critical)" : "Elevated \(from) to \(to)\(critical)"
         }
     }
 }
@@ -169,18 +185,23 @@ struct PanelAppRow: View {
 
     private var fullName: String { ([app.name] + details).joined(separator: ", ") }
 
-    private var name: Text {
-        guard !details.isEmpty else { return Text(app.name) }
-        return Text("\(app.name) \(Text(details.joined(separator: " · ")).foregroundStyle(BruhsColor.textTertiary))")
-    }
-
     var body: some View {
         Button(action: open) {
             HStack(spacing: 8) {
                 AppIconView(executable: app.executable, size: 16)
-                name.font(BruhsType.body).foregroundStyle(BruhsColor.text).lineLimit(1)
+                // Each detail is its own label, spaced from the name; the name gives way first.
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(app.name).foregroundStyle(BruhsColor.text)
+                    ForEach(details, id: \.self) { detail in
+                        Text(detail).foregroundStyle(BruhsColor.textTertiary).fixedSize()
+                    }
+                }
+                .font(BruhsType.body)
+                .lineLimit(1)
                 Spacer(minLength: 8)
-                Text(percent(app.cpu)).font(BruhsType.data).foregroundStyle(BruhsColor.textSecondary)
+                if let cpu = app.cpu {
+                    Text(verbatim: percent(cpu)).font(BruhsType.data).foregroundStyle(BruhsColor.textSecondary)
+                }
             }
             .padding(.horizontal, 6)
             .frame(height: PanelAppsSection.rowHeight)
@@ -203,7 +224,7 @@ struct PanelOtherAppsRow: View {
             Spacer().frame(width: 16)
             Text("Other \(count) \(count == 1 ? "app" : "apps")").font(BruhsType.body).lineLimit(1)
             Spacer(minLength: 8)
-            Text(percent(cpu)).font(BruhsType.data)
+            if let cpu { Text(verbatim: percent(cpu)).font(BruhsType.data) }
         }
         .foregroundStyle(BruhsColor.textTertiary)
         .frame(height: PanelAppsSection.rowHeight)
@@ -231,7 +252,8 @@ struct PanelDiskSection: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(name).font(BruhsType.label).foregroundStyle(BruhsColor.text).lineLimit(1)
                     Spacer(minLength: 8)
-                    Text(free ?? "—").font(BruhsType.data).foregroundStyle(BruhsColor.text)
+                    // Without a reading the line below says capacity is unavailable.
+                    if let free { Text(free).font(BruhsType.data).foregroundStyle(BruhsColor.text) }
                 }
                 // Without a reading the bar keeps its space but draws nothing, rather than an empty disk.
                 CapacityBar(used: used ?? 0).opacity(used == nil ? 0 : 1).padding(.top, 8)
@@ -298,9 +320,19 @@ struct PanelStatusLine: View {
                 .accessibilityLabel("Warning: \(error)")
         } else {
             let own = PanelSummary.own(model.snapshot?.apps ?? [], pid: ProcessInfo.processInfo.processIdentifier)
-            Text("Pith itself: \(percent(own?.cpu)) CPU · \(bytes(own?.memory))")
+            Text(ownUse(cpu: own?.cpu.map { percent($0) }, memory: own?.memory.map(bytes)))
                 .font(BruhsType.caption).foregroundStyle(BruhsColor.textTertiary).lineLimit(1)
-                .accessibilityLabel("Pith itself uses \(spokenPercent(own?.cpu)) CPU and \(bytes(own?.memory)) of memory")
+                .accessibilityLabel(ownUse(cpu: own?.cpu.map { spokenPercent($0) }, memory: own?.memory.map { "\(bytes($0)) of memory" }))
+        }
+    }
+
+    /// "Pith itself uses 0.4% CPU and 48.2 MB", leaving out whichever figure it has no reading for.
+    private func ownUse(cpu: String?, memory: String?) -> String {
+        switch (cpu, memory) {
+        case let (cpu?, memory?): "Pith itself uses \(cpu) CPU and \(memory)"
+        case let (cpu?, nil): "Pith itself uses \(cpu) CPU"
+        case let (nil, memory?): "Pith itself uses \(memory)"
+        case (nil, nil): "No reading of Pith itself yet"
         }
     }
 }

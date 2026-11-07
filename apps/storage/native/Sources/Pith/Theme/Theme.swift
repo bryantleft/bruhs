@@ -94,6 +94,54 @@ struct StatusChip: View {
     }
 }
 
+/// A short tag in a rounded box: what kind of process something is, a version or a count. It's the web theme's soft
+/// badge in its neutral tone, so a category reads as its own element instead of text joined by a separator.
+struct BruhsBadge: View {
+    let text: String
+    /// Set counts and versions in Monaspace, like other data.
+    var isData = false
+
+    var body: some View {
+        Text(verbatim: text)
+            .font(isData ? BruhsType.dataSmall : BruhsType.note)
+            .foregroundStyle(BruhsColor.textSecondary)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(BruhsColor.text.opacity(0.06), in: RoundedRectangle(cornerRadius: BruhsRadius.grape, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: BruhsRadius.grape, style: .continuous).strokeBorder(BruhsColor.hairline, lineWidth: 1))
+    }
+}
+
+/// A figure led by its name, as in "Peak 40%": the name in the tertiary tone, the value in data type. Several sit in a
+/// row with space between them rather than a separator character.
+struct LabeledFigure: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(label).font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary)
+            Text(verbatim: value).font(BruhsType.caption).foregroundStyle(BruhsColor.textSecondary)
+        }
+        .lineLimit(1)
+        .fixedSize()
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Marks a process macOS won't let Pith read. Its figures are left empty, so this says why once per row.
+struct ProtectedMark: View {
+    var body: some View {
+        Image(systemName: "lock.fill")
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(BruhsColor.textTertiary)
+            .help("Protected by macOS, so Pith can't read its CPU, memory or disk activity")
+            .accessibilityLabel("Protected by macOS")
+    }
+}
+
 /// bruhs button tones for Pith's content. Toolbars and menus keep standard controls.
 struct BruhsButtonStyle: ButtonStyle {
     enum Tone { case soft, ghost, softDanger }
@@ -188,6 +236,8 @@ struct MiniTrend: View {
     var height: CGFloat = 56
     var tint: Color = BruhsColor.accent
     var fill: Color = BruhsColor.chartFill
+    /// A ranked range to shade, as the Activity chart does, so figures for it read against the right stretch.
+    var highlight: ClosedRange<Double>?
     var label: String
 
     /// Splits samples into segments wherever a gap is longer than `maxGap` seconds.
@@ -206,6 +256,11 @@ struct MiniTrend: View {
 
     var body: some View {
         Chart {
+            // Conditionals inside a Chart builder need macOS 27's conformances, so the optional mark is a 0- or 1-element ForEach.
+            ForEach(highlight.map { [$0] } ?? [], id: \.self) { range in
+                RectangleMark(xStart: .value("Start", range.lowerBound), xEnd: .value("End", range.upperBound))
+                    .foregroundStyle(BruhsColor.selection)
+            }
             // The baseline spans the whole window, so a young session's first samples read as the latest
             // stretch of the timeline rather than a stray mark.
             RuleMark(y: .value("Zero", 0))

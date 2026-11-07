@@ -46,27 +46,38 @@ struct ActivityChart: View {
     // MARK: Header
 
     private func header(_ points: [MiniTrend.Point], window: ClosedRange<Double>) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text("CPU").font(BruhsType.label).foregroundStyle(BruhsColor.text)
-            Text("· share of your Mac").font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
+            Text("share of your Mac").font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
             Spacer(minLength: 12)
-            Text(readout(points, window: window))
-                .font(BruhsType.caption)
-                .foregroundStyle(BruhsColor.textSecondary)
+            readout(points, window: window)
                 .lineLimit(1)
                 .accessibilityHidden(true)
         }
     }
 
-    /// The hovered moment while there is one, otherwise now and the window's average and peak.
-    private func readout(_ points: [MiniTrend.Point], window: ClosedRange<Double>) -> String {
+    /// The hovered moment while there is one, then the ranked range's average and peak, otherwise now and the
+    /// window's average and peak.
+    @ViewBuilder private func readout(_ points: [MiniTrend.Point], window: ClosedRange<Double>) -> some View {
         if let cursor {
-            let time = model.history.date(at: cursor).map(clockWithSeconds) ?? ""
-            guard let sample = nearest(points, to: cursor) else { return "\(time) · no sample" }
-            return "\(time) · \(percent(sample.value))"
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(verbatim: model.history.date(at: cursor).map(clockWithSeconds) ?? "")
+                    .font(BruhsType.caption).foregroundStyle(BruhsColor.textTertiary)
+                if let sample = nearest(points, to: cursor) {
+                    Text(verbatim: percent(sample.value)).font(BruhsType.caption).foregroundStyle(BruhsColor.text)
+                } else {
+                    Text("No reading").font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary)
+                }
+            }
+        } else if let summary = model.history.systemCPU(in: range ?? window) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                if range == nil, let now = model.snapshot?.cpu { LabeledFigure(label: "Now", value: percent(now, glance: true)) }
+                LabeledFigure(label: "Avg", value: percent(summary.average, glance: true))
+                LabeledFigure(label: "Peak", value: percent(summary.peak, glance: true))
+            }
+        } else {
+            Text("No readings yet").font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary)
         }
-        guard let summary = model.history.systemCPU(in: window) else { return "No readings yet" }
-        return "now \(percent(model.snapshot?.cpu, glance: true)) · avg \(percent(summary.average, glance: true)) · peak \(percent(summary.peak, glance: true))"
     }
 
     // MARK: Chart
@@ -180,7 +191,7 @@ struct ActivityChart: View {
                 .accessibilityHidden(true)
             StatusChip(pressure: model.snapshot?.pressure ?? .unknown)
             if let note = pressureNote(PanelSummary.pressureStory(model.history.system, window: window, maxGap: ActivityModel.maxGap)) {
-                Text("· \(note)").font(BruhsType.caption).foregroundStyle(BruhsColor.textSecondary).lineLimit(1)
+                Text(note).font(BruhsType.caption).foregroundStyle(BruhsColor.textSecondary).lineLimit(1)
             }
             Spacer(minLength: 12)
             if range == nil {
@@ -193,14 +204,14 @@ struct ActivityChart: View {
         }
     }
 
-    /// The most recent stretch of elevated pressure, read after the current state: "Normal · elevated at 10:37",
-    /// "Elevated · since 10:41". Nothing while the whole window was normal.
+    /// The most recent stretch of elevated pressure, read after the chip's current state: "Elevated" then
+    /// "Since 10:41", or "Normal" then "Last elevated 10:37 to 10:39". Nothing while the whole window was normal.
     private func pressureNote(_ story: PanelSummary.PressureStory) -> String? {
         guard case let .elevated(start, end, worst) = story else { return nil }
         let critical = worst == .critical ? ", reached critical" : ""
-        guard let end else { return "since \(PanelSummary.clock(start))\(critical)" }
+        guard let end else { return "Since \(PanelSummary.clock(start))\(critical)" }
         let (from, to) = (PanelSummary.clock(start), PanelSummary.clock(end))
-        return (from == to ? "elevated at \(from)" : "elevated \(from)–\(to)") + critical
+        return (from == to ? "Last elevated at \(from)" : "Last elevated \(from) to \(to)") + critical
     }
 
     // MARK: Input

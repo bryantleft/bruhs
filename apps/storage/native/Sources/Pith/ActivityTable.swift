@@ -233,18 +233,30 @@ extension ActivityColumn {
         }
     }
 
-    /// What follows the name: process count, a tool's version or a system process's description.
+    /// How many processes the row stands for, shown as a badge after the name when it's more than one.
+    var groupedCount: Int? {
+        let count = switch content {
+        case .header: 0
+        case .app(let app): app.isRunning ? app.processCount : 0
+        case .helper(let helper, _): helper.count
+        case .system(let system): system.processCount
+        }
+        return count > 1 ? count : nil
+    }
+
+    /// What follows the name in tertiary text: a tool's version, a system process's description, or how many of
+    /// System's processes macOS protects.
     var detail: String? {
         switch content {
-        case .header: nil
-        case .app(let app):
-            if !app.isRunning { "Exited" }
-            else if app.processCount > 1 { [app.identity.secondaryText, "\(app.processCount) processes"].compactMap { $0 }.joined(separator: " · ") }
-            else { app.identity.secondaryText }
-        case .helper(let helper, _): helper.count > 1 ? "+\(helper.count - 1)" : nil
-        case .system(let system):
-            system.protectedCount > 0 ? "\(system.processCount) processes, \(system.protectedCount) protected" : "\(system.processCount) processes"
+        case .header, .helper: nil
+        case .app(let app): app.isRunning ? app.identity.secondaryText : "Exited"
+        case .system(let system): system.protectedCount > 0 ? "\(system.protectedCount) protected" : nil
         }
+    }
+
+    /// The row's name and details as one phrase, for VoiceOver and the tooltip.
+    var summary: String {
+        [name, groupedCount.map(processCount), detail].compactMap { $0 }.joined(separator: ", ")
     }
 
     var values: ActivityListing.Values? {
@@ -264,6 +276,9 @@ extension ActivityColumn {
         case .helper(_, let restricted): restricted
         }
     }
+
+    /// Whether the row's figures are missing because macOS protects it, so its name carries a lock.
+    var isLocked: Bool { isProtected && values?.memory == nil }
 }
 
 /// Keeps bruhs text colours on the translucent persimmon selection, rather than AppKit's
@@ -293,11 +308,13 @@ final class ActivityRowView: NSTableRowView {
     }
 }
 
-/// Icon, name and secondary text, in the system font: names and labels aren't data.
+/// Icon, name, process count badge, lock and secondary text. Names are in the system font: they aren't data.
 final class ActivityNameCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("ActivityName")
     private let icon = NSImageView()
     private let name = NSTextField(labelWithString: "")
+    private let count = CountBadgeView()
+    private let lock = NSImageView()
     private let detail = NSTextField(labelWithString: "")
 
     init() {
@@ -312,10 +329,20 @@ final class ActivityNameCell: NSTableCellView {
         detail.font = .systemFont(ofSize: 12)
         detail.textColor = NSColor(BruhsColor.textTertiary)
         detail.setAccessibilityElement(false)
-        // The name keeps its width; the secondary text gives way first.
+        count.setAccessibilityElement(false)
+        lock.image = NSImage(systemSymbolName: "lock.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold))
+        lock.contentTintColor = BruhsNSColor.textTertiary
+        lock.toolTip = "Protected by macOS, so Pith can't read its CPU, memory or disk activity"
+        lock.setAccessibilityElement(false)
+        // The name keeps its width and the marks after it never shrink; the secondary text gives way first.
         name.setContentCompressionResistancePriority(.defaultLow + 1, for: .horizontal)
         detail.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let stack = NSStackView(views: [icon, name, detail])
+        for mark in [count, lock] as [NSView] {
+            mark.setContentCompressionResistancePriority(.required, for: .horizontal)
+            mark.setContentHuggingPriority(.required, for: .horizontal)
+        }
+        let stack = NSStackView(views: [icon, name, count, lock, detail])
         stack.orientation = .horizontal
         stack.spacing = 6
         stack.alignment = .centerY
@@ -333,6 +360,9 @@ final class ActivityNameCell: NSTableCellView {
 
     func show(_ node: ActivityNode) {
         name.stringValue = node.name
+        count.count = node.groupedCount ?? 0
+        count.isHidden = node.groupedCount == nil
+        lock.isHidden = !node.isLocked
         detail.stringValue = node.detail ?? ""
         detail.isHidden = node.detail == nil
         switch node.content {
@@ -354,14 +384,49 @@ final class ActivityNameCell: NSTableCellView {
             name.font = .systemFont(ofSize: 13, weight: .semibold)
             name.textColor = NSColor(BruhsColor.text)
         }
-        let spoken = [node.name, node.detail].compactMap { $0 }.joined(separator: ", ")
+        let spoken = node.isLocked ? "\(node.summary), protected by macOS" : node.summary
         name.setAccessibilityLabel(spoken)
         toolTip = spoken
     }
 }
 
-/// A right-aligned figure in Monaspace. Zero is a dim en dash; a value macOS won't give is an
-/// em dash that says why.
+/// A process count beside a row's name, drawn like BruhsBadge: Monaspace digits in a rounded box with a hairline ring.
+final class CountBadgeView: NSView {
+    var count = 0 {
+        didSet { if count != oldValue { invalidateIntrinsicContentSize(); needsDisplay = true } }
+    }
+
+    private var text: NSAttributedString {
+        let font = BruhsFonts.isAvailable ? NSFont(name: "MonaspaceNeonVar-Regular", size: 10.5) : nil
+        return NSAttributedString(string: String(count), attributes: [
+            .font: font ?? .monospacedDigitSystemFont(ofSize: 10.5, weight: .regular),
+            .foregroundColor: BruhsNSColor.textSecondary,
+        ])
+    }
+
+    override var intrinsicContentSize: NSSize {
+        let size = text.size()
+        return NSSize(width: ceil(size.width) + 10, height: ceil(size.height) + 3)
+    }
+
+    // AppKit draws with the view's appearance current, so the dynamic roles resolve for light, dark and Increase Contrast here.
+    override func draw(_ dirtyRect: NSRect) {
+        let box = bounds.insetBy(dx: 0.5, dy: 0.5)
+        let radius = min(BruhsRadius.grape, box.height / 2)
+        let shape = NSBezierPath(roundedRect: box, xRadius: radius, yRadius: radius)
+        BruhsNSColor.text.withAlphaComponent(0.06).setFill()
+        shape.fill()
+        BruhsNSColor.hairline.setStroke()
+        shape.lineWidth = 1
+        shape.stroke()
+        let text = text
+        let size = text.size()
+        text.draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2))
+    }
+}
+
+/// A right-aligned figure in Monaspace. Idle and unread figures stay empty, so busy rows stand out; a row macOS
+/// protects says so once, with the lock after its name.
 final class ActivityNumberCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("ActivityNumber")
     private let label = NSTextField(labelWithString: "")
@@ -389,20 +454,17 @@ final class ActivityNumberCell: NSTableCellView {
             return
         }
         let figure = ActivityFigure(column, values)
-        label.stringValue = figure.text
+        label.font = Self.font
+        label.textColor = BruhsNSColor.text
         switch figure {
         case .unavailable:
-            // Monaspace draws em and en dashes alike, so the "unavailable" dash is set in the system font.
-            label.font = .systemFont(ofSize: 12)
-            label.textColor = NSColor(BruhsColor.textSecondary)
+            label.stringValue = ""
             toolTip = node.isProtected ? "Protected by macOS" : "No reading yet"
-        case .zero:
-            label.font = Self.font
-            label.textColor = NSColor(BruhsColor.textTertiary)
-            toolTip = nil
-        case .value:
-            label.font = Self.font
-            label.textColor = NSColor(BruhsColor.text)
+        case .zero(let zero):
+            label.stringValue = ""
+            toolTip = zero
+        case .value(let text, _):
+            label.stringValue = text
             toolTip = nil
         }
         label.setAccessibilityLabel("\(column.title) \(figure.spoken(protected: node.isProtected))")
@@ -417,8 +479,10 @@ final class ActivityNumberCell: NSTableCellView {
 
 /// How one figure reads in the table and to VoiceOver.
 enum ActivityFigure: Equatable {
+    /// No reading: macOS protects the process, or the first sample with a rate hasn't arrived.
     case unavailable
-    case zero
+    /// Below what the figure can show, such as CPU under 0.05%. Lists leave it empty; a labelled figure shows it, as "0%".
+    case zero(String)
     case value(String, spoken: String)
 
     init(_ column: ActivityColumn, _ values: ActivityListing.Values) {
@@ -427,22 +491,14 @@ enum ActivityFigure: Equatable {
             self = .unavailable
         case .cpu:
             guard let cpu = values.cpu else { self = .unavailable; return }
-            // Below what one decimal can show, the dash says "nothing" more honestly than 0.0%.
-            self = cpu < 0.05 ? .zero : .value(percent(cpu), spoken: percent(cpu))
+            // Below what one decimal can show, "0%" is more honest than 0.0%.
+            self = cpu < 0.05 ? .zero("0%") : .value(percent(cpu), spoken: percent(cpu))
         case .memory:
             guard let memory = values.memory else { self = .unavailable; return }
-            self = memory == 0 ? .zero : .value(bytes(memory), spoken: bytes(memory))
+            self = memory == 0 ? .zero(bytes(0)) : .value(bytes(memory), spoken: bytes(memory))
         case .read, .written:
             guard let speed = column == .read ? values.read : values.written else { self = .unavailable; return }
-            self = speed < 1 ? .zero : .value(rate(speed), spoken: "\(bytes(UInt64(speed))) per second")
-        }
-    }
-
-    var text: String {
-        switch self {
-        case .unavailable: "—"
-        case .zero: "–"
-        case .value(let text, _): text
+            self = speed < 1 ? .zero(rate(0)) : .value(rate(speed), spoken: "\(bytes(UInt64(speed))) per second")
         }
     }
 
@@ -455,15 +511,21 @@ enum ActivityFigure: Equatable {
     }
 }
 
-/// A figure outside the table, drawn the same way: Monaspace numbers, a dim en dash for zero,
-/// and a system-font em dash for unavailable, since Monaspace draws both dashes alike.
+/// A figure outside the table, in Monaspace. Like the table, a list leaves idle and unread figures empty; set
+/// `showsZero` where the figure has its own label, so "Read" never stands beside nothing.
 struct FigureText: View {
     let figure: ActivityFigure
     var color: Color = BruhsColor.textSecondary
+    var showsZero = false
 
     var body: some View {
-        Text(figure.text)
-            .font(figure == .unavailable ? .system(size: 11) : BruhsType.dataSmall)
-            .foregroundStyle(figure == .zero ? BruhsColor.textTertiary : color)
+        switch figure {
+        case .unavailable:
+            Text(verbatim: "").font(BruhsType.dataSmall)
+        case .zero(let zero):
+            Text(verbatim: showsZero ? zero : "").font(BruhsType.dataSmall).foregroundStyle(BruhsColor.textTertiary)
+        case .value(let text, _):
+            Text(verbatim: text).font(BruhsType.dataSmall).foregroundStyle(color)
+        }
     }
 }

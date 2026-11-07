@@ -74,16 +74,15 @@ import PithCore
     }
 }
 
-func bytes(_ value: UInt64?) -> String {
-    value.map(formatBytes) ?? "—"
-}
+// The figure formatters take values, not optionals: a missing reading is left out or explained where it would show,
+// never drawn as a placeholder dash.
+func bytes(_ value: UInt64) -> String { formatBytes(value) }
 /// Glance surfaces (menu bar, panel headline) show whole percents; lists and tables keep one
 /// decimal below 10% so small but real activity doesn't read as zero.
-func percent(_ value: Double?, glance: Bool = false) -> String {
-    guard let value else { return "—" }
-    return glance || value >= 10 ? String(format: "%.0f%%", value) : String(format: "%.1f%%", value)
+func percent(_ value: Double, glance: Bool = false) -> String {
+    glance || value >= 10 ? String(format: "%.0f%%", value) : String(format: "%.1f%%", value)
 }
-func rate(_ value: Double?) -> String { value.map { bytes(UInt64(max(0, $0))) + "/s" } ?? "—" }
+func rate(_ value: Double) -> String { bytes(UInt64(max(0, value))) + "/s" }
 
 /// "10:41:20": the locale's time with seconds and without its day period, for times inside the
 /// ten-minute window, alongside PanelSummary.clock's minutes.

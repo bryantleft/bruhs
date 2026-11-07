@@ -29,23 +29,31 @@ struct DiskProgress: Equatable {
     private var generation = UUID()
     var binary: URL { Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/storage-scanner") }
 
-    /// One line under the scope, set in Monaspace: progress while scanning, then what the map holds.
-    var caption: String? {
-        // Monaspace has no narrow no-break space, which the locale puts in times ("1:57 PM") and some locales'
-        // thousands. A fallback font would draw it at its own width, so use the font's no-break space instead.
-        summary?.replacingOccurrences(of: "\u{202F}", with: "\u{00A0}")
+    /// A figure under the scope, such as "Files 123,697".
+    struct Figure: Hashable {
+        let label: String
+        let value: String
     }
 
-    private var summary: String? {
+    /// The line under the scope: figures while scanning and for the map it holds, or a message about the scan.
+    enum Caption: Equatable {
+        case message(String)
+        case figures([Figure])
+    }
+
+    var caption: Caption? {
         if isScanning {
-            guard let progress else { return "Starting the scan…" }
-            return "\(count(progress.files, "file")) · \(bytes(progress.bytes)) so far"
+            guard let progress else { return .message("Starting the scan…") }
+            return .figures([Figure(label: "Size", value: bytes(progress.bytes)), Figure(label: "Files", value: monaspaced(progress.files.formatted()))])
         }
         if let result, let scannedAt {
-            let time = scannedAt.formatted(date: .omitted, time: .shortened)
-            return "\(count(result.summary.files, "file")) · \(bytes(result.summary.bytes)) · scanned \(time)"
+            return .figures([
+                Figure(label: "Size", value: bytes(result.summary.bytes)),
+                Figure(label: "Files", value: monaspaced(result.summary.files.formatted())),
+                Figure(label: "Scanned", value: monaspaced(scannedAt.formatted(date: .omitted, time: .shortened))),
+            ])
         }
-        return note
+        return note.map { .message(monaspaced($0)) }
     }
 
     /// Folders the last scan couldn't read, so its map leaves them out.
@@ -123,7 +131,8 @@ struct DiskProgress: Equatable {
     }
 }
 
-/// "1 file", "123,697 files".
-private func count(_ value: UInt64, _ noun: String) -> String {
-    "\(value.formatted()) \(value == 1 ? noun : "\(noun)s")"
+/// Monaspace has no narrow no-break space, which the locale puts in times ("1:57 PM") and some locales' thousands. A
+/// fallback font would draw it at its own width, so use the font's no-break space instead.
+private func monaspaced(_ text: String) -> String {
+    text.replacingOccurrences(of: "\u{202F}", with: "\u{00A0}")
 }

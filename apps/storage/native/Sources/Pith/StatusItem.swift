@@ -99,7 +99,8 @@ struct PanelActions {
             : "CPU \(cpu.map { $0.replacingOccurrences(of: "%", with: " percent") } ?? "unavailable"), memory pressure \(pressure.label.lowercased())"
         button.setAccessibilityLabel("Pith")
         button.setAccessibilityValue(state)
-        button.toolTip = "Pith · \(activity.paused ? "Monitoring paused" : "CPU \(cpu ?? "—") · Memory pressure \(pressure.label.lowercased())")"
+        let readings = activity.paused ? ["Monitoring paused"] : [cpu.map { "CPU \($0)" }, "Memory pressure \(pressure.label.lowercased())"].compactMap { $0 }
+        button.toolTip = (["Pith"] + readings).joined(separator: "\n")
     }
 
     /// The panel runs under the popover's border and arrow (hasFullSizeContent), so the popover is that much larger.

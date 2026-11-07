@@ -92,10 +92,11 @@ struct ActivityView: View {
 
     private func subtitle(_ range: ClosedRange<Double>?) -> String {
         if let range, let from = model.history.date(at: range.lowerBound), let to = model.history.date(at: range.upperBound) {
-            return "Paused at \(clockWithSeconds(from))–\(clockWithSeconds(to))"
+            return "From \(clockWithSeconds(from)) to \(clockWithSeconds(to))"
         }
         if model.paused { return "Sampling paused" }
-        return model.historyStart.map { "Live · since \(PanelSummary.clock($0))" } ?? "Live · last 10 minutes"
+        // The chart's axis shows the ten-minute window; a young session says when its readings began.
+        return model.historyStart.map { "Live since \(PanelSummary.clock($0))" } ?? "Live"
     }
 
     @ViewBuilder private func emptyState(_ listing: ActivityListing, range: ClosedRange<Double>?) -> some View {
@@ -118,7 +119,8 @@ struct ActivityView: View {
     }
 }
 
-/// Says what the table is ranking while a range is selected, with the way back to live.
+/// Says what the table is ranking while a range is selected, with the way back to live. The range's CPU average and
+/// peak are in the chart's header, over the shaded range.
 struct ActivityScopeBar: View {
     let model: ActivityModel
     let state: ActivityState
@@ -126,14 +128,9 @@ struct ActivityScopeBar: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(times).font(.monaspace(size: 12.5, weight: .semibold)).foregroundStyle(BruhsColor.text)
-                Text("· ranked by \(ranking)").font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
-                if let summary = model.history.systemCPU(in: range) {
-                    Text("· avg \(percent(summary.average, glance: true)) · peak \(percent(summary.peak, glance: true))")
-                        .font(BruhsType.data)
-                        .foregroundStyle(BruhsColor.textSecondary)
-                }
+                Text("Ranked by \(ranking)").font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
             }
             .lineLimit(1)
             .accessibilityElement(children: .ignore)
@@ -153,7 +150,7 @@ struct ActivityScopeBar: View {
 
     private var times: String {
         guard let from = model.history.date(at: range.lowerBound), let to = model.history.date(at: range.upperBound) else { return "" }
-        return "\(clockWithSeconds(from))–\(clockWithSeconds(to))"
+        return "\(clockWithSeconds(from)) to \(clockWithSeconds(to))"
     }
 
     private var ranking: String {
@@ -170,6 +167,6 @@ struct ActivityScopeBar: View {
 
     private var spoken: String {
         let cpu = model.history.systemCPU(in: range).map { ". Mac CPU averaged \(Int($0.average.rounded())) percent, peaking at \(Int($0.peak.rounded())) percent" } ?? ""
-        return "Showing \(times.replacingOccurrences(of: "–", with: " to ")), ranked by \(ranking)\(cpu)."
+        return "Showing \(times), ranked by \(ranking)\(cpu)."
     }
 }

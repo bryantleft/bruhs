@@ -372,7 +372,7 @@ function EmptyState({
       </h2>
       <p className="text-body-sm text-rambutan-400 max-w-sm text-pretty">
         {scanning
-          ? "Reading the filesystem — the treemap will appear the moment it's done."
+          ? "Reading the filesystem. The treemap appears the moment it's done."
           : "See exactly what's eating your space as a treemap. Double-click a folder to drill in, and move space-hogs to the Trash."}
       </p>
       {!scanning && (

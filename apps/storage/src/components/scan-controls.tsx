@@ -20,20 +20,21 @@ export function ScanControls({ scanning, progress, onScan, onCancel }: Props) {
               aria-hidden="true"
               className="spinner text-pandan-400 size-4"
             />
-            <span className="text-rambutan-300 tabular-nums">
+            <span className="text-rambutan-300 flex items-baseline gap-3 tabular-nums">
               {progress ? (
                 <>
-                  <span className="text-rambutan-100">
-                    {progress.files.toLocaleString()}
-                  </span>{" "}
-                  files ·{" "}
+                  <span>
+                    <span className="text-rambutan-100">
+                      {progress.files.toLocaleString()}
+                    </span>{" "}
+                    files
+                  </span>
                   <span className="text-persimmon-300">
                     {formatBytes(progress.bytes)}
                   </span>
                   {progress.errors > 0 && (
                     <span className="text-durian-400">
-                      {" "}
-                      · {progress.errors.toLocaleString()} skipped
+                      {progress.errors.toLocaleString()} skipped
                     </span>
                   )}
                 </>

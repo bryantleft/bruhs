@@ -15,7 +15,7 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Storage — disk profiler" },
+      { title: "Storage | Bruhs" },
       {
         name: "description",
         content: "Profile and manage disk usage across your computer.",

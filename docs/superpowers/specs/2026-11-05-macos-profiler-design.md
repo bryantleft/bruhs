@@ -65,7 +65,7 @@ The first build worked but looked like a stock SwiftUI prototype with a Bruhs we
 
 - **System controls, Bruhs surfaces and content.** Window buttons, toolbar items, search, menus, alerts and form controls are standard AppKit and SwiftUI. Bruhs supplies everything they sit on and show: the warm canvas under the whole window, toolbar included, the panel tone for the inspector, a menu bar panel filled edge to edge, colour roles, Monaspace for data, radii and motion. `packages/ui/AGENTS.md` section 18 records the rules for any native app.
 - **Follow the system appearance.** Colours come from the semantic roles in `packages/ui/src/lib/semantic.ts`, generated into Swift for light, dark and Increase Contrast. Twelve tokens were pulled inside Display P3 so the generated colours match the CSS.
-- **One window with Activity and Disk tabs** (⌘1, ⌘2). The title and subtitle say what the list shows: "Live · last 10 minutes" or "Paused at 10:40:02–10:41:31".
+- **One window with Activity and Disk tabs** (⌘1, ⌘2). The title and subtitle say what the list shows: "Live since 10:41" or "From 10:40:02 to 10:41:31".
 - **Rank by range.** Dragging across the CPU chart freezes the list and ranks apps by their average CPU in that range. Escape or Back to Live returns. This answers the retrospective question without a second history view.
 - **A legible disk map.** Blocks under 8 px merge into a "smaller items" block, labels pick the ink that meets 4.5:1 on their fill, and file kinds keep distinct hues.
 - **A generated brand.** The bruh-slice app icon (Icon Composer) and menu bar template glyph are generated from the tokens and the shared mascot geometry.

@@ -759,7 +759,9 @@ Put a window's title and subtitle in its title bar or toolbar. Mac windows don't
 
 Set text in `BruhsType` styles rather than system text styles or fixed sizes. Add a style to the scale when a view needs one.
 
-Pith's `scripts/lint-native.mjs` fails on the system accent, system colours, large titles and text outside `BruhsType` in its views. Copy it into a new app with its paths changed.
+Keep bullets, middle dots and dashes out of UI text, both between figures and in place of a missing value. Lay the parts out as elements instead. Pith's `LabeledFigure` names a figure, as in "Peak 40%", and its `BruhsBadge` holds a process kind, version or count. Write ranges with "to". Leave a figure the app can't read empty and say why once per row; Pith puts a lock after the name of a process macOS protects.
+
+Pith's `scripts/lint-native.mjs` fails on the system accent, system colours, large titles and text outside `BruhsType` in its views, and on bullets, middle dots and dashes in UI text there and in its disk map. Copy it into a new app with its paths changed.
 
 ---
 

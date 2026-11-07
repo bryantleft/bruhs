@@ -367,39 +367,73 @@ const percentOf = (part: number, whole: number) => {
   return share > 0 && share < 1 ? "<1%" : `${Math.round(share)}%`;
 };
 
-/** What the hover card says about a block: what it is, its size, and what clicks do. */
-function describe(
-  tile: Tile,
-  open: DirNode | null,
-  root: DirNode,
-): { title: string; detail: string; hint: string } {
-  const share = `${formatBytes(tileSize(tile))} · ${percentOf(tileSize(tile), root.size)} of ${root.name || "/"}`;
+/** What the hover card says about a block, each part shown as its own line or figure. */
+interface Card {
+  readonly title: string;
+  /**
+   * What the block is, with the fill or outline it has on the map, as in the kind legend.
+   * Null for a group of small items, which mixes kinds.
+   */
+  readonly kind: {
+    readonly label: string;
+    readonly fill: string | null;
+  } | null;
+  readonly size: string;
+  /** The block's share of the open folder, e.g. "12% of Users". */
+  readonly share: string;
+  /** What clicks do. */
+  readonly hint: string;
+}
+
+function describe(tile: Tile, open: DirNode | null, root: DirNode): Card {
+  const size = formatBytes(tileSize(tile));
+  const share = `${percentOf(tileSize(tile), root.size)} of ${root.name || "/"}`;
   const openFolder = open ? ` Double-click to open ${open.name}/.` : "";
   const title = middleTruncate(tileName(tile), 34);
+  const fill = (category: Category) => `var(${CATEGORY_VAR[category]})`;
   switch (tile.kind) {
     case "file":
       return {
         title,
-        detail: `${CATEGORY_LABEL[tile.category]} · ${share}`,
+        kind: {
+          label: CATEGORY_LABEL[tile.category],
+          fill: fill(tile.category),
+        },
+        size,
+        share,
         hint: `Click to select.${openFolder}`,
       };
     case "group":
       return {
         title,
-        detail: share,
+        kind: null,
+        size,
+        share,
         hint: `Too small to show one by one.${openFolder}`,
       };
-    default: {
-      const mostly =
-        tile.kind === "collapsed" && tile.category !== "other"
-          ? `, mostly ${CATEGORY_LABEL[tile.category].toLowerCase()}`
-          : "";
+    case "collapsed":
       return {
         title,
-        detail: `Folder${mostly} · ${share}`,
+        kind: {
+          label:
+            tile.category === "other"
+              ? "Folder"
+              : `Folder, mostly ${CATEGORY_LABEL[tile.category].toLowerCase()}`,
+          fill: fill(tile.category),
+        },
+        size,
+        share,
         hint: "Click to select. Double-click to open.",
       };
-    }
+    case "folder":
+      // Drawn as a container around its contents, so its swatch is an outline.
+      return {
+        title,
+        kind: { label: "Folder", fill: null },
+        size,
+        share,
+        hint: "Click to select. Double-click to open.",
+      };
   }
 }
 
@@ -620,8 +654,25 @@ export function TreemapCanvas({
           <p className="text-code-sm font-medium break-all text-(--role-text,var(--color-rambutan-50))">
             {card.title}
           </p>
-          <p className="text-code-sm text-(--role-text-secondary,var(--color-rambutan-300)) tabular-nums">
-            {card.detail}
+          {card.kind && (
+            <p className="text-label-sm mt-1 flex items-center gap-1.5 text-(--role-text-secondary,var(--color-rambutan-300))">
+              <span
+                aria-hidden="true"
+                className={`rounded-seed size-2.5 shrink-0 ${card.kind.fill ? "" : "inset-ring inset-ring-(--role-text-tertiary,var(--color-rambutan-400))"}`}
+                style={
+                  card.kind.fill ? { background: card.kind.fill } : undefined
+                }
+              />
+              {card.kind.label}
+            </p>
+          )}
+          <p className="text-code-sm mt-0.5 flex flex-wrap items-baseline gap-x-2 tabular-nums">
+            <span className="text-(--role-text,var(--color-rambutan-50))">
+              {card.size}
+            </span>
+            <span className="text-(--role-text-secondary,var(--color-rambutan-300))">
+              {card.share}
+            </span>
           </p>
           <p className="text-label-sm mt-1 text-pretty text-(--role-text-tertiary,var(--color-rambutan-400))">
             {card.hint}

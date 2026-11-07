@@ -85,11 +85,21 @@ private struct AppInspector: View {
                 .font(BruhsType.title)
                 .foregroundStyle(BruhsColor.text)
                 .textSelection(.enabled)
+            HStack(spacing: 6) {
+                BruhsBadge(text: app.identity.kind.label)
+                // A tool's secondary text is its version; a system process's is what it does, the line below.
+                if app.identity.kind == .commandLineTool, let version = app.identity.secondaryText {
+                    BruhsBadge(text: version, isData: true)
+                }
+            }
+            .padding(.vertical, 3)
+            if app.identity.kind == .system, let description = app.identity.secondaryText {
+                Text(description)
+                    .font(BruhsType.body)
+                    .foregroundStyle(BruhsColor.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Text(status).font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
-            Text([app.identity.kind.label, app.identity.secondaryText].compactMap { $0 }.joined(separator: " · "))
-                .font(BruhsType.body)
-                .foregroundStyle(BruhsColor.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
             if let protected = protectedNote {
                 Label(protected, systemImage: "lock")
                     .font(BruhsType.body)
@@ -104,11 +114,10 @@ private struct AppInspector: View {
         guard timeline.isRunning else {
             return timeline.points.last.map { "Exited at \($0.date.formatted(date: .omitted, time: .shortened))" } ?? "Exited"
         }
-        let count = app.members.count > 1 ? " · \(processCount(app.members.count))" : ""
-        guard let started = app.members.map(\.started).min() else { return "Running\(count)" }
+        guard let started = app.members.map(\.started).min() else { return "Running" }
         let date = Date(timeIntervalSince1970: Double(started) / 1_000_000)
         let since = Calendar.current.isDateInToday(date) ? date.formatted(date: .omitted, time: .shortened) : date.formatted(date: .abbreviated, time: .shortened)
-        return "Running since \(since)\(count)"
+        return "Running since \(since)"
     }
 
     /// Footprints are readable whenever macOS lets Pith see a process at all.
@@ -127,29 +136,58 @@ private struct AppInspector: View {
         let memory = MiniTrend.points(timeline.points.map { (time: $0.uptime, value: ceiling > 0 ? $0.memory.map { Double($0) / ceiling * 100 } : nil) }, maxGap: ActivityModel.maxGap)
         // Live figures match the table, where an app that has quit uses nothing.
         let now = timeline.isRunning ? ActivityListing.Values(cpu: app.cpu, memory: app.memory, read: nil, written: nil) : ActivityListing.Values(cpu: 0, memory: 0, read: nil, written: nil)
-        let cpuValue = range == nil ? ActivityFigure(.cpu, now).text : usage.map { "avg \(percent($0.cpu)) · peak \(percent($0.peakCPU))" } ?? "—"
-        let memoryValue = range == nil ? ActivityFigure(.memory, now).text : usage.map { "avg \(bytes($0.memory))" } ?? "—"
+        let minutes = Int(SessionHistory.retention / 60)
         return VStack(alignment: .leading, spacing: 6) {
-            trendCaption("CPU", value: cpuValue)
-            MiniTrend(points: cpu, window: window, height: 40, label: "\(app.name) CPU over the last 10 minutes")
+            trendHeader("CPU") {
+                if range == nil {
+                    FigureText(figure: ActivityFigure(.cpu, now), showsZero: true)
+                } else if let usage, usage.cpu != nil || usage.peakCPU != nil {
+                    if let average = usage.cpu { LabeledFigure(label: "Avg", value: percent(average)) }
+                    if let peak = usage.peakCPU { LabeledFigure(label: "Peak", value: percent(peak)) }
+                } else {
+                    noReadings
+                }
+            }
+            MiniTrend(points: cpu, window: window, height: 40, highlight: range, label: "\(app.name) CPU over the last \(minutes) minutes")
                 .accessibilityValue(spokenRange(timeline.points.compactMap(\.cpu)) { "\(Int($0.rounded())) percent" })
-            trendCaption("Memory", value: memoryValue)
-                .padding(.top, 6)
-            MiniTrend(points: memory, window: window, height: 40, tint: ActivityPalette.memory, fill: ActivityPalette.memoryFill, label: "\(app.name) memory over the last 10 minutes")
+            trendHeader("Memory") {
+                if range == nil {
+                    FigureText(figure: ActivityFigure(.memory, now), showsZero: true)
+                } else if let memory = usage?.memory {
+                    LabeledFigure(label: "Avg", value: bytes(memory))
+                } else {
+                    noReadings
+                }
+            }
+            .padding(.top, 6)
+            MiniTrend(points: memory, window: window, height: 40, tint: ActivityPalette.memory, fill: ActivityPalette.memoryFill, highlight: range,
+                      label: "\(app.name) memory over the last \(minutes) minutes")
                 .accessibilityValue(spokenRange(footprints) { bytes($0) })
+            // Both trends share the session window; its ends, labelled once, say how far back they go.
+            HStack {
+                Text("\(minutes) min ago")
+                Spacer(minLength: 8)
+                Text("now")
+            }
+            .font(BruhsType.caption)
+            .foregroundStyle(BruhsColor.textTertiary)
+            .accessibilityHidden(true)
         }
     }
 
-    private func trendCaption(_ title: String, value: String) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text("\(title) · \(range == nil ? "10 min" : "range")")
+    /// A trend's name with its figures: the latest value while live, or the ranked range's average and peak.
+    private func trendHeader<Figures: View>(_ title: String, @ViewBuilder figures: () -> Figures) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(title).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.textSecondary)
             Spacer(minLength: 8)
-            Text(value)
+            figures()
         }
-        .font(BruhsType.caption)
-        .foregroundStyle(BruhsColor.textSecondary)
         .lineLimit(1)
         .accessibilityHidden(true)
+    }
+
+    private var noReadings: some View {
+        Text("No readings in this range").font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary)
     }
 
     /// "Between 3.1 GB and 3.4 GB": the trend's spread without reading every sample aloud.
@@ -184,15 +222,22 @@ private struct AppInspector: View {
 
     private var processList: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(range == nil ? "Processes" : "Processes Now").font(BruhsType.sectionTitle).foregroundStyle(BruhsColor.textSecondary)
+            HStack(spacing: 6) {
+                Text(range == nil ? "Processes" : "Processes Now").font(BruhsType.sectionTitle).foregroundStyle(BruhsColor.textSecondary)
+                if processes.count > 1 { BruhsBadge(text: String(processes.count), isData: true) }
+            }
+            .accessibilityElement(children: .combine)
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 4) {
                 ForEach(processes) { process in
                     GridRow {
                         // Verbatim, so PIDs never pick up thousands separators.
                         Text(verbatim: String(process.key.pid)).font(BruhsType.dataSmall).foregroundStyle(BruhsColor.textTertiary)
-                        Text(process.displayName).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.text)
-                            .lineLimit(1).truncationMode(.middle)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        HStack(spacing: 4) {
+                            Text(process.displayName).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.text)
+                                .lineLimit(1).truncationMode(.middle)
+                            if process.memory == nil { ProtectedMark() }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         FigureText(figure: ActivityFigure(.cpu, values(process))).gridColumnAlignment(.trailing)
                         FigureText(figure: ActivityFigure(.memory, values(process))).gridColumnAlignment(.trailing)
                     }
@@ -264,7 +309,7 @@ private struct SystemInspector: View {
                         let figure = ActivityFigure(column, system.values)
                         GridRow {
                             Text(column.title).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.textSecondary)
-                            FigureText(figure: figure, color: BruhsColor.text)
+                            FigureText(figure: figure, color: BruhsColor.text, showsZero: true)
                         }
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel("\(column.title) \(figure.spoken(protected: false))")

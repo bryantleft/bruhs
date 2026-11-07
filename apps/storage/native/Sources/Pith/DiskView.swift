@@ -68,11 +68,18 @@ private struct DiskControlBar: View {
                         .font(BruhsType.body)
                         .foregroundStyle(BruhsColor.textSecondary)
                 }
-                if let caption = model.caption {
-                    Text(caption)
+                switch model.caption {
+                case .message(let message)?:
+                    Text(message)
                         .font(BruhsType.caption)
                         .foregroundStyle(BruhsColor.textSecondary)
                         .lineLimit(1)
+                case .figures(let figures)?:
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        ForEach(figures, id: \.self) { LabeledFigure(label: $0.label, value: $0.value) }
+                    }
+                case nil:
+                    EmptyView()
                 }
             }
             Spacer(minLength: 12)
