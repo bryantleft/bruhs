@@ -1,4 +1,5 @@
 import AppKit
+import Quartz
 import SwiftUI
 import WebKit
 import PithCore
@@ -25,47 +26,43 @@ import PithCore
     }
 }
 
-@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
+@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation, QLPreviewPanelDataSource {
     let activity = ActivityModel()
     let disk = DiskModel()
+    let alertSettings = AlertSettings()
+    private var alerts: AlertMonitor?
+    private(set) var shortcut: PanelShortcut?
+    private var diskCheckedAt = Date.distantPast
     private(set) var statusItem: StatusItemController?
     /// The Activity | Disk window, created on demand and released when closed.
     private(set) var mainWindow: MainWindowController?
     private var settingsWindow: NSWindow?
+    private var welcomeWindow: NSWindow?
     private var observers: [NSObjectProtocol] = []
     weak var webView: WKWebView?
+    /// What Quick Look shows; the panel asks for it through the responder chain, which ends at this delegate.
+    private var previewItems: [URL] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         BruhsFonts.register()
-        let menu = NSMenu()
-        let appMenu = NSMenuItem(); menu.addItem(appMenu)
-        appMenu.submenu = NSMenu()
-        appMenu.submenu?.addItem(withTitle: "About Pith", action: #selector(showAbout), keyEquivalent: "").target = self
-        appMenu.submenu?.addItem(.separator())
-        appMenu.submenu?.addItem(withTitle: "Settings…", action: #selector(showSettings), keyEquivalent: ",").target = self
-        appMenu.submenu?.addItem(.separator())
-        appMenu.submenu?.addItem(withTitle: "Quit Pith", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        let file = NSMenuItem(title: "File", action: nil, keyEquivalent: ""); menu.addItem(file)
-        file.submenu = NSMenu(title: "File")
-        file.submenu?.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
-        let edit = NSMenuItem(title: "Edit", action: nil, keyEquivalent: ""); menu.addItem(edit)
-        edit.submenu = NSMenu(title: "Edit")
-        for (name, action, key) in [("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] {
-            edit.submenu?.addItem(withTitle: name, action: Selector(action), keyEquivalent: key)
-        }
-        edit.submenu?.addItem(.separator())
-        edit.submenu?.addItem(withTitle: "Find…", action: #selector(findInActivity), keyEquivalent: "f").target = self
-        let view = NSMenuItem(title: "View", action: nil, keyEquivalent: ""); menu.addItem(view)
-        view.submenu = NSMenu(title: "View")
-        view.submenu?.addItem(withTitle: "Activity", action: #selector(showActivityFromMenu), keyEquivalent: "1").target = self
-        view.submenu?.addItem(withTitle: "Disk", action: #selector(showDisk), keyEquivalent: "2").target = self
-        NSApp.mainMenu = menu
+        NSApp.mainMenu = makeMainMenu()
         statusItem = StatusItemController(activity: activity, actions: PanelActions(
             openActivity: { [weak self] id in self?.showActivity(selecting: id) },
             openDisk: { [weak self] in self?.showDisk() },
             openSettings: { [weak self] in self?.showSettings() }))
-        activity.onSample = { [weak self] in self?.statusItem?.update() }
+        alerts = AlertMonitor(settings: alertSettings, activity: activity, open: { [weak self] id in self?.showActivity(selecting: id) })
+        shortcut = PanelShortcut { [weak self] in self?.statusItem?.togglePanel() }
+        activity.onSample = { [weak self] in
+            guard let self else { return }
+            statusItem?.update()
+            if let snapshot = activity.snapshot, !activity.paused {
+                // The disk alert needs a reading even while the panel is closed; once a minute is plenty for a disk.
+                if alertSettings.isOn(.disk), Date().timeIntervalSince(diskCheckedAt) >= 60 { diskCheckedAt = Date(); activity.refreshDiskSpace() }
+                alerts?.check(snapshot)
+            }
+        }
+        disk.showQuickLook = { [weak self] urls in self?.quickLook(urls) }
         activity.start(); statusItem?.update()
         let center = NSWorkspace.shared.notificationCenter
         observers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
@@ -74,6 +71,7 @@ import PithCore
         observers.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.activity.start() }
         })
+        let automated = CommandLine.arguments.contains { ["--activity", "--scan", "--smoke-test"].contains($0) }
         if CommandLine.arguments.contains("--activity") { showActivity() }
         if let index = CommandLine.arguments.firstIndex(of: "--scan"), CommandLine.arguments.indices.contains(index + 1) {
             showDisk(); disk.scan(URL(fileURLWithPath: CommandLine.arguments[index + 1]))
@@ -83,6 +81,82 @@ import PithCore
             let report = URL(fileURLWithPath: CommandLine.arguments[index + 2])
             Task { await smokeTest(root: root, report: report) }
         }
+        // A menu bar item can be hidden by macOS or crowded out behind the notch, so the first launch says where Pith is.
+        if !automated && !UserDefaults.standard.bool(forKey: WelcomeView.seenKey) { showWelcome() }
+    }
+
+    // MARK: Menus
+
+    private func makeMainMenu() -> NSMenu {
+        let menu = NSMenu()
+        func submenu(_ title: String) -> NSMenu {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            let sub = NSMenu(title: title)
+            item.submenu = sub
+            menu.addItem(item)
+            return sub
+        }
+        func add(_ menu: NSMenu, _ title: String, _ action: Selector?, _ key: String = "", _ modifiers: NSEvent.ModifierFlags = .command, target: AnyObject? = nil) {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            item.keyEquivalentModifierMask = modifiers
+            item.target = target
+            menu.addItem(item)
+        }
+        let app = submenu("Pith")
+        add(app, "About Pith", #selector(showAbout), target: self)
+        app.addItem(.separator())
+        add(app, "Settings…", #selector(showSettings), ",", target: self)
+        app.addItem(.separator())
+        add(app, "Hide Pith", #selector(NSApplication.hide(_:)), "h")
+        add(app, "Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option])
+        add(app, "Show All", #selector(NSApplication.unhideAllApplications(_:)))
+        app.addItem(.separator())
+        add(app, "Quit Pith", #selector(NSApplication.terminate(_:)), "q")
+
+        let file = submenu("File")
+        add(file, "Choose Folder to Scan…", #selector(chooseFolder), "o", target: self)
+        add(file, "Scan Startup Disk", #selector(scanStartupDisk), target: self)
+        add(file, "Scan Again", #selector(scanAgain), "r", target: self)
+        file.addItem(.separator())
+        add(file, "Quick Look", #selector(quickLookSelection), "y", target: self)
+        add(file, "Reveal in Finder", #selector(revealSelection), "r", [.command, .option], target: self)
+        add(file, "Copy Path", #selector(copySelectionPath), "c", [.command, .option], target: self)
+        add(file, "Move to Trash", #selector(trashSelection), "\u{8}", target: self)
+        file.addItem(.separator())
+        add(file, "Export Activity…", #selector(exportActivity), "e", [.command, .shift], target: self)
+        file.addItem(.separator())
+        add(file, "Close Window", #selector(NSWindow.performClose(_:)), "w")
+
+        let edit = submenu("Edit")
+        add(edit, "Undo", Selector(("undo:")), "z")
+        add(edit, "Redo", Selector(("redo:")), "z", [.command, .shift])
+        edit.addItem(.separator())
+        add(edit, "Cut", #selector(NSText.cut(_:)), "x")
+        add(edit, "Copy", #selector(NSText.copy(_:)), "c")
+        add(edit, "Paste", #selector(NSText.paste(_:)), "v")
+        add(edit, "Select All", #selector(NSText.selectAll(_:)), "a")
+        edit.addItem(.separator())
+        add(edit, "Find…", #selector(findInActivity), "f", target: self)
+
+        let view = submenu("View")
+        add(view, "Activity", #selector(showActivityFromMenu), "1", target: self)
+        add(view, "Disk", #selector(showDisk), "2", target: self)
+        view.addItem(.separator())
+        add(view, "Bigger Text", #selector(biggerText), "+", target: self)
+        add(view, "Smaller Text", #selector(smallerText), "-", target: self)
+        add(view, "Actual Size", #selector(actualTextSize), "0", target: self)
+
+        let go = submenu("Go")
+        add(go, "Enclosing Folder", #selector(enclosingFolder), String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), target: self)
+
+        let window = submenu("Window")
+        add(window, "Minimize", #selector(NSWindow.performMiniaturize(_:)), "m")
+        add(window, "Zoom", #selector(NSWindow.performZoom(_:)))
+        window.addItem(.separator())
+        add(window, "Show Welcome", #selector(showWelcome), target: self)
+        add(window, "Bring All to Front", #selector(NSApplication.arrangeInFront(_:)))
+        NSApp.windowsMenu = window
+        return menu
     }
 
     @objc private func showActivityFromMenu() { showActivity() }
@@ -105,9 +179,12 @@ import PithCore
     @objc func showSettings() {
         statusItem?.closePanel()
         if settingsWindow == nil {
-            // Settings has one pane, so the HIG asks for "App Name Settings" and no minimize or zoom.
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 360), styleMask: [.titled, .closable], backing: .buffered, defer: false)
-            window.title = "Pith Settings"; window.contentView = NSHostingView(rootView: SettingsView(model: activity))
+            // Settings has one pane, so the HIG asks for "App Name Settings" and no minimize or zoom. It sizes to its form.
+            let host = NSHostingController(rootView: SettingsView(model: activity, alerts: alertSettings, disk: disk, shortcut: shortcut))
+            host.sizingOptions = [.preferredContentSize]
+            let window = NSWindow(contentViewController: host)
+            window.styleMask = [.titled, .closable]
+            window.title = "Pith Settings"
             window.backgroundColor = BruhsNSColor.canvas
             window.titlebarAppearsTransparent = true
             window.delegate = self; window.isReleasedWhenClosed = false; window.center()
@@ -115,6 +192,25 @@ import PithCore
             settingsWindow = window
         }
         NSApp.activate(ignoringOtherApps: true); settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+    @objc func showWelcome() {
+        statusItem?.closePanel()
+        if welcomeWindow == nil {
+            let host = NSHostingController(rootView: WelcomeView(activity: activity, glyph: statusGlyph(), open: { [weak self] tab in
+                self?.welcomeWindow?.performClose(nil)
+                if tab == .activity { self?.showActivity() } else { self?.showDisk() }
+            }, close: { [weak self] in self?.welcomeWindow?.performClose(nil) }))
+            host.sizingOptions = [.preferredContentSize]
+            let window = NSWindow(contentViewController: host)
+            window.styleMask = [.titled, .closable]
+            window.title = "Welcome to Pith"
+            window.backgroundColor = BruhsNSColor.canvas
+            window.titlebarAppearsTransparent = true
+            window.delegate = self; window.isReleasedWhenClosed = false; window.center()
+            welcomeWindow = window
+        }
+        UserDefaults.standard.set(true, forKey: WelcomeView.seenKey)
+        NSApp.activate(ignoringOtherApps: true); welcomeWindow?.makeKeyAndOrderFront(nil)
     }
     private func openMainWindow(_ tab: WindowTab) {
         if mainWindow == nil {
@@ -128,19 +224,91 @@ import PithCore
     @objc private func findInActivity() {
         mainWindow?.window.toolbar?.items.lazy.compactMap { $0 as? NSSearchToolbarItem }.first?.beginSearchInteraction()
     }
+
+    // MARK: Disk commands
+
+    private var diskShowing: Bool { mainWindow?.window.isVisible == true && mainWindow?.state.tab == .disk }
+
+    @objc private func chooseFolder() { showDisk(); disk.chooseFolder() }
+    @objc private func scanStartupDisk() { showDisk(); disk.scan(URL(fileURLWithPath: "/")) }
+    @objc private func scanAgain() {
+        guard let root = disk.result?.root.path ?? disk.scope else { return }
+        disk.scan(URL(fileURLWithPath: root))
+    }
+    @objc private func quickLookSelection() { disk.quickLook(nil) }
+    @objc private func revealSelection() { if let path = disk.selected { disk.reveal(path) } }
+    @objc private func copySelectionPath() { if let path = disk.selected { disk.copyPath(path) } }
+    @objc private func trashSelection() { if let path = disk.selected { disk.requestTrash(path, undoManager: mainWindow?.window.undoManager) } }
+    @objc private func enclosingFolder() { webView?.evaluateJavaScript("window.pithCommand && window.pithCommand('up')") }
+
+    /// Saves Activity's table, as it's searched, sorted and ranked now, as CSV.
+    @objc private func exportActivity() {
+        let state = mainWindow?.state.activity
+        let listing = ActivityListing(history: activity.history, latest: activity.snapshot, range: state?.range, search: state?.search ?? "",
+                                      includeExited: state?.includeExited ?? false, sort: state?.sort ?? .cpuDescending)
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = "Pith Activity \(Date().formatted(.iso8601.year().month().day().dateSeparator(.dash).time(includingFractionalSeconds: false).timeSeparator(.omitted)))"
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try listing.csv().write(to: url, atomically: true, encoding: .utf8) }
+        catch {
+            let alert = NSAlert(error: error)
+            alert.messageText = "Pith couldn’t save the export."
+            alert.runModal()
+        }
+    }
+
+    // MARK: Text size
+
+    @objc private func biggerText() { TextSize.shared.step(1) }
+    @objc private func smallerText() { TextSize.shared.step(-1) }
+    @objc private func actualTextSize() { TextSize.shared.reset() }
+
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         let activityShowing = mainWindow?.window.isVisible == true && mainWindow?.state.tab == .activity
+        let selection = diskShowing && disk.selected != nil
         switch menuItem.action {
         case #selector(findInActivity): return activityShowing
+        case #selector(quickLookSelection), #selector(revealSelection), #selector(copySelectionPath): return selection
+        case #selector(trashSelection): return selection && !disk.isScanning && (try? disk.selectedPlan?.get()) != nil
+        case #selector(scanAgain): return diskShowing && !disk.isScanning && disk.scope != nil
+        case #selector(scanStartupDisk), #selector(chooseFolder): return !disk.isScanning && !disk.isTrashing
+        case #selector(enclosingFolder): return diskShowing && disk.openFolder != nil && disk.openFolder != disk.result?.root.path
+        case #selector(biggerText): return TextSize.shared.canGrow
+        case #selector(smallerText): return TextSize.shared.canShrink
+        case #selector(actualTextSize): return TextSize.shared.scale != 1
+        case #selector(exportActivity): return activity.snapshot != nil
         default: return true
         }
     }
 
-    func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow, window === settingsWindow else { return }
-        window.contentView = nil; settingsWindow = nil
+    // MARK: Quick Look
+
+    private func quickLook(_ urls: [URL]) {
+        previewItems = urls
+        guard let panel = QLPreviewPanel.shared() else { return }
+        if panel.isVisible { panel.reloadData() } else { panel.makeKeyAndOrderFront(nil) }
     }
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { showActivity(); return false }
+
+    // QLPreviewPanel calls these on the main thread; they're declared on NSObject without an actor.
+    nonisolated override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { MainActor.assumeIsolated { !previewItems.isEmpty } }
+    nonisolated override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) { MainActor.assumeIsolated { panel.dataSource = self; panel.reloadData() } }
+    nonisolated override func endPreviewPanelControl(_ panel: QLPreviewPanel!) { MainActor.assumeIsolated { panel.dataSource = nil } }
+    nonisolated func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int { MainActor.assumeIsolated { previewItems.count } }
+    nonisolated func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> (any QLPreviewItem)! {
+        MainActor.assumeIsolated { previewItems[index] as NSURL }
+    }
+
+    // MARK: Lifecycle
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        if window === settingsWindow { window.contentViewController = nil; settingsWindow = nil }
+        if window === welcomeWindow { window.contentViewController = nil; welcomeWindow = nil }
+    }
+    /// Opening Pith again from Finder while it runs shows where it lives, the fallback when macOS hides the menu bar item.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { showWelcome(); return false }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         activity.pause(); disk.cancel()
