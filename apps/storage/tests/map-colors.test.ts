@@ -37,9 +37,13 @@ describe("roleTokens", () => {
 
   test("uses the increased-contrast variant where a role has one", () => {
     assert.equal(roleTokens("dark", true).textSecondary, "rambutan-300");
-    assert.equal(roleTokens("light", true).textTertiary, "longan-700");
+    assert.equal(roleTokens("light", true).textTertiary, "longan-800");
+    assert.equal(roleTokens("light", true).accent, "persimmon-800");
     // Roles without one keep their usual token.
-    assert.equal(roleTokens("light", true).accent, "persimmon-700");
+    assert.equal(
+      roleTokens("light", true).well,
+      roleTokens("light", false).well,
+    );
   });
 });
 

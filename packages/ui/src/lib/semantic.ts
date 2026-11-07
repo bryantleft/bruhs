@@ -23,8 +23,9 @@ export const semanticColors = {
   /** A side panel beside the content, such as an inspector: the web theme's `surface-panel`. */
   surface: { dark: "longan-900", light: "longan-100" },
   text: { dark: "rambutan-100", light: "longan-950", minContrast: 4.5 },
-  textSecondary: { dark: "rambutan-400", light: "longan-700", darkHighContrast: "rambutan-300", lightHighContrast: "longan-800", minContrast: 4.5 },
-  textTertiary: { dark: "rambutan-500", light: "longan-600", darkHighContrast: "rambutan-400", lightHighContrast: "longan-700", minContrast: 3 },
+  textSecondary: { dark: "rambutan-400", light: "longan-800", darkHighContrast: "rambutan-300", lightHighContrast: "longan-900", minContrast: 4.5 },
+  /** Small type too, so it keeps the HIG's 4.5:1 for text under 18 pt on both backgrounds. */
+  textTertiary: { dark: "rambutan-500", light: "longan-700", darkHighContrast: "rambutan-400", lightHighContrast: "longan-800", minContrast: 4.5 },
   hairline: {
     dark: { token: "rambutan-100", alpha: 0.1 },
     light: { token: "longan-950", alpha: 0.1 },
@@ -41,17 +42,22 @@ export const semanticColors = {
   /** The thumb while the pointer is over its scroll area or it's being dragged. */
   scrollbarHover: { dark: "longan-500", light: "longan-700", darkHighContrast: "longan-400", lightHighContrast: "longan-800", minContrast: 3 },
   /** Lines, marks and text links in the brand colour. */
-  accent: { dark: "persimmon-400", light: "persimmon-700", minContrast: 3 },
+  accent: { dark: "persimmon-400", light: "persimmon-700", darkHighContrast: "persimmon-300", lightHighContrast: "persimmon-800", minContrast: 3 },
   /** Filled primary controls, with `onAccentFill` for their labels. */
   accentFill: { dark: "persimmon-500", light: "persimmon-500" },
   onAccentFill: { dark: "longan-950", light: "longan-950" },
   accentSoft: { dark: { token: "persimmon-500", alpha: 0.16 }, light: { token: "persimmon-500", alpha: 0.14 } },
   accentSoftText: { dark: "persimmon-200", light: "persimmon-800", minContrast: 4.5 },
-  selection: { dark: { token: "persimmon-500", alpha: 0.24 }, light: { token: "persimmon-500", alpha: 0.18 } },
+  selection: {
+    dark: { token: "persimmon-500", alpha: 0.24 },
+    light: { token: "persimmon-500", alpha: 0.18 },
+    darkHighContrast: { token: "persimmon-500", alpha: 0.4 },
+    lightHighContrast: { token: "persimmon-500", alpha: 0.34 },
+  },
   chartFill: { dark: { token: "persimmon-500", alpha: 0.16 }, light: { token: "persimmon-500", alpha: 0.14 } },
-  statusNormal: { dark: "pandan-400", light: "pandan-700", minContrast: 3 },
-  statusWarning: { dark: "durian-400", light: "durian-800", minContrast: 3 },
-  statusCritical: { dark: "lychee-400", light: "lychee-700", minContrast: 3 },
+  statusNormal: { dark: "pandan-400", light: "pandan-700", darkHighContrast: "pandan-300", lightHighContrast: "pandan-800", minContrast: 3 },
+  statusWarning: { dark: "durian-400", light: "durian-800", darkHighContrast: "durian-300", lightHighContrast: "durian-900", minContrast: 3 },
+  statusCritical: { dark: "lychee-400", light: "lychee-700", darkHighContrast: "lychee-300", lightHighContrast: "lychee-800", minContrast: 3 },
   dangerSoft: { dark: { token: "lychee-500", alpha: 0.16 }, light: { token: "lychee-500", alpha: 0.12 } },
   dangerSoftText: { dark: "lychee-200", light: "lychee-800", minContrast: 4.5 },
 } as const satisfies Record<string, Role>;

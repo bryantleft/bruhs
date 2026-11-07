@@ -29,8 +29,8 @@
 @media (prefers-color-scheme: light) {
   :root {
     --role-text: var(--color-longan-950);
-    --role-text-secondary: var(--color-longan-700);
-    --role-text-tertiary: var(--color-longan-600);
+    --role-text-secondary: var(--color-longan-800);
+    --role-text-tertiary: var(--color-longan-700);
     --role-hairline: color-mix(in oklab, var(--color-longan-950) 10%, transparent);
     --role-well: color-mix(in oklab, var(--color-longan-100) 55%, transparent);
     --role-accent: var(--color-persimmon-700);
@@ -46,6 +46,9 @@
     --role-text-secondary: var(--color-rambutan-300);
     --role-text-tertiary: var(--color-rambutan-400);
     --role-hairline: color-mix(in oklab, var(--color-rambutan-100) 25%, transparent);
+    --role-accent: var(--color-persimmon-300);
+    --role-selection: color-mix(in oklab, var(--color-persimmon-500) 40%, transparent);
+    --role-status-critical: var(--color-lychee-300);
     --role-scrollbar: var(--color-longan-500);
     --role-scrollbar-hover: var(--color-longan-400);
   }
@@ -53,9 +56,12 @@
 
 @media (prefers-color-scheme: light) and (prefers-contrast: more) {
   :root {
-    --role-text-secondary: var(--color-longan-800);
-    --role-text-tertiary: var(--color-longan-700);
+    --role-text-secondary: var(--color-longan-900);
+    --role-text-tertiary: var(--color-longan-800);
     --role-hairline: color-mix(in oklab, var(--color-longan-950) 25%, transparent);
+    --role-accent: var(--color-persimmon-800);
+    --role-selection: color-mix(in oklab, var(--color-persimmon-500) 34%, transparent);
+    --role-status-critical: var(--color-lychee-800);
     --role-scrollbar: var(--color-longan-700);
     --role-scrollbar-hover: var(--color-longan-800);
   }
