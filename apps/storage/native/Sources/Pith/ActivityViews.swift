@@ -13,37 +13,36 @@ struct ActivityView: View {
     var body: some View {
         let range = rankedRange
         let listing = ActivityListing(history: model.history, latest: model.snapshot, range: range, search: state.search, includeExited: state.includeExited, sort: state.sort)
-        HStack(spacing: 0) {
+        let inspecting = inspects(listing)
+        HStack(spacing: 12) {
             content(listing, range: range)
-            if state.showsInspector {
-                BruhsSidePanel(width: $inspectorWidth, widths: 260...420) {
+            // The inspector shows only while a row is selected: a card inset from the window's edges and the toolbar.
+            if inspecting {
+                BruhsSidePanel(width: $inspectorWidth, widths: 260...420, close: { state.selection = nil }) {
                     ActivityInspector(model: model, listing: listing, selection: state.selection, range: range)
                 }
-                .transition(.move(edge: .trailing))
+                .padding([.top, .trailing, .bottom], 12)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .animation(BruhsMotion.standard(duration: BruhsMotion.fast), value: state.showsInspector)
+        .animation(BruhsMotion.standard(duration: BruhsMotion.fast), value: inspecting)
         .navigationSubtitle(subtitle(range))
         .searchable(text: $state.search, placement: .toolbar, prompt: "Search apps or PID")
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
+            ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Toggle("Include Exited Apps", isOn: $state.includeExited)
                 } label: {
                     Label("Filter", systemImage: state.includeExited ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                 }
                 .help(state.includeExited ? "Including apps that quit in the last 10 minutes" : "Filter the list")
-                Button {
-                    state.showsInspector.toggle()
-                } label: {
-                    Label(state.showsInspector ? "Hide Inspector" : "Show Inspector", systemImage: "sidebar.trailing")
-                }
-                .help(state.showsInspector ? "Hide the inspector (⌥⌘I)" : "Show the inspector (⌥⌘I)")
             }
         }
-        // Escape from the table or chart arrives as the exit command; the scope bar's button
-        // covers Escape when nothing has focus.
-        .onExitCommand { state.backToLive() }
+        // Escape from the table or chart arrives as the exit command: it leaves a ranked range first, then closes the
+        // inspector. The scope bar's button covers Escape when nothing has focus.
+        .onExitCommand {
+            if state.range != nil { state.backToLive() } else { state.selection = nil }
+        }
         .onAppear(perform: applyFocus)
         .onChange(of: model.focusAppID) { applyFocus() }
         .onChange(of: model.snapshot?.uptime) {
@@ -82,6 +81,15 @@ struct ActivityView: View {
 
     private var query: String { state.search.trimmingCharacters(in: .whitespacesAndNewlines) }
 
+    /// Whether the selected row has details to show: System, or an app still in the session's history.
+    private func inspects(_ listing: ActivityListing) -> Bool {
+        switch state.selection {
+        case .system: listing.system != nil
+        case .app(let id), .helper(app: let id, name: _): model.history.apps[id] != nil
+        case .appsHeader, nil: false
+        }
+    }
+
     /// The ranked range, clipped to the history that still exists; nil while live or once it has expired.
     private var rankedRange: ClosedRange<Double>? {
         guard let range = state.range else { return nil }
@@ -107,7 +115,7 @@ struct ActivityView: View {
         }
     }
 
-    /// The panel asked to show one app: select it live, reveal it, and open the inspector.
+    /// The panel asked to show one app: select it live and reveal it, which opens the inspector.
     private func applyFocus() {
         guard let id = model.focusAppID else { return }
         model.focusAppID = nil
@@ -115,7 +123,6 @@ struct ActivityView: View {
         state.search = ""
         if model.history.apps[id]?.latest.identity.kind == .system { state.expanded.insert(.system) }
         state.selection = .app(id)
-        state.showsInspector = true
     }
 }
 

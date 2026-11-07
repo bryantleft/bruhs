@@ -284,38 +284,47 @@ struct MiniTrend: View {
     }
 }
 
-/// A side panel on `surface`, flush with the window's trailing edge, that the user resizes by dragging its leading
-/// hairline. It stands in for SwiftUI's inspector, which macOS 26 draws as an inset glass panel with a rounded
-/// corner that shows as a notch against the canvas.
+/// Details beside the content, in a rounded card on `surface` with a hairline ring. The caller insets it from the
+/// window's edges and the toolbar, so toolbar items never sit on it. The user resizes it by dragging its leading edge
+/// and closes it with the button in its corner. It stands in for SwiftUI's inspector, which macOS 26 draws as a glass
+/// panel joined to the window's edge, with one rounded corner that shows as a notch against the canvas.
 struct BruhsSidePanel<Content: View>: View {
     @Binding var width: Double
     let widths: ClosedRange<Double>
+    let close: () -> Void
     @ViewBuilder var content: Content
     @State private var dragStart: Double?
+
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: BruhsRadius.lychee, style: .continuous) }
 
     var body: some View {
         content
             .frame(width: min(widths.upperBound, max(widths.lowerBound, width)))
             .frame(maxHeight: .infinity)
-            .background(BruhsColor.surface)
+            .background(BruhsColor.surface, in: shape)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(BruhsColor.hairline, lineWidth: 1).accessibilityHidden(true))
+            .overlay(alignment: .topTrailing) {
+                Button(action: close) { Image(systemName: "xmark") }
+                    .buttonStyle(.bruhsGhost)
+                    .padding(8)
+                    .help("Close (Escape)")
+                    .accessibilityLabel("Close")
+            }
             .overlay(alignment: .leading) {
-                Rectangle()
-                    .fill(BruhsColor.hairline)
-                    .frame(width: 1)
-                    .overlay {
-                        // A wider target than the hairline. Global coordinates, because the edge moves while dragging.
-                        Color.clear
-                            .frame(width: 9)
-                            .contentShape(Rectangle())
-                            .onHover { inside in if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
-                            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                                .onChanged { drag in
-                                    let start = dragStart ?? width
-                                    dragStart = start
-                                    width = min(widths.upperBound, max(widths.lowerBound, start - drag.translation.width))
-                                }
-                                .onEnded { _ in dragStart = nil })
-                    }
+                // A wider target than the edge, centred on it. Global coordinates, because the edge moves while dragging.
+                Color.clear
+                    .frame(width: 9)
+                    .contentShape(Rectangle())
+                    .offset(x: -5)
+                    .onHover { inside in if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
+                    .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                        .onChanged { drag in
+                            let start = dragStart ?? width
+                            dragStart = start
+                            width = min(widths.upperBound, max(widths.lowerBound, start - drag.translation.width))
+                        }
+                        .onEnded { _ in dragStart = nil })
                     .accessibilityHidden(true)
             }
     }

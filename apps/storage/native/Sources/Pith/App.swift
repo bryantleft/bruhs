@@ -60,11 +60,6 @@ import PithCore
         view.submenu = NSMenu(title: "View")
         view.submenu?.addItem(withTitle: "Activity", action: #selector(showActivityFromMenu), keyEquivalent: "1").target = self
         view.submenu?.addItem(withTitle: "Disk", action: #selector(showDisk), keyEquivalent: "2").target = self
-        view.submenu?.addItem(.separator())
-        let inspector = NSMenuItem(title: "Show Inspector", action: #selector(toggleInspector), keyEquivalent: "i")
-        inspector.keyEquivalentModifierMask = [.command, .option]
-        inspector.target = self
-        view.submenu?.addItem(inspector)
         NSApp.mainMenu = menu
         statusItem = StatusItemController(activity: activity, actions: PanelActions(
             openActivity: { [weak self] id in self?.showActivity(selecting: id) },
@@ -133,15 +128,10 @@ import PithCore
     @objc private func findInActivity() {
         mainWindow?.window.toolbar?.items.lazy.compactMap { $0 as? NSSearchToolbarItem }.first?.beginSearchInteraction()
     }
-    @objc private func toggleInspector() { mainWindow?.state.activity.showsInspector.toggle() }
-
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         let activityShowing = mainWindow?.window.isVisible == true && mainWindow?.state.tab == .activity
         switch menuItem.action {
         case #selector(findInActivity): return activityShowing
-        case #selector(toggleInspector):
-            menuItem.title = mainWindow?.state.activity.showsInspector == false ? "Show Inspector" : "Hide Inspector"
-            return activityShowing
         default: return true
         }
     }

@@ -2,7 +2,8 @@ import AppKit
 import PithCore
 import SwiftUI
 
-/// Details for the selected row: an app's history, processes and actions, or System's totals.
+/// Details for the selected row: an app's history, processes and actions, or System's totals. Activity shows it only
+/// while a row is selected.
 struct ActivityInspector: View {
     let model: ActivityModel
     let listing: ActivityListing
@@ -15,13 +16,6 @@ struct ActivityInspector: View {
             SystemInspector(system: system)
         } else if let id = selection?.appID, let timeline = model.history.apps[id] {
             AppInspector(model: model, timeline: timeline, range: range)
-        } else {
-            Text("Select an app to see its history, processes and actions.")
-                .font(BruhsType.body)
-                .foregroundStyle(BruhsColor.textTertiary)
-                .multilineTextAlignment(.center)
-                .padding(24)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }

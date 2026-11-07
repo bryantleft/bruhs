@@ -26,7 +26,6 @@ enum ActivityRowID: Hashable {
     var selection: ActivityRowID?
     var expanded: Set<ActivityRowID> = []
     var sort = ActivitySort.cpuDescending
-    var showsInspector = true
     /// The range the table is ranked by, in sample-clock seconds; nil while live.
     private(set) var range: ClosedRange<Double>?
     /// The sort to restore on Back to Live: ranking a range sorts by CPU, as the scope bar says.
