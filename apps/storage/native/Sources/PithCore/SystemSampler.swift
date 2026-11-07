@@ -4,7 +4,12 @@ import PithSystem
 public actor SystemSampler {
     private var previous: [ProcessKey: RawProcess] = [:]
     private var previousCPU: (busy: UInt64, total: UInt64)?
+    /// Each logical CPU's busy and total ticks at the last reading, for the tiers.
+    private var previousCores: [(busy: UInt64, total: UInt64)] = []
+    private var previousNetwork: (in: UInt64, out: UInt64)?
     private var previousUptime: Double?
+    /// The Mac's CPU tiers, lowest capability first, read once: they don't change while it runs.
+    private let tierLayout = SystemSampler.readTierLayout()
     /// Info.plist display names by bundle path; nil when the bundle doesn't name itself.
     private var names: [String: String?] = [:]
     /// Enclosing .app bundles and identities by executable path. Both depend only on the path, so they're worked
@@ -15,7 +20,44 @@ public actor SystemSampler {
     public init() {}
 
     public func reset() {
-        previous = [:]; previousCPU = nil; previousUptime = nil
+        previous = [:]; previousCPU = nil; previousCores = []; previousNetwork = nil; previousUptime = nil
+    }
+
+    /// `hw.perflevelN`: level 0 is the highest-capability tier. macOS numbers logical CPUs from the lowest tier up
+    /// (checked on an M2 Max: background work runs on CPUs 0 to 3, its four efficiency cores), so the layout is reversed.
+    static func readTierLayout() -> [(name: String, cores: Int)] {
+        func int(_ name: String) -> Int? {
+            var value: Int32 = 0
+            var size = MemoryLayout<Int32>.size
+            return sysctlbyname(name, &value, &size, nil, 0) == 0 ? Int(value) : nil
+        }
+        func string(_ name: String) -> String? {
+            var size = 0
+            guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return nil }
+            var bytes = [CChar](repeating: 0, count: size)
+            guard sysctlbyname(name, &bytes, &size, nil, 0) == 0 else { return nil }
+            return String(decoding: bytes.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        }
+        guard let levels = int("hw.nperflevels"), levels > 1 else { return [] }
+        let tiers = (0..<levels).compactMap { level -> (String, Int)? in
+            guard let cores = int("hw.perflevel\(level).logicalcpu") else { return nil }
+            return (string("hw.perflevel\(level).name") ?? "Tier \(level + 1)", cores)
+        }
+        return tiers.count == levels ? tiers.reversed() : []
+    }
+
+    /// Busy share of each tier between two readings of every CPU's ticks.
+    static func tiers(_ layout: [(name: String, cores: Int)], current: [(busy: UInt64, total: UInt64)], previous: [(busy: UInt64, total: UInt64)]) -> [CoreTier] {
+        guard layout.reduce(0, { $0 + $1.cores }) == current.count else { return [] }
+        var start = 0
+        return layout.map { tier in
+            let range = start..<(start + tier.cores)
+            start += tier.cores
+            guard previous.count == current.count else { return CoreTier(name: tier.name, cores: tier.cores, busy: nil) }
+            let busy = range.reduce(UInt64(0)) { $0 + current[$1].busy.saturatingSubtract(previous[$1].busy) }
+            let total = range.reduce(UInt64(0)) { $0 + current[$1].total.saturatingSubtract(previous[$1].total) }
+            return CoreTier(name: tier.name, cores: tier.cores, busy: total > 0 ? Double(busy) / Double(total) * 100 : nil)
+        }
     }
 
     public func sample() -> ActivitySnapshot {
@@ -31,7 +73,8 @@ public actor SystemSampler {
                 let name = withUnsafeBytes(of: p.name) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
                 processes.append(RawProcess(key: ProcessKey(pid: p.pid, started: p.started_us), parent: p.parent_pid, name: name, path: path,
                     cpu: p.readable != 0 ? p.cpu_ns : nil, memory: p.readable != 0 ? p.footprint : nil,
-                    read: p.readable != 0 ? p.read_bytes : nil, written: p.readable != 0 ? p.written_bytes : nil))
+                    read: p.readable != 0 ? p.read_bytes : nil, written: p.readable != 0 ? p.written_bytes : nil,
+                    energy: p.energy_valid != 0 ? p.energy_nj : nil))
             }
         }
         let elapsed = previousUptime.map { uptime - $0 }
@@ -70,10 +113,15 @@ public actor SystemSampler {
             return MetricMath.rate(counter: current, previous: old, elapsed: elapsed)
         }
         func cpuShare(_ process: RawProcess) -> Double? { rate(process, \.cpu).map { $0 / 1_000_000_000 / cores * 100 } }
+        func coresUsed(_ process: RawProcess) -> Double? { rate(process, \.cpu).map { $0 / 1_000_000_000 } }
+        // Nanojoules per second over a reading: watts once divided by 10^9. A first reading or a counter that ran
+        // backwards gives no figure rather than a spike.
+        func watts(_ process: RawProcess) -> Double? { rate(process, \.energy).map { $0 / 1_000_000_000 } }
         let processSamples = processes.map { process in
             ProcessSample(key: process.key, name: process.name, path: process.path, parent: process.parent, cpu: cpuShare(process),
-                memory: process.memory, read: rate(process, \.read), written: rate(process, \.written))
+                memory: process.memory, read: rate(process, \.read), written: rate(process, \.written), power: watts(process), cores: coresUsed(process))
         }
+        let awake = PowerAndGPU.sleepAssertions()
         let apps = grouped.map { id, members -> AppSample in
             let owner = owners[members[0].key] ?? members[0]
             func sum(_ value: (RawProcess) -> Double?) -> Double? {
@@ -88,16 +136,35 @@ public actor SystemSampler {
                 memory: sum { $0.memory.map { Double($0) } }.map { UInt64($0) },
                 read: sum { rate($0, \.read) }, written: sum { rate($0, \.written) },
                 restricted: members.contains { $0.cpu == nil },
-                openedBy: parent.flatMap { identities[groupID(owners[$0.key] ?? $0)]?.displayName })
+                openedBy: parent.flatMap { identities[groupID(owners[$0.key] ?? $0)]?.displayName },
+                power: sum(watts), cores: members.compactMap(coresUsed).max(), keepsAwake: members.flatMap { awake[$0.key.pid] ?? [] })
         }.sorted { ($0.cpu ?? -1) > ($1.cpu ?? -1) }
         let activeBundles = Set(bundles.values.compactMap { $0 })
         names = names.filter { activeBundles.contains($0.key) }
+        let coreTicks: [(busy: UInt64, total: UInt64)] = capture.cpu_valid != 0 ? withUnsafeBytes(of: capture.cpu_busy) { busy in
+            withUnsafeBytes(of: capture.cpu_total) { total in
+                (0..<Int(capture.cpu_count)).map { (busy.load(fromByteOffset: $0 * 8, as: UInt64.self), total.load(fromByteOffset: $0 * 8, as: UInt64.self)) }
+            }
+        } : []
+        let tiers = Self.tiers(tierLayout, current: coreTicks, previous: previousCores)
+        let memory = capture.memory_valid != 0 ? MemoryUse(
+            pages: (capture.active, capture.inactive, capture.speculative, capture.wired, capture.compressed, capture.purgeable, capture.external),
+            pageSize: capture.page_size, physical: capture.physical,
+            swapUsed: capture.swap_valid != 0 ? capture.swap_used : nil, swapTotal: capture.swap_valid != 0 ? capture.swap_total : nil) : nil
+        let network: (in: UInt64, out: UInt64)? = capture.network_valid != 0 ? (capture.network_in, capture.network_out) : nil
+        let networkRates = network.flatMap { now in previousNetwork.flatMap { old in elapsed.map { elapsed in
+            (MetricMath.rate(counter: now.in, previous: old.in, elapsed: elapsed), MetricMath.rate(counter: now.out, previous: old.out, elapsed: elapsed)) } } }
         previous = Dictionary(uniqueKeysWithValues: processes.map { ($0.key, $0) })
         previousCPU = capture.cpu_valid != 0 ? (capture.busy_ticks, capture.total_ticks) : nil
+        previousCores = coreTicks
+        previousNetwork = network
         previousUptime = uptime
+        let info = ProcessInfo.processInfo
         return ActivitySnapshot(date: date, uptime: uptime, cpu: cpu, pressure: MemoryPressure(rawValue: Int(capture.pressure)) ?? .unknown,
             apps: apps, error: capture.error_code == 0 ? nil : "Process list incomplete: \(String(cString: strerror(capture.error_code)))",
-            unavailableProcesses: Int(capture.unavailable_processes), processes: processSamples)
+            unavailableProcesses: Int(capture.unavailable_processes), processes: processSamples,
+            memory: memory, tiers: tiers, thermal: ThermalPressure(info.thermalState), lowPowerMode: info.isLowPowerModeEnabled,
+            networkIn: networkRates?.0, networkOut: networkRates?.1, gpu: PowerAndGPU.gpuUtilization(), battery: PowerAndGPU.battery())
     }
 
     private func bundleName(_ bundle: String) -> String? {
