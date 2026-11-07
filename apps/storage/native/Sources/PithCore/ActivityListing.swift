@@ -118,6 +118,36 @@ public struct ActivityListing: Sendable {
         }
     }
 
+    /// Apps ranked across a stretch of kept history: each bucket's busiest apps, averaged. There's no process detail
+    /// for the past, so rows have no helpers, and apps that fell out of a bucket's busiest list count as idle there.
+    public init(longHistory: LongHistory, range: ClosedRange<Date>, span: HistorySpan, latest: ActivitySnapshot?, search: String, sort: ActivitySort) {
+        let filters = ActivityQuery(search)
+        let query = filters.text
+        let running = Dictionary((latest?.apps ?? []).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var apps: [App] = [], system: [App] = []
+        for (id, used) in longHistory.usage(in: range, span: span) {
+            guard let known = longHistory.identities[id] else { continue }
+            let kind = ProcessKind(rawValue: known.kind) ?? .commandLineTool
+            let derived = ProcessIdentity(path: known.executable, processName: known.name, bundleName: known.name)
+            let identity = ProcessIdentity(kind: kind, displayName: known.name, secondaryText: derived.secondaryText, description: derived.description)
+            if !query.isEmpty, ![identity.displayName, identity.secondaryText].compactMap({ $0 }).contains(where: { $0.localizedCaseInsensitiveContains(query) }) { continue }
+            let live = running[id]
+            let row = App(id: id, identity: identity, executable: known.executable, members: live?.members ?? [], isRunning: live != nil, restricted: false,
+                          processCount: live?.members.count ?? 0, values: Values(cpu: used.cpu, memory: used.memory, read: nil, written: nil, power: used.power), helpers: [])
+            guard filters.passes(kind: kind, executable: known.executable, values: row.values) else { continue }
+            if kind == .system { system.append(row) } else { apps.append(row) }
+        }
+        self.apps = apps.sorted { Self.ordered($0, $1, sort) }
+        if system.isEmpty {
+            self.system = nil
+        } else {
+            let cpu = system.compactMap(\.values.cpu), power = system.compactMap(\.values.power)
+            self.system = System(processCount: system.count, protectedCount: 0,
+                                 values: Values(cpu: cpu.isEmpty ? nil : cpu.reduce(0, +), memory: nil, read: nil, written: nil, power: power.isEmpty ? nil : power.reduce(0, +)),
+                                 apps: system.sorted { Self.ordered($0, $1, sort) })
+        }
+    }
+
     /// Name, tool version or description, a member's PID, or a running helper's name, such as "Renderer".
     private static func matches(_ sample: AppSample, _ query: String, processes: [ProcessKey: ProcessSample]) -> Bool {
         guard !query.isEmpty else { return true }

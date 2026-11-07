@@ -41,6 +41,16 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
     }
     /// Set when the panel opens Activity for one app; Activity selects it and clears this.
     var focusAppID: String?
+    /// A week of history, kept on this Mac only while the user has turned it on: Pith's promise was that history
+    /// clears when it quits, so keeping more is the user's choice.
+    var keepsHistory = UserDefaults.standard.bool(forKey: "keepsHistory") {
+        didSet {
+            UserDefaults.standard.set(keepsHistory, forKey: "keepsHistory")
+            if keepsHistory { loadHistory() } else { clearHistory() }
+        }
+    }
+    private(set) var longHistory = LongHistory()
+    private var savedAt = Date.distantPast
     var onSample: (() -> Void)?
     /// A gap longer than two sample intervals is missing data, not a slow sample.
     static let maxGap = interval * 2
@@ -57,6 +67,7 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
     func start() {
         sampling?.cancel()
         paused = false
+        if keepsHistory && longHistory.halfMinute.isEmpty && longHistory.fiveMinute.isEmpty { loadHistory() }
         sampling = Task {
             await sampler.reset()
             while !Task.isCancelled {
@@ -65,6 +76,7 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
                 announceChanges(from: snapshot, to: sample)
                 snapshot = sample
                 history.append(sample)
+                if keepsHistory { recordHistory(sample) }
                 if showsDiskSpace { refreshDiskSpace() }
                 onSample?()
                 do { try await Task.sleep(for: .seconds(Self.interval)) } catch { return }
@@ -74,7 +86,47 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
 
     func pause() {
         sampling?.cancel(); sampling = nil; paused = true
+        if keepsHistory { saveHistory() }
         onSample?()
+    }
+
+    // MARK: Kept history
+
+    /// ~/Library/Application Support/Pith/history.json.
+    static var historyFile: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Pith/history.json")
+    }
+
+    private func recordHistory(_ sample: ActivitySnapshot) {
+        longHistory.record(sample)
+        // Once a minute, so a crash loses a minute at most; encoding about a megabyte took under 10 ms.
+        if sample.date.timeIntervalSince(savedAt) >= 60 { saveHistory() }
+    }
+
+    func saveHistory() {
+        guard keepsHistory, let file = Self.historyFile else { return }
+        savedAt = Date()
+        let history = longHistory
+        Task.detached(priority: .utility) {
+            do {
+                try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try JSONEncoder().encode(history).write(to: file, options: [.atomic])
+            } catch {
+                NSLog("Pith: couldn't save history to \(file.path): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func loadHistory() {
+        guard let file = Self.historyFile, let data = try? Data(contentsOf: file) else { return }
+        do { longHistory = try JSONDecoder().decode(LongHistory.self, from: data) }
+        catch { NSLog("Pith: the saved history at \(file.path) couldn't be read, so it starts again: \(error.localizedDescription)") }
+    }
+
+    /// Forgets the kept history and deletes its file.
+    func clearHistory() {
+        longHistory.clear()
+        if let file = Self.historyFile { try? FileManager.default.removeItem(at: file) }
     }
 
     /// Says so to VoiceOver when memory pressure turns elevated or the Mac starts to throttle, as the Charts HIG asks:

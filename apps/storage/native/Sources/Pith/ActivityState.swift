@@ -1,3 +1,4 @@
+import Foundation
 import Observation
 import PithCore
 
@@ -31,6 +32,12 @@ enum ChartMetric: String, CaseIterable, Identifiable {
 /// keeps the search, selection, disclosure and ranked range.
 @MainActor @Observable final class ActivityState {
     var chartMetric = ChartMetric.cpu
+    /// How far back the chart looks. Longer than ten minutes needs kept history.
+    var span = HistorySpan.tenMinutes {
+        didSet { if span != oldValue { backToLive(); longRange = nil } }
+    }
+    /// A range of kept history the table ranks by, while the chart shows hours or days.
+    var longRange: ClosedRange<Date>?
     var search = ""
     var includeExited = false
     var selection: ActivityRowID?
@@ -55,9 +62,16 @@ enum ChartMetric: String, CaseIterable, Identifiable {
     }
 
     func backToLive() {
+        longRange = nil
         guard range != nil else { return }
         range = nil
         if let liveSort { sort = liveSort }
         liveSort = nil
+    }
+
+    /// Ranks the table by a stretch of kept history.
+    func rank(from: Date, to: Date) {
+        longRange = min(from, to)...max(from, to)
+        sort = ActivitySort(column: chartMetric.column, ascending: false)
     }
 }

@@ -65,14 +65,7 @@ struct ActivityChart: View {
 
     private func header(_ points: [MiniTrend.Point], window: ClosedRange<Double>) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Picker("Chart", selection: Bindable(state).chartMetric) {
-                ForEach(ChartMetric.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .help("Chart CPU or memory. Dragging across the chart ranks apps by what it shows.")
-            Text(metric == .cpu ? "share of your Mac" : "share of your Mac’s memory").font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
+            ChartControls(state: state, keepsHistory: model.keepsHistory)
             Spacer(minLength: 12)
             readout(points, window: window)
                 .lineLimit(1)

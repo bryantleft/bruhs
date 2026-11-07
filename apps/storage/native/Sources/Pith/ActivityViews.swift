@@ -13,7 +13,9 @@ struct ActivityView: View {
 
     var body: some View {
         let range = rankedRange
-        let listing = ActivityListing(history: model.history, latest: model.snapshot, range: range, search: state.search, includeExited: state.includeExited, sort: state.sort)
+        let listing = state.longRange.map {
+            ActivityListing(longHistory: model.longHistory, range: $0, span: state.span, latest: model.snapshot, search: state.search, sort: state.sort)
+        } ?? ActivityListing(history: model.history, latest: model.snapshot, range: range, search: state.search, includeExited: state.includeExited, sort: state.sort)
         let inspecting = inspects(listing)
         HStack(spacing: 12) {
             content(listing, range: range)
@@ -37,7 +39,7 @@ struct ActivityView: View {
         // Escape from the table or chart arrives as the exit command: it leaves a ranked range first, then closes the
         // inspector. The scope bar's button covers Escape when nothing has focus.
         .onExitCommand {
-            if state.range != nil { state.backToLive() } else { state.selection = nil }
+            if state.range != nil || state.longRange != nil { state.backToLive() } else { state.selection = nil }
         }
         .onAppear(perform: applyFocus)
         .onChange(of: model.focusAppID) { applyFocus() }
@@ -61,10 +63,16 @@ struct ActivityView: View {
     /// The chart, the scope bar while a range is ranked, and the table.
     private func content(_ listing: ActivityListing, range: ClosedRange<Double>?) -> some View {
         VStack(spacing: 0) {
-            ActivityChart(model: model, state: state, range: range)
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-            if let range {
+            Group {
+                if state.span == .tenMinutes || !model.keepsHistory {
+                    ActivityChart(model: model, state: state, range: range)
+                } else {
+                    ActivityHistoryChart(model: model, state: state)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            if range != nil || state.longRange != nil {
                 ActivityScopeBar(model: model, state: state, range: range)
                     .padding(.horizontal, 16)
                     .padding(.top, 10)
@@ -85,7 +93,7 @@ struct ActivityView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
             }
-            ActivityTable(listing: listing, opensSystem: !query.isEmpty, ranged: range != nil, textScale: TextSize.shared.scale,
+            ActivityTable(listing: listing, opensSystem: !query.isEmpty, ranged: range != nil || state.longRange != nil, textScale: TextSize.shared.scale,
                           selection: $state.selection, expanded: $state.expanded, sort: $state.sort,
                           quit: { app in state.quitRequest = QuitRequest(appID: app.id, name: app.identity.displayName, kind: app.identity.kind, members: app.members) })
                 .overlay { emptyState(listing, range: range) }
@@ -113,6 +121,10 @@ struct ActivityView: View {
     }
 
     private func subtitle(_ range: ClosedRange<Double>?) -> String {
+        if let long = state.longRange {
+            let style = Date.FormatStyle(date: Calendar.current.isDate(long.lowerBound, inSameDayAs: long.upperBound) ? .omitted : .abbreviated, time: .shortened)
+            return "From \(long.lowerBound.formatted(style)) to \(long.upperBound.formatted(style))"
+        }
         if let range, let from = model.history.date(at: range.lowerBound), let to = model.history.date(at: range.upperBound) {
             return "From \(clockWithSeconds(from)) to \(clockWithSeconds(to))"
         }
@@ -207,7 +219,8 @@ struct QuitOutcomeBar: View {
 struct ActivityScopeBar: View {
     let model: ActivityModel
     let state: ActivityState
-    let range: ClosedRange<Double>
+    /// The live window's ranked range; nil while a stretch of kept history is ranked instead.
+    let range: ClosedRange<Double>?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -232,7 +245,11 @@ struct ActivityScopeBar: View {
     }
 
     private var times: String {
-        guard let from = model.history.date(at: range.lowerBound), let to = model.history.date(at: range.upperBound) else { return "" }
+        if let long = state.longRange {
+            let style = Date.FormatStyle(date: Calendar.current.isDate(long.lowerBound, inSameDayAs: long.upperBound) ? .omitted : .abbreviated, time: .shortened)
+            return "\(monaspaced(long.lowerBound.formatted(style))) to \(monaspaced(long.upperBound.formatted(style)))"
+        }
+        guard let range, let from = model.history.date(at: range.lowerBound), let to = model.history.date(at: range.upperBound) else { return "" }
         return "\(clockWithSeconds(from)) to \(clockWithSeconds(to))"
     }
 
@@ -250,7 +267,7 @@ struct ActivityScopeBar: View {
     }
 
     private var spoken: String {
-        let cpu = model.history.systemCPU(in: range).map { ". Mac CPU averaged \(Int($0.average.rounded())) percent, peaking at \(Int($0.peak.rounded())) percent" } ?? ""
+        let cpu = range.flatMap { model.history.systemCPU(in: $0) }.map { ". Mac CPU averaged \(Int($0.average.rounded())) percent, peaking at \(Int($0.peak.rounded())) percent" } ?? ""
         return "Showing \(times), ranked by \(ranking)\(cpu)."
     }
 }
