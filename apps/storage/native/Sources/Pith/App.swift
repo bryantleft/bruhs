@@ -128,8 +128,8 @@ import PithCore
         add(file, "Close Window", #selector(NSWindow.performClose(_:)), "w")
 
         let edit = submenu("Edit")
-        add(edit, "Undo", Selector(("undo:")), "z")
-        add(edit, "Redo", Selector(("redo:")), "z", [.command, .shift])
+        add(edit, "Undo", #selector(undoInFocus(_:)), "z", target: self)
+        add(edit, "Redo", #selector(redoInFocus(_:)), "z", [.command, .shift], target: self)
         edit.addItem(.separator())
         add(edit, "Cut", #selector(NSText.cut(_:)), "x")
         add(edit, "Copy", #selector(NSText.copy(_:)), "c")
@@ -225,6 +225,32 @@ import PithCore
         mainWindow?.window.toolbar?.items.lazy.compactMap { $0 as? NSSearchToolbarItem }.first?.beginSearchInteraction()
     }
 
+    // MARK: Undo
+
+    /// The undo manager Edit > Undo acts on. SwiftUI gives a search field an undo manager of its own, apart from the
+    /// window's, so the menu's usual undo: reaches the window and finds nothing; the focused view's manager comes first
+    /// when it holds something, then the window's, which holds Move to Trash.
+    private var undoTarget: UndoManager? {
+        let window = NSApp.keyWindow
+        if let focused = window?.firstResponder?.undoManager, focused !== window?.undoManager, focused.canUndo || focused.canRedo { return focused }
+        return window?.undoManager
+    }
+
+    /// Activity's search state while its search field is being edited, whose steps Activity keeps itself.
+    private var focusedSearch: ActivityState? {
+        guard let main = mainWindow, NSApp.keyWindow === main.window,
+              let field = main.window.toolbar?.items.lazy.compactMap({ ($0 as? NSSearchToolbarItem)?.searchField }).first,
+              let editor = field.currentEditor(), editor === main.window.firstResponder else { return nil }
+        return main.state.activity
+    }
+
+    @objc private func undoInFocus(_ sender: Any?) {
+        if let search = focusedSearch { search.undoSearch() } else { undoTarget?.undo() }
+    }
+    @objc private func redoInFocus(_ sender: Any?) {
+        if let search = focusedSearch { search.redoSearch() } else { undoTarget?.redo() }
+    }
+
     // MARK: Disk commands
 
     private var diskShowing: Bool { mainWindow?.window.isVisible == true && mainWindow?.state.tab == .disk }
@@ -279,6 +305,14 @@ import PithCore
         case #selector(smallerText): return TextSize.shared.canShrink
         case #selector(actualTextSize): return TextSize.shared.scale != 1
         case #selector(exportActivity): return activity.snapshot != nil
+        case #selector(undoInFocus(_:)):
+            if let search = focusedSearch { menuItem.title = "Undo Typing"; return search.canUndoSearch }
+            menuItem.title = undoTarget?.undoMenuItemTitle ?? "Undo"
+            return undoTarget?.canUndo == true
+        case #selector(redoInFocus(_:)):
+            if let search = focusedSearch { menuItem.title = "Redo Typing"; return search.canRedoSearch }
+            menuItem.title = undoTarget?.redoMenuItemTitle ?? "Redo"
+            return undoTarget?.canRedo == true
         default: return true
         }
     }

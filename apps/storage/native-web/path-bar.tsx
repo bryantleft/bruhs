@@ -1,4 +1,3 @@
-import { formatBytes } from "../src/lib/format";
 import type { DirNode } from "../src/lib/types";
 
 interface Props {
@@ -8,9 +7,8 @@ interface Props {
   onOpen: (index: number) => void;
 }
 
-/** Where the map is within the scan: each folder is a step back up. */
+/** Where the map is within the scan: each folder is a step back up. Pith's bar under the map gives the folder's size. */
 export function PathBar({ trail, onOpen }: Props) {
-  const current = trail.at(-1);
   return (
     <div className="flex min-h-8 min-w-0 shrink-0 items-center gap-3">
       <nav aria-label="Folder path" className="-ml-1.5 min-w-0 flex-1">
@@ -54,11 +52,6 @@ export function PathBar({ trail, onOpen }: Props) {
           })}
         </ol>
       </nav>
-      {current && (
-        <span className="text-code-sm shrink-0 text-(--role-text-secondary) tabular-nums">
-          {formatBytes(current.size)}
-        </span>
-      )}
     </div>
   );
 }

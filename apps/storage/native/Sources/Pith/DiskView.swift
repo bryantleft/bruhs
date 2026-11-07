@@ -43,9 +43,16 @@ struct DiskView: View {
                         .padding(.top, 14)
                 }
             }
-            if let item = model.selectedItem, let path = model.selected {
-                DiskSelectionBar(model: model, item: item, path: path, plan: model.selectedPlan) {
-                    model.requestTrash(path, undoManager: undoManager)
+            // Always there while a map is: appearing on a selection would shrink the map under the pointer, so the second
+            // click of a double-click could land on another block. Without a selection it describes the open folder.
+            if let result = model.result {
+                if let item = model.selectedItem, let path = model.selected {
+                    DiskSelectionBar(model: model, item: item, path: path, isSelection: true, plan: model.selectedPlan) {
+                        model.requestTrash(path, undoManager: undoManager)
+                    }
+                } else {
+                    let folder = model.openFolder.flatMap { result.item(at: $0) } ?? result.root
+                    DiskSelectionBar(model: model, item: folder, path: folder.path, isSelection: false, plan: nil) {}
                 }
             }
         }
@@ -371,11 +378,13 @@ private struct DiskVolumeList: View {
     }
 }
 
-/// The selected item and what can be done with it.
+/// The selected item, or the open folder while nothing is selected, and what can be done with it.
 private struct DiskSelectionBar: View {
     let model: DiskModel
     let item: DiskNode
     let path: String
+    /// False while it describes the open folder, which Move to Trash never targets from here.
+    let isSelection: Bool
     let plan: Result<TrashPlan, DiskFailure>?
     let trash: () -> Void
 
@@ -401,22 +410,24 @@ private struct DiskSelectionBar: View {
                 LabeledFigure(label: "Size", value: bytes(item.size))
                 if item.kind == .dir { LabeledFigure(label: "Files", value: monaspaced(item.fileCount.formatted())) }
                 // A copy that shares its blocks with another (an APFS clone) or with a snapshot frees less than its size.
-                if let frees = model.selectedFreesNow, frees + 1_000_000 < item.size {
+                if isSelection, let frees = model.selectedFreesNow, frees + 1_000_000 < item.size {
                     LabeledFigure(label: "Frees now", value: bytes(frees))
                         .help("Deleting it frees \(bytes(frees)) now: the rest of its \(bytes(item.size)) is shared with copies or snapshots.")
                 }
             }
             .fixedSize()
             Spacer(minLength: 12)
-            Button("Quick Look") { model.quickLook(path) }
+            Button("Quick Look") { model.showQuickLook?([URL(fileURLWithPath: path)]) }
                 .buttonStyle(.bruhsGhost)
                 .help("Preview it (Space)")
             Button("Reveal in Finder") { model.reveal(path) }
                 .buttonStyle(.bruhsGhost)
-            Button(asks ? "Move to Trash…" : "Move to Trash", action: trash)
-                .buttonStyle(.bruhsSoftDanger)
-                .disabled(refusal != nil || model.isScanning || model.isTrashing)
-                .help(refusal ?? "Move it to the Trash (⌘⌫). You can undo this.")
+            if isSelection {
+                Button(asks ? "Move to Trash…" : "Move to Trash", action: trash)
+                    .buttonStyle(.bruhsSoftDanger)
+                    .disabled(refusal != nil || model.isScanning || model.isTrashing)
+                    .help(refusal ?? "Move it to the Trash (⌘⌫). You can undo this.")
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)

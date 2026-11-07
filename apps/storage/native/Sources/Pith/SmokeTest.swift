@@ -38,6 +38,12 @@ extension AppDelegate {
             }
             // MenuPanelLayout.idealSize must hold the populated panel without scrolling on a display this tall.
             checks["menu_panel_content_fits"] = (statusItem?.panelContentHeight ?? 0) > 0 && statusItem?.panelContentFits == true
+            // The panel follows the system's light or dark appearance, as Activity does, whatever the menu bar shows over
+            // the wallpaper.
+            let panelLooks = statusItem?.panelWindow?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
+            let systemLooks = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
+            print("panel appearance=\(panelLooks?.rawValue ?? "none") system=\(systemLooks?.rawValue ?? "none")")
+            checks["panel_follows_system_appearance"] = panelLooks != nil && panelLooks == systemLooks
             statusItem?.togglePanel()
 
             showActivity()
@@ -72,6 +78,7 @@ extension AppDelegate {
                 main.window.sendEvent(escape)
             }
             checks["escape_returns_to_live"] = await eventually { main.state.activity.range == nil && main.window.subtitle.hasPrefix("Live") }
+            checks["search_cut_and_undo"] = await checkSearchCutAndUndo(in: main)
 
             activity.pause()
             let pausedCount = activity.history.system.count
@@ -88,10 +95,11 @@ extension AppDelegate {
             checks["native_scan"] = disk.result?.root.path == root.resolvingSymlinksInPath().path
             checks.merge(try await inspectDisk(), uniquingKeysWith: { _, new in new })
             // Leaving the Disk tab keeps the map, so its open folder survives; closing the window frees WebKit.
-            let shown = webView
+            // An identity, not a reference: holding the view here would keep it alive past the window's close.
+            let shown = webView.map(ObjectIdentifier.init)
             main.show(.activity)
             try await Task.sleep(for: .milliseconds(200))
-            checks["disk_kept_across_tabs"] = webView != nil && webView === shown && webView?.isHidden == true
+            checks["disk_kept_across_tabs"] = shown != nil && webView.map(ObjectIdentifier.init) == shown && webView?.isHidden == true
             showDisk()
             main.window.performClose(nil)
             checks["disk_webview_released"] = await eventually { self.webView == nil }
@@ -129,13 +137,60 @@ extension AppDelegate {
         // The labels' face must load. `document.fonts.check` would also pass with no matching face declared at all.
         let fonts = (try? await web.callAsyncJavaScript("return (await document.fonts.load('11px MonaspaceNeonVariable')).some((face) => face.status === 'loaded')", in: nil, contentWorld: .page)) as? Bool == true
         let labels = (try await web.callAsyncJavaScript("return document.querySelector('canvas').getAttribute('aria-label').includes('Treemap') && document.querySelector('[aria-label=\"Largest files\"]') !== null", in: nil, contentWorld: .page)) as? Bool == true
+        // Selecting shows the selection bar; the map mustn't change size under the pointer, or the second click of a
+        // double-click lands on another block.
+        let mapHeight = "return document.querySelector('canvas').getBoundingClientRect().height"
+        let before = try await web.callAsyncJavaScript(mapHeight, in: nil, contentWorld: .page) as? Double
         _ = try await web.callAsyncJavaScript("document.querySelector('aside button')?.click()", in: nil, contentWorld: .page)
-        try await Task.sleep(for: .milliseconds(100))
+        try await Task.sleep(for: .milliseconds(400))
         let selection = disk.selected != nil
+        let after = try await web.callAsyncJavaScript(mapHeight, in: nil, contentWorld: .page) as? Double
+        print("map height before selection=\(before ?? -1) after=\(after ?? -1)")
         _ = try await web.callAsyncJavaScript("window.location.href = 'https://example.com/'", in: nil, contentWorld: .page)
         try await Task.sleep(for: .milliseconds(200))
         return ["treemap_rendered": rendered, "bundled_fonts": fonts, "accessible_map": labels,
-            "selection_bridge": selection, "remote_navigation_blocked": web.url?.scheme == "pith"]
+            "selection_bridge": selection, "map_keeps_size_on_select": before != nil && before == after,
+            "remote_navigation_blocked": web.url?.scheme == "pith"]
+    }
+
+    /// Command-X then Command-Z in Activity's search field, through the Edit menu as a key press would go. The user's
+    /// clipboard is put back afterwards.
+    private func checkSearchCutAndUndo(in main: MainWindowController) async -> Bool {
+        guard let field = main.window.toolbar?.items.lazy.compactMap({ ($0 as? NSSearchToolbarItem)?.searchField }).first else { return false }
+        let pasteboard = NSPasteboard.general
+        let saved = pasteboard.pasteboardItems?.map { item -> NSPasteboardItem in
+            let copy = NSPasteboardItem()
+            for type in item.types { if let data = item.data(forType: type) { copy.setData(data, forType: type) } }
+            return copy
+        } ?? []
+        defer {
+            pasteboard.clearContents()
+            if !saved.isEmpty { pasteboard.writeObjects(saved) }
+        }
+        func press(_ key: String, _ code: UInt16) -> Bool {
+            guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: ProcessInfo.processInfo.systemUptime,
+                                               windowNumber: main.window.windowNumber, context: nil, characters: key, charactersIgnoringModifiers: key,
+                                               isARepeat: false, keyCode: code) else { return false }
+            return NSApp.mainMenu?.performKeyEquivalent(with: event) == true
+        }
+        // SwiftUI syncs the field with Activity's search between steps, so each step waits for it.
+        let settle = { try? await Task.sleep(for: .milliseconds(250)) }
+        main.window.makeFirstResponder(field)
+        await settle()
+        field.currentEditor()?.insertText("pith smoke")
+        await settle()
+        field.currentEditor()?.selectAll(nil)
+        let pressedCut = press("x", 7)
+        await settle()
+        let cut = pressedCut && field.stringValue.isEmpty && pasteboard.string(forType: .string) == "pith smoke"
+        let pressedUndo = press("z", 6)
+        await settle()
+        let undone = pressedUndo && field.stringValue == "pith smoke"
+        print("search cut=\(cut) undo=\(undone) field=\"\(field.stringValue)\"")
+        field.currentEditor()?.selectAll(nil)
+        field.currentEditor()?.delete(nil)
+        main.state.activity.search = ""
+        return cut && undone
     }
 
     /// Diagnostic budget: 20 seconds covers startup, scan and WebKit initialization.

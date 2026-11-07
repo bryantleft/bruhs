@@ -109,12 +109,9 @@ struct DiskVolumeChoice: Identifiable, Equatable {
             guard let progress else { return .message(rescanning == nil ? "Starting the scan…" : "Scanning \(URL(fileURLWithPath: rescanning ?? "").lastPathComponent) again…") }
             return .figures([Figure(label: "Size", value: bytes(progress.bytes)), Figure(label: "Files", value: monaspaced(progress.files.formatted()))])
         }
-        if let result, let scannedAt {
-            return .figures([
-                Figure(label: "Size", value: bytes(result.summary.bytes)),
-                Figure(label: "Files", value: monaspaced(result.summary.files.formatted())),
-                Figure(label: edited ? "Scanned, then edited" : "Scanned", value: monaspaced(scanTime(scannedAt))),
-            ])
+        // The bar under the map gives the open folder's or the selection's size, so this line says when the scan was.
+        if result != nil, let scannedAt {
+            return .figures([Figure(label: edited ? "Scanned, then edited" : "Scanned", value: monaspaced(scanTime(scannedAt)))])
         }
         return note.map { .message($0) }
     }

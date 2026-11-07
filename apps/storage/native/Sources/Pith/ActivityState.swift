@@ -38,7 +38,15 @@ enum ChartMetric: String, CaseIterable, Identifiable {
     }
     /// A range of kept history the table ranks by, while the chart shows hours or days.
     var longRange: ClosedRange<Date>?
-    var search = ""
+    var search = "" {
+        didSet { if search != oldValue { noteSearchEdit(from: oldValue) } }
+    }
+    /// Earlier and undone searches, for Edit > Undo while the search field has focus. SwiftUI's search field keeps an
+    /// undo manager of its own, but resets the field from `search` after an undo, so Activity keeps the steps itself.
+    private var searchUndo: [String] = []
+    private var searchRedo: [String] = []
+    private var searchEditedAt = Date.distantPast
+    private var applyingSearchStep = false
     var includeExited = false
     var selection: ActivityRowID?
     var expanded: Set<ActivityRowID> = []
@@ -51,6 +59,33 @@ enum ChartMetric: String, CaseIterable, Identifiable {
     var quitRequest: QuitRequest?
     /// How the last quit went, until it's dismissed or another starts.
     var quitOutcome: QuitOutcome?
+
+    var canUndoSearch: Bool { !searchUndo.isEmpty }
+    var canRedoSearch: Bool { !searchRedo.isEmpty }
+
+    func undoSearch() {
+        guard let previous = searchUndo.popLast() else { return }
+        searchRedo.append(search)
+        applyingSearchStep = true; search = previous; applyingSearchStep = false
+    }
+
+    func redoSearch() {
+        guard let next = searchRedo.popLast() else { return }
+        searchUndo.append(search)
+        applyingSearchStep = true; search = next; applyingSearchStep = false
+    }
+
+    /// Typing joins one step until a one-second pause; a cut, paste or clear changes more than a character at once and
+    /// is a step of its own, as in a text field.
+    private func noteSearchEdit(from old: String) {
+        guard !applyingSearchStep else { return }
+        let now = Date()
+        if abs(search.count - old.count) > 1 || now.timeIntervalSince(searchEditedAt) > 1 {
+            searchUndo.append(old)
+            searchRedo.removeAll()
+        }
+        searchEditedAt = now
+    }
 
     /// Ranks the table by `range`, by the metric the chart shows.
     func rank(by range: ClosedRange<Double>) {
