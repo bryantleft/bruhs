@@ -19,7 +19,7 @@ export const COLORS = {
   'durian-400': '#f6e296',
   'persimmon-500': '#da7825',
   'persimmon-800': '#75391c',
-  'blueberry-300': '#a1cbff',
+  'blueberry-300': '#a5cbff',
   'blueberry-400': '#7eb3ff',
 } as const;
 
