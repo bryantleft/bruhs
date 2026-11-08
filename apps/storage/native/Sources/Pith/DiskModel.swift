@@ -89,18 +89,15 @@ struct DiskVolumeChoice: Identifiable, Equatable {
     /// Folders FSEvents says changed since the map's scan began.
     private(set) var changes = DiskChanges()
     private var watcher: DiskWatcher?
-    /// FSEvents' position and the volume's identity when the map's scan began, saved with it.
-    private var scanStart: (since: UInt64, volume: String?)?
-    /// Saves the map for the next launch. The smoke test turns it off, so its fixture never replaces the user's scan.
-    var keepsScans = true
+    /// How far FSEvents has reached the map: the event ID through which every change is in the map or in `changes`,
+    /// and the volume those IDs describe. Saved with the map, so the next launch replays only what came after.
+    private var watched: (through: UInt64, volume: String?)?
+    /// Where kept scans go: each folder's sizes and its saved map, in ~/Library/Application Support/Pith/Scans. The
+    /// smoke test points it at a folder of its own, so its fixture never touches the user's scans.
+    var scansFolder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Pith/Scans")
     private var restoreAttempted = false
     /// Saves run one at a time, so an older map never lands after a newer one.
     private static let saving = DispatchQueue(label: "app.bruhs.pith.saved-scans", qos: .utility)
-
-    /// ~/Library/Application Support/Pith/Scans.
-    static var scansFolder: URL? {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Pith/Scans")
-    }
     var problem: DiskProblem?
     var isScanning = false
     var isTrashing = false
@@ -203,7 +200,7 @@ struct DiskVolumeChoice: Identifiable, Equatable {
                 revision = UUID()
                 refreshAccounting()
                 changes = DiskChanges()
-                scanStart = start
+                watched = (start.since, start.volume)
                 watch(root.path, since: start.since)
                 saveScan()
             } catch {
@@ -384,7 +381,7 @@ struct DiskVolumeChoice: Identifiable, Equatable {
     /// Compares a finished scan with the last one of the same folder, then keeps this one for next time.
     private func compareWithLastScan(_ value: DiskResult) {
         growth = [:]; growthSince = nil
-        guard remembersScans, let folder = Self.scansFolder, let date = scannedAt else { return }
+        guard remembersScans, let folder = scansFolder, let date = scannedAt else { return }
         let file = ScanMemory.file(for: value.root.path, in: folder)
         if let data = try? Data(contentsOf: file), let last = try? JSONDecoder().decode(ScanMemory.self, from: data), last.comparable(to: value) {
             growth = last.changes(to: value)
@@ -404,8 +401,7 @@ struct DiskVolumeChoice: Identifiable, Equatable {
     /// Deletes every kept scan: folder sizes and saved maps.
     func forgetScans() {
         growth = [:]; growthSince = nil; revision = UUID()
-        UserDefaults.standard.removeObject(forKey: "lastScanRoot")
-        guard let folder = Self.scansFolder else { return }
+        guard let folder = scansFolder else { return }
         // On the save queue, so a save already queued can't put a map back after this.
         Self.saving.async { try? FileManager.default.removeItem(at: folder) }
     }
@@ -416,14 +412,16 @@ struct DiskVolumeChoice: Identifiable, Equatable {
         watcher = DiskWatcher(root: root, since: since) { [weak self] events in
             guard let self, self.result?.root.path == root else { return }
             for event in events { self.changes.note(event.path, flags: event.flags, root: root) }
+            // Changes only: the marker that a replay is done names no change.
+            let last = events.lazy.filter { $0.flags & DiskChanges.Flag.historyDone == 0 }.map(\.id).max()
+            if let last, let watched = self.watched, last > watched.through { self.watched = (last, watched.volume) }
         }
     }
 
-    /// Keeps the map for the next launch, with FSEvents' position when its scan began.
+    /// Keeps the map for the next launch, with how far FSEvents had reached it and what was still to catch up.
     private func saveScan() {
-        guard keepsScans, remembersScans, let result, let scannedAt, let start = scanStart, let folder = Self.scansFolder else { return }
-        let saved = SavedScan(result: result, date: scannedAt, since: start.since, volume: start.volume, edited: edited)
-        UserDefaults.standard.set(result.root.path, forKey: "lastScanRoot")
+        guard remembersScans, let result, let scannedAt, let watched, let folder = scansFolder else { return }
+        let saved = SavedScan(result: result, date: scannedAt, since: watched.through, volume: watched.volume, edited: edited, changes: changes)
         Self.saving.async {
             do {
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -434,24 +432,20 @@ struct DiskVolumeChoice: Identifiable, Equatable {
         }
     }
 
-    /// Opens on the map saved at an earlier launch, if there is one, and asks FSEvents what changed since its scan began.
+    /// Opens on the map Pith showed last, at an earlier launch, if there is one, and asks FSEvents what changed since.
     func restoreLastScan() {
         guard !restoreAttempted else { return }
         restoreAttempted = true
-        guard keepsScans, remembersScans, result == nil, !isScanning, let folder = Self.scansFolder,
-              let root = UserDefaults.standard.string(forKey: "lastScanRoot") else { return }
-        let file = SavedScan.file(for: root, in: folder)
+        guard remembersScans, result == nil, !isScanning, let folder = scansFolder else { return }
         Task {
-            let saved = await Task.detached(priority: .userInitiated) { () -> SavedScan? in
-                guard let data = try? Data(contentsOf: file) else { return nil }
-                return try? JSONDecoder().decode(SavedScan.self, from: data)
-            }.value
+            let saved = await Task.detached(priority: .userInitiated) { SavedScan.newest(in: folder) }.value
             // A scan that started meanwhile wins, and a saved map from another scanner version would count differently.
-            guard let saved, saved.result.version == DiskResult.version, saved.result.root.path == root,
-                  self.result == nil, !self.isScanning, FileManager.default.fileExists(atPath: root) else { return }
+            guard let saved, saved.result.version == DiskResult.version, self.result == nil, !self.isScanning,
+                  FileManager.default.fileExists(atPath: saved.result.root.path) else { return }
+            let root = saved.result.root.path
             result = saved.result; scannedAt = saved.date; edited = saved.edited; scope = root
-            scanStart = (saved.since, saved.volume)
-            changes = DiskChanges()
+            watched = (saved.since, saved.volume)
+            changes = saved.changes ?? DiskChanges()
             // Event IDs describe a volume's history only while it's the same volume.
             if saved.volume == nil || saved.volume != DiskWatcher.volumeUUID(for: root) { changes.markEverything() }
             watch(root, since: saved.since)

@@ -3,7 +3,7 @@ import Foundation
 
 /// Folders that changed after a scan, as FSEvents reports them, and what to scan again to catch up. FSEvents reports
 /// a folder when entries directly in it change, and a whole subtree when it lost track of the detail.
-public struct DiskChanges: Equatable, Sendable {
+public struct DiskChanges: Codable, Equatable, Sendable {
     /// Folders whose own entries changed, by path without a trailing slash.
     public private(set) var folders: Set<String> = []
     /// Folders anything inside of which may have changed.
@@ -119,25 +119,41 @@ public struct DiskChanges: Equatable, Sendable {
     }
 }
 
-/// A finished scan kept on this Mac, so Pith can show it at the next launch, with the FSEvents position it began at,
+/// A finished scan kept on this Mac, so Pith can show it at the next launch, with how far FSEvents had reached it,
 /// from which FSEvents can replay what changed since.
 public struct SavedScan: Codable, Sendable {
     public let result: DiskResult
     public let date: Date
-    /// FSEvents' event ID when the scan began.
+    /// FSEvents' event ID the map is caught up to: every change up to it is in the map or in `changes`. It's where the
+    /// scan began until events arrive, then the last one delivered, so a folder Refresh caught up stays caught up.
     public let since: UInt64
     /// The volume's FSEvents UUID then: IDs only mean the same thing while it stays the same.
     public let volume: String?
     /// The map changed after the scan, as when an item went to the Trash.
     public let edited: Bool
+    /// What had changed up to `since` and wasn't caught up yet. Nil in a map saved before Pith kept it, whose `since`
+    /// is where its scan began, so the replay brings those changes back.
+    public let changes: DiskChanges?
 
-    public init(result: DiskResult, date: Date, since: UInt64, volume: String?, edited: Bool) {
-        self.result = result; self.date = date; self.since = since; self.volume = volume; self.edited = edited
+    public init(result: DiskResult, date: Date, since: UInt64, volume: String?, edited: Bool, changes: DiskChanges) {
+        self.result = result; self.date = date; self.since = since; self.volume = volume; self.edited = edited; self.changes = changes
     }
 
     /// Where the scan of `root` is kept: next to its folder sizes, named by a hash of its path.
     public static func file(for root: String, in folder: URL) -> URL {
         let digest = SHA256.hash(data: Data(root.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
-        return folder.appendingPathComponent("\(digest).scan.json")
+        return folder.appendingPathComponent("\(digest)\(suffix)")
+    }
+
+    private static let suffix = ".scan.json"
+
+    /// The map saved last in `folder`: every save is of the map on screen, so it's the one Pith showed last. Nil when
+    /// there's none, or it doesn't decode, as a map from before a format change wouldn't.
+    public static func newest(in folder: URL) -> SavedScan? {
+        let saved = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        let changed = { (file: URL) in (try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast }
+        guard let file = saved.filter({ $0.lastPathComponent.hasSuffix(suffix) }).max(by: { changed($0) < changed($1) }),
+              let data = try? Data(contentsOf: file) else { return nil }
+        return try? JSONDecoder().decode(SavedScan.self, from: data)
     }
 }

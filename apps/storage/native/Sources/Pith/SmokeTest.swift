@@ -7,8 +7,10 @@ extension AppDelegate {
     /// No Trash operation or system setting is changed by this diagnostic.
     func smokeTest(root: URL, report: URL) async {
         var checks: [String: Bool] = [:]
-        // The fixture's map must never replace the user's saved scan.
-        disk.keepsScans = false
+        // The fixture's scans are kept in a folder of the smoke test's own, never the user's, which goes when it ends.
+        let scans = FileManager.default.temporaryDirectory.appendingPathComponent("pith-smoke-scans-\(UUID().uuidString)")
+        disk.scansFolder = scans
+        let forgetScans = { _ = try? FileManager.default.removeItem(at: scans) }
         checks["native_fonts_registered"] = BruhsFonts.isAvailable
         // The fallback symbol is a template image too, so the SVG itself has to decode.
         let glyph = Bundle.main.url(forResource: "StatusGlyph", withExtension: "svg").flatMap(NSImage.init(contentsOf:))
@@ -109,6 +111,7 @@ extension AppDelegate {
             disk.refresh()
             try await waitUntil("the refresh to finish") { !self.disk.isScanning }
             checks["refresh_catches_up"] = disk.changes.isEmpty && disk.problem == nil
+            checks.merge(try await checkSavedScan(changed: changed), uniquingKeysWith: { _, new in new })
             // Leaving the Disk tab keeps the map, so its open folder survives; closing the window frees WebKit.
             // An identity, not a reference: holding the view here would keep it alive past the window's close.
             let shown = webView.map(ObjectIdentifier.init)
@@ -124,12 +127,14 @@ extension AppDelegate {
             statusItem?.togglePanel()
             checks["menu_panel_opens"] = statusItem?.panelWindow?.isVisible == true
             statusItem?.togglePanel()
+            forgetScans()
             let data = try JSONSerialization.data(withJSONObject: checks, options: [.prettyPrinted, .sortedKeys])
             try data.write(to: report)
             print(String(decoding: data, as: UTF8.self))
             if checks.values.contains(false) { exit(1) }
             NSApp.terminate(nil)
         } catch {
+            forgetScans()
             let failure: [String: Any] = ["checks": checks, "error": error.localizedDescription]
             if let data = try? JSONSerialization.data(withJSONObject: failure, options: [.prettyPrinted, .sortedKeys]) { try? data.write(to: report); print(String(decoding: data, as: UTF8.self)) }
             exit(1)
@@ -175,6 +180,36 @@ extension AppDelegate {
         return ["treemap_rendered": rendered, "bundled_fonts": fonts, "accessible_map": labels,
             "selection_bridge": selection, "selection_frees_measured": frees, "map_follows_text_size": zooms, "map_keeps_size_on_select": before != nil && before == after,
             "remote_navigation_blocked": web.url?.scheme == "pith"]
+    }
+
+    /// Opens the kept map in a second model, as the next launch would. It must show what the live map does: the folder
+    /// Refresh caught up stays caught up rather than coming back in FSEvents' replay, and changes after still arrive.
+    private func checkSavedScan(changed folder: URL) async throws -> [String: Bool] {
+        guard let result = disk.result, let scans = disk.scansFolder else { return ["saved_scan_reopens": false] }
+        let file = SavedScan.file(for: result.root.path, in: scans)
+        let saved = await eventually {
+            let kept = (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode(SavedScan.self, from: $0) }
+            return kept?.result.root.size == result.root.size && kept?.edited == true
+        }
+        let reopened = DiskModel()
+        reopened.scansFolder = scans
+        reopened.restoreLastScan()
+        let reopens = await eventually { reopened.result != nil }
+        let same = reopened.result?.root.path == result.root.path && reopened.result?.root.size == result.root.size
+            && reopened.scannedAt.map { abs($0.timeIntervalSince(disk.scannedAt ?? .distantPast)) < 0.001 } == true
+        // The replay is in after FSEvents' one-second latency.
+        try await Task.sleep(for: .seconds(2.5))
+        let caughtUp = reopened.changes == disk.changes
+        print("saved scan kept=\(saved) reopened=\(reopens) same=\(same) changes reopened=\(reopened.changes.count) live=\(disk.changes.count)")
+        let added = folder.appendingPathComponent("pith-smoke-\(UUID().uuidString).txt")
+        defer { try? FileManager.default.removeItem(at: added) }
+        let touch = Process()
+        touch.executableURL = URL(fileURLWithPath: "/usr/bin/touch")
+        touch.arguments = [added.path]
+        try touch.run()
+        touch.waitUntilExit()
+        let follows = await eventually { reopened.changes.touches(folder.path) }
+        return ["saved_scan_reopens": saved && reopens && same, "saved_scan_stays_caught_up": caughtUp, "saved_scan_follows_changes": follows]
     }
 
     /// Command-X then Command-Z in Activity's search field, through the Edit menu as a key press would go. The user's

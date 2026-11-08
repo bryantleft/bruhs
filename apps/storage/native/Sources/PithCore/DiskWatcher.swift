@@ -8,6 +8,8 @@ public final class DiskWatcher: @unchecked Sendable {
     public struct Event: Sendable, Equatable {
         public let path: String
         public let flags: UInt32
+        /// FSEvents' ID for it. Events arrive in ID order, so the last one delivered is how far the watch has reached.
+        public let id: UInt64
     }
 
     // Created, started and stopped on the main thread, which also receives the events.
@@ -28,11 +30,11 @@ public final class DiskWatcher: @unchecked Sendable {
     @MainActor public init?(root: String, since: UInt64, receive: @escaping @MainActor ([Event]) -> Void) {
         self.receive = receive
         var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(), retain: nil, release: nil, copyDescription: nil)
-        let callback: FSEventStreamCallback = { _, info, count, paths, flags, _ in
+        let callback: FSEventStreamCallback = { _, info, count, paths, flags, ids in
             guard let info else { return }
             let watcher = Unmanaged<DiskWatcher>.fromOpaque(info).takeUnretainedValue()
             let names = unsafeBitCast(paths, to: NSArray.self) as? [String] ?? []
-            let events = (0..<min(count, names.count)).map { Event(path: names[$0], flags: flags[$0]) }
+            let events = (0..<min(count, names.count)).map { Event(path: names[$0], flags: flags[$0], id: ids[$0]) }
             MainActor.assumeIsolated { watcher.receive(events) }
         }
         let options = FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagWatchRoot | kFSEventStreamCreateFlagIgnoreSelf)
