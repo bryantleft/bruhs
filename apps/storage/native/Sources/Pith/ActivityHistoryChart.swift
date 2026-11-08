@@ -12,6 +12,14 @@ struct ActivityHistoryChart: View {
     private var metric: ChartMetric { state.chartMetric }
     private var span: HistorySpan { state.span }
 
+    /// Apps that opened inside the chart's span while history was kept.
+    private func launches(domain: ClosedRange<Double>) -> [LaunchMarker] {
+        model.longHistory.launches
+            .filter { domain.contains($0.date.timeIntervalSince1970) }
+            .suffix(LaunchMarker.limit)
+            .map { LaunchMarker(launch: $0, x: $0.date.timeIntervalSince1970) }
+    }
+
     private func value(_ bucket: HistoryBucket) -> Double? {
         switch metric {
         case .cpu: bucket.cpu
@@ -37,7 +45,7 @@ struct ActivityHistoryChart: View {
                 .frame(height: 150)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(metric.title) over the last \(span.title)")
-                .accessibilityValue(points.isEmpty ? "No kept history yet" : "\(points.count) readings")
+                .accessibilityValue(points.isEmpty ? "No kept history yet" : "\(points.count) readings." + LaunchMarker.spoken(launches(domain: domain)))
             HStack {
                 if buckets.isEmpty {
                     Text("Pith fills this in as it runs. Keep it running to see hours and days here.")
@@ -96,6 +104,7 @@ struct ActivityHistoryChart: View {
                     .foregroundStyle(metric == .cpu ? BruhsColor.accent : ActivityPalette.memory)
                     .lineStyle(StrokeStyle(lineWidth: 1.5, lineJoin: .round))
             }
+            LaunchMarks(markers: launches(domain: domain))
             ForEach(cursor.map { [$0.timeIntervalSince1970] } ?? [], id: \.self) { time in
                 RuleMark(x: .value("Time", time)).foregroundStyle(BruhsColor.textTertiary).lineStyle(StrokeStyle(lineWidth: 1))
             }

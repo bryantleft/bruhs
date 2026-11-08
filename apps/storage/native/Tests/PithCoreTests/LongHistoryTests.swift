@@ -97,7 +97,7 @@ final class LongHistoryTests: XCTestCase {
         // Strip every trace of writes, as in a file saved by the version before.
         func strip(_ value: Any) -> Any {
             if let object = value as? [String: Any] {
-                return object.filter { !["written", "appWritten", "lastUptime"].contains($0.key) }.mapValues(strip)
+                return object.filter { !["written", "appWritten", "lastUptime", "lastDate", "launchLog"].contains($0.key) }.mapValues(strip)
             }
             if let array = value as? [Any] { return array.map(strip) }
             return value
@@ -107,5 +107,44 @@ final class LongHistoryTests: XCTestCase {
         XCTAssertEqual(loaded.halfMinute.count, history.halfMinute.count)
         XCTAssertNil(loaded.halfMinute.first?.apps.first?.written)
         XCTAssertEqual(loaded.written(in: base...base.addingTimeInterval(60))?.apps.count, 0, "no writes recorded, none invented")
+    }
+
+    /// An app sample whose processes began at `started` seconds after `base`.
+    private func app(_ id: String, path: String, started: Double, pid: Int32 = 100) -> AppSample {
+        let key = ProcessKey(pid: pid, started: UInt64((base.timeIntervalSince1970 + started) * 1_000_000))
+        return AppSample(id: id, name: id, executable: path, members: [key], cpu: 1, memory: 1, read: nil, written: nil, restricted: false)
+    }
+
+    private func launching(_ seconds: Double, _ apps: [AppSample]) -> ActivitySnapshot {
+        ActivitySnapshot(date: base.addingTimeInterval(seconds), uptime: seconds, cpu: 10, pressure: .normal, apps: apps, error: nil,
+                         memory: MemoryUse(physical: 1000, used: 500, app: 400, wired: 50, compressed: 50, cached: 100, swapUsed: 10, swapTotal: 100))
+    }
+
+    func testALaunchIsWhenAnAppsFirstProcessBegan() throws {
+        let xcode = try XCTUnwrap(AppLaunch.of(app("Xcode", path: "/Applications/Xcode.app/Contents/MacOS/Xcode", started: 42)))
+        XCTAssertEqual(xcode.date, base.addingTimeInterval(42))
+        XCTAssertNil(AppLaunch.of(app("cargo", path: "/Users/me/.cargo/bin/cargo", started: 42)), "tools start all the time")
+        XCTAssertNil(AppLaunch.of(app("mds", path: "/usr/libexec/mds", started: 42)), "so does macOS")
+    }
+
+    func testTheSessionListsAppsThatOpenedInTheWindow() {
+        var session = SessionHistory()
+        let path = "/Applications/Safari.app/Contents/MacOS/Safari"
+        session.append(launching(600, [app("Safari", path: path, started: 590), app("Old", path: "/Applications/Old.app/Contents/MacOS/Old", started: -3600),
+                                       app("Pith", path: "/Applications/Pith.app/Contents/MacOS/Pith", started: 595, pid: 7)]))
+        let launches = session.launches(from: base, to: base.addingTimeInterval(600), excluding: 7)
+        XCTAssertEqual(launches.map(\.name), ["Safari"], "an app open since before the window, and Pith itself, aren't marked")
+    }
+
+    func testHistoryKeepsOnlyLaunchesItSawHappen() {
+        var history = LongHistory()
+        let running = app("Mail", path: "/Applications/Mail.app/Contents/MacOS/Mail", started: -86_400)
+        history.record(launching(0, [running]))
+        history.record(launching(2, [running, app("Xcode", path: "/Applications/Xcode.app/Contents/MacOS/Xcode", started: 1)]))
+        history.record(launching(4, [running, app("Xcode", path: "/Applications/Xcode.app/Contents/MacOS/Xcode", started: 1)]))
+        XCTAssertEqual(history.launches.map(\.name), ["Xcode"], "Mail was open before history began; Xcode is noted once")
+        // A week on, the launch has aged out with its buckets.
+        history.record(launching(8 * 86_400, [running]))
+        XCTAssertTrue(history.launches.isEmpty)
     }
 }

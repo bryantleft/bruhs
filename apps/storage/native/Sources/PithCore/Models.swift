@@ -253,12 +253,37 @@ public struct AppTimeline: Identifiable, Sendable {
     public var isRunning: Bool
 }
 
+/// An app opening, for a marker on Activity's charts.
+public struct AppLaunch: Codable, Sendable, Equatable, Identifiable {
+    public let appID: String
+    public let name: String
+    public let date: Date
+    public var id: String { "\(appID)@\(date.timeIntervalSince1970)" }
+    public init(appID: String, name: String, date: Date) { self.appID = appID; self.name = name; self.date = date }
+
+    /// When an app's process group began: its earliest process, the app itself, starts before its helpers.
+    /// Only apps with a bundle count; helpers, tools and macOS's own processes start all the time.
+    public static func of(_ app: AppSample) -> AppLaunch? {
+        guard app.identity.kind == .app, let started = app.members.map(\.started).filter({ $0 > 0 }).min() else { return nil }
+        return AppLaunch(appID: app.id, name: app.name, date: Date(timeIntervalSince1970: Double(started) / 1_000_000))
+    }
+}
+
 public struct SessionHistory: Sendable {
     // The approved product requirement is a ten-minute retrospective.
     public static let retention: TimeInterval = 10 * 60
     public private(set) var system: [ActivityPoint] = []
     public private(set) var apps: [String: AppTimeline] = [:]
     public init() {}
+
+    /// Apps that opened between `start` and `end`, oldest first, leaving out the process `excluding` belongs to.
+    public func launches(from start: Date, to end: Date, excluding pid: Int32? = nil) -> [AppLaunch] {
+        apps.values
+            .filter { timeline in !timeline.latest.members.contains { $0.pid == pid } }
+            .compactMap { AppLaunch.of($0.latest) }
+            .filter { $0.date >= start && $0.date <= end }
+            .sorted { $0.date < $1.date }
+    }
     public mutating func append(_ snapshot: ActivitySnapshot) {
         let cutoff = snapshot.uptime - Self.retention
         system.removeAll { $0.uptime < cutoff }

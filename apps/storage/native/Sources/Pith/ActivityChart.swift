@@ -102,6 +102,15 @@ struct ActivityChart: View {
 
     // MARK: Chart
 
+    /// Apps that opened inside the window, placed on its sample clock.
+    private func launches(window: ClosedRange<Double>) -> [LaunchMarker] {
+        guard let snapshot = model.snapshot else { return [] }
+        let start = snapshot.date.addingTimeInterval(window.lowerBound - snapshot.uptime)
+        return model.history.launches(from: start, to: snapshot.date, excluding: ProcessInfo.processInfo.processIdentifier)
+            .suffix(LaunchMarker.limit)
+            .map { LaunchMarker(launch: $0, x: snapshot.uptime - snapshot.date.timeIntervalSince($0.date)) }
+    }
+
     private func chart(_ points: [MiniTrend.Point], window: ClosedRange<Double>) -> some View {
         let marked = cursor.flatMap { nearest(points, to: $0) }
         let ticks = model.snapshot.map {
@@ -120,6 +129,7 @@ struct ActivityChart: View {
                     .foregroundStyle(metric == .cpu ? BruhsColor.accent : ActivityPalette.memory)
                     .lineStyle(StrokeStyle(lineWidth: 1.5, lineJoin: .round))
             }
+            LaunchMarks(markers: launches(window: window))
             ForEach(cursor.map { [$0] } ?? [], id: \.self) { time in
                 RuleMark(x: .value("Time", time))
                     .foregroundStyle(BruhsColor.textTertiary)
@@ -286,6 +296,7 @@ struct ActivityChart: View {
         let span = model.historyStart.map { "Since \(PanelSummary.clock($0))" } ?? "Last 10 minutes"
         let say = { (value: Double) in self.figure(value).replacingOccurrences(of: "%", with: " percent") }
         return "Now \(say(now)). \(span): average \(say(values.reduce(0, +) / Double(values.count))), peak \(say(peak))."
+            + LaunchMarker.spoken(launches(window: window))
     }
 }
 

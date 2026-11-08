@@ -74,6 +74,13 @@ public struct LongHistory: Codable, Sendable {
     private var coarseAccumulator: Accumulator?
     /// The last sample's uptime: an app's write rate covers the time since it, so rate times that is bytes written.
     private var lastUptime: Double?
+    /// The last sample's date: an app whose process began after it opened since.
+    private var lastDate: Date?
+    /// Apps that opened while history was kept, for the charts' markers. Optional so a file saved before stays readable.
+    private var launchLog: [AppLaunch]?
+
+    /// Apps that opened while history was kept, oldest first.
+    public var launches: [AppLaunch] { launchLog ?? [] }
 
     public init() {}
 
@@ -89,6 +96,12 @@ public struct LongHistory: Codable, Sendable {
         let elapsed = lastUptime.map { snapshot.uptime - $0 }.flatMap { $0 > 0 ? $0 : nil }
         fineAccumulator?.add(snapshot, elapsed: elapsed)
         lastUptime = snapshot.uptime
+        // Only launches seen happen: apps already running when history began aren't news.
+        if let lastDate {
+            let opened = snapshot.apps.compactMap(AppLaunch.of).filter { $0.date > lastDate && $0.date <= snapshot.date }
+            if !opened.isEmpty { launchLog = launches + opened }
+        }
+        lastDate = snapshot.date
         prune(now: snapshot.date)
     }
 
@@ -156,6 +169,9 @@ public struct LongHistory: Codable, Sendable {
     private mutating func prune(now: Date) {
         halfMinute.removeAll { $0.end < now.addingTimeInterval(-HistorySpan.sixHours.seconds) }
         fiveMinute.removeAll { $0.end < now.addingTimeInterval(-HistorySpan.sevenDays.seconds) }
+        if let first = launchLog?.first, first.date < now.addingTimeInterval(-HistorySpan.sevenDays.seconds) {
+            launchLog = launches.filter { $0.date >= now.addingTimeInterval(-HistorySpan.sevenDays.seconds) }
+        }
         let kept = Set(halfMinute.flatMap(\.apps).map(\.id) + fiveMinute.flatMap(\.apps).map(\.id))
         if identities.count > kept.count * 2 + 64 { identities = identities.filter { kept.contains($0.key) } }
     }
