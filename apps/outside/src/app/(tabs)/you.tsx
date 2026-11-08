@@ -1,22 +1,22 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Bruh } from '../components/Bruh';
-import { ConfirmAction } from '../components/ConfirmAction';
-import { GoalPicker } from '../components/GoalPicker';
-import { HealthSummary } from '../components/HealthSummary';
-import { Icon } from '../components/Icon';
-import { ItemSheet } from '../components/ItemSheet';
-import { TrackingControl } from '../components/TrackingControl';
-import { IconButton, Screen } from '../components/ui';
-import { WeekHistory } from '../components/WeekHistory';
-import { useParty } from '../friends/PartyProvider';
-import { ITEMS, SKINS } from '../game/content';
-import { useGame } from '../game/GameProvider';
-import { getSkin, questPoints, streak, totalLevel, totalSteps, totalXp } from '../game/game';
-import { backToAdventure, useScreenFocus, useScreenLink } from '../navigation/useScreenFocus';
-import { ghost, itemArt } from '../pixel/art';
-import { bevel, Panel, Slot } from '../pixel/chrome';
-import { color, font, shadow, space } from '../theme/theme';
+import { Bruh } from '../../components/Bruh';
+import { ConfirmAction } from '../../components/ConfirmAction';
+import { GoalPicker } from '../../components/GoalPicker';
+import { HealthSummary } from '../../components/HealthSummary';
+import { Icon } from '../../components/Icon';
+import { ItemSheet } from '../../components/ItemSheet';
+import { TrackingControl } from '../../components/TrackingControl';
+import { Screen } from '../../components/ui';
+import { WeekHistory } from '../../components/WeekHistory';
+import { useParty } from '../../friends/PartyProvider';
+import { ITEMS, SKINS } from '../../game/content';
+import { useGame } from '../../game/GameProvider';
+import { getSkin, questPoints, streak, totalLevel, totalSteps, totalXp } from '../../game/game';
+import { useScreenFocus, useScreenLink } from '../../navigation/useScreenFocus';
+import { ghost, itemArt } from '../../pixel/art';
+import { bevel, Panel, Slot } from '../../pixel/chrome';
+import { color, font, shadow, space } from '../../theme/theme';
 
 function LinkRow({
   icon,
@@ -48,7 +48,7 @@ function LinkRow({
   );
 }
 
-export default function CharacterScreen(): React.JSX.Element {
+export default function YouScreen(): React.JSX.Element {
   const screen = useScreenFocus();
   const { game, today, demo, equip, setGoal, reset, resetting, resetError } = useGame();
   const { available: hasParties } = useParty();
@@ -78,10 +78,7 @@ export default function CharacterScreen(): React.JSX.Element {
     ['fish burnt', game.stats.burnt ?? 0],
   ] as const;
   return (
-    <Screen rootRef={screen} bottomSafeArea>
-      <View style={styles.navigation}>
-        <IconButton icon="back" label="Back to the world" onPress={() => backToAdventure('/character')} />
-      </View>
+    <Screen rootRef={screen}>
       <View style={styles.hero}>
         <View style={[styles.portrait, bevel('well')]}>
           <Bruh skin={game.equipped} size={96} />
@@ -185,8 +182,8 @@ export default function CharacterScreen(): React.JSX.Element {
         {demo ? null : (
           <LinkRow
             icon="health"
-            label="step sync settings"
-            detail="health access, pause, erase"
+            label="settings"
+            detail="step sync, privacy and erasing your journey"
             link={healthLink}
           />
         )}
@@ -218,7 +215,6 @@ export default function CharacterScreen(): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  navigation: { flexDirection: 'row' },
   hero: { flexDirection: 'row', alignItems: 'center', gap: space.group },
   portrait: { padding: space.tight },
   grow: { flex: 1, minWidth: 0 },

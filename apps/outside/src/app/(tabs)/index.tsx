@@ -3,9 +3,9 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { ActivityList } from '../../components/ActivityList';
 import { ActivitySheet } from '../../components/ActivitySheet';
-import { Hud } from '../../components/Hud';
+import { PageTitle, useTabStat } from '../../components/PageTitle';
 import { Scene } from '../../components/Scene';
-import { TrackingControl } from '../../components/TrackingControl';
+import { StepSyncNotice } from '../../components/StepSyncNotice';
 import { Button, Screen } from '../../components/ui';
 import { getActivity, getItem, getLocation, START_LOCATION } from '../../game/content';
 import { useGame } from '../../game/GameProvider';
@@ -238,8 +238,9 @@ function NextStepButton({ step }: Readonly<{ step: NextStep }>): React.JSX.Eleme
 }
 
 export default function WorldScreen(): React.JSX.Element {
-  const { game, today, act } = useGame();
+  const { game, today, act, tracking, syncHealth } = useGame();
   const screen = useScreenFocus({ returnToTab: true });
+  const steps = useTabStat('steps');
   const [details, setDetails] = useState(false);
   const place = getLocation(game.location) ?? getLocation(START_LOCATION);
   const activity = game.task ? getActivity(game.task.id) : undefined;
@@ -254,12 +255,9 @@ export default function WorldScreen(): React.JSX.Element {
       ? `Your bruh ${activity.verb} at ${place.name}`
       : `Your bruh standing in ${place.name}`;
   return (
-    <Screen rootRef={screen} footer={<TrackingControl adventure />}>
-      <Hud />
+    <Screen rootRef={screen} onRefresh={syncHealth} refreshing={tracking.status === 'syncing'}>
       <View style={styles.header}>
-        <Text accessibilityRole="header" aria-level={1} style={styles.place}>
-          {traveling ? 'on the road' : place.name}
-        </Text>
+        <PageTitle title={traveling ? 'on the road' : place.name} stat={steps} />
         <Text style={styles.blurb}>{traveling ? 'step by step, the fruitlands go by.' : place.blurb}</Text>
       </View>
       <Scene
@@ -270,6 +268,7 @@ export default function WorldScreen(): React.JSX.Element {
         tool={activity?.tool ? game.tools[activity.tool] : activity ? activity.output.item : undefined}
         label={sceneLabel}
       />
+      <StepSyncNotice />
       <StatusPanel onDetails={() => setDetails(true)} />
       <BagStrip />
       {handIn?.kind === 'hand-in' ? (
@@ -308,7 +307,6 @@ const styles = StyleSheet.create({
   next: { gap: space.micro },
   nextDetail: { fontFamily: font.body, fontSize: 13, lineHeight: 18, color: color.muted },
   header: { gap: 2 },
-  place: { fontFamily: font.display, fontSize: 26, lineHeight: 32, color: color.gold, ...shadow },
   blurb: { fontFamily: font.body, fontSize: 15, lineHeight: 20, color: color.secondary },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.related },
   grow: { flex: 1 },

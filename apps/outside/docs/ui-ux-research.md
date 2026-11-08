@@ -1890,3 +1890,12 @@ Checked in the web dev build with a mid-game save (total level 237, bank stocked
 Lint, typecheck and 205 tests pass. Metro on this Mac runs without watchman and twice stopped noticing edits; restart it with `expo start --clear` before trusting a browser check.
 
 Remaining checks: the merged skill rows with VoiceOver, and the report and map rows on a phone at larger text sizes.
+
+## You tab, no top bar, onboarding (November 7, 2026)
+
+Checked in the web dev build from a cleared save at 320×640, 390×844 and 1280×900 in headless Chromium: both onboarding screens, the world and all six tabs, and a reload that must not bring onboarding back. No console errors. Not checked on a device, so the Apple Health and Health Connect prompts, the pull-to-sync gesture and the world's sync row are untested.
+
+- **You tab.** The character sheet is now the sixth tab, drawn as the player's bruh in its outfit. Six tabs still fit at 320 (about 47 points each). Its link to step sync is now "settings", and that screen is titled settings.
+- **No top bar.** Each tab shows its own figure beside its title: waiting steps on the world and map, coins in the bag, total level on skills, quest points on quests. The "+15 xp" toast floats over whichever tab is open.
+- **No sync bar.** Steps already sync whenever the app opens. Pulling down on the world syncs sooner, and "sync steps now" stays in settings. The world shows one row, which opens settings, only when steps aren't reaching the game: never connected, paused, access missing, no steps, or an error.
+- **Onboarding.** A new save opens on two screens before the world. The first says how steps become an adventure. The second explains step access before the system's one-time Health prompt, since iOS shows that prompt once per install and a denial can only be undone in the Health app. "not now" skips it, and the world's sync row leads back. The world's next-step button teaches the rest as each feature comes up. Saves from before this change, and version 1 saves, skip onboarding; erasing a journey shows it again.

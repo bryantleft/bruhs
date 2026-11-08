@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { compact, Hud } from '../../components/Hud';
 import { Icon } from '../../components/Icon';
+import { compact, PageTitle, useTabStat } from '../../components/PageTitle';
 import { Screen } from '../../components/ui';
 import {
   ACTIVITIES,
@@ -62,13 +62,11 @@ export default function SkillsScreen(): React.JSX.Element {
   const [selected, setSelected] = useState<SkillId>('woodcutting');
   const detail = SKILLS.find((skill) => skill.id === selected) ?? SKILLS[0];
   const progress = levelProgress(game.xp[detail.id] ?? 0);
+  const level = useTabStat('level');
   return (
     <Screen rootRef={screen}>
-      <Hud />
-      {/* The HUD shows total level, and the grid's last cell total xp, so the title stands alone. */}
-      <Text accessibilityRole="header" aria-level={1} style={styles.title}>
-        skills
-      </Text>
+      {/* Total level sits beside the title and total xp in the grid's last cell. */}
+      <PageTitle title="skills" stat={level} />
       <View style={styles.grid} accessibilityRole="radiogroup" accessibilityLabel="Skills">
         {SKILLS.map((skill) => {
           const level = levelProgress(game.xp[skill.id] ?? 0);

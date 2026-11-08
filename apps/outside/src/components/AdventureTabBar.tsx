@@ -2,8 +2,9 @@ import { BottomTabBarHeightCallbackContext, type BottomTabBarProps } from 'expo-
 import { PlatformPressable, useLinkBuilder } from 'expo-router/react-navigation';
 import { useContext, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
+import { useGame } from '../game/GameProvider';
 import { adventureTab, panelId, tabId } from '../navigation/tabs';
-import { UI_ART } from '../pixel/art';
+import { bruhArt, UI_ART } from '../pixel/art';
 import { bevel } from '../pixel/chrome';
 import { Sprite } from '../pixel/Sprite';
 import { color, font, layout, shadow, space } from '../theme/theme';
@@ -16,6 +17,7 @@ export function AdventureTabBar({
   insets,
 }: BottomTabBarProps): React.JSX.Element {
   const onHeightChange = useContext(BottomTabBarHeightCallbackContext);
+  const { game } = useGame();
   const { buildHref } = useLinkBuilder();
   const buttons = useRef<Record<string, HTMLElement | null>>({});
   const [focused, setFocused] = useState<string | null>(null);
@@ -50,7 +52,8 @@ export function AdventureTabBar({
           const options = descriptors[route.key]?.options;
           const label = typeof options?.title === 'string' ? options.title : route.name;
           const selected = index === state.index;
-          const art = UI_ART[adventureTab(route.name)?.art ?? 'world'];
+          const tab = adventureTab(route.name)?.art ?? 'world';
+          const art = tab === 'bruh' ? bruhArt(game.equipped) : UI_ART[tab];
           const webProps =
             Platform.OS === 'web'
               ? {

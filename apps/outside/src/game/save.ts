@@ -272,6 +272,7 @@ function decodeSave(value: Record<string, unknown>, days: Day[]): Game | Invalid
     bagUpgrades:
       isCount(value.bagUpgrades) && value.bagUpgrades <= BAG_UPGRADES.length ? value.bagUpgrades : 0,
     missions: decodeMissions(value.missions),
+    ...(value.onboarding === true ? { onboarding: true } : {}),
   };
   if (game.spent > totalSteps(game)) return invalid('spent');
   return totalLevel(game) >= skin.total ? game : { ...game, equipped: 'original' };
@@ -280,7 +281,8 @@ function decodeSave(value: Record<string, unknown>, days: Day[]): Game | Invalid
 // Version 1 saves (single XP bar) keep their step history; today's steps start the pouch.
 export function migrateV1(value: Record<string, unknown>, days: Day[], today: string): Game | null {
   if (!isGoal(value.goal)) return null;
-  const base = createGame(today);
+  // A version 1 player has played already, so the welcome screens are skipped.
+  const { onboarding: _new, ...base } = createGame(today);
   const history = { ...base, goal: value.goal, days };
   const todaySteps = getDay(history, today).steps;
   return {

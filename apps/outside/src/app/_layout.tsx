@@ -9,6 +9,7 @@ import { AppStage } from '../components/AppStage';
 import { Bruh } from '../components/Bruh';
 import { ConfirmActionCore } from '../components/ConfirmAction';
 import { MotionProvider } from '../components/MotionProvider';
+import { Onboarding } from '../components/Onboarding';
 import { RewardOverlay } from '../components/RewardOverlay';
 import { Button, Copy } from '../components/ui';
 import { useProgressRecoveryFocus } from '../components/useProgressRecoveryFocus';
@@ -37,12 +38,14 @@ function AdventureLoading(): React.JSX.Element {
 }
 
 function GameApp(): React.JSX.Element {
-  const { loading, retryLoad, reset, resetting, resetError } = useGame();
+  const { game, loading, retryLoad, reset, resetting, resetError } = useGame();
   const recovery = useProgressRecoveryFocus(loading.status);
   const failure = loading.status === 'error' ? loadFailureCopy(loading.failure) : null;
   return (
     <AppStage>
-      {loading.status === 'ready' ? (
+      {loading.status === 'ready' && game.onboarding ? (
+        <Onboarding />
+      ) : loading.status === 'ready' ? (
         <>
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.canvas } }}>
             <Stack.Screen name="(tabs)" />

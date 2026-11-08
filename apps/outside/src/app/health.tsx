@@ -32,7 +32,7 @@ export default function HealthScreen(): React.JSX.Element {
           </View>
         </View>
         <Copy variant="title" style={styles.title}>
-          step sync
+          settings
         </Copy>
       </View>
       <View style={styles.permissions}>

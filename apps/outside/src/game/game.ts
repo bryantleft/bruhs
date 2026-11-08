@@ -176,6 +176,8 @@ export type Game = Readonly<{
   // Backpack upgrades bought at a bank, two slots each.
   bagUpgrades: number;
   missions: Readonly<Partial<Record<MissionPeriod, MissionState>>>;
+  // Set on a new save until the welcome screens are done. Saves from before onboarding never had it.
+  onboarding?: true;
 }>;
 
 export type GameAction =
@@ -203,6 +205,7 @@ export type GameAction =
   | Readonly<{ type: 'quest-start'; quest: string }>
   | Readonly<{ type: 'quest-complete'; quest: string }>
   | Readonly<{ type: 'health-pause' }>
+  | Readonly<{ type: 'onboarded' }>
   | Readonly<{
       type: 'health-sync';
       date: string;
@@ -270,6 +273,7 @@ function newGame(date: string, seed: number): Game {
     stats: {},
     bagUpgrades: 0,
     missions: {},
+    onboarding: true,
   };
 }
 
@@ -820,6 +824,11 @@ function wear(game: Game, key: string, slot?: GearSlot): RuleResult {
 
 function applyRules(game: Game, action: GameAction): RuleResult {
   switch (action.type) {
+    case 'onboarded': {
+      if (!game.onboarding) return NO_CHANGE;
+      const { onboarding: _done, ...rest } = game;
+      return accept(rest);
+    }
     case 'health-pause':
       return game.health?.enabled
         ? accept({ ...game, health: { ...game.health, enabled: false } })

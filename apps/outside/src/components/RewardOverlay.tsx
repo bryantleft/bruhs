@@ -188,7 +188,7 @@ export function RewardOverlay(): React.JSX.Element | null {
                     icon="bruh"
                     onPress={() => {
                       dismissReward({ restoreFocus: false });
-                      router.push('/character');
+                      router.navigate('/you');
                     }}
                   />
                 ) : null}

@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Hud } from '../../components/Hud';
 import { Icon } from '../../components/Icon';
+import { PageTitle, useTabStat } from '../../components/PageTitle';
 import { Button, Screen } from '../../components/ui';
 import { WorldMap } from '../../components/WorldMap';
 import { type Activity, getActivity, getItem, getLocation, LOCATIONS } from '../../game/content';
@@ -18,6 +18,7 @@ export default function MapScreen(): React.JSX.Element {
   const { game, act } = useGame();
   const screen = useScreenFocus();
   const [selected, setSelected] = useState(game.travel?.to ?? game.location);
+  const steps = useTabStat('steps');
   const place = getLocation(selected) ?? getLocation(game.location);
   const locked = new Set(LOCATIONS.filter((entry) => locationBlocker(game, entry)).map((entry) => entry.id));
   const travelRoute = game.travel ? route(game.travel.from, game.travel.to) : null;
@@ -57,10 +58,7 @@ export default function MapScreen(): React.JSX.Element {
     );
   return (
     <Screen rootRef={screen} footer={footer}>
-      <Hud />
-      <Text accessibilityRole="header" aria-level={1} style={styles.title}>
-        the fruitlands
-      </Text>
+      <PageTitle title="the fruitlands" stat={steps} />
       <WorldMap
         location={game.location}
         selected={place.id}

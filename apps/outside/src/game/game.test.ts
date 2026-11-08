@@ -38,6 +38,7 @@ import {
   ownedCount,
   periodDaysLeft,
   periodRange,
+  playGame,
   questsNeeding,
   readyMissions,
   route,
@@ -765,4 +766,30 @@ test('a store without a bank sells only what you carry', () => {
   } finally {
     Reflect.set(town, 'bank', true);
   }
+});
+
+test('a new save waits on the welcome screens, and older saves skip them', () => {
+  const today = '2026-11-07';
+  const fresh = createGame(today);
+  assert.equal(fresh.onboarding, true);
+  const roundTrip = decodeGame(JSON.stringify(fresh), today);
+  assert.ok(roundTrip.ok);
+  assert.equal(roundTrip.game.onboarding, true);
+
+  const done = updateGame(fresh, { type: 'onboarded' });
+  assert.equal(done.onboarding, undefined);
+  assert.equal('onboarding' in done, false);
+  assert.deepEqual(playGame(done, { type: 'onboarded' }), { ok: false, reason: { kind: 'no-change' } });
+
+  const { onboarding: _flag, ...older } = fresh;
+  const decoded = decodeGame(JSON.stringify(older), today);
+  assert.ok(decoded.ok);
+  assert.equal(decoded.game.onboarding, undefined);
+
+  const v1 = decodeGame(
+    JSON.stringify({ version: 1, goal: 8_000, days: [{ date: today, steps: 1_200, goal: 8_000 }] }),
+    today,
+  );
+  assert.ok(v1.ok);
+  assert.equal(v1.game.onboarding, undefined);
 });

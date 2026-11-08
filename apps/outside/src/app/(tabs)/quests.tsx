@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Hud } from '../../components/Hud';
 import { Icon } from '../../components/Icon';
+import { PageTitle, useTabStat } from '../../components/PageTitle';
 import { Button, Screen } from '../../components/ui';
 import {
   getItem,
@@ -309,13 +309,11 @@ export default function QuestsScreen(): React.JSX.Element {
     .map((entry) => entry.quest);
   const finished = QUESTS.filter((quest) => questState(game, quest.id) === 'done');
   const done = finished.length;
+  const points = useTabStat('quest-points');
   return (
     <Screen rootRef={screen}>
-      <Hud />
-      {/* Quest points sit in the HUD and progress in the journal's header, so the title stands alone. */}
-      <Text accessibilityRole="header" aria-level={1} style={styles.title}>
-        quests
-      </Text>
+      {/* Quest points sit beside the title and progress in the journal's header. */}
+      <PageTitle title="quests" stat={points} />
       <Missions />
       <Panel title="quest journal" aside={`${QUESTS.length - done} to go`}>
         {active.map((quest) => (

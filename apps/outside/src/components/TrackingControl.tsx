@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import { Platform, StyleSheet, View } from 'react-native';
 import { useGame } from '../game/GameProvider';
 
@@ -6,7 +5,7 @@ import { color, space } from '../theme/theme';
 import { Icon } from './Icon';
 import { Button, Copy } from './ui';
 
-export function TrackingControl({ adventure = false }: Readonly<{ adventure?: boolean }>): React.JSX.Element {
+export function TrackingControl(): React.JSX.Element {
   const { demo, tracking, walk, connect, syncHealth, healthSettings, game } = useGame();
   const provider = Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect';
   if (demo)
@@ -21,15 +20,7 @@ export function TrackingControl({ adventure = false }: Readonly<{ adventure?: bo
   if (tracking.status === 'ready') {
     return (
       <View style={styles.group}>
-        {adventure ? (
-          <View style={styles.actions}>
-            <View style={styles.primary}>
-              <Button label="sync steps" icon="refresh" onPress={syncHealth} />
-            </View>
-          </View>
-        ) : (
-          <Button label="sync steps now" variant="outline" icon="refresh" onPress={syncHealth} />
-        )}
+        <Button label="sync steps now" variant="outline" icon="refresh" onPress={syncHealth} />
         <View style={styles.connected}>
           <Icon name="check" tint={color.success} />
           <Copy variant="label" style={styles.status}>
@@ -71,11 +62,7 @@ export function TrackingControl({ adventure = false }: Readonly<{ adventure?: bo
   if (tracking.status === 'permission-required')
     return (
       <View style={styles.group}>
-        <Button
-          label="allow step access"
-          icon="health"
-          onPress={adventure ? () => router.push('/health') : connect}
-        />
+        <Button label="allow step access" icon="health" onPress={connect} />
         <Copy variant="small" style={styles.note}>
           allow read access to Steps in {provider} to continue.
         </Copy>
@@ -99,14 +86,12 @@ export function TrackingControl({ adventure = false }: Readonly<{ adventure?: bo
     <Button
       label={tracking.status === 'paused' ? 'resume step sync' : `connect ${provider}`}
       icon="health"
-      onPress={adventure ? () => router.push('/health') : connect}
+      onPress={connect}
     />
   );
 }
 const styles = StyleSheet.create({
   group: { gap: space.tight },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: space.tight },
-  primary: { flex: 1 },
   note: { textAlign: 'center' },
   connected: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: space.tight },
   status: { color: color.success, flexShrink: 1 },

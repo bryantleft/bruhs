@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Hud } from '../../components/Hud';
 import { type ItemOrigin, ItemSheet } from '../../components/ItemSheet';
+import { PageTitle, useTabStat } from '../../components/PageTitle';
 import { Sheet } from '../../components/Sheet';
 import { type Cell, SlotGrid } from '../../components/SlotGrid';
 import { Button, Screen } from '../../components/ui';
@@ -374,12 +374,10 @@ export default function BagScreen(): React.JSX.Element {
   const [open, setOpen] = useState<Open>(null);
   const options: Segment[] = ['items', 'gear', 'bank', ...(atStore(game) ? (['store'] as const) : [])];
   const current = options.includes(segment) ? segment : 'items';
+  const coins = useTabStat('coins');
   return (
     <Screen rootRef={screen}>
-      <Hud />
-      <Text accessibilityRole="header" aria-level={1} style={styles.title}>
-        bag
-      </Text>
+      <PageTitle title="bag" stat={coins} />
       <Segments value={current} options={options} onChange={setSegment} />
       {current === 'items' ? <Inventory onOpen={setOpen} /> : null}
       {current === 'gear' ? <Gear onOpen={setOpen} /> : null}

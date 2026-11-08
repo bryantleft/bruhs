@@ -16,6 +16,7 @@ import {
   Easing,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -206,6 +207,8 @@ export function Screen({
   onScrollBeginDrag,
   keyboardShouldPersistTaps,
   automaticallyAdjustKeyboardInsets,
+  onRefresh,
+  refreshing = false,
 }: PropsWithChildren<
   Readonly<{
     style?: ViewStyle;
@@ -219,6 +222,9 @@ export function Screen({
     automaticallyAdjustKeyboardInsets?: ComponentPropsWithRef<
       typeof ScrollView
     >['automaticallyAdjustKeyboardInsets'];
+    // Pull down to refresh, on phones. Web has no pull gesture, so it gets nothing.
+    onRefresh?: () => void;
+    refreshing?: boolean;
   }>
 >): React.JSX.Element {
   const focused = useIsFocused();
@@ -294,6 +300,11 @@ export function Screen({
               : undefined
           }
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            onRefresh && Platform.OS !== 'web' ? (
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.gold} />
+            ) : undefined
+          }
           contentContainerStyle={[styles.content, style]}
         >
           {children}

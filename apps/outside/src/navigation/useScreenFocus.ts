@@ -10,8 +10,8 @@ import {
 import { Platform, type Pressable, type View } from 'react-native';
 import { keepFocusVisible, keepFocusVisibleOnFocus } from '../components/keepFocusVisible';
 
-type DetailRoute = '/explore' | '/health' | '/party' | '/character';
-type ScreenLinkRoute = DetailRoute | '/character';
+type DetailRoute = '/explore' | '/health' | '/party';
+type ScreenLinkRoute = DetailRoute;
 type ScreenLinkOwner = Readonly<{ openerId: string; sourcePath: string }>;
 
 // Hidden HUD copies must not claim another control's return. Keep ownership
@@ -177,7 +177,6 @@ export function backToAdventure(href: DetailRoute): void {
   if (Platform.OS === 'web' && document.activeElement instanceof HTMLElement) document.activeElement.blur();
   if (router.canGoBack()) router.back();
   else {
-    const fallback = href === '/character' ? '/' : '/character';
-    router.replace(Platform.OS === 'web' ? { pathname: fallback, params: { returnFrom: href } } : fallback);
+    router.replace(Platform.OS === 'web' ? { pathname: '/you', params: { returnFrom: href } } : '/you');
   }
 }
