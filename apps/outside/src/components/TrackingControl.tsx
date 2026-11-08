@@ -53,7 +53,7 @@ export function TrackingControl({ adventure = false }: Readonly<{ adventure?: bo
               : `${provider} isn’t available on this device.`}
         </Copy>
         {tracking.reason === 'update-required' ? (
-          <Button label="get Health Connect" icon="arrow" onPress={healthSettings} />
+          <Button label="get Health Connect" onPress={healthSettings} />
         ) : (
           <Button label="check again" variant="outline" icon="refresh" onPress={connect} />
         )}

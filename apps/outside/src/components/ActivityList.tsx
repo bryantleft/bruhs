@@ -141,7 +141,9 @@ function ActivityRow({
           {activity.name}
         </Text>
         <Text style={styles.meta}>
-          lvl {activity.level} · {steps} steps · +{activity.xp} xp
+          {/* A locked recipe's red "needs" line names the level, so the meta line leaves it out. */}
+          {levelLocked ? '' : `lvl ${activity.level} · `}
+          {steps} steps · +{activity.xp} xp
         </Text>
         {activity.inputs?.length ? (
           // Sprites keep recipes on one line at compact widths; the label spells them out.

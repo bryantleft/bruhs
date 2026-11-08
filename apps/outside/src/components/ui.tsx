@@ -369,7 +369,8 @@ const styles = StyleSheet.create({
   },
   track: {
     height: 14,
-    backgroundColor: palette['lychee-900'],
+    // Neutral like the pixel bars: an empty track is just empty, not a warning.
+    backgroundColor: palette['longan-900'],
     borderWidth: layout.border,
     borderColor: color.ink,
     overflow: 'hidden',

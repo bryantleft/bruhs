@@ -39,7 +39,7 @@ import {
 } from '../../game/items';
 import { useScreenFocus } from '../../navigation/useScreenFocus';
 import { ghost, itemArt, SLOT_ART, UI_ART } from '../../pixel/art';
-import { Bar, bevel, Panel, QUALITY_TINT, Segments, Slot } from '../../pixel/chrome';
+import { bevel, Panel, QUALITY_TINT, Segments, Slot } from '../../pixel/chrome';
 import { Sprite } from '../../pixel/Sprite';
 import { palette } from '../../theme/palette';
 import { color, font, shadow, space } from '../../theme/theme';
@@ -75,8 +75,8 @@ function Inventory({ onOpen }: Readonly<{ onOpen: (open: Open) => void }>): Reac
   const buff = game.buff ? getItem(game.buff.item) : undefined;
   return (
     <>
+      {/* The grid below shows every slot, so a fill bar would only repeat the count. */}
       <Panel title="in your bag" aside={`${used}/${capacity} slots`}>
-        <Bar value={used / capacity} fill={used >= capacity ? color.danger : color.xp} height={8} />
         {used >= capacity ? (
           <Text style={[styles.small, { color: color.danger }]}>
             full. gathering stops until you bank, sell, drop or wear a bigger pack.
@@ -270,7 +270,7 @@ function Bank({ onOpen }: Readonly<{ onOpen: (open: Open) => void }>): React.JSX
   const worth = keys.reduce((sum, key) => sum + keyValue(key) * (game.bank[key] ?? 0), 0);
   const towns = townsWith('bank');
   return (
-    <Panel title="bank" aside={`${keys.length} stacks · worth ${worth.toLocaleString()}`}>
+    <Panel title="bank" aside={`worth ${worth.toLocaleString()}`}>
       {here ? (
         Object.keys(game.inventory).length ? (
           <Button

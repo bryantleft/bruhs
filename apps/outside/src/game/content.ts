@@ -1339,7 +1339,7 @@ export const LOCATIONS: readonly Place[] = [
     id: 'bruhbridge',
     name: 'bruhbridge',
     biome: 'town',
-    blurb: 'a cosy town with a bank, forge, range, workbench and store.',
+    blurb: 'a cosy town where every road in the fruitlands begins.',
     x: 11,
     y: 16,
     activities: [
@@ -1411,7 +1411,7 @@ export const LOCATIONS: readonly Place[] = [
     id: 'blueberry-bay',
     name: 'blueberry bay',
     biome: 'bay',
-    blurb: 'a salty port with a bank, range, workbench and deep-sea fishing.',
+    blurb: 'a salty port where the deep-sea boats come in.',
     x: 20,
     y: 10,
     activities: [

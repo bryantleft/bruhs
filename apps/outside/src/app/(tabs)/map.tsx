@@ -5,7 +5,7 @@ import { Hud } from '../../components/Hud';
 import { Icon } from '../../components/Icon';
 import { Button, Screen } from '../../components/ui';
 import { WorldMap } from '../../components/WorldMap';
-import { getActivity, getItem, getLocation, LOCATIONS } from '../../game/content';
+import { type Activity, getActivity, getItem, getLocation, LOCATIONS } from '../../game/content';
 import { useGame } from '../../game/GameProvider';
 import { activityBlocker, locationBlocker, route, skillLevel, travelCost } from '../../game/game';
 import { useScreenFocus } from '../../navigation/useScreenFocus';
@@ -26,6 +26,10 @@ export default function MapScreen(): React.JSX.Element {
   const cost = path ? travelCost(game, path.distance) : 0;
   const blocker = locationBlocker(game, place);
   const here = place.id === game.location && !game.travel;
+  const reachable = !game.travel && !here && !blocker;
+  const gathering = place.activities
+    .map((id) => getActivity(id))
+    .filter((activity): activity is Activity => !!activity && !activity.station);
   const stationOf = (id: string): string | undefined => getActivity(id)?.station;
   const stations = [
     ...(place.activities.some((id) => stationOf(id) === 'forge') ? ['forge: smelt & smith'] : []),
@@ -69,17 +73,14 @@ export default function MapScreen(): React.JSX.Element {
         }
         locked={locked}
       />
-      <Panel
-        title={place.name}
-        aside={here ? 'you are here' : blocker ? 'locked' : `${cost.toLocaleString()} steps`}
-      >
+      {/* The pinned footer says the trip's cost or why the place is locked, so the panel doesn't repeat it. */}
+      <Panel title={place.name} aside={here ? 'you are here' : blocker ? 'locked' : undefined}>
         <Text style={styles.body}>{place.blurb}</Text>
-        <View style={styles.resources}>
-          {place.activities.map((id) => {
-            const activity = getActivity(id);
-            if (!activity || activity.station) return null;
-            return (
-              <View key={id} style={styles.resource}>
+        {reachable ? null : (
+          // A reachable place lists these below as travel-and-start rows instead.
+          <View style={styles.resources}>
+            {gathering.map((activity) => (
+              <View key={activity.id} style={styles.resource}>
                 <Slot
                   art={itemArt(activity.output.item)}
                   size={36}
@@ -90,11 +91,10 @@ export default function MapScreen(): React.JSX.Element {
                   <Text style={styles.small}>{activity.level}</Text>
                 </View>
               </View>
-            );
-          })}
-        </View>
+            ))}
+          </View>
+        )}
         {stations.length ? <Text style={styles.small}>{stations.join(' · ')}</Text> : null}
-        {blocker ? <Text style={[styles.body, { color: color.danger }]}>{blocker}</Text> : null}
         {game.travel ? (
           <Text style={styles.body}>
             you are walking to {getLocation(game.travel.to)?.name}. arrive first, or turn back from the world
@@ -113,29 +113,44 @@ export default function MapScreen(): React.JSX.Element {
             ) : null}
           </View>
         )}
-        {!game.travel && !here && !blocker ? (
+        {reachable && gathering.length ? (
           <View style={styles.queue}>
-            <Text style={styles.small}>or travel and start:</Text>
-            {place.activities
-              .map((id) => getActivity(id))
-              .filter((activity) => activity && !activity.station && !activityBlocker(game, activity))
-              .map((activity) =>
-                activity ? (
-                  <Pressable
-                    key={activity.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Travel to ${place.name} and start ${activity.verb} ${activity.name}`}
-                    onPress={() => go(activity.id)}
-                    style={({ pressed }) => [styles.queueRow, bevel('panel', pressed)]}
-                  >
-                    <Slot art={itemArt(activity.output.item)} size={32} />
-                    <Text style={styles.queueText}>
-                      {activity.verb} {getItem(activity.output.item)?.name}
-                    </Text>
-                    <Icon name="arrow" tint={color.gold} />
-                  </Pressable>
-                ) : null,
-              )}
+            <Text style={styles.small}>
+              {gathering.some((activity) => !activityBlocker(game, activity))
+                ? 'or travel and start:'
+                : 'found here:'}
+            </Text>
+            {gathering.map((activity) => {
+              const name = `${activity.verb} ${getItem(activity.output.item)?.name}`;
+              const reason = activityBlocker(game, activity);
+              return reason ? (
+                <View
+                  key={activity.id}
+                  accessible
+                  accessibilityLabel={`${name}: ${reason}`}
+                  style={[styles.queueRow, bevel('well')]}
+                >
+                  <Slot art={itemArt(activity.output.item)} size={32} dim />
+                  <View style={styles.grow}>
+                    <Text style={[styles.queueName, { color: color.muted }]}>{name}</Text>
+                    <Text style={styles.small}>{reason}</Text>
+                  </View>
+                  <Icon name="lock" tint={color.muted} />
+                </View>
+              ) : (
+                <Pressable
+                  key={activity.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Travel to ${place.name} and start ${activity.verb} ${activity.name}`}
+                  onPress={() => go(activity.id)}
+                  style={({ pressed }) => [styles.queueRow, bevel('panel', pressed)]}
+                >
+                  <Slot art={itemArt(activity.output.item)} size={32} />
+                  <Text style={[styles.queueName, styles.grow]}>{name}</Text>
+                  <Icon name="arrow" tint={color.gold} />
+                </Pressable>
+              );
+            })}
           </View>
         ) : null}
       </Panel>
@@ -164,6 +179,7 @@ const styles = StyleSheet.create({
     padding: space.micro,
     paddingRight: space.related,
   },
-  queueText: { flex: 1, fontFamily: font.bold, fontSize: 15, lineHeight: 20, color: color.text, ...shadow },
+  grow: { flex: 1, minWidth: 0 },
+  queueName: { fontFamily: font.bold, fontSize: 15, lineHeight: 20, color: color.text, ...shadow },
   legend: { alignItems: 'center' },
 });

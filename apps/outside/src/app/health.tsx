@@ -45,7 +45,7 @@ export default function HealthScreen(): React.JSX.Element {
             },
             {
               icon: 'refresh',
-              title: 'step sync',
+              title: 'when it syncs',
               description: 'syncs when you open the app or tap sync. watch updates may arrive later.',
             },
             {
@@ -71,7 +71,6 @@ export default function HealthScreen(): React.JSX.Element {
       <Button
         label="read the privacy policy"
         variant="ghost"
-        icon="arrow"
         accessibilityHint="opens outside.bruhs.app in your browser"
         onPress={() => void Linking.openURL(PRIVACY_POLICY)}
       />
@@ -90,7 +89,7 @@ export default function HealthScreen(): React.JSX.Element {
               ? 'in Apple Health, let this app read Steps. if totals are missing, check that, then sync again.'
               : 'in Health Connect, let this app read Steps. your phone or fitness app must record steps there.'}
           </Copy>
-          <Button label={`open ${provider}`} variant="outline" icon="arrow" onPress={healthSettings} />
+          <Button label={`open ${provider}`} variant="outline" onPress={healthSettings} />
           {active ? (
             <>
               <Button label="pause step sync" variant="ghost" onPress={pauseHealth} />

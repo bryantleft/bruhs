@@ -60,7 +60,6 @@ export function ActivitySheet({
                   ? 'already doing this'
                   : (blocker ?? (game.travel ? 'arrive first' : `start ${activity.verb}`))
               }
-              icon="arrow"
               disabled={active || !!blocker || !!game.travel}
               onPress={() => {
                 act({ type: 'start', activity: activity.id });

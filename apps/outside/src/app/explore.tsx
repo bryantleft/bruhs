@@ -2,7 +2,6 @@ import * as Haptics from 'expo-haptics';
 import { useIsFocused } from 'expo-router';
 import { type ComponentRef, useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Linking, Platform, type Pressable, StyleSheet, View } from 'react-native';
-import { Bruh } from '../components/Bruh';
 import { ConfirmAction } from '../components/ConfirmAction';
 import { Icon } from '../components/Icon';
 import { keepFocusVisible } from '../components/keepFocusVisible';
@@ -416,41 +415,20 @@ export default function ExploreScreen(): React.JSX.Element {
         </View>
       </View>
       {!walk ? <WalkStats key="walk-stats" walk={walk} stamps={earned.length} /> : null}
-      {!complete ? (
-        <>
-          <View style={styles.next}>
-            <Bruh skin={game.equipped} size={48} />
-            <View style={styles.nextCopy}>
-              <Copy style={styles.nextTitle}>{next ? next.name : 'all stamps earned'}</Copy>
-              {next ? (
-                <Copy variant="small">
-                  {formatDistance(Math.ceil(Math.max(0, next.meters - meters)))} left
-                </Copy>
-              ) : null}
-            </View>
-          </View>
-          <Progress
-            label={
-              next
-                ? `${next.name}: ${Math.floor(meters)} of ${next.meters} meters`
-                : 'All distance stamps earned'
-            }
-            value={next ? meters / next.meters : 1}
-            tint={color.success}
-          />
-        </>
-      ) : null}
       <View style={styles.stamps}>
         {STAMPS.map((stamp) => {
           const unlocked = meters >= stamp.meters;
           const status = unlocked ? 'earned' : complete ? 'not reached' : 'locked';
+          // The next stamp shows how far there is to go in its own row, while a walk can still earn it.
+          const upcoming = !complete && stamp.id === next?.id;
+          const left = formatDistance(Math.ceil(Math.max(0, stamp.meters - meters)));
           return (
             <View
               key={stamp.id}
               style={styles.stamp}
               accessible
               accessibilityRole="image"
-              accessibilityLabel={`${stamp.name}. ${stamp.meters.toLocaleString()} meters. ${status}`}
+              accessibilityLabel={`${stamp.name}. ${stamp.meters.toLocaleString()} meters. ${status}${upcoming ? `, ${left} left` : ''}`}
             >
               <View style={styles.stampTop}>
                 <View style={[styles.stampBadge, unlocked && styles.earned]}>
@@ -461,6 +439,17 @@ export default function ExploreScreen(): React.JSX.Element {
                 </Copy>
               </View>
               <Copy style={[styles.stampName, unlocked && { color: color.success }]}>{stamp.name}</Copy>
+              {upcoming ? (
+                <>
+                  <Copy variant="small">{left} left</Copy>
+                  <Progress
+                    decorative
+                    label={`${stamp.name}: ${Math.floor(meters)} of ${stamp.meters} meters`}
+                    value={meters / stamp.meters}
+                    tint={color.success}
+                  />
+                </>
+              ) : null}
             </View>
           );
         })}
@@ -560,9 +549,6 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   stampCountText: { flexShrink: 1 },
-  next: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.related },
-  nextCopy: { flexGrow: 1, flexBasis: 160, gap: space.micro, minWidth: 0 },
-  nextTitle: { color: color.text, maxWidth: '100%' },
   stamps: { gap: space.group },
   stamp: { paddingBottom: space.group, borderBottomWidth: 1, borderColor: color.border, gap: space.tight },
   stampTop: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.related },

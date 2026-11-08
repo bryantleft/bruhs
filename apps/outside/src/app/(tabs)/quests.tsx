@@ -25,7 +25,6 @@ import {
   ownedCount,
   periodDaysLeft,
   questBlocker,
-  questPoints,
   questState,
   readyMissions,
   skillLevel,
@@ -92,13 +91,16 @@ function Missions(): React.JSX.Element {
                 <Text style={[styles.taskName, claimed && { color: color.muted }]}>{mission.name}</Text>
                 <Text style={styles.small}>{missionGoal(mission, target)}</Text>
               </View>
-              <View style={styles.reward}>
-                <Sprite art={UI_ART.coins} size={14} />
-                <Text style={styles.rewardText}>{mission.coins.toLocaleString()}</Text>
-                {mission.items?.map((stack) => (
-                  <Sprite key={stack.item} art={itemArt(stack.item)} size={16} />
-                ))}
-              </View>
+              {/* Once it's done, the collect button names the reward instead. */}
+              {done ? null : (
+                <View style={styles.reward}>
+                  <Sprite art={UI_ART.coins} size={14} />
+                  <Text style={styles.rewardText}>{mission.coins.toLocaleString()}</Text>
+                  {mission.items?.map((stack) => (
+                    <Sprite key={stack.item} art={itemArt(stack.item)} size={16} />
+                  ))}
+                </View>
+              )}
             </View>
             {done ? (
               <Button
@@ -135,7 +137,12 @@ function QuestDetail({ quest }: Readonly<{ quest: Quest }>): React.JSX.Element {
   return (
     <View style={styles.detail}>
       <Text style={styles.giver}>
-        from {quest.giver} · hand in at {getLocation(quest.location)?.name}
+        from {quest.giver}
+        {/* Said once: a quest in progress names its hand-in town in the row above, and a giver's
+            description, like "madame plum at blueberry bay", often names it already. */}
+        {state === 'started' || !place || quest.giver.includes(place.name)
+          ? ''
+          : ` · hand in at ${place.name}`}
       </Text>
       <Text style={styles.body}>{state === 'done' ? quest.done : quest.blurb}</Text>
       {state !== 'done' ? (
@@ -217,7 +224,6 @@ function QuestDetail({ quest }: Readonly<{ quest: Quest }>): React.JSX.Element {
       {state === 'new' ? (
         <Button
           label={blocker ?? 'start quest'}
-          icon="arrow"
           disabled={!!blocker}
           onPress={() => act({ type: 'quest-start', quest: quest.id })}
         />
@@ -306,14 +312,10 @@ export default function QuestsScreen(): React.JSX.Element {
   return (
     <Screen rootRef={screen}>
       <Hud />
-      <View style={styles.header}>
-        <Text accessibilityRole="header" aria-level={1} style={styles.title}>
-          quests
-        </Text>
-        <Text style={styles.small}>
-          {done}/{QUESTS.length} complete · {questPoints(game)} quest points
-        </Text>
-      </View>
+      {/* Quest points sit in the HUD and progress in the journal's header, so the title stands alone. */}
+      <Text accessibilityRole="header" aria-level={1} style={styles.title}>
+        quests
+      </Text>
       <Missions />
       <Panel title="quest journal" aside={`${QUESTS.length - done} to go`}>
         {active.map((quest) => (
@@ -343,7 +345,6 @@ export default function QuestsScreen(): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  header: { gap: 2 },
   title: { fontFamily: font.display, fontSize: 26, lineHeight: 32, color: color.gold, ...shadow },
   small: { fontFamily: font.label, fontSize: 10, lineHeight: 14, color: color.muted, ...shadow },
   body: { fontFamily: font.body, fontSize: 14, lineHeight: 19, color: color.secondary },

@@ -106,10 +106,6 @@ export function WeekHistory(): React.JSX.Element {
           );
         })}
       </View>
-      <Copy variant="label" style={styles.footer}>
-        {week.completed} {week.completed === 1 ? 'goal' : 'goals'} reached · {week.logged}{' '}
-        {week.logged === 1 ? 'day' : 'days'} logged
-      </Copy>
     </View>
   );
 }
@@ -158,5 +154,4 @@ const styles = StyleSheet.create({
   barTrack: { height: space.micro, backgroundColor: color.border, borderRadius: radius.seed },
   missingTrack: { backgroundColor: 'transparent', borderBottomWidth: 1, borderColor: color.border },
   bar: { height: '100%', borderRadius: radius.seed },
-  footer: { paddingTop: space.group, borderTopWidth: 1, borderColor: color.border },
 });

@@ -10,7 +10,7 @@ import { color, font, layout, shadow, space } from '../theme/theme';
 import { Bruh } from './Bruh';
 
 // Big numbers shrink so the HUD fits a 320-wide screen; the spoken label keeps every digit.
-function compact(value: number): string {
+export function compact(value: number): string {
   if (value >= 1_000_000) return `${Math.floor(value / 100_000) / 10}m`;
   if (value >= 10_000) return `${Math.floor(value / 100) / 10}k`;
   return value.toLocaleString();

@@ -3,13 +3,14 @@ import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { Modal, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getActivity, getLocation, getQuest } from '../game/content';
+import { getActivity, getLocation, getQuest, type SkillId } from '../game/content';
 import { useGame, useGameFeedback } from '../game/GameProvider';
 import { getSkin, unlocksBetween } from '../game/game';
 import { itemCount, parseKey } from '../game/items';
 import { type Report, stopReasonText } from '../game/session';
+import { levelProgress } from '../game/xp';
 import { itemArt, SKILL_ART, UI_ART } from '../pixel/art';
-import { Panel, Slot } from '../pixel/chrome';
+import { Bar, Panel, Slot } from '../pixel/chrome';
 import { Sprite } from '../pixel/Sprite';
 import { color, font, shadow, space } from '../theme/theme';
 import { Bruh } from './Bruh';
@@ -26,9 +27,52 @@ function headline(report: Report): string {
   return report.walked ? 'while you walked…' : 'your bruh got to work';
 }
 
-function levelLine(skill: string, from: number, level: number): string {
-  const jump = level - from > 1 ? ` (+${level - from} levels)` : '';
-  return `${skill} level ${level}${jump}`;
+// One row per skill the report touched: the xp it earned, its level, and a bar to the next level whose bright
+// part is this report's xp. A level-up in the report says the jump and what it unlocked.
+function SkillRow({
+  skill,
+  amount,
+  levelUp,
+}: Readonly<{
+  skill: SkillId;
+  amount: number;
+  levelUp?: Readonly<{ from: number; level: number }>;
+}>): React.JSX.Element {
+  const { game } = useGame();
+  const xp = game.xp[skill] ?? 0;
+  const progress = levelProgress(xp);
+  const span = (progress.next ?? xp) - progress.current;
+  const earlier = levelUp || span <= 0 ? 0 : (xp - amount - progress.current) / span;
+  const unlocks = levelUp ? unlocksBetween(skill, levelUp.from, levelUp.level) : [];
+  const level = levelUp ? `lvl ${levelUp.from} to ${levelUp.level}` : `lvl ${progress.level}`;
+  const toNext = progress.next
+    ? `${progress.remaining.toLocaleString()} xp to level ${progress.level + 1}`
+    : 'max level';
+  return (
+    <View
+      accessible
+      accessibilityLabel={`${skill}, plus ${amount.toLocaleString()} xp. ${levelUp ? `level ${levelUp.from} to ${levelUp.level}` : `level ${progress.level}`}. ${toNext}.${unlocks.length ? ` new: ${unlocks.join(', ')}.` : ''}`}
+      style={styles.skill}
+    >
+      <View style={styles.row}>
+        <Sprite art={SKILL_ART[skill]} size={18} />
+        <Text style={styles.rowLabel}>{skill}</Text>
+        <Text style={styles.xp}>+{amount.toLocaleString()} xp</Text>
+      </View>
+      <View style={styles.progress}>
+        <View style={styles.grow}>
+          <Bar value={progress.progress} from={earlier} height={6} />
+        </View>
+        <Text style={[styles.level, levelUp && styles.levelUp]}>{level}</Text>
+      </View>
+      {unlocks.length ? (
+        <Text style={[styles.unlocks, styles.indent]}>
+          new: {unlocks.slice(0, 4).join(', ')}
+          {unlocks.length > 4 ? ` and ${unlocks.length - 4} more` : ''}
+        </Text>
+      ) : null}
+    </View>
+  );
 }
 
 export function RewardOverlay(): React.JSX.Element | null {
@@ -88,31 +132,15 @@ export function RewardOverlay(): React.JSX.Element | null {
                   </View>
                 ) : null}
               </View>
-              {reward.levels.map(({ skill, from, level }) => {
-                const unlocks = unlocksBetween(skill, from, level);
-                return (
-                  <View key={skill} style={styles.level}>
-                    <Sprite art={SKILL_ART[skill]} size={32} />
-                    <View style={styles.levelCopy}>
-                      <Text style={styles.levelText}>{levelLine(skill, from, level)}</Text>
-                      {unlocks.length ? (
-                        <Text style={styles.unlocks}>
-                          new: {unlocks.slice(0, 4).join(', ')}
-                          {unlocks.length > 4 ? ` and ${unlocks.length - 4} more` : ''}
-                        </Text>
-                      ) : null}
-                    </View>
-                  </View>
-                );
-              })}
               {reward.xp.length ? (
                 <View style={styles.rows}>
                   {reward.xp.map(({ skill, amount }) => (
-                    <View key={skill} style={styles.row}>
-                      <Sprite art={SKILL_ART[skill]} size={18} />
-                      <Text style={styles.rowLabel}>{skill}</Text>
-                      <Text style={styles.xp}>+{amount.toLocaleString()} xp</Text>
-                    </View>
+                    <SkillRow
+                      key={skill}
+                      skill={skill}
+                      amount={amount}
+                      levelUp={reward.levels.find((entry) => entry.skill === skill)}
+                    />
                   ))}
                 </View>
               ) : null}
@@ -127,11 +155,6 @@ export function RewardOverlay(): React.JSX.Element | null {
                     </View>
                   ))}
                 </View>
-              ) : null}
-              {reward.gained.length ? (
-                <Text style={styles.note}>
-                  got {reward.gained.map((stack) => itemCount(stack.qty, stack.item)).join(', ')}
-                </Text>
               ) : null}
               {reward.gained.some((stack) => stack.item === 'burnt-fish') ? (
                 <Text style={styles.note}>some fish burnt. higher cooking levels burn less.</Text>
@@ -173,7 +196,6 @@ export function RewardOverlay(): React.JSX.Element | null {
                   key={reward.id}
                   label="continue"
                   variant={newSkin ? 'outline' : 'primary'}
-                  icon="arrow"
                   onPress={() => dismissReward()}
                 />
               </View>
@@ -215,12 +237,25 @@ const styles = StyleSheet.create({
   },
   spent: { flexDirection: 'row', alignItems: 'center', gap: space.micro },
   spentText: { fontFamily: font.label, fontSize: 11, lineHeight: 16, color: color.secondary, ...shadow },
-  level: { flexDirection: 'row', alignItems: 'center', gap: space.related },
-  levelCopy: { flex: 1, gap: 2 },
-  levelText: { fontFamily: font.bold, fontSize: 16, lineHeight: 21, color: color.info, ...shadow },
   unlocks: { fontFamily: font.body, fontSize: 13, lineHeight: 18, color: color.gold },
-  rows: { gap: space.micro },
+  rows: { gap: space.related },
+  skill: { gap: space.micro },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.tight },
+  // Lines under a skill start where its name does: past the 18-point sprite and the row gap.
+  indent: { paddingLeft: 18 + space.tight },
+  progress: { flexDirection: 'row', alignItems: 'center', gap: space.tight, paddingLeft: 18 + space.tight },
+  grow: { flex: 1 },
+  // Wide enough for "lvl 22 to 24", so every skill's bar ends at the same place.
+  level: {
+    minWidth: 92,
+    textAlign: 'right',
+    fontFamily: font.label,
+    fontSize: 10,
+    lineHeight: 14,
+    color: color.secondary,
+    ...shadow,
+  },
+  levelUp: { color: color.info },
   rowLabel: { flex: 1, fontFamily: font.body, fontSize: 15, lineHeight: 20, color: color.text },
   xp: { fontFamily: font.labelBold, fontSize: 12, lineHeight: 16, color: color.xp, ...shadow },
   loot: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center' },

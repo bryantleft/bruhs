@@ -61,13 +61,22 @@ export function Panel({
   );
 }
 
+function fraction(value: number): number {
+  return Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+}
+
+// `from` marks where new progress starts: the part before it is dimmed, so a report shows what it added.
 export function Bar({
   value,
   fill = color.xp,
   height = 12,
+  from,
   children,
-}: PropsWithChildren<Readonly<{ value: number; fill?: string; height?: number }>>): React.JSX.Element {
-  const width = `${Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0)) * 100}%` as const;
+}: PropsWithChildren<
+  Readonly<{ value: number; fill?: string; height?: number; from?: number }>
+>): React.JSX.Element {
+  const end = fraction(value);
+  const start = from === undefined ? 0 : Math.min(fraction(from), end);
   return (
     // A labelled bar grows with its label, so larger text sizes never clip the numbers.
     <View
@@ -76,7 +85,17 @@ export function Bar({
         children ? { minHeight: height + layout.border * 2 } : { height: height + layout.border * 2 },
       ]}
     >
-      <View style={[styles.barFill, { width, backgroundColor: fill }]}>
+      {start > 0 ? (
+        <View
+          style={[styles.barFill, styles.barEarlier, { width: `${start * 100}%`, backgroundColor: fill }]}
+        />
+      ) : null}
+      <View
+        style={[
+          styles.barFill,
+          { left: `${start * 100}%`, width: `${(end - start) * 100}%`, backgroundColor: fill },
+        ]}
+      >
         <View style={styles.barShine} />
       </View>
       {children ? <View style={styles.barLabel}>{children}</View> : null}
@@ -194,6 +213,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   barFill: { position: 'absolute', left: 0, top: 0, bottom: 0 },
+  barEarlier: { opacity: 0.45 },
   barShine: { height: 2, backgroundColor: 'rgba(255,255,255,0.28)' },
   barLabel: { alignItems: 'center', justifyContent: 'center' },
   slot: { alignItems: 'center', justifyContent: 'center' },

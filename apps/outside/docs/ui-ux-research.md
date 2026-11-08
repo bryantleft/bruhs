@@ -1873,3 +1873,20 @@ Every sprite and glyph was rendered to a labelled contact sheet at 8× and at in
 - Unchanged after a second look, because they read clearly: the other ores, gems, rings, amulets, straw and angler's hats, vest, robe, packs, chests, tools other than the axe, fruit, scenery, skins, and the other glyphs.
 - The app icon, splash and favicon now come from the 16×16 bruh (`pnpm render:icon`), matching the pixel logo.
 - Remaining checks: the redrawn sprites in the bag, bank, gear, loot report and skills screens of the running app, and on a phone at 1×, 2× and 3×.
+
+## Repeated UI and data (November 7, 2026)
+
+Checked in the web dev build with a mid-game save (total level 237, bank stocked, a quest in progress) at 320×640, 390×844 and 1280×900 in headless Chromium. Not checked on a device.
+
+- **Loot report.** Each skill now appears once, with its xp, its level and a bar to the next level. The bar's bright part is what the report earned. A level-up shows the jump ("lvl 22 to 24") and its unlocks in that row, replacing the separate line that named the skill a second time. The "got …" line repeated the loot slots and is gone; the slots still name their items to screen readers.
+- **Arrows.** Continue lost its arrow, and so did the other text buttons: start, visit the store, start quest, the privacy policy, open Health and get Health Connect. Rows that open something keep theirs.
+- **World.** The idle panel's "N steps waiting" and the next step's "uses your N waiting steps" repeated the HUD's pouch. The bag strip's bag button and "open the world map" repeated the tab bar. A locked recipe showed "lvl 30" next to "needs smithing 30".
+- **Map.** The panel's step cost repeated the travel button, and a locked place gave its reason three times. A reachable place listed its resources twice, as slots and as travel-and-start rows. The rows now include locked resources with their reason, under "found here:" when none can start. Bruhbridge's and blueberry bay's descriptions listed the facilities named on the line below; they're flavour text now, on the landing page too.
+- **Quests.** The header repeated quest points (in the HUD) and progress (the journal's "16 to go" and its completed fold). Quest details repeated the hand-in town, which every giver's description names. A finished mission showed its reward beside the collect button that names it.
+- **Skills.** Total level showed three times. The header line is gone and the grid's last cell shows total xp. The bar says what's left ("1,075 xp to level 33") instead of totals that the line below restated.
+- **Bag, bank and items.** The slot grid shows fullness, so the capacity bar is gone. The bank dropped "13 stacks", a count of the visible slots. "sell 1 · 12" repeated the sheet's worth line, so the button says "sell 1".
+- **Character, step sync and walk.** The week's "5 goals reached · 7 days logged" counted the checks and rows above it. Step sync's second point shared the page title and is now "when it syncs". The next stamp's name and distance moved from their own block into that stamp's row, and the empty walk bar is neutral instead of dark red.
+
+Lint, typecheck and 205 tests pass. Metro on this Mac runs without watchman and twice stopped noticing edits; restart it with `expo start --clear` before trusting a browser check.
+
+Remaining checks: the merged skill rows with VoiceOver, and the report and map rows on a phone at larger text sizes.

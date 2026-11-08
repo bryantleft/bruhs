@@ -57,16 +57,12 @@ function BagStrip(): React.JSX.Element {
         <Text style={styles.stripLabel}>chests</Text>
         <Text style={[styles.stripValue, chests > 0 && { color: color.gold }]}>{chests}</Text>
       </View>
-      <View style={styles.stripButton}>
-        <Button label="bag" variant="outline" onPress={() => router.navigate('/bag')} />
-      </View>
     </Panel>
   );
 }
 
 function StatusPanel({ onDetails }: Readonly<{ onDetails: () => void }>): React.JSX.Element {
   const { game, act } = useGame();
-  const pouch = unspentSteps(game);
   if (game.travel) {
     const { travel } = game;
     const destination = getLocation(travel.to)?.name ?? travel.to;
@@ -140,10 +136,11 @@ function StatusPanel({ onDetails }: Readonly<{ onDetails: () => void }>): React.
   const stopped = game.stopped ? getActivity(game.stopped.activity) : undefined;
   const full = game.stopped?.kind === 'bag-full';
   const bank = full ? nearestBank(game)?.place : null;
-  // One clear next step: quests first, then steady work here, then a walk to somewhere useful.
+  // One clear next step: quests first, then steady work here, then a walk to somewhere useful. The HUD
+  // already shows the waiting steps, so the panel doesn't repeat the count.
   const next = nextStep(game);
   return (
-    <Panel title="your bruh is idle" aside={pouch ? `${pouch.toLocaleString()} steps waiting` : undefined}>
+    <Panel title="your bruh is idle">
       {stopped && full ? (
         <>
           <Text style={[styles.detail, { color: color.danger }]}>
@@ -181,7 +178,7 @@ function NextStepButton({ step }: Readonly<{ step: NextStep }>): React.JSX.Eleme
   const pouch = unspentSteps(game);
   const why = 'quest' in step && step.quest ? `for ${step.quest.name}` : null;
   let label: string;
-  let icon: 'arrow' | 'trail' | 'check' | 'plus' = 'arrow';
+  let icon: 'trail' | 'check' | 'plus' | undefined;
   let onPress: () => void;
   let detail: string | null = why;
   switch (step.kind) {
@@ -204,7 +201,7 @@ function NextStepButton({ step }: Readonly<{ step: NextStep }>): React.JSX.Eleme
       const runs = Math.min(Math.floor(pouch / each), runsLeft(game, step.activity));
       const cost =
         pouch > 0
-          ? `uses your ${pouch.toLocaleString()} waiting steps: about ${runs.toLocaleString()} ${runs === 1 ? 'action' : 'actions'}`
+          ? `uses your waiting steps: about ${runs.toLocaleString()} ${runs === 1 ? 'action' : 'actions'}`
           : null;
       detail = [why, cost].filter(Boolean).join(' · ') || null;
       onPress = () => act({ type: 'start', activity: step.activity.id });
@@ -296,19 +293,8 @@ export default function WorldScreen(): React.JSX.Element {
           </Text>
           <ActivityList place={place} />
           {place.store ? (
-            <Button
-              label="visit the store"
-              variant="outline"
-              icon="arrow"
-              onPress={() => router.navigate('/bag')}
-            />
+            <Button label="visit the store" variant="outline" onPress={() => router.navigate('/bag')} />
           ) : null}
-          <Button
-            label="open the world map"
-            variant="outline"
-            icon="map"
-            onPress={() => router.navigate('/map')}
-          />
         </View>
       ) : null}
       {details && activity ? (
@@ -333,6 +319,5 @@ const styles = StyleSheet.create({
   stripCell: { flex: 1, minWidth: 0 },
   stripLabel: { fontFamily: font.label, fontSize: 9, lineHeight: 12, color: color.muted, ...shadow },
   stripValue: { fontFamily: font.labelBold, fontSize: 11, lineHeight: 15, color: color.text, ...shadow },
-  stripButton: { width: 84 },
   sectionTitle: { fontFamily: font.display, fontSize: 19, lineHeight: 25, color: color.gold, ...shadow },
 });

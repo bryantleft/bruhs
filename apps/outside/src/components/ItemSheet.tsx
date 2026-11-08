@@ -233,8 +233,10 @@ export function ItemSheet({
         {store && (origin.from === 'inventory' || origin.from === 'bank') && owned > 0 ? (
           <View style={styles.row}>
             <View style={styles.grow}>
+              {/* The sheet's "worth" line above gives the price of one. */}
               <Button
-                label={`sell 1 · ${keyValue(itemKey)}`}
+                label="sell 1"
+                accessibilityLabel={`sell 1 for ${keyValue(itemKey).toLocaleString()} coins`}
                 variant="outline"
                 onPress={() => run({ type: 'sell', item: itemKey, qty: 1 }, left(1))}
               />

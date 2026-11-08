@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Hud } from '../../components/Hud';
+import { compact, Hud } from '../../components/Hud';
 import { Icon } from '../../components/Icon';
 import { Screen } from '../../components/ui';
 import {
@@ -15,7 +15,7 @@ import {
   TOOL_SKILL,
 } from '../../game/content';
 import { useGame } from '../../game/GameProvider';
-import { totalLevel, totalXp } from '../../game/game';
+import { totalXp } from '../../game/game';
 import { levelProgress } from '../../game/xp';
 import { useScreenFocus } from '../../navigation/useScreenFocus';
 import { itemArt, SKILL_ART } from '../../pixel/art';
@@ -65,14 +65,10 @@ export default function SkillsScreen(): React.JSX.Element {
   return (
     <Screen rootRef={screen}>
       <Hud />
-      <View style={styles.header}>
-        <Text accessibilityRole="header" aria-level={1} style={styles.title}>
-          skills
-        </Text>
-        <Text style={styles.total}>
-          total {totalLevel(game)} · {totalXp(game).toLocaleString()} xp
-        </Text>
-      </View>
+      {/* The HUD shows total level, and the grid's last cell total xp, so the title stands alone. */}
+      <Text accessibilityRole="header" aria-level={1} style={styles.title}>
+        skills
+      </Text>
       <View style={styles.grid} accessibilityRole="radiogroup" accessibilityLabel="Skills">
         {SKILLS.map((skill) => {
           const level = levelProgress(game.xp[skill.id] ?? 0);
@@ -100,25 +96,21 @@ export default function SkillsScreen(): React.JSX.Element {
         <View
           style={[styles.cell, styles.totalCell, bevel('well')]}
           accessible
-          accessibilityLabel={`Total level ${totalLevel(game)}`}
+          accessibilityLabel={`${totalXp(game).toLocaleString()} xp in all`}
         >
-          <Text style={styles.totalLabel}>total</Text>
-          <Text style={styles.level}>{totalLevel(game)}</Text>
+          <Text style={styles.totalLabel}>total xp</Text>
+          <Text style={[styles.level, styles.totalValue]}>{compact(totalXp(game))}</Text>
         </View>
       </View>
       <Panel title={detail.name} aside={`level ${progress.level}`}>
         <Text style={styles.body}>{detail.blurb}</Text>
         <Bar value={progress.progress} height={14}>
           <Text style={styles.barText}>
-            {(game.xp[detail.id] ?? 0).toLocaleString()}
-            {progress.next ? ` / ${progress.next.toLocaleString()}` : ''} xp
+            {progress.next
+              ? `${progress.remaining.toLocaleString()} xp to level ${progress.level + 1}`
+              : 'maxed. legendary.'}
           </Text>
         </Bar>
-        <Text style={styles.small}>
-          {progress.next
-            ? `${progress.remaining.toLocaleString()} xp to level ${progress.level + 1}`
-            : 'maxed. legendary.'}
-        </Text>
         <View style={styles.unlocks}>
           {unlocksFor(detail.id).map((unlock) => {
             const reached = progress.level >= unlock.level;
@@ -147,9 +139,7 @@ export default function SkillsScreen(): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  header: { gap: 2 },
   title: { fontFamily: font.display, fontSize: 26, lineHeight: 32, color: color.gold, ...shadow },
-  total: { fontFamily: font.label, fontSize: 11, lineHeight: 16, color: color.secondary, ...shadow },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.tight },
   cell: {
     width: '31.5%',
@@ -161,7 +151,9 @@ const styles = StyleSheet.create({
     minHeight: 56,
   },
   cellCopy: { flex: 1, gap: 3 },
-  totalCell: { justifyContent: 'center' },
+  // Label over value: "total xp" and a six-character figure don't fit side by side at 320.
+  totalCell: { flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', gap: 0 },
+  totalValue: { fontSize: 16 },
   totalLabel: { fontFamily: font.label, fontSize: 10, lineHeight: 14, color: color.muted, ...shadow },
   level: { fontFamily: font.labelBold, fontSize: 18, lineHeight: 20, color: color.gold, ...shadow },
   mini: { height: 4, backgroundColor: color.ink },
