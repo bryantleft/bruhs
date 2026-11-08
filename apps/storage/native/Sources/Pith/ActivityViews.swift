@@ -24,8 +24,9 @@ struct ActivityView: View {
         }
         .animation(BruhsMotion.standard(duration: BruhsMotion.fast), value: inspecting)
         .modifier(QuitConfirmation(state: state, run: run))
-        .navigationSubtitle(subtitle(range))
-        .searchable(text: $state.search, placement: .toolbar, prompt: "Search, or filter: cpu>10 mem>1gb kind:tool")
+        .navigationSubtitle(subtitle)
+        // Short enough for the field at the window's narrowest; the full prompt was cut off even at the default width.
+        .searchable(text: $state.search, placement: .toolbar, prompt: "Search, or cpu>10 mem>1gb")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
@@ -120,14 +121,9 @@ struct ActivityView: View {
         return max(range.lowerBound, oldest)...range.upperBound
     }
 
-    private func subtitle(_ range: ClosedRange<Double>?) -> String {
-        if let long = state.longRange {
-            let style = Date.FormatStyle(date: Calendar.current.isDate(long.lowerBound, inSameDayAs: long.upperBound) ? .omitted : .abbreviated, time: .shortened)
-            return "From \(long.lowerBound.formatted(style)) to \(long.upperBound.formatted(style))"
-        }
-        if let range, let from = model.history.date(at: range.lowerBound), let to = model.history.date(at: range.upperBound) {
-            return "From \(clockWithSeconds(from)) to \(clockWithSeconds(to))"
-        }
+    /// Whether sampling runs. While a range is ranked it still does: the chart moves on, and the bar under it says the
+    /// range the table shows.
+    private var subtitle: String {
         if model.paused { return "Sampling paused" }
         // The chart's axis shows the ten-minute window; a young session says when its readings began.
         return model.historyStart.map { "Live since \(PanelSummary.clock($0))" } ?? "Live"
@@ -226,7 +222,6 @@ struct ActivityScopeBar: View {
         HStack(spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(times).font(.monaspace(size: 12.5, weight: .semibold)).foregroundStyle(BruhsColor.text)
-                Text("Ranked by \(ranking)").font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
             }
             .lineLimit(1)
             .accessibilityElement(children: .ignore)

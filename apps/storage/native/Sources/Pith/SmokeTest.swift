@@ -77,7 +77,7 @@ extension AppDelegate {
             let range = (window.upperBound - 3 * ActivityModel.interval)...window.upperBound
             main.state.activity.rank(by: range)
             let ranked = ActivityListing(history: activity.history, latest: activity.snapshot, range: range, search: "", includeExited: false, sort: main.state.activity.sort)
-            checks["range_ranking_scope"] = await eventually { main.window.subtitle.hasPrefix("From ") }
+            checks["range_ranking_scope"] = await eventually { main.state.activity.range != nil && main.window.subtitle.hasPrefix("Live") }
                 && activity.history.systemCPU(in: range) != nil && !ranked.apps.isEmpty && main.state.activity.sort == .cpuDescending
             // Escape with the table focused arrives as SwiftUI's exit command.
             if let content = main.window.contentView, let table = firstView(NSOutlineView.self, in: content) { main.window.makeFirstResponder(table) }

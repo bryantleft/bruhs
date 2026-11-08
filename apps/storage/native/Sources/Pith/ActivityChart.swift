@@ -230,9 +230,11 @@ struct ActivityChart: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("Memory pressure").font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
                 .accessibilityHidden(true)
+            let story = PanelSummary.pressureStory(model.history.system, window: window, maxGap: ActivityModel.maxGap)
             StatusChip(pressure: model.snapshot?.pressure ?? .unknown)
-            if let note = pressureNote(PanelSummary.pressureStory(model.history.system, window: window, maxGap: ActivityModel.maxGap)) {
-                Text(note).font(BruhsType.note).foregroundStyle(BruhsColor.textSecondary).lineLimit(1)
+                .accessibilityValue(pastPressure(story) ?? "")
+            if let since = ongoingPressure(story) {
+                Text(since).font(BruhsType.note).foregroundStyle(BruhsColor.textSecondary).lineLimit(1)
             }
             Spacer(minLength: 12)
             if range == nil {
@@ -245,14 +247,18 @@ struct ActivityChart: View {
         }
     }
 
-    /// The most recent stretch of elevated pressure, read after the chip's current state: "Elevated" then
-    /// "Since 10:41", or "Normal" then "Last elevated 10:37 to 10:39". Nothing while the whole window was normal.
-    private func pressureNote(_ story: PanelSummary.PressureStory) -> String? {
-        guard case let .elevated(start, end, worst) = story else { return nil }
-        let critical = worst == .critical ? ", reached critical" : ""
-        guard let end else { return "Since \(PanelSummary.clock(start))\(critical)" }
+    /// When the elevated pressure going on now began, read after the chip: "Elevated" then "Since 10:41".
+    private func ongoingPressure(_ story: PanelSummary.PressureStory) -> String? {
+        guard case let .elevated(start, nil, worst) = story else { return nil }
+        return "Since \(PanelSummary.clock(start))" + (worst == .critical ? ", reached critical" : "")
+    }
+
+    /// The last stretch of elevated pressure that has ended, which the band over the axis shows: "Last elevated 10:37
+    /// to 10:39". For VoiceOver, which can't see the band.
+    private func pastPressure(_ story: PanelSummary.PressureStory) -> String? {
+        guard case let .elevated(start, end?, worst) = story else { return nil }
         let (from, to) = (PanelSummary.clock(start), PanelSummary.clock(end))
-        return (from == to ? "Last elevated at \(from)" : "Last elevated \(from) to \(to)") + critical
+        return (from == to ? "Last elevated at \(from)" : "Last elevated \(from) to \(to)") + (worst == .critical ? ", reached critical" : "")
     }
 
     // MARK: Input

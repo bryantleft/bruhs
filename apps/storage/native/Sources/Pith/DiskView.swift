@@ -99,10 +99,6 @@ private struct DiskControlBar: View {
                         .truncationMode(.middle)
                         .textSelection(.enabled)
                         .help(scope)
-                } else {
-                    Text("No scan yet")
-                        .font(BruhsType.body)
-                        .foregroundStyle(BruhsColor.textSecondary)
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     switch model.caption {
@@ -149,10 +145,13 @@ private struct DiskControlBar: View {
                 Button("Cancel") { model.cancel() }
                     .buttonStyle(.bruhsGhost)
             } else {
-                Button("Scan Startup Disk") { model.scan(URL(fileURLWithPath: "/")) }
-                    .buttonStyle(.bruhsGhost)
-                    .disabled(model.isTrashing)
-                    .help("Scan everything on the startup disk.")
+                // Before a first scan, the list of disks under this bar has the startup disk's own Scan.
+                if model.result != nil {
+                    Button("Scan Startup Disk") { model.scan(URL(fileURLWithPath: "/")) }
+                        .buttonStyle(.bruhsGhost)
+                        .disabled(model.isTrashing)
+                        .help("Scan everything on the startup disk.")
+                }
                 Button("Choose Folder…") { model.chooseFolder() }
                     .buttonStyle(.bruhsSoft)
                     .disabled(model.isTrashing)

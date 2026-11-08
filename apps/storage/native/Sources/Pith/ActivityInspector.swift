@@ -59,7 +59,8 @@ private struct AppInspector: View {
                 // A process macOS won't let Pith read has no trend to draw; the lock note says why.
                 if model.window != nil, timeline.points.contains(where: { $0.cpu != nil || $0.memory != nil }) { trends(window) }
                 facts
-                if !processes.isEmpty { processList }
+                // One process is the app itself, whose figures are above; its PID is with the facts.
+                if processes.count > 1 { processList }
                 actions
             }
             .padding(16)
@@ -213,6 +214,13 @@ private struct AppInspector: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if processes.count == 1, let only = processes.first {
+                GridRow {
+                    factLabel("PID")
+                    // Verbatim, so a PID never picks up a thousands separator.
+                    Text(verbatim: String(only.key.pid)).font(BruhsType.dataSmall).foregroundStyle(BruhsColor.text).textSelection(.enabled)
+                }
+            }
             if let openedBy = app.openedBy {
                 GridRow {
                     factLabel("Opened by")
@@ -254,7 +262,7 @@ private struct AppInspector: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Text(range == nil ? "Processes" : "Processes now").font(BruhsType.sectionTitle).foregroundStyle(BruhsColor.textSecondary)
-                if processes.count > 1 { BruhsBadge(text: String(processes.count), isData: true) }
+                BruhsBadge(text: String(processes.count), isData: true)
             }
             .accessibilityElement(children: .combine)
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 4) {
@@ -324,36 +332,8 @@ private struct SystemInspector: View {
                         .foregroundStyle(BruhsColor.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 6) {
-                    ForEach([ActivityColumn.cpu, .memory, .read, .written] + (SystemSampler.countsNetwork ? [.network] : []), id: \.self) { column in
-                        let figure = ActivityFigure(column, system.values)
-                        GridRow {
-                            Text(column.title).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.textSecondary)
-                            FigureText(figure: figure, color: BruhsColor.text, showsZero: true)
-                        }
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("\(column.title) \(figure.spoken(protected: false))")
-                    }
-                }
+                // System's own figures and its busiest processes are in its row and under it, beside this card.
                 if let snapshot { macFacts(snapshot) }
-                if !busiest.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Busiest").font(BruhsType.sectionTitle).foregroundStyle(BruhsColor.textSecondary)
-                        ForEach(busiest) { app in
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(app.identity.displayName).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.text).lineLimit(1)
-                                    if let description = app.identity.secondaryText {
-                                        Text(description).font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary).lineLimit(2)
-                                    }
-                                }
-                                Spacer(minLength: 8)
-                                FigureText(figure: ActivityFigure(.cpu, app.values))
-                            }
-                            .accessibilityElement(children: .combine)
-                        }
-                    }
-                }
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -409,11 +389,6 @@ private struct SystemInspector: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var summary: String {
-        system.protectedCount > 0 ? "\(processCount(system.processCount)), \(system.protectedCount) protected" : processCount(system.processCount)
-    }
-
-    private var busiest: [ActivityListing.App] {
-        Array(system.apps.filter { ($0.values.cpu ?? 0) >= 0.05 }.sorted { ($0.values.cpu ?? 0) > ($1.values.cpu ?? 0) }.prefix(5))
-    }
+    /// How many; the lock note under it says how many of them are protected.
+    private var summary: String { processCount(system.processCount) }
 }

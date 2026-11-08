@@ -139,7 +139,6 @@ struct PanelMemorySection: View {
     }
 
     private func caption(_ story: PanelSummary.PressureStory, culprit: (app: AppSample, growth: Int64?)?, spoken: Bool) -> String {
-        if model.paused { return "Paused" }
         switch story {
         case .unavailable:
             return "No readings from macOS"
@@ -215,7 +214,7 @@ struct PanelAppsSection: View {
                 // Under memory pressure the list follows the warning, so it names who holds the memory.
                 Text(ranking == .memory ? "Using the most memory" : "Busiest apps").accessibilityAddTraits(.isHeader)
                 Spacer()
-                Text(model.paused ? "Paused" : ranking == .memory ? "Memory" : "CPU").accessibilityHidden(true)
+                Text(ranking == .memory ? "Memory" : "CPU").accessibilityHidden(true)
             }
             .font(BruhsType.sectionTitle)
             .foregroundStyle(BruhsColor.textTertiary)
