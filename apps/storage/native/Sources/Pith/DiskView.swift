@@ -546,6 +546,9 @@ struct DiskWebView: NSViewRepresentable {
     }
 
     @MainActor final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+        /// "Nov 3": what grew is compared across days, so the page names the day.
+        static func day(_ date: Date) -> String { date.formatted(.dateTime.month(.abbreviated).day()) }
+
         let model: DiskModel
         weak var web: WKWebView?
         var ready = false
@@ -603,7 +606,18 @@ struct DiskWebView: NSViewRepresentable {
                 let payload = try model.result.map { String(decoding: try JSONEncoder().encode($0), as: UTF8.self) }
                 // What grew since the last scan of this folder travels apart from the scanner's own result.
                 let growth = model.growthSince.map { since in
-                    ["since": since.formatted(.dateTime.month(.abbreviated).day()), "changes": model.growth] as [String: Any]
+                    var growth: [String: Any] = ["since": Self.day(since), "changes": model.growth]
+                    // Who wrote while it grew: a correlation, which the page words as one.
+                    switch model.writers?(since) {
+                    case .apps(let apps, let from)?:
+                        growth["writers"] = apps.map { ["name": $0.name, "bytes": $0.bytes] as [String: Any] }
+                        growth["writersSince"] = Self.day(from)
+                    case .historyOff?:
+                        growth["writersHint"] = "Turn on Keep a week of history in Settings to see which apps wrote the most since then."
+                    case .empty?, nil:
+                        break
+                    }
+                    return growth
                 }
                 web.callAsyncJavaScript("window.pithReceive(payload); window.pithReceiveGrowth?.(growth)",
                                         arguments: ["payload": payload as Any? ?? NSNull(), "growth": growth as Any? ?? NSNull()], in: nil, in: .page) { [weak self] result in

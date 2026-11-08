@@ -28,6 +28,21 @@ struct TrashedItem: Equatable {
     static func == (lhs: TrashedItem, rhs: TrashedItem) -> Bool { lhs.trashed == rhs.trashed && lhs.original == rhs.original }
 }
 
+/// The apps that wrote the most to disk over a stretch, shown beside what grew. macOS doesn't say which app wrote to
+/// which folder without administrator access, so this says who was writing then, not who grew a folder.
+enum DiskWriters: Equatable {
+    case apps([DiskWriter], since: Date)
+    /// History isn't kept, so there's no record of who wrote.
+    case historyOff
+    /// History holds nothing for the stretch.
+    case empty
+}
+
+struct DiskWriter: Equatable {
+    let name: String
+    let bytes: UInt64
+}
+
 /// A volume Pith can scan, for the list shown before any scan.
 struct DiskVolumeChoice: Identifiable, Equatable {
     let url: URL
@@ -58,6 +73,8 @@ struct DiskVolumeChoice: Identifiable, Equatable {
     private(set) var accounting: DiskAccounting?
     /// Shows items in Quick Look; the app delegate owns the panel.
     var showQuickLook: (([URL]) -> Void)?
+    /// Who wrote to disk since a date, from Activity's history; the app delegate connects it.
+    var writers: ((Date) -> DiskWriters)?
     /// Keep each scan's folder sizes, so the next scan of the same folder shows what grew, and the last map, so Pith opens
     /// on it at the next launch. On unless the user turns it off.
     var remembersScans = UserDefaults.standard.object(forKey: "remembersScans") as? Bool ?? true {

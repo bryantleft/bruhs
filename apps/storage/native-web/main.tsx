@@ -27,17 +27,49 @@ type Message =
   | { action: "trash"; path: string };
 
 /** What grew since the last scan of the same folder: bytes by path, and when that scan was. */
+interface Writer {
+  name: string;
+  bytes: number;
+}
+
 interface Growth {
   since: string;
   changes: ReadonlyMap<string, number>;
+  /** The apps that wrote the most to disk over the same stretch, from Pith's kept history. */
+  writers: readonly Writer[];
+  /** When that history begins, if later than `since`. */
+  writersSince?: string;
+  /** Why there are no writers to show, when that's worth saying. */
+  writersHint?: string;
+}
+
+interface GrowthMessage {
+  since: string;
+  changes: Record<string, number>;
+  writers?: unknown;
+  writersSince?: unknown;
+  writersHint?: unknown;
+}
+
+/** The writers Pith sent, each with a name and a byte count, or none. */
+function parseWriters(value: unknown): Writer[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item: unknown) => {
+    if (typeof item !== "object" || item === null) return [];
+    const { name, bytes } = item as Record<string, unknown>;
+    return typeof name === "string" &&
+      typeof bytes === "number" &&
+      Number.isFinite(bytes) &&
+      bytes > 0
+      ? [{ name, bytes }]
+      : [];
+  });
 }
 
 declare global {
   interface Window {
     pithReceive: (payload: string | null) => void;
-    pithReceiveGrowth: (
-      growth: { since: string; changes: Record<string, number> } | null,
-    ) => void;
+    pithReceiveGrowth: (growth: GrowthMessage | null) => void;
     /** Pith's menu commands that act on the map, such as Go, Enclosing Folder. */
     pithCommand: (command: "up") => void;
     webkit?: {
@@ -106,7 +138,17 @@ function DiskMap() {
         if (typeof delta === "number" && Number.isFinite(delta))
           changes.set(path, delta);
       }
-      setGrowth({ since: value.since, changes });
+      setGrowth({
+        since: value.since,
+        changes,
+        writers: parseWriters(value.writers),
+        writersSince:
+          typeof value.writersSince === "string"
+            ? value.writersSince
+            : undefined,
+        writersHint:
+          typeof value.writersHint === "string" ? value.writersHint : undefined,
+      });
     };
     post({ action: "ready" });
     return () => {
@@ -296,6 +338,48 @@ function DiskMap() {
               </ul>
             </section>
           )}
+          {grew.length > 0 &&
+            growth &&
+            (growth.writers.length > 0 || growth.writersHint) && (
+              <section
+                aria-labelledby="writers-heading"
+                className="flex shrink-0 flex-col gap-1.5"
+              >
+                <h2
+                  id="writers-heading"
+                  className="text-eyebrow text-(--role-text-tertiary)"
+                >
+                  Wrote the most since {growth.writersSince ?? growth.since}
+                </h2>
+                {growth.writers.length > 0 ? (
+                  <>
+                    <ul className="space-y-px">
+                      {growth.writers.map((writer) => (
+                        <li
+                          key={writer.name}
+                          className="flex items-baseline gap-2 py-1"
+                        >
+                          <span className="text-body-sm min-w-0 flex-1 truncate text-(--role-text)">
+                            {writer.name}
+                          </span>
+                          <span className="text-code-sm shrink-0 text-(--role-text-secondary) tabular-nums">
+                            {formatBytes(writer.bytes)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-body-sm text-(--role-text-tertiary)">
+                      Apps writing to disk while it grew. macOS doesn’t say
+                      which folders they wrote to.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-body-sm text-(--role-text-tertiary)">
+                    {growth.writersHint}
+                  </p>
+                )}
+              </section>
+            )}
           {unreadable.length > 0 && (
             <section
               aria-labelledby="unreadable-heading"

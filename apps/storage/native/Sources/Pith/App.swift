@@ -63,6 +63,7 @@ import PithCore
             }
         }
         disk.showQuickLook = { [weak self] urls in self?.quickLook(urls) }
+        disk.writers = { [weak self] since in self?.activity.writers(since: since) ?? .empty }
         activity.start(); statusItem?.update()
         let center = NSWorkspace.shared.notificationCenter
         observers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in

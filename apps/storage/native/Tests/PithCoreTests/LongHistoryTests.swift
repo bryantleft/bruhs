@@ -67,4 +67,45 @@ final class LongHistoryTests: XCTestCase {
         XCTAssertEqual(decoded.halfMinute, history.halfMinute)
         XCTAssertEqual(decoded.identities, history.identities)
     }
+
+    private func writing(_ seconds: Double, _ apps: [(id: String, cpu: Double, written: Double)]) -> ActivitySnapshot {
+        let samples = apps.map { AppSample(id: $0.id, name: $0.id, executable: "/Applications/\($0.id).app", members: [], cpu: $0.cpu, memory: 100,
+                                           read: nil, written: $0.written, restricted: false) }
+        return ActivitySnapshot(date: base.addingTimeInterval(seconds), uptime: seconds, cpu: 10, pressure: .normal, apps: samples, error: nil,
+                                memory: MemoryUse(physical: 1000, used: 500, app: 400, wired: 50, compressed: 50, cached: 100, swapUsed: 10, swapTotal: 100))
+    }
+
+    func testBucketsKeepWhatEachAppWroteToDisk() throws {
+        var history = LongHistory()
+        // Twenty apps busier by CPU and memory, and one quiet app writing a megabyte a second.
+        let busy = (0..<20).map { (id: "busy\($0)", cpu: Double(10 + $0), written: 0.0) }
+        for second in stride(from: 0.0, to: 62, by: 2) { history.record(writing(second, busy + [(id: "writer", cpu: 0.1, written: 1_000_000)])) }
+        let first = try XCTUnwrap(history.halfMinute.first?.apps.first { $0.id == "writer" }, "kept for what it wrote")
+        // The first sample has no earlier one to measure from, so 14 of its 15 samples count, two seconds each.
+        XCTAssertEqual(first.written, 28_000_000)
+        XCTAssertEqual(history.halfMinute[1].apps.first { $0.id == "writer" }?.written, 30_000_000)
+        let written = try XCTUnwrap(history.written(in: base...base.addingTimeInterval(60)))
+        XCTAssertEqual(written.apps.first?.id, "writer")
+        XCTAssertEqual(written.apps.first?.bytes, 58_000_000)
+        XCTAssertEqual(written.from, base)
+        XCTAssertNil(history.written(in: base.addingTimeInterval(-7200)...base.addingTimeInterval(-3600)), "nothing kept from before")
+    }
+
+    func testAHistoryKeptBeforeWritesWereCountedStillLoads() throws {
+        var history = LongHistory()
+        for second in stride(from: 0.0, to: 62, by: 2) { history.record(writing(second, [(id: "a", cpu: 5, written: 1000)])) }
+        // Strip every trace of writes, as in a file saved by the version before.
+        func strip(_ value: Any) -> Any {
+            if let object = value as? [String: Any] {
+                return object.filter { !["written", "appWritten", "lastUptime"].contains($0.key) }.mapValues(strip)
+            }
+            if let array = value as? [Any] { return array.map(strip) }
+            return value
+        }
+        let old = try JSONSerialization.data(withJSONObject: strip(JSONSerialization.jsonObject(with: JSONEncoder().encode(history))))
+        let loaded = try JSONDecoder().decode(LongHistory.self, from: old)
+        XCTAssertEqual(loaded.halfMinute.count, history.halfMinute.count)
+        XCTAssertNil(loaded.halfMinute.first?.apps.first?.written)
+        XCTAssertEqual(loaded.written(in: base...base.addingTimeInterval(60))?.apps.count, 0, "no writes recorded, none invented")
+    }
 }

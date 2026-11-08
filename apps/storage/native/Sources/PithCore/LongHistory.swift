@@ -32,6 +32,8 @@ public struct BucketApp: Codable, Sendable, Equatable {
     /// Average footprint while it ran.
     public let memory: UInt64?
     public let power: Double?
+    /// Bytes it wrote to disk during the bucket. Nil in buckets kept before Pith counted writes.
+    public let written: UInt64?
 }
 
 /// What an app was, kept once for every bucket that mentions it.
@@ -57,8 +59,8 @@ public struct HistoryBucket: Codable, Sendable, Equatable {
 }
 
 /// A week of activity in tiers, as Netdata keeps its database: 30-second buckets for six hours and 5-minute buckets
-/// for seven days, about 3,000 points per series. Each bucket keeps only the apps that used the most in it, so the
-/// file stays near a megabyte however many processes run.
+/// for seven days, about 3,000 points per series. Each bucket keeps only the apps that used the most CPU or memory
+/// or wrote the most in it, so the file stays near a megabyte however many processes run.
 public struct LongHistory: Codable, Sendable {
     public static let fine: TimeInterval = 30
     public static let coarse: TimeInterval = 300
@@ -70,6 +72,8 @@ public struct LongHistory: Codable, Sendable {
     public private(set) var identities: [String: BucketIdentity] = [:]
     private var fineAccumulator: Accumulator?
     private var coarseAccumulator: Accumulator?
+    /// The last sample's uptime: an app's write rate covers the time since it, so rate times that is bytes written.
+    private var lastUptime: Double?
 
     public init() {}
 
@@ -81,8 +85,27 @@ public struct LongHistory: Codable, Sendable {
         let start = Self.floor(snapshot.date, to: Self.fine)
         if let pending = fineAccumulator, pending.start != start { close(fine: pending) }
         if fineAccumulator?.start != start { fineAccumulator = Accumulator(start: start, duration: Self.fine) }
-        fineAccumulator?.add(snapshot)
+        // A first sample has no rate, and a last uptime from before a restart is later than now, so neither counts.
+        let elapsed = lastUptime.map { snapshot.uptime - $0 }.flatMap { $0 > 0 ? $0 : nil }
+        fineAccumulator?.add(snapshot, elapsed: elapsed)
+        lastUptime = snapshot.uptime
         prune(now: snapshot.date)
+    }
+
+    /// Bytes each app wrote to disk between `range`'s ends, most first, from the buckets that overlap it, and when those
+    /// buckets begin: later than the range's start when history began after it. Approximate where an app fell out of a
+    /// bucket's lists of the busiest. Nil when no bucket overlaps the range.
+    public func written(in range: ClosedRange<Date>) -> (apps: [(id: String, bytes: UInt64)], from: Date)? {
+        // Five-minute buckets for anything past six hours, which the 30-second ones no longer cover.
+        let span: HistorySpan = range.upperBound.timeIntervalSince(range.lowerBound) > HistorySpan.sixHours.seconds ? .sevenDays : .sixHours
+        let inside = buckets(span, now: range.upperBound.addingTimeInterval(1)).filter { $0.end > range.lowerBound && $0.start < range.upperBound }
+        guard let first = inside.first else { return nil }
+        var bytes: [String: UInt64] = [:]
+        for bucket in inside {
+            for app in bucket.apps { if let written = app.written, written > 0 { bytes[app.id, default: 0] += written } }
+        }
+        let apps = bytes.map { (id: $0.key, bytes: $0.value) }.sorted { $0.bytes > $1.bytes }
+        return (apps, max(range.lowerBound, first.start))
     }
 
     /// Buckets inside the span ending at `now`, oldest first: 30-second ones for six hours, 5-minute ones beyond.
@@ -155,29 +178,37 @@ public struct LongHistory: Codable, Sendable {
         var appPower: [String: Double] = [:]
         var appMemory: [String: Double] = [:]
         var appMemoryCount: [String: Int] = [:]
+        /// Bytes written; optional so a bucket saved before Pith counted writes still loads.
+        var appWritten: [String: Double]?
 
         init(start: Date, duration: TimeInterval) { self.start = start; self.duration = duration }
 
-        mutating func add(_ snapshot: ActivitySnapshot) {
+        mutating func add(_ snapshot: ActivitySnapshot, elapsed: Double? = nil) {
             samples += 1
             note(cpu: snapshot.cpu, peak: snapshot.cpu, memory: snapshot.memory?.used, physical: snapshot.memory?.physical,
                  swap: snapshot.memory?.swapUsed, pressure: snapshot.pressure, thermal: snapshot.thermal)
+            var written = appWritten ?? [:]
             for app in snapshot.apps {
                 if let cpu = app.cpu { appCPU[app.id, default: 0] += cpu }
                 if let power = app.power { appPower[app.id, default: 0] += power }
                 if let memory = app.memory { appMemory[app.id, default: 0] += Double(memory); appMemoryCount[app.id, default: 0] += 1 }
+                if let rate = app.written, let elapsed { written[app.id, default: 0] += rate * elapsed }
             }
+            appWritten = written
         }
 
         /// A finer bucket counts as one sample; its apps' averages add up as samples' readings do.
         mutating func add(_ bucket: HistoryBucket) {
             samples += 1
             note(cpu: bucket.cpu, peak: bucket.cpuPeak, memory: bucket.memoryUsed, physical: bucket.memoryPhysical, swap: bucket.swapPeak, pressure: bucket.pressure, thermal: bucket.thermal)
+            var written = appWritten ?? [:]
             for app in bucket.apps {
                 if let cpu = app.cpu { appCPU[app.id, default: 0] += cpu }
                 if let power = app.power { appPower[app.id, default: 0] += power }
                 if let memory = app.memory { appMemory[app.id, default: 0] += Double(memory); appMemoryCount[app.id, default: 0] += 1 }
+                if let bytes = app.written { written[app.id, default: 0] += Double(bytes) }
             }
+            appWritten = written
         }
 
         private mutating func note(cpu: Double?, peak: Double?, memory: UInt64?, physical: UInt64?, swap: UInt64?, pressure: MemoryPressure, thermal: ThermalPressure) {
@@ -194,9 +225,12 @@ public struct LongHistory: Codable, Sendable {
             let count = Double(max(1, samples))
             let byCPU = appCPU.sorted { $0.value > $1.value }.prefix(limit).map(\.key)
             let byMemory = appMemory.map { ($0.key, $0.value / Double(appMemoryCount[$0.key] ?? 1)) }.sorted { $0.1 > $1.1 }.prefix(limit).map(\.0)
-            let kept = Array(Set(byCPU + byMemory)).sorted()
+            let written = appWritten ?? [:]
+            let byWrites = written.filter { $0.value >= 1 }.sorted { $0.value > $1.value }.prefix(limit).map(\.key)
+            let kept = Array(Set(byCPU + byMemory + byWrites)).sorted()
             let apps = kept.map { id in
-                BucketApp(id: id, cpu: appCPU[id].map { $0 / count }, memory: appMemory[id].map { UInt64($0 / Double(appMemoryCount[id] ?? 1)) }, power: appPower[id].map { $0 / count })
+                BucketApp(id: id, cpu: appCPU[id].map { $0 / count }, memory: appMemory[id].map { UInt64($0 / Double(appMemoryCount[id] ?? 1)) }, power: appPower[id].map { $0 / count },
+                          written: written[id].map { UInt64($0.rounded()) })
             }
             return HistoryBucket(start: start, duration: duration, cpu: cpuCount > 0 ? cpuSum / Double(cpuCount) : nil, cpuPeak: cpuPeak,
                                  memoryUsed: memoryCount > 0 ? UInt64(memorySum / Double(memoryCount)) : nil, memoryPhysical: physical, swapPeak: swapPeak,
