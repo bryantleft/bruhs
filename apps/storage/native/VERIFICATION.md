@@ -72,3 +72,20 @@ Verified on the same Mac after working through the feature-gap and UX audit (`re
 - **Writers and launches:** Disk's growth note with the apps that wrote the most, rendered in a headless browser, light and dark. Launch markers rendered on the CPU chart at T3 Code's launch and the start of League of Legends' spike.
 - **Tests:** 20 Rust tests. 129 Swift tests, new ones covering the loopback count, network in the listing, ranges and CSV, saved changes and older saved maps, the newest saved map, the watcher's event IDs, and writes and launches in history. 78 node tests.
 - **Packaged UI:** all 34 smoke checks pass, four new: Bigger Text zooms the map, and the saved map reopens, stays caught up after Refresh and follows a change after. `map_keeps_size_on_select` failed once the text-size check ran between its two readings, since the second was taken zoomed; it now reads the map first.
+
+## 2026-11-07: Developer ID release
+
+- **Signing:** `release:mac` signed the app and its scanner with the Developer ID Application certificate, the hardened runtime and Apple's timestamp, with no keychain prompt. `codesign --verify --deep --strict` passes.
+- **Notarization:** all three submissions were accepted, and the stapled ticket validates.
+- **Gatekeeper:** `spctl` accepts the app as Notarized Developer ID, and accepts a copy unpacked from `Pith.zip` (5.2 MB) with the quarantine flag a browser download adds.
+- **Packaged UI:** all 35 smoke checks pass on the notarized build. The new one confirms network by app works under the hardened runtime. On the first launch of the newly signed build the map's height read 0, measured before it was laid out, so the check now waits for the height to settle.
+- **Not checked:** Intel Macs, macOS before 26.3, and Finder's first-launch dialog for a downloaded copy.
+
+## 2026-11-07: live figures, history cost and a duplication audit
+
+- **Live figures:** Pith samples every second while Activity is on screen or the panel is open, and every two seconds otherwise. In the notarized build the smoke checks measured samples 1.16 s apart with Activity open and 2.10 s once it closed; the extra tenth is the sample itself.
+- **History cost:** appending a sample tested every reading of every app for expiry. With ten minutes of history for 300 apps that took 5.7 ms at a sample every two seconds and 11.1 ms at one a second, against 0.4 ms while young. Counting the expired readings from the front takes 0.8 and 1.1 ms. Side by side over the same minutes, menu bar only, the old and new builds used 530 and 540 ms of CPU in the first minute, and 1,010 and 720 ms in the twelfth.
+- **Closed panel:** it kept its SwiftUI tree after closing and redrew with every sample; closing now releases it.
+- **Audit:** offscreen renders of every native screen, light and dark, and the disk map in headless Chrome with a fresh scan of this repository. Removed the range's times from the window subtitle, "Ranked by average CPU", "Last elevated" under Activity's chart (VoiceOver still hears it), the System card's figures and busiest list, a second "protected" count, the one-row process list of a single-process app (its PID moved to the facts), the paused panel's extra "Paused" labels, and Scan Startup Disk above the list of disks before a first scan. The search prompt no longer cuts off at the default width.
+- **Signer:** code Pith couldn't read, such as an executable deleted since it started, read "Not signed"; it now has no Signed by row.
+- **Tests:** 131 Swift tests, new ones for the expiry boundary and unreadable code. 20 Rust tests and 78 node tests. All 37 smoke checks pass on the notarized build, two of them new for the cadence.
