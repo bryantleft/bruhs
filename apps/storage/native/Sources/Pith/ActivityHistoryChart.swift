@@ -69,8 +69,9 @@ struct ActivityHistoryChart: View {
             }
         } else if let peak = shown.max() {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
-                LabeledFigure(label: "Avg", value: figure(shown.reduce(0, +) / Double(shown.count)))
-                LabeledFigure(label: "Peak", value: figure(peak))
+                let average = shown.reduce(0, +) / Double(shown.count)
+                LabeledFigure(label: "Avg", value: figure(average), amount: average)
+                LabeledFigure(label: "Peak", value: figure(peak), amount: peak)
             }
         }
     }

@@ -53,7 +53,7 @@ struct PanelCPUSection: View {
             if let tiers = model.snapshot?.tiers, !tiers.isEmpty {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     ForEach(tiers, id: \.name) { tier in
-                        LabeledFigure(label: tier.name, value: model.paused ? "" : tier.busy.map { percent($0, glance: true) } ?? "")
+                        LabeledFigure(label: tier.name, value: model.paused ? "" : tier.busy.map { percent($0, glance: true) } ?? "", amount: model.paused ? nil : tier.busy)
                             .help("\(tier.cores) \(tier.name.lowercased()) cores")
                     }
                 }
@@ -66,7 +66,7 @@ struct PanelCPUSection: View {
     /// The live value, or a word on the same baseline and at the same height, so the section keeps its size.
     @ViewBuilder private func readout(_ live: Double?) -> some View {
         if let live {
-            Text(verbatim: percent(live, glance: true)).font(BruhsType.readout).foregroundStyle(BruhsColor.text).fixedSize()
+            Text(verbatim: percent(live, glance: true)).font(BruhsType.readout).foregroundStyle(BruhsColor.text).fixedSize().rolls(live)
         } else {
             Text(verbatim: "0%").font(BruhsType.readout).hidden()
                 .overlay(alignment: .leadingLastTextBaseline) {
@@ -78,8 +78,8 @@ struct PanelCPUSection: View {
     @ViewBuilder private func figures(_ cpu: PanelSummary.CPU) -> some View {
         if let average = cpu.average, let peak = cpu.peak {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                LabeledFigure(label: "Avg", value: percent(average, glance: true))
-                LabeledFigure(label: "Peak", value: percent(peak, glance: true))
+                LabeledFigure(label: "Avg", value: percent(average, glance: true), amount: average)
+                LabeledFigure(label: "Peak", value: percent(peak, glance: true), amount: peak)
             }
         } else {
             Text("No readings yet").font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary)
@@ -124,11 +124,11 @@ struct PanelMemorySection: View {
     /// compression gives way, then swap: used memory is the one figure the row can't lose.
     private var figures: some View {
         let memory = model.paused ? nil : model.snapshot?.memory
-        let used = LabeledFigure(label: "Used", value: memory.map { memorySize($0.used) } ?? "")
+        let used = LabeledFigure(label: "Used", value: memory.map { memorySize($0.used) } ?? "", amount: memory.map { Double($0.used) })
             .help(memory.map { "\(memorySize($0.used)) of \(memorySize($0.physical)) in use" } ?? "")
-        let swap = LabeledFigure(label: "Swap", value: memory?.swapUsed.map(memorySize) ?? "")
+        let swap = LabeledFigure(label: "Swap", value: memory?.swapUsed.map(memorySize) ?? "", amount: memory?.swapUsed.map(Double.init))
             .help("Memory macOS moved to the disk. Swapping is what makes a Mac slow when memory runs short.")
-        let compressed = LabeledFigure(label: "Compressed", value: memory.map { memorySize($0.compressed) } ?? "")
+        let compressed = LabeledFigure(label: "Compressed", value: memory.map { memorySize($0.compressed) } ?? "", amount: memory.map { Double($0.compressed) })
             .help("Memory macOS compressed to make room before it swaps.")
         return ViewThatFits(in: .horizontal) {
             HStack(alignment: .firstTextBaseline, spacing: 10) { used; Spacer(minLength: 0); swap; compressed }
@@ -294,6 +294,7 @@ struct PanelAppRow: View {
                 }
                 if let figure = ranking == .cpu ? app.cpu.map({ percent($0) }) : app.memory.map(memorySize) {
                     Text(verbatim: figure).font(BruhsType.data).foregroundStyle(BruhsColor.textSecondary)
+                        .rolls(ranking == .cpu ? app.cpu : app.memory.map(Double.init))
                 }
             }
             .padding(.horizontal, 6)
@@ -326,7 +327,7 @@ struct PanelSummaryRow: View {
             Text(title).font(BruhsType.body).lineLimit(1)
             if let detail { Text(detail).font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary).lineLimit(1) }
             Spacer(minLength: 8)
-            if let figure { Text(verbatim: figure).font(BruhsType.data) }
+            if let figure { Text(verbatim: figure).font(BruhsType.data).rolls(ranking == .cpu ? cpu : memory.map(Double.init)) }
         }
         .foregroundStyle(BruhsColor.textTertiary)
         .frame(height: PanelAppsSection.rowHeight)
@@ -364,7 +365,7 @@ struct PanelDiskSection: View {
                     }
                     Spacer(minLength: 8)
                     // Without a reading the line below says capacity is unavailable.
-                    if let free { Text(free).font(BruhsType.data).foregroundStyle(BruhsColor.text) }
+                    if let free { Text(free).font(BruhsType.data).foregroundStyle(BruhsColor.text).rolls(model.availableDisk.map(Double.init)) }
                 }
                 // Without a reading the bar keeps its space but draws nothing, rather than an empty disk.
                 CapacityBar(used: used ?? 0).opacity(used == nil ? 0 : 1).padding(.top, 8)

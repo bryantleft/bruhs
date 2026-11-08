@@ -598,7 +598,7 @@ final class ActivityNumberCell: NSTableCellView {
         case .zero(let zero):
             label.stringValue = ""
             toolTip = zero
-        case .value(let text, _):
+        case .value(let text, _, _):
             label.stringValue = text
             toolTip = nil
         }
@@ -618,7 +618,8 @@ enum ActivityFigure: Equatable {
     case unavailable
     /// Below what the figure can show, such as CPU under 0.05%. Lists leave it empty; a labelled figure shows it, as "0%".
     case zero(String)
-    case value(String, spoken: String)
+    /// The figure as shown and as spoken, and the number behind it, which a live figure rolls toward.
+    case value(String, spoken: String, amount: Double)
 
     init(_ column: ActivityColumn, _ values: ActivityListing.Values) {
         switch column {
@@ -627,16 +628,16 @@ enum ActivityFigure: Equatable {
         case .cpu:
             guard let cpu = values.cpu else { self = .unavailable; return }
             // Below what one decimal can show, "0%" is more honest than 0.0%.
-            self = cpu < 0.05 ? .zero("0%") : .value(percent(cpu), spoken: percent(cpu))
+            self = cpu < 0.05 ? .zero("0%") : .value(percent(cpu), spoken: percent(cpu), amount: cpu)
         case .memory:
             guard let memory = values.memory else { self = .unavailable; return }
-            self = memory == 0 ? .zero(memorySize(0)) : .value(memorySize(memory), spoken: memorySize(memory))
+            self = memory == 0 ? .zero(memorySize(0)) : .value(memorySize(memory), spoken: memorySize(memory), amount: Double(memory))
         case .power:
             guard let power = values.power else { self = .unavailable; return }
-            self = power < 0.05 ? .zero("0 W") : .value(watts(power), spoken: "\(watts(power).replacingOccurrences(of: " W", with: "")) watts")
+            self = power < 0.05 ? .zero("0 W") : .value(watts(power), spoken: "\(watts(power).replacingOccurrences(of: " W", with: "")) watts", amount: power)
         case .read, .written, .network:
             guard let speed = column == .read ? values.read : column == .written ? values.written : values.network else { self = .unavailable; return }
-            self = speed < 1 ? .zero(rate(0)) : .value(rate(speed), spoken: "\(bytes(UInt64(speed))) per second")
+            self = speed < 1 ? .zero(rate(0)) : .value(rate(speed), spoken: "\(bytes(UInt64(speed))) per second", amount: speed)
         }
     }
 
@@ -644,7 +645,16 @@ enum ActivityFigure: Equatable {
         switch self {
         case .unavailable: protected ? "unavailable, protected by macOS" : "no reading yet"
         case .zero: "zero"
-        case .value(_, let spoken): spoken
+        case .value(_, let spoken, _): spoken
+        }
+    }
+
+    /// The number behind the figure: zero below what it can show, nil without a reading.
+    var amount: Double? {
+        switch self {
+        case .unavailable: nil
+        case .zero: 0
+        case .value(_, _, let amount): amount
         }
     }
 }
@@ -656,14 +666,18 @@ struct FigureText: View {
     var color: Color = BruhsColor.textSecondary
     var showsZero = false
 
+    // One text whose words change, rather than one per case, so a new reading rolls in place of the last.
     var body: some View {
+        Text(verbatim: text).font(BruhsType.dataSmall).foregroundStyle(tint).rolls(figure.amount)
+    }
+
+    private var text: String {
         switch figure {
-        case .unavailable:
-            Text(verbatim: "").font(BruhsType.dataSmall)
-        case .zero(let zero):
-            Text(verbatim: showsZero ? zero : "").font(BruhsType.dataSmall).foregroundStyle(BruhsColor.textTertiary)
-        case .value(let text, _):
-            Text(verbatim: text).font(BruhsType.dataSmall).foregroundStyle(color)
+        case .unavailable: ""
+        case .zero(let zero): showsZero ? zero : ""
+        case .value(let text, _, _): text
         }
     }
+
+    private var tint: Color { if case .zero = figure { BruhsColor.textTertiary } else { color } }
 }

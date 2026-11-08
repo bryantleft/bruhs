@@ -148,8 +148,8 @@ private struct AppInspector: View {
                 if range == nil {
                     FigureText(figure: ActivityFigure(.cpu, now), showsZero: true)
                 } else if let usage, usage.cpu != nil || usage.peakCPU != nil {
-                    if let average = usage.cpu { LabeledFigure(label: "Avg", value: percent(average)) }
-                    if let peak = usage.peakCPU { LabeledFigure(label: "Peak", value: percent(peak)) }
+                    if let average = usage.cpu { LabeledFigure(label: "Avg", value: percent(average), amount: average) }
+                    if let peak = usage.peakCPU { LabeledFigure(label: "Peak", value: percent(peak), amount: peak) }
                 } else {
                     noReadings
                 }
@@ -160,7 +160,7 @@ private struct AppInspector: View {
                 if range == nil {
                     FigureText(figure: ActivityFigure(.memory, now), showsZero: true)
                 } else if let memory = usage?.memory {
-                    LabeledFigure(label: "Avg", value: memorySize(memory))
+                    LabeledFigure(label: "Avg", value: memorySize(memory), amount: Double(memory))
                 } else {
                     noReadings
                 }
@@ -347,27 +347,27 @@ private struct SystemInspector: View {
             Text("This Mac").font(BruhsType.sectionTitle).foregroundStyle(BruhsColor.textSecondary).accessibilityAddTraits(.isHeader)
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 6) {
                 if let unattributed = snapshot.unattributedCPU {
-                    factRow("Protected and kernel", percent(unattributed),
+                    factRow("Protected and kernel", percent(unattributed), amount: unattributed,
                             help: "CPU the Mac used that no process Pith can read accounts for: protected processes and the macOS kernel.")
                 }
                 ForEach(snapshot.tiers, id: \.name) { tier in
-                    if let busy = tier.busy { factRow("\(tier.name) cores", percent(busy), help: "How busy the \(tier.cores) \(tier.name.lowercased()) cores are.") }
+                    if let busy = tier.busy { factRow("\(tier.name) cores", percent(busy), amount: busy, help: "How busy the \(tier.cores) \(tier.name.lowercased()) cores are.") }
                 }
-                if let gpu = snapshot.gpu { factRow("GPU", percent(gpu), help: "How busy the graphics processor is.") }
+                if let gpu = snapshot.gpu { factRow("GPU", percent(gpu), amount: gpu, help: "How busy the graphics processor is.") }
                 if let received = snapshot.networkIn, let sent = snapshot.networkOut {
-                    factRow("Network in", rate(received), help: "Data received per second over every network connection.")
-                    factRow("Network out", rate(sent), help: "Data sent per second over every network connection.")
+                    factRow("Network in", rate(received), amount: received, help: "Data received per second over every network connection.")
+                    factRow("Network out", rate(sent), amount: sent, help: "Data sent per second over every network connection.")
                 }
                 if let battery = snapshot.battery {
-                    factRow("Battery", batteryText(battery), help: "As macOS's battery menu reports it.")
+                    factRow("Battery", batteryText(battery), amount: Double(battery.percent), help: "As macOS's battery menu reports it.")
                 }
                 if let memory = snapshot.memory {
-                    factRow("Memory used", "\(memorySize(memory.used)) of \(memorySize(memory.physical))", help: "App memory, wired and compressed memory together.")
-                    factRow("App memory", memorySize(memory.app), help: "Memory apps hold.")
-                    factRow("Wired", memorySize(memory.wired), help: "Memory macOS keeps in place and can't compress or swap.")
-                    factRow("Compressed", memorySize(memory.compressed), help: "Memory macOS compressed to make room before it swaps.")
-                    factRow("Cached files", memorySize(memory.cached), help: "Files kept in memory so they open quickly. macOS gives this up when it needs room.")
-                    if let swap = memory.swapUsed { factRow("Swap used", memorySize(swap), help: "Memory macOS moved to the disk.") }
+                    factRow("Memory used", "\(memorySize(memory.used)) of \(memorySize(memory.physical))", amount: Double(memory.used), help: "App memory, wired and compressed memory together.")
+                    factRow("App memory", memorySize(memory.app), amount: Double(memory.app), help: "Memory apps hold.")
+                    factRow("Wired", memorySize(memory.wired), amount: Double(memory.wired), help: "Memory macOS keeps in place and can't compress or swap.")
+                    factRow("Compressed", memorySize(memory.compressed), amount: Double(memory.compressed), help: "Memory macOS compressed to make room before it swaps.")
+                    factRow("Cached files", memorySize(memory.cached), amount: Double(memory.cached), help: "Files kept in memory so they open quickly. macOS gives this up when it needs room.")
+                    if let swap = memory.swapUsed { factRow("Swap used", memorySize(swap), amount: Double(swap), help: "Memory macOS moved to the disk.") }
                 }
             }
         }
@@ -380,10 +380,10 @@ private struct SystemInspector: View {
         return "\(battery.percent)%, \(state)"
     }
 
-    private func factRow(_ label: String, _ value: String, help: String) -> some View {
+    private func factRow(_ label: String, _ value: String, amount: Double, help: String) -> some View {
         GridRow {
             Text(label).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.textSecondary)
-            Text(verbatim: value).font(BruhsType.dataSmall).foregroundStyle(BruhsColor.text)
+            Text(verbatim: value).font(BruhsType.dataSmall).foregroundStyle(BruhsColor.text).rolls(amount)
         }
         .help(help)
         .accessibilityElement(children: .combine)

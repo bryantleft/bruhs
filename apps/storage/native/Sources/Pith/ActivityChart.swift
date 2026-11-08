@@ -90,10 +90,11 @@ struct ActivityChart: View {
         } else if let peak = shown.max() {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 if range == nil, let now = model.snapshot.flatMap({ snapshot in model.history.system.last.flatMap(value) ?? (metric == .cpu ? snapshot.cpu : nil) }) {
-                    LabeledFigure(label: "Now", value: figure(now))
+                    LabeledFigure(label: "Now", value: figure(now), amount: now)
                 }
-                LabeledFigure(label: "Avg", value: figure(shown.reduce(0, +) / Double(shown.count)))
-                LabeledFigure(label: "Peak", value: figure(peak))
+                let average = shown.reduce(0, +) / Double(shown.count)
+                LabeledFigure(label: "Avg", value: figure(average), amount: average)
+                LabeledFigure(label: "Peak", value: figure(peak), amount: peak)
             }
         } else {
             Text("No readings yet").font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary)
