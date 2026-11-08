@@ -22,7 +22,9 @@ struct ActivityView: View {
             // The inspector shows only while a row is selected: a card inset from the window's edges and the toolbar.
             if inspecting { inspector(listing, range: range) }
         }
-        .animation(BruhsMotion.standard(duration: BruhsMotion.fast), value: inspecting)
+        // A strong ease-out both ways: the card moves the moment it's asked to, then settles. The standard curve's slow
+        // start made the first frames of a 150 ms slide look like a delay.
+        .animation(BruhsMotion.entrance(duration: BruhsMotion.fast), value: inspecting)
         .modifier(QuitConfirmation(state: state, run: run))
         .navigationSubtitle(subtitle)
         // Short enough for the field at the window's narrowest; the full prompt was cut off even at the default width.
@@ -40,7 +42,12 @@ struct ActivityView: View {
         // Escape from the table or chart arrives as the exit command: it leaves a ranked range first, then closes the
         // inspector. The scope bar's button covers Escape when nothing has focus.
         .onExitCommand {
-            if state.range != nil || state.longRange != nil { state.backToLive() } else { state.selection = nil }
+            if state.range != nil || state.longRange != nil {
+                state.backToLive()
+            } else {
+                // A key closes the inspector at once: an action taken from the keyboard shouldn't wait on an animation.
+                withTransaction(\.disablesAnimations, true) { state.selection = nil }
+            }
         }
         .onAppear(perform: applyFocus)
         .onChange(of: model.focusAppID) { applyFocus() }

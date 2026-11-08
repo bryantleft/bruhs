@@ -214,6 +214,69 @@ struct ProtectedMark: View {
 }
 
 /// bruhs button tones for Pith's content. Toolbars and menus keep standard controls.
+/// The bruhs spinner, as the design system's `.spinner` draws it on the web: a ring with a quarter gone, turning once
+/// every 0.75 s, since a quicker turn makes a wait feel shorter. Reduce Motion slows it to 1.5 s, as the web's does.
+/// macOS's own spinner turns at a speed Pith can't set. Core Animation turns this one in the render server, so a long
+/// scan costs Pith nothing to show it.
+struct BruhsSpinner: NSViewRepresentable {
+    var diameter: CGFloat = 16
+    var lineWidth: CGFloat = 2
+
+    func makeNSView(context: Context) -> SpinnerView { SpinnerView(diameter: diameter, lineWidth: lineWidth) }
+    func updateNSView(_ view: SpinnerView, context: Context) {}
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: SpinnerView, context: Context) -> CGSize? {
+        CGSize(width: diameter, height: diameter)
+    }
+
+    final class SpinnerView: NSView {
+        private let ring = CAShapeLayer()
+
+        init(diameter: CGFloat, lineWidth: CGFloat) {
+            super.init(frame: NSRect(x: 0, y: 0, width: diameter, height: diameter))
+            wantsLayer = true
+            ring.frame = bounds
+            ring.path = CGPath(ellipseIn: bounds.insetBy(dx: lineWidth / 2, dy: lineWidth / 2), transform: nil)
+            ring.fillColor = nil
+            ring.lineWidth = lineWidth
+            ring.lineCap = .round
+            ring.strokeEnd = 0.75
+            layer?.addSublayer(ring)
+            setAccessibilityElement(true)
+            setAccessibilityRole(.progressIndicator)
+        }
+
+        required init?(coder: NSCoder) { fatalError("BruhsSpinner is created in code") }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            spin()
+        }
+
+        override func viewDidChangeEffectiveAppearance() {
+            super.viewDidChangeEffectiveAppearance()
+            paint()
+        }
+
+        /// A layer's colour doesn't follow the appearance by itself, so it's resolved for this view's.
+        private func paint() {
+            effectiveAppearance.performAsCurrentDrawingAppearance { ring.strokeColor = BruhsNSColor.textSecondary.cgColor }
+        }
+
+        private func spin() {
+            paint()
+            ring.removeAnimation(forKey: "spin")
+            guard window != nil else { return }
+            let turn = CABasicAnimation(keyPath: "transform.rotation.z")
+            // Clockwise, as the web's turns: a negative angle in AppKit's unflipped layers.
+            turn.fromValue = 0
+            turn.toValue = -2 * Double.pi
+            turn.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 1.5 : 0.75
+            turn.repeatCount = .infinity
+            ring.add(turn, forKey: "spin")
+        }
+    }
+}
+
 struct BruhsButtonStyle: ButtonStyle {
     enum Tone { case soft, ghost, softDanger }
     var tone: Tone = .soft

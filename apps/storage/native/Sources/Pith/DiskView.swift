@@ -24,7 +24,7 @@ struct DiskView: View {
                 if model.result == nil {
                     if model.isScanning {
                         VStack(spacing: 10) {
-                            ProgressView().controlSize(.regular)
+                            BruhsSpinner(diameter: 24, lineWidth: 2.5).accessibilityLabel("Scanning")
                             Text("The map appears when the scan finishes.").font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -139,8 +139,7 @@ private struct DiskControlBar: View {
             }
             Spacer(minLength: 12)
             if model.isScanning {
-                ProgressView()
-                    .controlSize(.small)
+                BruhsSpinner(diameter: 14, lineWidth: 2)
                     .accessibilityLabel("Scanning")
                 Button("Cancel") { model.cancel() }
                     .buttonStyle(.bruhsGhost)

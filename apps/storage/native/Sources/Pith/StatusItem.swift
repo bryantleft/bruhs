@@ -96,6 +96,8 @@ struct PanelActions {
         item.button?.target = self
         item.button?.action = #selector(togglePanel)
         popover.behavior = .transient
+        // The panel opens and closes at once, as a menu does: it's Pith's most used surface, and its shortcut is a key.
+        popover.animates = false
         // The panel's canvas runs under the arrow too, so the whole popover is one bruhs surface.
         popover.hasFullSizeContent = true
         popover.delegate = self
