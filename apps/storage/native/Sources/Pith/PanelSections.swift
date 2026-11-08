@@ -66,7 +66,7 @@ struct PanelCPUSection: View {
     /// The live value, or a word on the same baseline and at the same height, so the section keeps its size.
     @ViewBuilder private func readout(_ live: Double?) -> some View {
         if let live {
-            Text(verbatim: percent(live, glance: true)).font(BruhsType.readout).foregroundStyle(BruhsColor.text).fixedSize().rolls(live)
+            Text(verbatim: percent(live, glance: true)).font(BruhsType.readout).foregroundStyle(BruhsColor.text).fixedSize()
         } else {
             Text(verbatim: "0%").font(BruhsType.readout).hidden()
                 .overlay(alignment: .leadingLastTextBaseline) {
@@ -294,7 +294,6 @@ struct PanelAppRow: View {
                 }
                 if let figure = ranking == .cpu ? app.cpu.map({ percent($0) }) : app.memory.map(memorySize) {
                     Text(verbatim: figure).font(BruhsType.data).foregroundStyle(BruhsColor.textSecondary)
-                        .rolls(ranking == .cpu ? app.cpu : app.memory.map(Double.init))
                 }
             }
             .padding(.horizontal, 6)
@@ -327,7 +326,7 @@ struct PanelSummaryRow: View {
             Text(title).font(BruhsType.body).lineLimit(1)
             if let detail { Text(detail).font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary).lineLimit(1) }
             Spacer(minLength: 8)
-            if let figure { Text(verbatim: figure).font(BruhsType.data).rolls(ranking == .cpu ? cpu : memory.map(Double.init)) }
+            if let figure { Text(verbatim: figure).font(BruhsType.data) }
         }
         .foregroundStyle(BruhsColor.textTertiary)
         .frame(height: PanelAppsSection.rowHeight)
@@ -365,7 +364,7 @@ struct PanelDiskSection: View {
                     }
                     Spacer(minLength: 8)
                     // Without a reading the line below says capacity is unavailable.
-                    if let free { Text(free).font(BruhsType.data).foregroundStyle(BruhsColor.text).rolls(model.availableDisk.map(Double.init)) }
+                    if let free { Text(free).font(BruhsType.data).foregroundStyle(BruhsColor.text) }
                 }
                 // Without a reading the bar keeps its space but draws nothing, rather than an empty disk.
                 CapacityBar(used: used ?? 0).opacity(used == nil ? 0 : 1).padding(.top, 8)

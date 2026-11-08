@@ -190,13 +190,13 @@ struct BruhsBadge: View {
 struct LabeledFigure: View {
     let label: String
     let value: String
-    /// The number behind a live value, so a new reading rolls in; nil for one that holds still.
+    /// The number behind a live value; nil for one that holds still.
     var amount: Double? = nil
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             Text(label).font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary)
-            Text(verbatim: value).font(BruhsType.caption).foregroundStyle(BruhsColor.textSecondary).rolls(amount)
+            Text(verbatim: value).font(BruhsType.caption).foregroundStyle(BruhsColor.textSecondary)
         }
         .lineLimit(1)
         .fixedSize()
@@ -216,23 +216,6 @@ struct ProtectedMark: View {
 }
 
 /// bruhs button tones for Pith's content. Toolbars and menus keep standard controls.
-extension View {
-    /// A live figure rolls to each new reading as a live price does: only the digits that change move, up as the number
-    /// rises and down as it falls, starting at once and settling within a quarter second. Reduce Motion crossfades.
-    func rolls(_ amount: Double?) -> some View { modifier(RollingFigure(amount: amount)) }
-}
-
-private struct RollingFigure: ViewModifier {
-    let amount: Double?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func body(content: Content) -> some View {
-        content
-            .contentTransition(reduceMotion ? .opacity : .numericText(value: amount ?? 0))
-            .animation(BruhsMotion.entrance(duration: BruhsMotion.standard), value: amount)
-    }
-}
-
 /// The bruhs spinner, as the design system's `.spinner` draws it on the web: a ring with a quarter gone, turning once
 /// every 0.6 s, since a quicker turn makes a wait feel shorter. Reduce Motion slows it to 1.2 s, as the web's does.
 /// macOS's own spinner turns at a speed Pith can't set. Core Animation turns this one in the render server, so a long

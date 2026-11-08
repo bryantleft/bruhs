@@ -618,7 +618,7 @@ enum ActivityFigure: Equatable {
     case unavailable
     /// Below what the figure can show, such as CPU under 0.05%. Lists leave it empty; a labelled figure shows it, as "0%".
     case zero(String)
-    /// The figure as shown and as spoken, and the number behind it, which a live figure rolls toward.
+    /// The figure as shown and as spoken, and the number behind it.
     case value(String, spoken: String, amount: Double)
 
     init(_ column: ActivityColumn, _ values: ActivityListing.Values) {
@@ -666,9 +666,8 @@ struct FigureText: View {
     var color: Color = BruhsColor.textSecondary
     var showsZero = false
 
-    // One text whose words change, rather than one per case, so a new reading rolls in place of the last.
     var body: some View {
-        Text(verbatim: text).font(BruhsType.dataSmall).foregroundStyle(tint).rolls(figure.amount)
+        Text(verbatim: text).font(BruhsType.dataSmall).foregroundStyle(tint)
     }
 
     private var text: String {
