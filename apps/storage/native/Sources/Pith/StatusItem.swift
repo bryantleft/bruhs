@@ -136,7 +136,11 @@ struct PanelActions {
     }
 
     func closePanel() { popover.performClose(nil) }
-    func popoverDidClose(_ notification: Notification) { activity.showsDiskSpace = false }
+    func popoverDidClose(_ notification: Notification) {
+        activity.showsDiskSpace = false
+        // Each opening builds a fresh panel; a closed one kept would still redraw with every sample.
+        popover.contentViewController = nil
+    }
 
     @objc func togglePanel() {
         guard let button = item.button else { return }
