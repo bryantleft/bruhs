@@ -94,7 +94,7 @@ struct SettingsView: View {
         } header: {
             Text("Disk")
         } footer: {
-            Text("Pith keeps each scan's folder sizes on this Mac, never what's in the files, so the next scan of the same folder can show what grew.")
+            Text("Pith keeps each scan's map on this Mac, never what's in the files, so it can open on the last map and show what changed and grew since.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

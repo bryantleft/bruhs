@@ -3,7 +3,7 @@
 import type { Category } from "./format.ts";
 
 /** Version of the `result` shape this client understands (`RESULT_VERSION` in Rust). */
-export const RESULT_VERSION = 3;
+export const RESULT_VERSION = 4;
 
 interface NodeBase {
   name: string;
@@ -15,6 +15,8 @@ export interface DirNode extends NodeBase {
   kind: "dir";
   /** Files inside it, counted once each. */
   files: number;
+  /** Its APFS clones that `size` leaves out, because another copy holds their blocks. */
+  clones?: number;
   children: readonly TreeNode[];
 }
 
@@ -28,6 +30,8 @@ export interface AggregateNode extends NodeBase {
   files: number;
   /** Its bytes by file kind, so the legend counts grouped items as what they are. */
   kinds?: Readonly<Partial<Record<Category, number>>>;
+  /** Its APFS clones that `size` leaves out, because another copy holds their blocks. */
+  clones?: number;
 }
 
 /** Why the scanner couldn't read a folder. */
@@ -73,6 +77,8 @@ export interface ScanSummary {
   entryErrors: number;
   /** iCloud items counted without downloading them. */
   cloudOnly: { files: number; bytes: number; folders: number };
+  /** Full clones counted once, at another copy of their group; `bytes` leaves their sizes out. */
+  clones: { files: number; bytes: number };
   elapsedMs: number;
   engine: ScanEngine;
 }

@@ -7,15 +7,23 @@ public struct ScanMemory: Codable, Sendable, Equatable {
     public let root: String
     public let date: Date
     public let sizes: [String: UInt64]
+    /// The scan result's version. Scans of version 4 count APFS clones once, so comparing one with an older scan
+    /// would report every folder of clones as shrinking. Nil in files kept before the version was recorded.
+    public let version: Int?
 
-    public init(root: String, date: Date, sizes: [String: UInt64]) { self.root = root; self.date = date; self.sizes = sizes }
+    public init(root: String, date: Date, sizes: [String: UInt64], version: Int? = DiskResult.version) {
+        self.root = root; self.date = date; self.sizes = sizes; self.version = version
+    }
 
     /// Every folder and file the scan's tree holds by its own path.
     public init(_ result: DiskResult, date: Date) {
         var sizes: [String: UInt64] = [:]
         for node in result.root.entries where node.isItem { sizes[node.path] = node.size }
-        self.init(root: result.root.path, date: date, sizes: sizes)
+        self.init(root: result.root.path, date: date, sizes: sizes, version: result.version)
     }
+
+    /// Whether this kept scan counted sizes the same way as `result`, so their differences are real changes.
+    public func comparable(to result: DiskResult) -> Bool { version == result.version && root == result.root.path }
 
     /// How much each item changed since this scan, largest change first, at most `limit` of them and none under
     /// `threshold` bytes either way. Items new since then count from zero; items gone count down to zero.

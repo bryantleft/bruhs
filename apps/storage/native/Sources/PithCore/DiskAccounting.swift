@@ -26,9 +26,10 @@ public struct DiskAccounting: Equatable, Sendable {
     /// Volumes in the container that aren't mounted, such as Recovery, so no scan can enter them.
     public let hiddenVolumes: UInt64
     /// Space the scanned volumes use that the walk didn't find: folders it couldn't read, local snapshots, and the
-    /// volumes' own bookkeeping. Nil when the walk found more than they use, as APFS clones count once per copy.
+    /// volumes' own bookkeeping. Nil when the walk found more than they use, as changed APFS clones count once per copy.
     public let notMeasured: UInt64?
-    /// What the walk found beyond the volumes' use: clones that share their blocks count once per copy.
+    /// What the walk found beyond the volumes' use. The scan counts a full clone's blocks once, but a clone changed
+    /// since it was made still shares some of them, and those count at every copy.
     public let overcounted: UInt64
     public let unreadableFolders: UInt64
     /// Local Time Machine snapshots on the disk; nil when Pith couldn't list them.

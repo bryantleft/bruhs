@@ -55,6 +55,12 @@ function parseKinds(value: unknown): Partial<Record<Category, number>> | null {
   return kinds;
 }
 
+/** A folder's or group's left-out clones: absent when it has none, a count otherwise, `false` when malformed. */
+function parseClones(value: unknown): { clones?: number } | false {
+  if (value === undefined) return {};
+  return isCount(value) ? { clones: value } : false;
+}
+
 function parseTreeNode(value: unknown): TreeNode | null {
   const base = parseEntry(value);
   if (!base || !isObject(value)) return null;
@@ -62,13 +68,14 @@ function parseTreeNode(value: unknown): TreeNode | null {
     case "file":
       return { ...base, kind: "file" };
     case "aggregate": {
-      if (!isCount(value.files)) return null;
+      const clones = parseClones(value.clones);
+      if (!isCount(value.files) || !clones) return null;
       if (value.kinds === undefined) {
-        return { ...base, kind: "aggregate", files: value.files };
+        return { ...base, kind: "aggregate", files: value.files, ...clones };
       }
       const kinds = parseKinds(value.kinds);
       return kinds
-        ? { ...base, kind: "aggregate", files: value.files, kinds }
+        ? { ...base, kind: "aggregate", files: value.files, kinds, ...clones }
         : null;
     }
     case "unreadable":
@@ -79,10 +86,12 @@ function parseTreeNode(value: unknown): TreeNode | null {
       return typeof value.sharesDisk === "boolean"
         ? { ...base, kind: "volume", sharesDisk: value.sharesDisk }
         : null;
-    case "dir":
-      return isCount(value.files)
-        ? parseDirChildren(base, value.files, value.children)
-        : null;
+    case "dir": {
+      const clones = parseClones(value.clones);
+      if (!isCount(value.files) || !clones) return null;
+      const dir = parseDirChildren(base, value.files, value.children);
+      return dir ? { ...dir, ...clones } : null;
+    }
     default:
       return null;
   }
@@ -119,6 +128,7 @@ function parseSummary(value: unknown): ScanSummary | null {
     cloudOnly,
     elapsedMs,
     engine,
+    clones,
   } = value;
   if (
     !isCount(dirs) ||
@@ -135,7 +145,10 @@ function parseSummary(value: unknown): ScanSummary | null {
     !isObject(cloudOnly) ||
     !isCount(cloudOnly.files) ||
     !isCount(cloudOnly.bytes) ||
-    !isCount(cloudOnly.folders)
+    !isCount(cloudOnly.folders) ||
+    !isObject(clones) ||
+    !isCount(clones.files) ||
+    !isCount(clones.bytes)
   ) {
     return null;
   }
@@ -157,6 +170,7 @@ function parseSummary(value: unknown): ScanSummary | null {
     },
     elapsedMs,
     engine,
+    clones: { files: clones.files, bytes: clones.bytes },
   };
 }
 

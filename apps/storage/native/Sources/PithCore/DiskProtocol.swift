@@ -31,12 +31,15 @@ public struct DiskNode: Codable, Sendable, Equatable {
     public let files: UInt64?
     /// An aggregate's bytes by file kind ("code", "image", …), so the map's legend counts grouped items as what they are.
     public let kinds: [String: UInt64]?
+    /// A folder's or aggregate's APFS clones that `size` leaves out: another copy of each holds the shared blocks, and
+    /// the scan counts them there. Nil when it has none.
+    public let clones: UInt64?
     public let children: [DiskNode]?
 
     public init(kind: Kind, name: String, path: String, size: UInt64, reason: Reason? = nil, sharesDisk: Bool? = nil, files: UInt64? = nil,
-                kinds: [String: UInt64]? = nil, children: [DiskNode]?) {
+                kinds: [String: UInt64]? = nil, clones: UInt64? = nil, children: [DiskNode]?) {
         self.kind = kind; self.name = name; self.path = path; self.size = size
-        self.reason = reason; self.sharesDisk = sharesDisk; self.files = files; self.kinds = kinds; self.children = children
+        self.reason = reason; self.sharesDisk = sharesDisk; self.files = files; self.kinds = kinds; self.clones = clones; self.children = children
     }
 
     public var entries: [DiskNode] { [self] + (children ?? []).flatMap(\.entries) }
@@ -47,12 +50,14 @@ public struct DiskNode: Codable, Sendable, Equatable {
     /// How many files this node stands for.
     public var fileCount: UInt64 { kind == .file ? 1 : files ?? 0 }
 
-    func with(size: UInt64, files: UInt64?, children: [DiskNode]?) -> DiskNode {
+    func with(size: UInt64, files: UInt64?, clones: UInt64? = nil, children: [DiskNode]?) -> DiskNode {
         // A shrunken group's kinds shrink in proportion: which kind the removed file was isn't known here.
         let scaled = kinds.map { kinds in
             self.size > 0 ? kinds.mapValues { UInt64(Double($0) * Double(size) / Double(self.size)) } : kinds
         }
-        return DiskNode(kind: kind, name: name, path: path, size: size, reason: reason, sharesDisk: sharesDisk, files: files, kinds: scaled, children: children)
+        let clones = (clones ?? self.clones).flatMap { $0 > 0 ? $0 : nil }
+        return DiskNode(kind: kind, name: name, path: path, size: size, reason: reason, sharesDisk: sharesDisk, files: files, kinds: scaled,
+                        clones: clones, children: children)
     }
 }
 
@@ -104,22 +109,33 @@ public struct DiskSummary: Codable, Sendable, Equatable {
     public let unreadable: Unreadable
     public let entryErrors: UInt64
     public let cloudOnly: CloudOnly
+    /// Full clones counted once, at another copy of their group.
+    public struct Clones: Codable, Sendable, Equatable {
+        public let files: UInt64
+        /// Their sizes, which `bytes` leaves out.
+        public let bytes: UInt64
+        public init(files: UInt64, bytes: UInt64) { self.files = files; self.bytes = bytes }
+    }
+
     public let elapsedMs: UInt64
     public let engine: String
+    public let clones: Clones?
 
-    public init(dirs: UInt64, files: UInt64, bytes: UInt64, errors: UInt64, unreadable: Unreadable, entryErrors: UInt64, cloudOnly: CloudOnly, elapsedMs: UInt64, engine: String) {
+    public init(dirs: UInt64, files: UInt64, bytes: UInt64, errors: UInt64, unreadable: Unreadable, entryErrors: UInt64, cloudOnly: CloudOnly, elapsedMs: UInt64, engine: String,
+                clones: Clones? = nil) {
         self.dirs = dirs; self.files = files; self.bytes = bytes; self.errors = errors; self.unreadable = unreadable
-        self.entryErrors = entryErrors; self.cloudOnly = cloudOnly; self.elapsedMs = elapsedMs; self.engine = engine
+        self.entryErrors = entryErrors; self.cloudOnly = cloudOnly; self.elapsedMs = elapsedMs; self.engine = engine; self.clones = clones
     }
 
     func with(bytes: UInt64, files: UInt64, errors: UInt64? = nil, unreadable: Unreadable? = nil) -> DiskSummary {
-        DiskSummary(dirs: dirs, files: files, bytes: bytes, errors: errors ?? self.errors, unreadable: unreadable ?? self.unreadable, entryErrors: entryErrors, cloudOnly: cloudOnly, elapsedMs: elapsedMs, engine: engine)
+        DiskSummary(dirs: dirs, files: files, bytes: bytes, errors: errors ?? self.errors, unreadable: unreadable ?? self.unreadable, entryErrors: entryErrors, cloudOnly: cloudOnly, elapsedMs: elapsedMs, engine: engine,
+                    clones: clones)
     }
 }
 
 public struct DiskResult: Codable, Sendable {
     /// `RESULT_VERSION` in scanner/src/output.rs.
-    public static let version = 3
+    public static let version = 4
     public let type: String
     public let version: Int
     public let root: DiskNode
@@ -191,15 +207,18 @@ public struct DiskResult: Codable, Sendable {
 
     private static func remove(_ path: String, from node: DiskNode) -> (DiskNode, removed: DiskNode)? {
         guard let children = node.children else { return nil }
+        let without = { (removed: DiskNode) in (node.clones ?? 0).saturatingSubtract(removed.clones ?? 0) }
         if let index = children.firstIndex(where: { $0.path == path }) {
             let removed = children[index]
             var rest = children; rest.remove(at: index)
-            return (node.with(size: node.size.saturatingSubtract(removed.size), files: node.files.map { $0.saturatingSubtract(removed.fileCount) }, children: rest), removed)
+            return (node.with(size: node.size.saturatingSubtract(removed.size), files: node.files.map { $0.saturatingSubtract(removed.fileCount) },
+                              clones: without(removed), children: rest), removed)
         }
         guard let index = children.firstIndex(where: { path.hasPrefix($0.path + "/") && $0.kind == .dir }),
               let (child, removed) = remove(path, from: children[index]) else { return nil }
         var updated = children; updated[index] = child
-        return (node.with(size: node.size.saturatingSubtract(removed.size), files: node.files.map { $0.saturatingSubtract(removed.fileCount) }, children: updated), removed)
+        return (node.with(size: node.size.saturatingSubtract(removed.size), files: node.files.map { $0.saturatingSubtract(removed.fileCount) },
+                          clones: without(removed), children: updated), removed)
     }
 
     /// Shrinks the folders above `path` and the aggregate holding it, for an item the tree folded away.
@@ -228,11 +247,12 @@ public struct DiskResult: Codable, Sendable {
         } else { return nil }
         let old = children[index]
         children[index] = DiskNode(kind: child.kind, name: old.name, path: child.path, size: child.size, reason: child.reason, sharesDisk: child.sharesDisk,
-                                   files: child.files, kinds: child.kinds, children: child.children)
+                                   files: child.files, kinds: child.kinds, clones: child.clones, children: child.children)
         children.sort { $0.size > $1.size }
         let size = node.size.saturatingSubtract(old.size) + child.size
         let files = node.files.map { $0.saturatingSubtract(old.fileCount) + child.fileCount }
-        return node.with(size: size, files: files, children: children)
+        let clones = (node.clones ?? 0).saturatingSubtract(old.clones ?? 0) + (child.clones ?? 0)
+        return node.with(size: size, files: files, clones: clones, children: children)
     }
 }
 
@@ -289,6 +309,33 @@ public struct DiskStreamDecoder {
             try result.validate()
             return .result(result)
         case "fatal": throw DiskFailure(tag.reason ?? "The scanner could not complete the scan.", isComplete: tag.reason != nil)
+        default: throw DiskFailure("Unexpected scanner event: \(tag.type)")
+        }
+    }
+}
+
+/// What deleting an item frees now (`Frees` in scanner/src/frees.rs): the bytes no clone, hard link or snapshot
+/// outside it shares. Moving it to the Trash frees them once the Trash is emptied.
+public struct DiskFrees: Codable, Sendable, Equatable {
+    public let bytes: UInt64
+    /// Bytes clones or hard links outside it share, which they keep.
+    public let shared: UInt64
+    /// Bytes local snapshots hold until they're gone.
+    public let snapshots: UInt64
+    public let files: UInt64
+    /// Folders inside it the scanner couldn't read.
+    public let unreadable: UInt64
+    public init(bytes: UInt64, shared: UInt64, snapshots: UInt64, files: UInt64, unreadable: UInt64) {
+        self.bytes = bytes; self.shared = shared; self.snapshots = snapshots; self.files = files; self.unreadable = unreadable
+    }
+
+    /// One line of the scanner's `frees` output: the measurement, or the failure it reported.
+    public static func decode(_ line: Data) throws -> DiskFrees {
+        struct Tag: Decodable { let type: String; let reason: String? }
+        let tag = try JSONDecoder().decode(Tag.self, from: line)
+        switch tag.type {
+        case "frees": return try JSONDecoder().decode(DiskFrees.self, from: line)
+        case "fatal": throw DiskFailure(tag.reason ?? "The scanner couldn’t measure what deleting it frees.", isComplete: tag.reason != nil)
         default: throw DiskFailure("Unexpected scanner event: \(tag.type)")
         }
     }

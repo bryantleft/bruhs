@@ -9,7 +9,7 @@ use crate::walk::UnreadableFolder;
 
 /// Version of the `result` line's shape. The client ignores cached snapshots written by
 /// a scanner with a different version. Bump it whenever `TreeNode` or `Result` changes.
-pub const RESULT_VERSION: u32 = 3;
+pub const RESULT_VERSION: u32 = 4;
 
 #[derive(Serialize)]
 pub struct Summary {
@@ -25,6 +25,7 @@ pub struct Summary {
     pub entry_errors: u64,
     #[serde(rename = "cloudOnly")]
     pub cloud_only: CloudOnly,
+    pub clones: Clones,
     #[serde(rename = "elapsedMs")]
     pub elapsed_ms: u128,
     pub engine: &'static str,
@@ -47,6 +48,13 @@ pub struct CloudOnly {
     pub bytes: u64,
     /// Folders whose contents macOS hasn't listed, so their files are unknown.
     pub folders: u64,
+}
+
+/// Full clones counted once, at another copy of their group, which the totals leave out.
+#[derive(Serialize)]
+pub struct Clones {
+    pub files: u64,
+    pub bytes: u64,
 }
 
 #[derive(Serialize)]

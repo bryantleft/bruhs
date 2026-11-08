@@ -12,20 +12,22 @@ const summary = {
   cloudOnly: { files: 0, bytes: 0, folders: 0 },
   elapsedMs: 1,
   engine: "bulk",
+  clones: { files: 2, bytes: 4096 },
 };
 
-/** A result line as storage-scanner writes it (scanner/src/output.rs, RESULT_VERSION 3). */
+/** A result line as storage-scanner writes it (scanner/src/output.rs, RESULT_VERSION 4). */
 const line: {
   root: { children: Record<string, unknown>[] } & Record<string, unknown>;
 } & Record<string, unknown> = {
   type: "result",
-  version: 3,
+  version: 4,
   root: {
     name: "",
     path: "/",
     size: 10,
     kind: "dir",
     files: 1,
+    clones: 4096,
     children: [
       {
         name: "Preboot",
@@ -70,8 +72,21 @@ describe("parseResultEvent", () => {
     assert.equal(result.summary.unreadable.protected, 1);
   });
 
+  test("keeps the clones a folder and the scan leave out", () => {
+    const result = parseResultEvent(line);
+    assert.ok(result);
+    assert.equal(result.root.clones, 4096);
+    assert.deepEqual(result.summary.clones, { files: 2, bytes: 4096 });
+    const noClones = structuredClone(line);
+    delete noClones.root.clones;
+    assert.equal(parseResultEvent(noClones)?.root.clones, undefined);
+    const badClones = structuredClone(line);
+    badClones.root.clones = -1;
+    assert.equal(parseResultEvent(badClones), null);
+  });
+
   test("refuses an older scanner's result and malformed nodes", () => {
-    assert.equal(parseResultEvent({ ...line, version: 2 }), null);
+    assert.equal(parseResultEvent({ ...line, version: 3 }), null);
     const badReason = structuredClone(line);
     badReason.root.children[2] = {
       ...badReason.root.children[2],

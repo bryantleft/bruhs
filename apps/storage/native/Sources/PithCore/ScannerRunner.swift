@@ -23,12 +23,14 @@ public actor ScannerRunner {
     // AppKit termination cannot wait for a task queued on the main actor.
     public nonisolated func cancelImmediately() { control.cancel() }
 
-    public func scan(binary: URL, root: URL, onProgress: @escaping @Sendable (DiskEvent) async -> Void) async throws -> DiskResult {
+    /// Scans `root`. `within` is the map it's a folder of, when a folder is scanned again: clone groups whose first
+    /// copy lies elsewhere on that map stay counted there.
+    public func scan(binary: URL, root: URL, within: URL? = nil, onProgress: @escaping @Sendable (DiskEvent) async -> Void) async throws -> DiskResult {
         guard active == nil else { throw DiskFailure("A scanner operation is already running.") }
         let process = Process()
         let stdout = Pipe(), stderr = Pipe()
         process.executableURL = binary
-        process.arguments = ["scan", "--root", root.path]
+        process.arguments = ["scan", "--root", root.path] + (within.map { ["--within", $0.path] } ?? [])
         process.standardOutput = stdout; process.standardError = stderr
         let (termination, exitStream) = Self.terminationWaiter(process)
         do { try control.run(process) } catch { exitStream.finish(); throw error }
@@ -75,6 +77,31 @@ public actor ScannerRunner {
                 if let failure = error as? DiskFailure, failure.isComplete { throw failure }
                 throw DiskFailure("\(error.localizedDescription) Exit code \(status). \(diagnostic)")
             }
+        } onCancel: {
+            if process.isRunning { process.terminate() }
+        }
+    }
+
+    /// What deleting `paths` frees now, measured by the scanner's `frees` command. It runs beside any scan, at utility
+    /// priority, and cancelling the task stops it.
+    public static func frees(binary: URL, paths: [String]) async throws -> DiskFrees {
+        let process = Process(), output = Pipe(), errors = Pipe()
+        process.executableURL = binary
+        process.arguments = ["frees"] + paths.flatMap { ["--path", $0] }
+        process.standardOutput = output; process.standardError = errors
+        process.qualityOfService = .utility
+        let (termination, exitStream) = terminationWaiter(process)
+        do { try process.run() } catch { exitStream.finish(); throw error }
+        let diagnostics = Task.detached { errorTail(errors.fileHandleForReading) }
+        return try await withTaskCancellationHandler {
+            let data = await Task.detached { output.fileHandleForReading.readDataToEndOfFile() }.value
+            let status = await termination.value
+            let tail = await diagnostics.value
+            try Task.checkCancellation()
+            guard let line = data.split(separator: 10).last else {
+                throw DiskFailure("The scanner exited with code \(status) without measuring. \(tail)")
+            }
+            return try DiskFrees.decode(Data(line))
         } onCancel: {
             if process.isRunning { process.terminate() }
         }

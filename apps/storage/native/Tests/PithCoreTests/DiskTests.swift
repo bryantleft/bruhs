@@ -15,7 +15,7 @@ final class DiskTests: XCTestCase {
 
     func testAScanOfAProtectedFolderSaysHowToFixIt() throws {
         let line = """
-        {"type":"result","version":3,"root":{"name":"Mail","path":"/Users/me/Library/Mail","size":0,"kind":"unreadable","reason":"protected"},"topFiles":[],"volumes":[],"unreadableFolders":[],"summary":{"dirs":0,"files":0,"bytes":0,"errors":1,"unreadable":{"protected":1,"denied":0,"other":0},"entryErrors":0,"cloudOnly":{"files":0,"bytes":0,"folders":0},"elapsedMs":1,"engine":"bulk"}}
+        {"type":"result","version":4,"root":{"name":"Mail","path":"/Users/me/Library/Mail","size":0,"kind":"unreadable","reason":"protected"},"topFiles":[],"volumes":[],"unreadableFolders":[],"summary":{"dirs":0,"files":0,"bytes":0,"errors":1,"unreadable":{"protected":1,"denied":0,"other":0},"entryErrors":0,"cloudOnly":{"files":0,"bytes":0,"folders":0},"elapsedMs":1,"engine":"bulk"}}
 
         """
         var decoder = DiskStreamDecoder()
@@ -28,7 +28,7 @@ final class DiskTests: XCTestCase {
 
     func testTheScannersNewNodesDecode() throws {
         let line = """
-        {"type":"result","version":3,"root":{"name":"","path":"/","size":10,"kind":"dir","files":1,"children":[{"name":"Preboot","path":"/System/Volumes/Preboot","size":8,"kind":"volume","sharesDisk":true},{"name":"x","path":"/x","size":2,"kind":"file"},{"name":"locked","path":"/locked","size":0,"kind":"unreadable","reason":"denied"}]},"topFiles":[],"volumes":[{"path":"/System/Volumes/Preboot","name":"Preboot","bytes":8,"sharesDisk":true}],"unreadableFolders":[{"path":"/locked","reason":"denied"}],"summary":{"dirs":1,"files":1,"bytes":10,"errors":1,"unreadable":{"protected":0,"denied":1,"other":0},"entryErrors":0,"cloudOnly":{"files":0,"bytes":0,"folders":0},"elapsedMs":1,"engine":"bulk"}}
+        {"type":"result","version":4,"root":{"name":"","path":"/","size":10,"kind":"dir","files":1,"children":[{"name":"Preboot","path":"/System/Volumes/Preboot","size":8,"kind":"volume","sharesDisk":true},{"name":"x","path":"/x","size":2,"kind":"file"},{"name":"locked","path":"/locked","size":0,"kind":"unreadable","reason":"denied"}]},"topFiles":[],"volumes":[{"path":"/System/Volumes/Preboot","name":"Preboot","bytes":8,"sharesDisk":true}],"unreadableFolders":[{"path":"/locked","reason":"denied"}],"summary":{"dirs":1,"files":1,"bytes":10,"errors":1,"unreadable":{"protected":0,"denied":1,"other":0},"entryErrors":0,"cloudOnly":{"files":0,"bytes":0,"folders":0},"elapsedMs":1,"engine":"bulk"}}
 
         """
         var decoder = DiskStreamDecoder()

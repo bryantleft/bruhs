@@ -46,21 +46,35 @@ impl UnreadableReason {
     }
 }
 
+/// A file that's a full APFS clone: it shares every block with the other files of its group, which macOS
+/// identifies by a clone ID on the file's device. The scan counts the group's bytes once, at the copy made first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CloneTag {
+    pub device: u64,
+    pub id: u64,
+    pub inode: u64,
+}
+
 /// A single large file worth showing individually in the treemap / largest-files list.
 #[derive(Clone, Serialize)]
 pub struct FileEntry {
     pub name: String,
     pub path: String,
-    /// Allocated (on-disk) bytes.
+    /// Allocated (on-disk) bytes; 0 for a clone whose bytes another copy holds.
     pub size: u64,
+    /// Set for a full clone, so the scan can drop it from the lists if another copy turns out to hold its bytes.
+    #[serde(skip)]
+    pub clone: Option<CloneTag>,
 }
 
 /// A directory in the scanned tree.
 pub struct DirNode {
+    /// Unique within a scan, so clone copies can be settled against their folder after the walk.
+    pub id: u32,
     pub name: String,
     pub path: String,
     pub status: DirStatus,
-    /// Total allocated bytes for this directory and everything beneath it.
+    /// Total allocated bytes for this directory and everything beneath it, each clone group counted once.
     pub size: u64,
     /// Allocated bytes of files directly in this directory (not subdirectories).
     pub own_files_size: u64,
@@ -68,6 +82,10 @@ pub struct DirNode {
     pub file_count: u64,
     /// Bytes by file kind (recursive), so grouped small items can still say what they are.
     pub kinds: KindBytes,
+    /// Bytes of clones in it (recursive) that `size` leaves out, because another copy holds them.
+    pub clones: u64,
+    /// The same for the files directly in it.
+    pub own_clones: u64,
     pub dirs: Vec<DirNode>,
     /// Largest direct files (capped at TOP_FILES_PER_DIR), descending by size.
     pub top_files: Vec<FileEntry>,
@@ -76,6 +94,7 @@ pub struct DirNode {
 impl DirNode {
     pub fn new(name: String, path: String) -> Self {
         DirNode {
+            id: 0,
             name,
             path,
             status: DirStatus::Listed,
@@ -83,31 +102,29 @@ impl DirNode {
             own_files_size: 0,
             file_count: 0,
             kinds: KindBytes::default(),
+            clones: 0,
+            own_clones: 0,
             dirs: Vec::new(),
             top_files: Vec::new(),
         }
     }
 
-    /// Record a direct file: add to aggregates and keep it if it's among the largest.
-    pub fn add_file(&mut self, name: &str, path: &str, size: u64) {
+    /// Record a direct file: add to aggregates and keep it if it's among the largest. `size` is 0 for a clone
+    /// whose bytes another copy holds; `clone_bytes` is then its own size, which `clones` counts.
+    pub fn add_file(&mut self, name: &str, path: &str, size: u64, clone: Option<CloneTag>, clone_bytes: u64) {
         self.own_files_size += size;
         self.size += size;
         self.file_count += 1;
         self.kinds.0[kind_of(name)] += size;
+        self.clones += clone_bytes;
+        self.own_clones += clone_bytes;
+        let entry = || FileEntry { name: name.to_string(), path: path.to_string(), size, clone };
         // Keep only the largest TOP_FILES_PER_DIR files.
         if self.top_files.len() < TOP_FILES_PER_DIR {
-            self.top_files.push(FileEntry {
-                name: name.to_string(),
-                path: path.to_string(),
-                size,
-            });
+            self.top_files.push(entry());
             self.top_files.sort_unstable_by(|a, b| b.size.cmp(&a.size));
         } else if size > self.top_files[TOP_FILES_PER_DIR - 1].size {
-            self.top_files[TOP_FILES_PER_DIR - 1] = FileEntry {
-                name: name.to_string(),
-                path: path.to_string(),
-                size,
-            };
+            self.top_files[TOP_FILES_PER_DIR - 1] = entry();
             self.top_files.sort_unstable_by(|a, b| b.size.cmp(&a.size));
         }
     }
@@ -117,6 +134,7 @@ impl DirNode {
         self.size += child.size;
         self.file_count += child.file_count;
         self.kinds.add(&child.kinds);
+        self.clones += child.clones;
         self.dirs.push(child);
     }
 }
@@ -155,14 +173,32 @@ pub struct TreeNode {
     /// A group of smaller items' bytes by file kind, so the map's legend counts them as what they are.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kinds: Option<KindBytes>,
+    /// A folder's or group's clones that `size` leaves out because another copy holds their bytes; absent when none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub clones: Option<u64>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<TreeNode>,
 }
 
 impl TreeNode {
     fn leaf(name: String, path: String, size: u64, kind: NodeKind) -> Self {
-        TreeNode { name, path, size, kind, reason: None, shares_disk: None, files: None, kinds: None, children: Vec::new() }
+        TreeNode {
+            name,
+            path,
+            size,
+            kind,
+            reason: None,
+            shares_disk: None,
+            files: None,
+            kinds: None,
+            clones: None,
+            children: Vec::new(),
+        }
     }
+}
+
+fn some_bytes(bytes: u64) -> Option<u64> {
+    (bytes > 0).then_some(bytes)
 }
 
 /// Threshold policy controlling how aggressively small nodes are pruned for the payload.
@@ -188,6 +224,7 @@ impl DirNode {
     /// Convert the in-memory tree into the pruned, serializable treemap tree.
     pub fn into_tree(self, cfg: &PruneConfig) -> TreeNode {
         let DirNode {
+            id: _,
             name,
             path,
             status,
@@ -195,6 +232,8 @@ impl DirNode {
             own_files_size,
             file_count,
             kinds,
+            clones,
+            own_clones,
             dirs,
             top_files,
         } = self;
@@ -210,6 +249,8 @@ impl DirNode {
 
         let mut children: Vec<TreeNode> = Vec::new();
         let mut folded_dirs_bytes: u64 = 0;
+        // The group's left-out clones: those of the files directly here and of the folders folded into it.
+        let mut folded_clones = own_clones;
         // Files in the aggregate: those of folded folders and the direct files not shown on their own.
         let mut folded_files: u64 = file_count - dirs.iter().map(|d| d.file_count).sum::<u64>();
         // What the aggregate holds by kind: everything here, less what's shown on its own.
@@ -234,6 +275,7 @@ impl DirNode {
                 DirStatus::Listed => {
                     folded_dirs_bytes += d.size;
                     folded_files += d.file_count;
+                    folded_clones += d.clones;
                 }
             }
         }
@@ -251,13 +293,24 @@ impl DirNode {
 
         let other_files = own_files_size.saturating_sub(shown_files_bytes);
         let other = other_files + folded_dirs_bytes;
-        if other > 0 {
+        // A group that holds only left-out clones has no size, but it still holds files the map would otherwise lose.
+        if other > 0 || folded_files > 0 {
             let aggregate = TreeNode::leaf("(smaller items)".to_string(), format!("{path}/__other__"), other, NodeKind::Aggregate);
-            children.push(TreeNode { files: Some(folded_files), kinds: Some(folded_kinds), ..aggregate });
+            children.push(TreeNode {
+                files: Some(folded_files),
+                kinds: Some(folded_kinds),
+                clones: some_bytes(folded_clones),
+                ..aggregate
+            });
         }
 
         children.sort_unstable_by(|a, b| b.size.cmp(&a.size));
 
-        TreeNode { children, files: Some(file_count), ..TreeNode::leaf(name, path, size, NodeKind::Dir) }
+        TreeNode {
+            children,
+            files: Some(file_count),
+            clones: some_bytes(clones),
+            ..TreeNode::leaf(name, path, size, NodeKind::Dir)
+        }
     }
 }

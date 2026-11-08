@@ -48,15 +48,18 @@ struct DiskVolumeChoice: Identifiable, Equatable {
     private(set) var selectedItem: DiskNode?
     /// What moving the selected item to the Trash would do, or why it can't go.
     private(set) var selectedPlan: Result<TrashPlan, DiskFailure>?
-    /// For a selected file: the bytes deleting it would free now, which clones and snapshots can make less than its size.
-    private(set) var selectedFreesNow: UInt64?
+    /// What deleting the selected item frees now, once the scanner has measured it: clones, hard links and snapshots
+    /// outside it can keep part of its size.
+    private(set) var selectedFrees: DiskFrees?
+    private var freesTask: Task<Void, Never>?
     /// A move to the Trash waiting for the user to confirm what it does to a synced item.
     var confirming: TrashPlan?
     /// Where the scanned volume's space went, for a scan of a whole volume.
     private(set) var accounting: DiskAccounting?
     /// Shows items in Quick Look; the app delegate owns the panel.
     var showQuickLook: (([URL]) -> Void)?
-    /// Keep each scan's folder sizes, so the next scan of the same folder shows what grew. On unless the user turns it off.
+    /// Keep each scan's folder sizes, so the next scan of the same folder shows what grew, and the last map, so Pith opens
+    /// on it at the next launch. On unless the user turns it off.
     var remembersScans = UserDefaults.standard.object(forKey: "remembersScans") as? Bool ?? true {
         didSet {
             UserDefaults.standard.set(remembersScans, forKey: "remembersScans")
@@ -66,6 +69,16 @@ struct DiskVolumeChoice: Identifiable, Equatable {
     /// How much items changed since the last scan of this folder, and when that scan was.
     private(set) var growth: [String: Int64] = [:]
     private(set) var growthSince: Date?
+    /// Folders FSEvents says changed since the map's scan began.
+    private(set) var changes = DiskChanges()
+    private var watcher: DiskWatcher?
+    /// FSEvents' position and the volume's identity when the map's scan began, saved with it.
+    private var scanStart: (since: UInt64, volume: String?)?
+    /// Saves the map for the next launch. The smoke test turns it off, so its fixture never replaces the user's scan.
+    var keepsScans = true
+    private var restoreAttempted = false
+    /// Saves run one at a time, so an older map never lands after a newer one.
+    private static let saving = DispatchQueue(label: "app.bruhs.pith.saved-scans", qos: .utility)
 
     /// ~/Library/Application Support/Pith/Scans.
     static var scansFolder: URL? {
@@ -157,6 +170,8 @@ struct DiskVolumeChoice: Identifiable, Equatable {
         let root = root.standardizedFileURL.resolvingSymlinksInPath()
         let shown = scope
         scope = root.path
+        // Watching from before the scan begins catches what changes while it runs.
+        let start = (since: DiskWatcher.currentEventID, volume: DiskWatcher.volumeUUID(for: root.path))
         operation = Task {
             defer { if generation == id { isScanning = false } }
             await runner.cancel()
@@ -170,6 +185,10 @@ struct DiskVolumeChoice: Identifiable, Equatable {
                 compareWithLastScan(value)
                 revision = UUID()
                 refreshAccounting()
+                changes = DiskChanges()
+                scanStart = start
+                watch(root.path, since: start.since)
+                saveScan()
             } catch {
                 guard generation == id else { return }
                 // The map still shows the earlier scan, so the scope goes back to it.
@@ -181,26 +200,52 @@ struct DiskVolumeChoice: Identifiable, Equatable {
     }
 
     /// Scans one folder of the map again and puts the result in its place, rather than the whole scan.
-    func rescan(_ folder: String) {
-        guard let result, !isTrashing, !isScanning, result.root.path == folder || result.item(at: folder)?.kind == .dir else { return }
-        if folder == result.root.path { scan(URL(fileURLWithPath: folder)); return }
+    func rescan(_ folder: String) { rescan([folder]) }
+
+    /// Catches the map up with what changed since its scan: scans the changed folders again, or the whole folder when
+    /// FSEvents lost track or too many changed.
+    func refresh() {
+        guard let result, !changes.isEmpty else { return }
+        if let targets = changes.refreshTargets(in: result) { rescan(targets) } else { scan(URL(fileURLWithPath: result.root.path)) }
+    }
+
+    /// Scans folders of the map again, one after another, and puts each result in its place.
+    private func rescan(_ folders: [String]) {
+        guard let result, !isTrashing, !isScanning else { return }
+        if folders.contains(result.root.path) { scan(URL(fileURLWithPath: result.root.path)); return }
+        let folders = folders.filter { result.item(at: $0)?.kind == .dir }
+        guard !folders.isEmpty else { return }
         operation?.cancel()
         let id = UUID(); generation = id
-        problem = nil; progress = nil; isScanning = true; rescanning = folder
+        problem = nil; progress = nil; isScanning = true
         operation = Task {
             defer { if generation == id { isScanning = false; rescanning = nil } }
             await runner.cancel()
-            do {
-                let fresh = try await runner.scan(binary: binary, root: URL(fileURLWithPath: folder)) { [weak self] event in
-                    await self?.record(event, generation: id)
+            for folder in folders {
+                guard !Task.isCancelled, generation == id else { return }
+                rescanning = folder; progress = nil
+                // Cleared before the scan, so a change while it runs marks the folder again; a failed scan puts them back.
+                let earlier = changes
+                changes.clear(inside: folder)
+                do {
+                    let map = URL(fileURLWithPath: result.root.path)
+                    let fresh = try await runner.scan(binary: binary, root: URL(fileURLWithPath: folder), within: map) { [weak self] event in
+                        await self?.record(event, generation: id)
+                    }
+                    guard !Task.isCancelled, generation == id, let current = self.result, let merged = current.replacing(folder, with: fresh) else {
+                        changes.merge(earlier)
+                        return
+                    }
+                    self.result = merged; edited = true; trashed = nil; revision = UUID()
+                    select(selected)
+                } catch {
+                    changes.merge(earlier)
+                    guard generation == id, !Task.isCancelled else { return }
+                    problem = Self.problem(error)
+                    return
                 }
-                guard !Task.isCancelled, generation == id, let current = self.result, let merged = current.replacing(folder, with: fresh) else { return }
-                self.result = merged; edited = true; trashed = nil; revision = UUID()
-                select(selected)
-            } catch {
-                guard generation == id, !Task.isCancelled else { return }
-                problem = Self.problem(error)
             }
+            saveScan()
         }
     }
 
@@ -219,11 +264,31 @@ struct DiskVolumeChoice: Identifiable, Equatable {
 
     /// Selects a real item from the current scan; anything else clears the selection.
     func select(_ path: String?) {
-        guard let path, let item = result?.item(at: path) else { selected = nil; selectedItem = nil; selectedPlan = nil; selectedFreesNow = nil; return }
+        freesTask?.cancel()
+        selectedFrees = nil
+        guard let path, let item = result?.item(at: path) else { selected = nil; selectedItem = nil; selectedPlan = nil; return }
         selected = path
         selectedItem = item
         selectedPlan = trashPlan(path)
-        selectedFreesNow = item.kind == .file ? ProcessDetails.freesNow(path) : nil
+        measureFrees(path)
+    }
+
+    /// Asks the scanner what deleting `path` frees, after a short pause so arrowing across the map doesn't start a
+    /// walk for every item passed. A new selection cancels it.
+    private func measureFrees(_ path: String) {
+        let binary = binary
+        freesTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            do {
+                let frees = try await ScannerRunner.frees(binary: binary, paths: [path])
+                guard !Task.isCancelled, let self, self.selected == path else { return }
+                self.selectedFrees = frees
+            } catch {
+                guard !Task.isCancelled else { return }
+                NSLog("Pith: couldn't measure what deleting \(path) frees: \(error.localizedDescription)")
+            }
+        }
     }
 
     /// What moving `path` to the Trash would do, or why it can't go.
@@ -261,6 +326,7 @@ struct DiskVolumeChoice: Identifiable, Equatable {
             }
             trashed = (trashedURL as URL?).map { TrashedItem(name: plan.name, size: plan.size, original: plan.target, trashed: $0, previous: result) }
             edited = true; revision = UUID()
+            saveScan()
             if trashed != nil {
                 undoManager?.registerUndo(withTarget: self) { model in MainActor.assumeIsolated { model.undoTrash() } }
                 undoManager?.setActionName("Move to Trash")
@@ -277,6 +343,7 @@ struct DiskVolumeChoice: Identifiable, Equatable {
             try FileManager.default.moveItem(at: item.trashed, to: item.original)
             result = item.previous; trashed = nil; revision = UUID()
             select(item.original.path)
+            saveScan()
         } catch {
             problem = DiskProblem(message: "Pith couldn’t put \(item.name) back. Open the Trash in Finder and drag it out instead.")
             trashed = nil
@@ -302,7 +369,7 @@ struct DiskVolumeChoice: Identifiable, Equatable {
         growth = [:]; growthSince = nil
         guard remembersScans, let folder = Self.scansFolder, let date = scannedAt else { return }
         let file = ScanMemory.file(for: value.root.path, in: folder)
-        if let data = try? Data(contentsOf: file), let last = try? JSONDecoder().decode(ScanMemory.self, from: data), last.root == value.root.path {
+        if let data = try? Data(contentsOf: file), let last = try? JSONDecoder().decode(ScanMemory.self, from: data), last.comparable(to: value) {
             growth = last.changes(to: value)
             growthSince = last.date
         }
@@ -317,10 +384,63 @@ struct DiskVolumeChoice: Identifiable, Equatable {
         }
     }
 
-    /// Deletes every kept scan.
+    /// Deletes every kept scan: folder sizes and saved maps.
     func forgetScans() {
         growth = [:]; growthSince = nil; revision = UUID()
-        if let folder = Self.scansFolder { try? FileManager.default.removeItem(at: folder) }
+        UserDefaults.standard.removeObject(forKey: "lastScanRoot")
+        guard let folder = Self.scansFolder else { return }
+        // On the save queue, so a save already queued can't put a map back after this.
+        Self.saving.async { try? FileManager.default.removeItem(at: folder) }
+    }
+
+    /// Follows FSEvents for the map's folder from `since`, noting which folders change.
+    private func watch(_ root: String, since: UInt64) {
+        watcher?.stop()
+        watcher = DiskWatcher(root: root, since: since) { [weak self] events in
+            guard let self, self.result?.root.path == root else { return }
+            for event in events { self.changes.note(event.path, flags: event.flags, root: root) }
+        }
+    }
+
+    /// Keeps the map for the next launch, with FSEvents' position when its scan began.
+    private func saveScan() {
+        guard keepsScans, remembersScans, let result, let scannedAt, let start = scanStart, let folder = Self.scansFolder else { return }
+        let saved = SavedScan(result: result, date: scannedAt, since: start.since, volume: start.volume, edited: edited)
+        UserDefaults.standard.set(result.root.path, forKey: "lastScanRoot")
+        Self.saving.async {
+            do {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                try JSONEncoder().encode(saved).write(to: SavedScan.file(for: saved.result.root.path, in: folder), options: [.atomic])
+            } catch {
+                NSLog("Pith: couldn't keep the scan of \(saved.result.root.path) for next time: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Opens on the map saved at an earlier launch, if there is one, and asks FSEvents what changed since its scan began.
+    func restoreLastScan() {
+        guard !restoreAttempted else { return }
+        restoreAttempted = true
+        guard keepsScans, remembersScans, result == nil, !isScanning, let folder = Self.scansFolder,
+              let root = UserDefaults.standard.string(forKey: "lastScanRoot") else { return }
+        let file = SavedScan.file(for: root, in: folder)
+        Task {
+            let saved = await Task.detached(priority: .userInitiated) { () -> SavedScan? in
+                guard let data = try? Data(contentsOf: file) else { return nil }
+                return try? JSONDecoder().decode(SavedScan.self, from: data)
+            }.value
+            // A scan that started meanwhile wins, and a saved map from another scanner version would count differently.
+            guard let saved, saved.result.version == DiskResult.version, saved.result.root.path == root,
+                  self.result == nil, !self.isScanning, FileManager.default.fileExists(atPath: root) else { return }
+            result = saved.result; scannedAt = saved.date; edited = saved.edited; scope = root
+            scanStart = (saved.since, saved.volume)
+            changes = DiskChanges()
+            // Event IDs describe a volume's history only while it's the same volume.
+            if saved.volume == nil || saved.volume != DiskWatcher.volumeUUID(for: root) { changes.markEverything() }
+            watch(root, since: saved.since)
+            revision = UUID()
+            refreshAccounting()
+        }
     }
 
     /// Works out where the space went after a scan of a whole volume: what's on hidden volumes, what the walk

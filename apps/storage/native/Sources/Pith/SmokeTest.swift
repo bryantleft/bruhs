@@ -7,6 +7,8 @@ extension AppDelegate {
     /// No Trash operation or system setting is changed by this diagnostic.
     func smokeTest(root: URL, report: URL) async {
         var checks: [String: Bool] = [:]
+        // The fixture's map must never replace the user's saved scan.
+        disk.keepsScans = false
         checks["native_fonts_registered"] = BruhsFonts.isAvailable
         // The fallback symbol is a template image too, so the SVG itself has to decode.
         let glyph = Bundle.main.url(forResource: "StatusGlyph", withExtension: "svg").flatMap(NSImage.init(contentsOf:))
@@ -94,6 +96,19 @@ extension AppDelegate {
             if let problem = disk.problem { throw DiskFailure(problem.message) }
             checks["native_scan"] = disk.result?.root.path == root.resolvingSymlinksInPath().path
             checks.merge(try await inspectDisk(), uniquingKeysWith: { _, new in new })
+            // FSEvents marks a folder another process changes, and Refresh catches the map up.
+            let changed = root.resolvingSymlinksInPath().appendingPathComponent("sub")
+            let added = changed.appendingPathComponent("pith-smoke-\(UUID().uuidString).txt")
+            defer { try? FileManager.default.removeItem(at: added) }
+            let touch = Process()
+            touch.executableURL = URL(fileURLWithPath: "/usr/bin/touch")
+            touch.arguments = [added.path]
+            try touch.run()
+            touch.waitUntilExit()
+            checks["changes_noticed"] = await eventually { self.disk.changes.touches(changed.path) }
+            disk.refresh()
+            try await waitUntil("the refresh to finish") { !self.disk.isScanning }
+            checks["refresh_catches_up"] = disk.changes.isEmpty && disk.problem == nil
             // Leaving the Disk tab keeps the map, so its open folder survives; closing the window frees WebKit.
             // An identity, not a reference: holding the view here would keep it alive past the window's close.
             let shown = webView.map(ObjectIdentifier.init)
@@ -144,12 +159,14 @@ extension AppDelegate {
         _ = try await web.callAsyncJavaScript("document.querySelector('aside button')?.click()", in: nil, contentWorld: .page)
         try await Task.sleep(for: .milliseconds(400))
         let selection = disk.selected != nil
+        // The bundled scanner measures what deleting the selection frees, beside the scan's own runner.
+        let frees = await eventually { self.disk.selectedFrees != nil }
         let after = try await web.callAsyncJavaScript(mapHeight, in: nil, contentWorld: .page) as? Double
         print("map height before selection=\(before ?? -1) after=\(after ?? -1)")
         _ = try await web.callAsyncJavaScript("window.location.href = 'https://example.com/'", in: nil, contentWorld: .page)
         try await Task.sleep(for: .milliseconds(200))
         return ["treemap_rendered": rendered, "bundled_fonts": fonts, "accessible_map": labels,
-            "selection_bridge": selection, "map_keeps_size_on_select": before != nil && before == after,
+            "selection_bridge": selection, "selection_frees_measured": frees, "map_keeps_size_on_select": before != nil && before == after,
             "remote_navigation_blocked": web.url?.scheme == "pith"]
     }
 

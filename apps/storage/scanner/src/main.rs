@@ -1,11 +1,13 @@
 //! storage-scanner — fast macOS disk-usage scanner for the Storage app.
 //!
 //! Usage:
-//!   storage-scanner scan --root <path> [--engine bulk|std]
+//!   storage-scanner scan --root <path> [--within <map root>] [--engine bulk|std]
 //!   storage-scanner trash --path <path>
+//!   storage-scanner frees --path <path> [--path <path>…]
 //!
 //! `scan` streams NDJSON: repeated `{"type":"progress",...}` lines, then one
 //! `{"type":"result",...}` line with the pruned treemap tree, largest files, and a summary.
+//! `frees` prints one `{"type":"frees",...}` line: what deleting the paths would free now.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,7 +15,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use storage_scanner::model::PruneConfig;
-use storage_scanner::output::{self, CloudOnly, Summary, Unreadable};
+use storage_scanner::frees;
+use storage_scanner::output::{self, Clones, CloudOnly, Summary, Unreadable};
 use storage_scanner::trash;
 use storage_scanner::walk::{self, Engine, Scanner};
 
@@ -22,8 +25,9 @@ fn main() {
     match args.first().map(String::as_str) {
         Some("scan") => cmd_scan(&args[1..]),
         Some("trash") => cmd_trash(&args[1..]),
+        Some("frees") => cmd_frees(&args[1..]),
         _ => {
-            eprintln!("usage: storage-scanner <scan|trash> [options]");
+            eprintln!("usage: storage-scanner <scan|trash|frees> [options]");
             std::process::exit(2);
         }
     }
@@ -44,6 +48,19 @@ fn cmd_trash(args: &[String]) {
             std::process::exit(2);
         }
     }
+}
+
+fn cmd_frees(args: &[String]) {
+    let paths: Vec<String> = args.windows(2).filter(|pair| pair[0] == "--path").map(|pair| pair[1].clone()).collect();
+    if paths.is_empty() {
+        eprintln!("frees: --path <path> required");
+        std::process::exit(2);
+    }
+    if let Err(reason) = stop_cloud_downloads() {
+        println!("{}", serde_json::json!({ "type": "fatal", "reason": reason }));
+        std::process::exit(1);
+    }
+    frees::print(&paths);
 }
 
 fn cmd_scan(args: &[String]) {
@@ -76,8 +93,10 @@ fn cmd_scan(args: &[String]) {
     let progress = walk::spawn_progress(scanner.clone(), done.clone());
 
     let start = Instant::now();
+    // A folder scanned again inside a larger map: clone groups whose first copy lies elsewhere on it are counted there.
+    let within = flag(args, "--within").map(Path::new);
     // Walk on the rayon pool. Scanner is shared immutably; interior mutability handles state.
-    let tree = scanner.walk(root_path, root_name);
+    let tree = scanner.walk_within(root_path, root_name, within);
     done.store(true, Ordering::Relaxed);
     let _ = progress.join();
 
@@ -98,6 +117,7 @@ fn cmd_scan(args: &[String]) {
             bytes: load(&scanner.cloud.bytes),
             folders: load(&scanner.cloud.folders),
         },
+        clones: Clones { files: load(&scanner.clones.files), bytes: load(&scanner.clones.bytes) },
         elapsed_ms: start.elapsed().as_millis(),
         engine: engine_name,
     };

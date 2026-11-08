@@ -71,17 +71,4 @@ public enum ProcessDetails {
             return summary.isEmpty ? nil : summary
         }
     }
-
-    /// Bytes deleting the file would free now: its blocks that no clone or snapshot shares. Nil when the file
-    /// system doesn't say, as on a disk that isn't APFS.
-    public static func freesNow(_ path: String) -> UInt64? {
-        var list = attrlist()
-        list.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
-        list.forkattr = attrgroup_t(ATTR_CMNEXT_PRIVATESIZE)
-        var buffer = (UInt32(0), UInt32(0), UInt32(0), UInt32(0))
-        let status = withUnsafeMutableBytes(of: &buffer) { getattrlist(path, &list, $0.baseAddress, $0.count, UInt32(FSOPT_ATTR_CMN_EXTENDED | FSOPT_NOFOLLOW)) }
-        guard status == 0, buffer.0 >= 12 else { return nil }
-        let size = UInt64(buffer.1) | UInt64(buffer.2) << 32
-        return Int64(bitPattern: size) >= 0 ? size : nil
-    }
 }

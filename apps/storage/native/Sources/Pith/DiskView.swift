@@ -56,7 +56,10 @@ struct DiskView: View {
                 }
             }
         }
-        .onAppear { model.refreshChoices() }
+        .onAppear {
+            model.refreshChoices()
+            model.restoreLastScan()
+        }
         .alert(model.confirming.map { "Move “\($0.name)” to the Trash?" } ?? "", isPresented: Binding(get: { model.confirming != nil }, set: { if !$0 { model.confirming = nil } })) {
             Button("Cancel", role: .cancel) { model.confirming = nil }
             Button("Move to Trash", role: .destructive) {
@@ -113,6 +116,21 @@ private struct DiskControlBar: View {
                     case nil:
                         EmptyView()
                     }
+                    if model.result != nil, !model.isScanning, !model.changes.isEmpty {
+                        let count = model.changes.count
+                        Text(model.changes.everything || count == 0 ? "Folders changed since then." : "\(count.formatted()) \(count == 1 ? "folder" : "folders") changed since then.")
+                            .font(BruhsType.note)
+                            .foregroundStyle(BruhsColor.textSecondary)
+                            .lineLimit(1)
+                        Button("Refresh") { model.refresh() }
+                            .buttonStyle(.link)
+                            .font(BruhsType.note)
+                            .foregroundStyle(BruhsColor.accent)
+                            .disabled(model.isTrashing)
+                            .help(model.changes.everything
+                                  ? "macOS lost track of some changes, so this scans the whole folder again."
+                                  : "Scan the folders that changed again, and put them in their places on the map.")
+                    }
                     if let accounting = model.accounting, !model.isScanning {
                         Button("Where the space is") { showsAccounting.toggle() }
                             .buttonStyle(.link)
@@ -164,7 +182,10 @@ private struct DiskAccountingView: View {
                 row("Not measured", bytes(notMeasured), note: notMeasuredNote)
             }
             if accounting.overcounted > 0 {
-                row("Counted twice", bytes(accounting.overcounted), note: "Copies that share their space on APFS count once per copy on the map.")
+                row("Counted twice", bytes(accounting.overcounted), note: "Clones changed since they were made still share some blocks, and the map counts those at every copy.")
+            }
+            if let clones = result?.summary.clones, clones.bytes > 0 {
+                row("Clones counted once", bytes(clones.bytes), note: "\(clones.files.formatted()) \(clones.files == 1 ? "file is a clone" : "files are clones") of another file, sharing all its blocks. The map counts that space at the copy made first.")
             }
             if let purgeable = accounting.purgeable, purgeable > 0 {
                 row("Purgeable", bytes(purgeable), note: "Caches and snapshots macOS can remove when it needs room. They count as used until it does.")
@@ -397,34 +418,83 @@ private struct DiskSelectionBar: View {
         return false
     }
 
+    private var pathText: some View {
+        Text(path)
+            .font(BruhsType.dataSmall)
+            .foregroundStyle(BruhsColor.text)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .textSelection(.enabled)
+            .help(path)
+    }
+
+    private func figures(files: Bool, clones: Bool) -> some View {
+        HStack(spacing: 10) {
+            LabeledFigure(label: "Size", value: bytes(item.size))
+            if files, item.kind == .dir { LabeledFigure(label: "Files", value: monaspaced(item.fileCount.formatted())) }
+            if clones, let shared = item.clones, shared >= 1_000_000 {
+                LabeledFigure(label: "Clones", value: bytes(shared))
+                    .help("It also holds \(bytes(shared)) of APFS clones. Each shares its blocks with another copy, which the map counts instead, so the size leaves them out.")
+            }
+            // Clones, hard links and snapshots outside it keep the blocks they share, so deleting it can free less.
+            if isSelection, let frees = model.selectedFrees, frees.bytes + 1_000_000 < item.size {
+                LabeledFigure(label: "Frees now", value: bytes(frees.bytes))
+                    .help(Self.freesHelp(frees))
+            }
+        }
+        .fixedSize()
+    }
+
+    /// Why deleting it frees less than its size, in sentences.
+    static func freesHelp(_ frees: DiskFrees) -> String {
+        var sentences = ["Deleting it frees \(bytes(frees.bytes)) now. Moving it to the Trash frees that once you empty the Trash."]
+        if frees.shared > 0 {
+            sentences.append("\(bytes(frees.shared)) of it is shared with clones or hard links outside it, which keep those blocks.")
+        }
+        if frees.snapshots > 0 {
+            sentences.append("\(bytes(frees.snapshots)) stays in local snapshots until macOS deletes them.")
+        }
+        if frees.unreadable > 0 {
+            sentences.append("Pith couldn’t read \(frees.unreadable.formatted()) \(frees.unreadable == 1 ? "folder" : "folders") inside, so they aren’t counted.")
+        }
+        return sentences.joined(separator: " ")
+    }
+
     var body: some View {
         HStack(spacing: 12) {
-            Text(path)
-                .font(BruhsType.dataSmall)
-                .foregroundStyle(BruhsColor.text)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
-                .help(path)
-            HStack(spacing: 10) {
-                LabeledFigure(label: "Size", value: bytes(item.size))
-                if item.kind == .dir { LabeledFigure(label: "Files", value: monaspaced(item.fileCount.formatted())) }
-                // A copy that shares its blocks with another (an APFS clone) or with a snapshot frees less than its size.
-                if isSelection, let frees = model.selectedFreesNow, frees + 1_000_000 < item.size {
-                    LabeledFigure(label: "Frees now", value: bytes(frees))
-                        .help("Deleting it frees \(bytes(frees)) now: the rest of its \(bytes(item.size)) is shared with copies or snapshots.")
-                }
+            // A short path shows whole; a long one truncates in its middle at a third of a narrow window, so the
+            // figures keep their room.
+            ViewThatFits(in: .horizontal) {
+                pathText.fixedSize()
+                pathText.frame(maxWidth: 260, alignment: .leading)
             }
-            .fixedSize()
+            .layoutPriority(2)
+            // The buttons keep their labels; at narrow widths the figures give way, Files first, then Clones.
+            ViewThatFits(in: .horizontal) {
+                figures(files: true, clones: true)
+                figures(files: false, clones: true)
+                figures(files: false, clones: false)
+            }
+            .layoutPriority(1)
             Spacer(minLength: 12)
+            if item.kind == .dir, model.changes.touches(path), !model.isScanning {
+                Button("Scan Again") { model.rescan(path) }
+                    .buttonStyle(.bruhsGhost)
+                    .fixedSize()
+                    .disabled(model.isTrashing)
+                    .help("Something in it changed since the scan. Scan it again to update its size.")
+            }
             Button("Quick Look") { model.showQuickLook?([URL(fileURLWithPath: path)]) }
                 .buttonStyle(.bruhsGhost)
+                .fixedSize()
                 .help("Preview it (Space)")
             Button("Reveal in Finder") { model.reveal(path) }
                 .buttonStyle(.bruhsGhost)
+                .fixedSize()
             if isSelection {
                 Button(asks ? "Move to Trash…" : "Move to Trash", action: trash)
                     .buttonStyle(.bruhsSoftDanger)
+                    .fixedSize()
                     .disabled(refusal != nil || model.isScanning || model.isTrashing)
                     .help(refusal ?? "Move it to the Trash (⌘⌫). You can undo this.")
             }

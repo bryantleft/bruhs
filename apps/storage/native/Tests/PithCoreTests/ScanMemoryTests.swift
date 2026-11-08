@@ -35,6 +35,15 @@ final class ScanMemoryTests: XCTestCase {
         XCTAssertTrue(before.changes(to: after).isEmpty, "a kilobyte isn't growth worth showing")
     }
 
+    func testAScanCountedTheOldWayIsntCompared() throws {
+        let now = result([DiskNode(kind: .file, name: "x", path: "/r/x", size: 1000, children: nil)])
+        XCTAssertTrue(ScanMemory(now, date: Date()).comparable(to: now))
+        // Kept before version 4, when clones counted once per copy, so every folder of clones would look shrunk.
+        let old = try JSONDecoder().decode(ScanMemory.self, from: Data(#"{"root":"/r","date":0,"sizes":{"/r/x":5000000}}"#.utf8))
+        XCTAssertNil(old.version)
+        XCTAssertFalse(old.comparable(to: now))
+    }
+
     func testEachFolderHasItsOwnFile() {
         let folder = URL(fileURLWithPath: "/tmp")
         XCTAssertNotEqual(ScanMemory.file(for: "/Users/me", in: folder), ScanMemory.file(for: "/", in: folder))

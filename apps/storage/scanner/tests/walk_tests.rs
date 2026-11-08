@@ -177,3 +177,93 @@ fn both_engines_agree() {
     assert_eq!(bulk.dirs.len(), std.dirs.len());
     fs::remove_dir_all(&root).unwrap();
 }
+
+/// An APFS clone of `from` at `to`, as Finder's Duplicate and `cp -c` make.
+fn clone_file(from: &std::path::Path, to: &std::path::Path) {
+    use std::os::unix::ffi::OsStrExt;
+    let from = std::ffi::CString::new(from.as_os_str().as_bytes()).unwrap();
+    let to = std::ffi::CString::new(to.as_os_str().as_bytes()).unwrap();
+    assert_eq!(unsafe { libc::clonefile(from.as_ptr(), to.as_ptr(), 0) }, 0, "the temp folder is on APFS");
+}
+
+#[test]
+fn clones_count_once_at_the_copy_made_first() {
+    use storage_scanner::model::NodeKind;
+
+    let root = fixture("clones_count_once");
+    let original = root.join("a/b/file2.bin");
+    // The copies sit where the parallel walk can reach them before the original, which still holds the bytes.
+    fs::create_dir_all(root.join("c/d")).unwrap();
+    clone_file(&original, &root.join("c/copy.bin"));
+    clone_file(&original, &root.join("c/d/copy2.bin"));
+    let size = fs::metadata(&original).map(|m| std::os::unix::fs::MetadataExt::blocks(&m) * 512).unwrap();
+    let plain = Scanner::new(Engine::Std).walk(&fixture("clones_count_once_plain"), "root".into()).size;
+
+    for engine in [Engine::Bulk, Engine::Std] {
+        let scanner = Scanner::new(engine);
+        let tree = scanner.walk(&root, "root".into());
+        assert_eq!(tree.size, plain, "two clones of file2.bin add nothing to the total");
+        assert_eq!(tree.file_count, 5, "the copies are still files");
+        assert_eq!(tree.clones, 2 * size, "the root says how much its clones leave out");
+        let c = tree.dirs.iter().find(|d| d.name == "c").unwrap();
+        let a = tree.dirs.iter().find(|d| d.name == "a").unwrap();
+        assert_eq!(c.clones, 2 * size);
+        assert_eq!(a.clones, 0, "the original holds the bytes");
+        assert_eq!(a.size, 8192 + size, "file1.txt and the original");
+        assert_eq!(scanner.clones.files.load(std::sync::atomic::Ordering::Relaxed), 2);
+        assert_eq!(scanner.clones.bytes.load(std::sync::atomic::Ordering::Relaxed), 2 * size);
+
+        let pruned = tree.into_tree(&PruneConfig { min_bytes: 1 });
+        let c = pruned.children.iter().find(|n| n.name == "c").unwrap();
+        assert_eq!(c.clones, Some(2 * size));
+        assert!(
+            c.children.iter().all(|n| n.kind != NodeKind::File || n.size > 0),
+            "a copy whose bytes another file holds isn't drawn as a file"
+        );
+        let json = serde_json::to_value(&pruned).unwrap();
+        assert!(json["children"].as_array().unwrap().iter().any(|n| n["clones"].as_u64() == Some(2 * size)));
+        let top = scanner.into_top_files();
+        assert_eq!(top.iter().filter(|f| f.name.contains("copy")).count(), 0, "copies aren't among the largest files");
+        assert!(top.iter().any(|f| f.name == "file2.bin"));
+    }
+    fs::remove_dir_all(&root).unwrap();
+    fs::remove_dir_all(fixture("clones_count_once_plain")).unwrap();
+}
+
+#[test]
+fn a_changed_clone_counts_in_full() {
+    let root = fixture("a_changed_clone_counts_in_full");
+    let original = root.join("a/b/file2.bin");
+    let copy = root.join("c/copy.bin");
+    clone_file(&original, &copy);
+    // Writing to a clone gives it blocks of its own, so it's no longer a full clone.
+    let mut bytes = fs::read(&copy).unwrap();
+    bytes[0] = b'!';
+    fs::write(&copy, bytes).unwrap();
+    let tree = Scanner::new(Engine::Bulk).walk(&root, "root".into());
+    assert_eq!(tree.clones, 0);
+    assert_eq!(tree.file_count, 4);
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn a_folder_scanned_again_leaves_its_clones_to_originals_elsewhere_on_the_map() {
+    let root = fixture("rescanned_folder_clones");
+    let original = root.join("a/b/file2.bin");
+    clone_file(&original, &root.join("c/copy.bin"));
+    let size = fs::metadata(&original).map(|m| std::os::unix::fs::MetadataExt::blocks(&m) * 512).unwrap();
+    let log = 4096;
+
+    let alone = Scanner::new(Engine::Bulk).walk(&root.join("c"), "c".into());
+    assert_eq!(alone.size, log + size, "scanned on its own, the copy is the first it finds");
+    let again = Scanner::new(Engine::Bulk).walk_within(&root.join("c"), "c".into(), Some(&root));
+    assert_eq!(again.size, log, "as part of the map, the original in a/b holds the bytes");
+    assert_eq!(again.clones, size);
+    let outside = Scanner::new(Engine::Bulk).walk_within(&root.join("c"), "c".into(), Some(&root.join("c")));
+    assert_eq!(outside.size, log + size, "an original outside the map counts for nothing on it");
+
+    fs::remove_file(&original).unwrap();
+    let orphan = Scanner::new(Engine::Bulk).walk_within(&root.join("c"), "c".into(), Some(&root));
+    assert_eq!(orphan.size, log + size, "with the original gone, the copy holds its blocks alone");
+    fs::remove_dir_all(&root).unwrap();
+}
