@@ -1899,3 +1899,12 @@ Checked in the web dev build from a cleared save at 320×640, 390×844 and 1280�
 - **No top bar.** Each tab shows its own figure beside its title: waiting steps on the world and map, coins in the bag, total level on skills, quest points on quests. The "+15 xp" toast floats over whichever tab is open.
 - **No sync bar.** Steps already sync whenever the app opens. Pulling down on the world syncs sooner, and "sync steps now" stays in settings. The world shows one row, which opens settings, only when steps aren't reaching the game: never connected, paused, access missing, no steps, or an error.
 - **Onboarding.** A new save opens on two screens before the world. The first says how steps become an adventure. The second explains step access before the system's one-time Health prompt, since iOS shows that prompt once per install and a denial can only be undone in the Health app. "not now" skips it, and the world's sync row leads back. The world's next-step button teaches the rest as each feature comes up. Saves from before this change, and version 1 saves, skip onboarding; erasing a journey shows it again.
+
+## Motion timing (November 8, 2026)
+
+Checked against four rules: ease-out for instant feedback, UI motion under 300 ms, custom curves, and fast spinners. Presses and tab switches already respond instantly, and the progress bars and walk-stamp pop already ran 200 ms on a custom ease-out.
+
+- Sheets and the loot report used the system modal slide and fade, which run longer on the platform's own curve and ignore reduced motion. Both now use one entrance (`useEntrance` in `MotionProvider.tsx`): 200 ms on the shared `easeOut` curve. Sheets fade in and rise 24 points; each report fades in and settles from 96%. Under reduced motion they appear at once. In the web build the sheet's backdrop measured 75% opaque at 100 ms and fully opaque at 200 ms.
+- The system spinner, which can't be sped up, is replaced in icon buttons by the refresh glyph turning in quarter steps, a full turn every 320 ms. Reduced motion still shows the still hourglass.
+- `easeOut` lives in `theme.ts` beside the motion tokens, replacing two copies of the curve. The unused 400 ms token is gone.
+- Left alone: the scene's 380 ms sprite frames are an ambient loop rather than feedback, and the native pull-to-sync spinner can't be restyled. Not yet checked on a device.

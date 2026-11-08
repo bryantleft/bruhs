@@ -1,4 +1,4 @@
-import { Platform, StyleSheet } from 'react-native';
+import { Easing, Platform, StyleSheet } from 'react-native';
 import { palette } from './palette';
 
 // Pixel MMO chrome built from the bruhs fruit palette: longan browns for stone-and-wood
@@ -51,7 +51,11 @@ export const space = {
   chapter: 32,
 } as const;
 export const layout = { touch: 48, button: 52, navigation: 68, border: 2 } as const;
-export const motion = { fast: 120, standard: 200, slow: 400 } as const;
+// UI motion stays under 300 ms. Things that appear start fast and settle (ease-out), so a tap
+// answers at once; nothing in the UI eases in. Ambient loops, like the scene's sprite frames,
+// keep their own pace.
+export const motion = { fast: 120, standard: 200 } as const;
+export const easeOut = Easing.bezier(0.2, 0, 0, 1);
 
 // One-pixel drop shadow, the classic MMO text treatment.
 export const shadow = {

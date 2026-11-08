@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { useIsFocused } from 'expo-router';
 import { type ComponentRef, useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Linking, Platform, type Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Linking, Platform, type Pressable, StyleSheet, View } from 'react-native';
 import { ConfirmAction } from '../components/ConfirmAction';
 import { Icon } from '../components/Icon';
 import { keepFocusVisible } from '../components/keepFocusVisible';
@@ -15,7 +15,7 @@ import type { MapStatus } from '../explore/map';
 import { elapsedWalk, formatDistance, formatWalkTime, lastFix, STAMPS, type Walk } from '../explore/walk';
 import { useGame, useGameFeedback } from '../game/GameProvider';
 import { backToAdventure, useScreenFocus } from '../navigation/useScreenFocus';
-import { color, layout, motion, radius, space } from '../theme/theme';
+import { color, easeOut, layout, motion, radius, space } from '../theme/theme';
 
 const MIN_MAP_SIZE = 260;
 
@@ -52,7 +52,7 @@ function WalkStats({ walk, stamps }: Readonly<{ walk: Walk | null; stamps: numbe
     const animation = Animated.timing(stampScale, {
       toValue: 1,
       duration: motion.standard,
-      easing: Easing.bezier(0.2, 0, 0, 1),
+      easing: easeOut,
       useNativeDriver: Platform.OS !== 'web',
     });
     animation.start();

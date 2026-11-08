@@ -9,11 +9,10 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
 } from 'react';
 import {
-  ActivityIndicator,
   Animated,
-  Easing,
   Platform,
   Pressable,
   RefreshControl,
@@ -28,7 +27,7 @@ import { useGameFeedback } from '../game/GameProvider';
 import { adventureTab, panelId, tabId } from '../navigation/tabs';
 import { bevel } from '../pixel/chrome';
 import { palette } from '../theme/palette';
-import { color, font, layout, motion, shadow, space, typography } from '../theme/theme';
+import { color, easeOut, font, layout, motion, shadow, space, typography } from '../theme/theme';
 import { GameNotice } from './GameNotice';
 import { Icon, type IconName } from './Icon';
 import { keepFocusVisibleOnFocus, keepFocusVisibleOnKey } from './keepFocusVisible';
@@ -133,16 +132,27 @@ export function IconButton({
     >
       {loading ? (
         <View aria-hidden accessible={false} pointerEvents="none">
-          {reduced ? (
-            <Icon name="loading" tint={color.primary} />
-          ) : (
-            <ActivityIndicator size="small" color={color.primary} accessible={false} />
-          )}
+          {reduced ? <Icon name="loading" tint={color.primary} /> : <Spinner />}
         </View>
       ) : (
         <Icon name={icon} tint={color.secondary} />
       )}
     </Pressable>
+  );
+}
+
+// A pixel spinner: the refresh glyph turning in quarter steps, a full turn every 320 ms. The
+// system spinner can't be sped up and its smooth curve looks out of place in pixel chrome.
+function Spinner(): React.JSX.Element {
+  const [quarter, setQuarter] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setQuarter((value) => (value + 1) % 4), 80);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <View style={{ transform: [{ rotate: `${quarter * 90}deg` }] }}>
+      <Icon name="refresh" tint={color.primary} />
+    </View>
   );
 }
 
@@ -165,7 +175,7 @@ export function Progress({
     const animation = Animated.timing(progress, {
       toValue: normalized,
       duration: motion.standard,
-      easing: Easing.bezier(0.2, 0, 0, 1),
+      easing: easeOut,
       useNativeDriver: Platform.OS !== 'web',
     });
     animation.start();

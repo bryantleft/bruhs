@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
-import { Modal, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Modal, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getActivity, getLocation, getQuest, type SkillId } from '../game/content';
 import { useGame, useGameFeedback } from '../game/GameProvider';
@@ -14,6 +14,7 @@ import { Bar, Panel, Slot } from '../pixel/chrome';
 import { Sprite } from '../pixel/Sprite';
 import { color, font, shadow, space } from '../theme/theme';
 import { Bruh } from './Bruh';
+import { useEntrance } from './MotionProvider';
 import { Button } from './ui';
 
 function headline(report: Report): string {
@@ -80,6 +81,9 @@ export function RewardOverlay(): React.JSX.Element | null {
   const { reward, dismissReward } = useGameFeedback();
   const insets = useSafeAreaInsets();
   const rewardId = reward?.id;
+  // Each report fades in and settles from 96%, in 200 ms, instead of the system's slower fade.
+  const enter = useEntrance(rewardId);
+  const scale = enter.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] });
   const celebrate = !!reward && (reward.levels.length > 0 || reward.quest !== null);
   useEffect(() => {
     if (rewardId === undefined || Platform.OS === 'web') return;
@@ -99,14 +103,16 @@ export function RewardOverlay(): React.JSX.Element | null {
     <Modal
       visible
       transparent
-      animationType="fade"
+      animationType="none"
       accessibilityLabel={title}
       statusBarTranslucent
       onRequestClose={() => dismissReward()}
     >
       {/* Modals don't give SafeAreaView its insets on iOS; use the app provider's. */}
-      <View style={[styles.backdrop, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-        <View accessibilityViewIsModal style={styles.card}>
+      <Animated.View
+        style={[styles.backdrop, { paddingTop: insets.top, paddingBottom: insets.bottom, opacity: enter }]}
+      >
+        <Animated.View accessibilityViewIsModal style={[styles.card, { transform: [{ scale }] }]}>
           <ScrollView contentContainerStyle={styles.content}>
             <Panel tone="panel" inner={styles.inner}>
               <View style={styles.hero}>
@@ -201,8 +207,8 @@ export function RewardOverlay(): React.JSX.Element | null {
               </View>
             </Panel>
           </ScrollView>
-        </View>
-      </View>
+        </Animated.View>
+      </Animated.View>
     </Modal>
   );
 }

@@ -1,9 +1,10 @@
 import type { PropsWithChildren } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bevel } from '../pixel/chrome';
 import { color, font, layout, shadow, space } from '../theme/theme';
 import { Icon } from './Icon';
+import { useEntrance } from './MotionProvider';
 
 // A bottom sheet in the pixel chrome: title bar, close button, scrollable body, and an optional
 // footer pinned under the body so the main action stays in reach on short screens.
@@ -19,11 +20,14 @@ export function Sheet({
   // Inside a Modal, iOS does not hand SafeAreaView its insets, so read them from the app's
   // provider and pad the sheet itself: its panel colour runs under the home indicator.
   const insets = useSafeAreaInsets();
+  // Our own entrance, not the system slide: 200 ms, ease-out, and still under reduced motion.
+  const enter = useEntrance();
+  const rise = enter.interpolate({ inputRange: [0, 1], outputRange: [24, 0] });
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.backdrop}>
+    <Modal visible transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+      <Animated.View style={[styles.backdrop, { opacity: enter }]}>
         <Pressable accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View style={styles.frame}>
+        <Animated.View style={[styles.frame, { transform: [{ translateY: rise }] }]}>
           <View
             accessibilityViewIsModal
             style={[styles.sheet, bevel('panel'), { paddingBottom: insets.bottom }]}
@@ -45,8 +49,8 @@ export function Sheet({
             <ScrollView contentContainerStyle={styles.body}>{children}</ScrollView>
             {footer ? <View style={styles.footer}>{footer}</View> : null}
           </View>
-        </View>
-      </View>
+        </Animated.View>
+      </Animated.View>
     </Modal>
   );
 }
