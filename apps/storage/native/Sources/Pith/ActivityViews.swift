@@ -261,6 +261,7 @@ struct ActivityScopeBar: View {
         case .power: "average power"
         case .read: "average disk read"
         case .written: "average disk write"
+        case .network: "average network use"
         }
         let reversed = state.sort.column == .name ? !state.sort.ascending : state.sort.ascending
         return reversed ? "\(measure), reversed" : measure

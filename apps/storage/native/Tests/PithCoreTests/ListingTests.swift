@@ -106,6 +106,24 @@ final class ListingTests: XCTestCase {
         XCTAssertEqual(build(history).system?.values.memory, 20_000_000)
     }
 
+    func testNetworkUseIsListedSummedAndRankedLikeDiskActivity() throws {
+        let traffic = { (time: Double, chat: Double, sync: Double) in
+            self.sample(at: time, apps: [
+                self.group("chat", path: "/Applications/Chat.app/Contents/MacOS/Chat", bundleName: "Chat", pids: [1], cpu: 9, network: chat),
+                self.group("sync", path: "/opt/homebrew/bin/sync", pids: [2], cpu: 1, network: sync),
+                self.group("nsurlsessiond", path: "/usr/libexec/nsurlsessiond", pids: [3], cpu: 1, network: 300),
+            ])
+        }
+        let history = [traffic(0, 1_000, 40_000), traffic(2, 1_000, 0), traffic(4, 1_000, 0)]
+        let live = build(history, sort: ActivitySort(column: .network, ascending: false))
+        XCTAssertEqual(live.apps.map(\.id), ["chat", "sync"])
+        XCTAssertEqual(live.apps.first?.values.network, 1_000)
+        XCTAssertEqual(live.system?.values.network, 300)
+        let ranged = build(history, range: 0...4, sort: ActivitySort(column: .network, ascending: false))
+        XCTAssertEqual(ranged.apps.map(\.id), ["sync", "chat"], "Ranked by the average across the range.")
+        XCTAssertEqual(try XCTUnwrap(ranged.apps.first?.values.network), 40_000 / 3, accuracy: 0.01)
+    }
+
     func testUnavailableValuesSortLastInBothDirections() {
         let snapshot = sample(at: 0, apps: [
             group("b", path: "/opt/homebrew/bin/b", pids: [1], cpu: 5),
@@ -136,14 +154,17 @@ final class ListingTests: XCTestCase {
         return ActivityListing(history: history, latest: snapshots.last, range: range, search: search, includeExited: includeExited, sort: sort)
     }
 
-    private func group(_ id: String, path: String, bundleName: String? = nil, pids: [Int32], cpu: Double?, memory: UInt64? = 10, read: Double? = 0, written: Double? = 0, restricted: Bool = false) -> AppSample {
+    private func group(_ id: String, path: String, bundleName: String? = nil, pids: [Int32], cpu: Double?, memory: UInt64? = 10, read: Double? = 0, written: Double? = 0, restricted: Bool = false,
+                       network: Double? = nil) -> AppSample {
         AppSample(id: id, identity: ProcessIdentity(path: path, processName: URL(fileURLWithPath: path).lastPathComponent, bundleName: bundleName), executable: path,
-            members: pids.map { ProcessKey(pid: $0, started: UInt64($0)) }, cpu: cpu, memory: memory, read: read, written: written, restricted: restricted, openedBy: nil)
+            members: pids.map { ProcessKey(pid: $0, started: UInt64($0)) }, cpu: cpu, memory: memory, read: read, written: written, restricted: restricted, openedBy: nil,
+            network: network)
     }
 
     private func sample(at time: Double, apps: [AppSample], unavailable: Int = 0) -> ActivitySnapshot {
         let processes = apps.flatMap { app in
-            app.members.map { ProcessSample(key: $0, name: app.name, path: app.executable, parent: 1, cpu: app.cpu, memory: app.memory, read: app.read, written: app.written) }
+            app.members.map { ProcessSample(key: $0, name: app.name, path: app.executable, parent: 1, cpu: app.cpu, memory: app.memory, read: app.read, written: app.written,
+                                            network: app.network) }
         }
         return ActivitySnapshot(date: Date(timeIntervalSince1970: time), uptime: time, cpu: 10, pressure: .normal, apps: apps, error: nil, unavailableProcesses: unavailable, processes: processes)
     }

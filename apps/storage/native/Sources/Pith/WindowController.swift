@@ -40,11 +40,12 @@ enum WindowTab: String, CaseIterable, Identifiable {
         content.sceneBridgingOptions = [.title, .toolbars]
         // Only the minimum size follows SwiftUI, so switching tabs or showing the inspector never resizes the window.
         content.sizingOptions = [.minSize]
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 760), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        // Wide enough for every Activity column beside the inspector at its usual width.
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 760), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         super.init()
         window.contentViewController = content
         // Assigning the controller shrinks the window to the content's ideal size.
-        window.setContentSize(NSSize(width: 1100, height: 760))
+        window.setContentSize(NSSize(width: 1180, height: 760))
         window.toolbarStyle = .unified
         // The canvas shows under the toolbar and through the disk map's transparent page. Without a transparent
         // title bar, macOS paints its own grey band behind the toolbar.

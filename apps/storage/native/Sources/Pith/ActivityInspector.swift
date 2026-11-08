@@ -325,7 +325,7 @@ private struct SystemInspector: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 6) {
-                    ForEach([ActivityColumn.cpu, .memory, .read, .written], id: \.self) { column in
+                    ForEach([ActivityColumn.cpu, .memory, .read, .written] + (SystemSampler.countsNetwork ? [.network] : []), id: \.self) { column in
                         let figure = ActivityFigure(column, system.values)
                         GridRow {
                             Text(column.title).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.textSecondary)

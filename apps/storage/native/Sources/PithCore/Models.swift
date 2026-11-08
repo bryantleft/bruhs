@@ -111,6 +111,8 @@ public struct RawProcess: Sendable {
     public let written: UInt64?
     /// Nanojoules used so far.
     public let energy: UInt64?
+    /// Bytes received and sent over the network since Pith began counting; nil when it can't count by process.
+    public var network: UInt64? = nil
 }
 
 public struct AppSample: Identifiable, Sendable {
@@ -123,6 +125,8 @@ public struct AppSample: Identifiable, Sendable {
     public let memory: UInt64?
     public let read: Double?
     public let written: Double?
+    /// Bytes per second received and sent over the network; nil when Pith can't count by process.
+    public let network: Double?
     public let restricted: Bool
     /// The app or process that started this one, e.g. "Riot Client". Nil when launchd did.
     public let openedBy: String?
@@ -136,10 +140,10 @@ public struct AppSample: Identifiable, Sendable {
     public var name: String { identity.displayName }
 
     public init(id: String, identity: ProcessIdentity, executable: String, members: [ProcessKey], cpu: Double?, memory: UInt64?, read: Double?, written: Double?,
-                restricted: Bool, openedBy: String?, power: Double? = nil, cores: Double? = nil, keepsAwake: [String] = []) {
+                restricted: Bool, openedBy: String?, power: Double? = nil, cores: Double? = nil, keepsAwake: [String] = [], network: Double? = nil) {
         self.id = id; self.identity = identity; self.executable = executable; self.members = members; self.cpu = cpu; self.memory = memory
         self.read = read; self.written = written; self.restricted = restricted; self.openedBy = openedBy; self.power = power; self.cores = cores
-        self.keepsAwake = keepsAwake
+        self.keepsAwake = keepsAwake; self.network = network
     }
 }
 
@@ -205,10 +209,13 @@ public struct ProcessSample: Identifiable, Sendable {
     public let power: Double?
     /// CPU in cores: 1 is one core fully busy.
     public let cores: Double?
+    /// Bytes per second received and sent over the network; nil when Pith can't count by process.
+    public let network: Double?
     public var id: ProcessKey { key }
-    public init(key: ProcessKey, name: String, path: String, parent: Int32, cpu: Double?, memory: UInt64?, read: Double?, written: Double?, power: Double? = nil, cores: Double? = nil) {
+    public init(key: ProcessKey, name: String, path: String, parent: Int32, cpu: Double?, memory: UInt64?, read: Double?, written: Double?, power: Double? = nil, cores: Double? = nil,
+                network: Double? = nil) {
         self.key = key; self.name = name; self.path = path; self.parent = parent; self.cpu = cpu; self.memory = memory
-        self.read = read; self.written = written; self.power = power; self.cores = cores
+        self.read = read; self.written = written; self.power = power; self.cores = cores; self.network = network
     }
     /// The full executable name when macOS reveals the path, otherwise the kernel's name.
     public var displayName: String { path.isEmpty ? name : URL(fileURLWithPath: path).lastPathComponent }
@@ -236,6 +243,7 @@ public struct AppPoint: Sendable {
     public let written: Double?
     public let power: Double?
     public let members: [ProcessKey]
+    public var network: Double? = nil
 }
 
 public struct AppTimeline: Identifiable, Sendable {
@@ -261,7 +269,8 @@ public struct SessionHistory: Sendable {
             if apps[id]?.points.isEmpty == true { apps.removeValue(forKey: id) }
         }
         for app in snapshot.apps {
-            let point = AppPoint(date: snapshot.date, uptime: snapshot.uptime, cpu: app.cpu, memory: app.memory, read: app.read, written: app.written, power: app.power, members: app.members)
+            let point = AppPoint(date: snapshot.date, uptime: snapshot.uptime, cpu: app.cpu, memory: app.memory, read: app.read, written: app.written, power: app.power,
+                                 members: app.members, network: app.network)
             if apps[app.id] != nil {
                 apps[app.id]?.latest = app
                 apps[app.id]?.isRunning = true

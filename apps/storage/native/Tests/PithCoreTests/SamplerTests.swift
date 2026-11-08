@@ -60,4 +60,71 @@ final class SamplerTests: XCTestCase {
         if let gpu = sample.gpu { XCTAssertTrue((0...100).contains(gpu)) }
         if let battery = sample.battery { XCTAssertTrue((0...100).contains(battery.percent)) }
     }
+
+    func testTheSamplerCountsWhatAProcessMovesOverTheNetwork() async throws {
+        try XCTSkipUnless(SystemSampler.countsNetwork, "macOS's private network statistics didn't load here")
+        let sampler = SystemSampler()
+        let before = await sampler.sample()
+        let pair = try LoopbackPair()
+        defer { pair.close() }
+        let bytes = 4 << 20
+        try pair.move(bytes)
+        let after = await sampler.sample()
+        let own = try XCTUnwrap(after.processes.first { $0.key.pid == getpid() })
+        let moved = try XCTUnwrap(own.network) * (after.uptime - before.uptime)
+        // One socket counts what it sent and the other what it received, and both are this process's.
+        XCTAssertEqual(moved, Double(2 * bytes), accuracy: Double(bytes) / 16)
+        XCTAssertNotNil(after.apps.first { $0.members.contains(own.key) }?.network)
+    }
+}
+
+/// A connected pair of loopback TCP sockets in this process.
+private struct LoopbackPair {
+    let client: Int32, server: Int32
+
+    init() throws {
+        let listener = socket(AF_INET, SOCK_STREAM, 0)
+        guard listener >= 0 else { throw POSIXError(.EBADF) }
+        defer { Darwin.close(listener) }
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let client = socket(AF_INET, SOCK_STREAM, 0)
+        let connected = withUnsafeMutablePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { address in
+                bind(listener, address, length) == 0 && listen(listener, 1) == 0 && getsockname(listener, address, &length) == 0
+                    && connect(client, address, length) == 0
+            }
+        }
+        let server = accept(listener, nil, nil)
+        guard client >= 0, connected, server >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        self.client = client; self.server = server
+    }
+
+    /// Sends `count` bytes from the client and reads each 32 KB at the server before the next, well under the 128 KB
+    /// socket buffers, so neither side blocks.
+    func move(_ count: Int) throws {
+        let chunk = [UInt8](repeating: 7, count: 32_768)
+        var sink = [UInt8](repeating: 0, count: chunk.count)
+        var left = count
+        while left > 0 {
+            let size = min(left, chunk.count)
+            var sent = 0, received = 0
+            while sent < size {
+                let n = chunk.withUnsafeBytes { write(client, $0.baseAddress! + sent, size - sent) }
+                guard n > 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+                sent += n
+            }
+            while received < size {
+                let n = sink.withUnsafeMutableBytes { read(server, $0.baseAddress!, size - received) }
+                guard n > 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+                received += n
+            }
+            left -= size
+        }
+    }
+
+    func close() { Darwin.close(client); Darwin.close(server) }
 }

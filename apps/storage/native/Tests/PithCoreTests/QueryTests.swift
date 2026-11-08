@@ -34,5 +34,7 @@ final class QueryTests: XCTestCase {
         let csv = listing.csv()
         XCTAssertTrue(csv.hasPrefix("Name,Kind,PIDs,CPU %"))
         XCTAssertTrue(csv.contains("A,App,1,30.00,1,"))
+        XCTAssertTrue(csv.contains("Written bytes/s,Network bytes/s,Path"))
+        XCTAssertTrue(csv.contains(",,/Applications/A.app"), "an app without a network count leaves the field empty")
     }
 }

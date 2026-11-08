@@ -32,7 +32,7 @@ struct ActivityTable: NSViewRepresentable {
         outline.floatsGroupRows = false
         outline.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
         outline.setAccessibilityLabel("Apps and processes")
-        for column in ActivityColumn.allCases {
+        for column in ActivityColumn.allCases where column != .network || SystemSampler.countsNetwork {
             let tableColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(column.rawValue))
             tableColumn.title = column.title
             tableColumn.headerToolTip = column.help
@@ -53,6 +53,9 @@ struct ActivityTable: NSViewRepresentable {
         let scroll = NSScrollView()
         scroll.documentView = outline
         scroll.hasVerticalScroller = true
+        // Past the App column's minimum, a narrow window or Bigger Text scrolls the figures sideways rather than
+        // cutting the last off.
+        scroll.hasHorizontalScroller = true
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
         BruhsScroller.install(in: scroll)
@@ -276,6 +279,7 @@ extension ActivityColumn {
         case .power: ranged ? "Avg power" : "Power"
         case .read: ranged ? "Avg read" : "Disk read"
         case .written: ranged ? "Avg write" : "Disk write"
+        case .network: ranged ? "Avg network" : "Network"
         }
     }
 
@@ -289,6 +293,7 @@ extension ActivityColumn {
         case .power: "An estimate in watts, from the energy macOS counts for each process. Protected processes have none."
         case .read: ranged ? "Average data read from disk per second across the range." : "Data read from disk per second."
         case .written: ranged ? "Average data written to disk per second across the range." : "Data written to disk per second."
+        case .network: ranged ? "Average data sent and received over the network per second across the range." : "Data sent and received over the network per second."
         }
     }
 }
@@ -629,8 +634,8 @@ enum ActivityFigure: Equatable {
         case .power:
             guard let power = values.power else { self = .unavailable; return }
             self = power < 0.05 ? .zero("0 W") : .value(watts(power), spoken: "\(watts(power).replacingOccurrences(of: " W", with: "")) watts")
-        case .read, .written:
-            guard let speed = column == .read ? values.read : values.written else { self = .unavailable; return }
+        case .read, .written, .network:
+            guard let speed = column == .read ? values.read : column == .written ? values.written : values.network else { self = .unavailable; return }
             self = speed < 1 ? .zero(rate(0)) : .value(rate(speed), spoken: "\(bytes(UInt64(speed))) per second")
         }
     }

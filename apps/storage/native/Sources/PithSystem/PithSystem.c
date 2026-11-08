@@ -145,3 +145,133 @@ uint64_t pith_start_time(int32_t pid) {
     if (pid <= 0 || proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof(info)) != sizeof(info)) return 0;
     return info.pbi_start_tvsec * 1000000 + info.pbi_start_tvusec;
 }
+
+// ---- Network bytes by process ------------------------------------------------------------------------------------
+// macOS counts each socket's bytes in its private NetworkStatistics framework, which nettop reads. It has no header
+// and no promise of staying the same, so Pith loads it at run time and shows no network figures by app without it.
+
+#include <CoreFoundation/CoreFoundation.h>
+#include <dispatch/dispatch.h>
+#include <dlfcn.h>
+
+typedef void *pith_nstat_manager;
+typedef void *pith_nstat_source;
+
+/// Totals are kept by PID in flat arrays: macOS's PIDs stay under 100,000, and a lookup per callback stays cheap.
+#define PITH_NET_PIDS 100000
+
+static struct {
+    /// 0 before a start, 1 counting, -1 unavailable.
+    int state;
+    dispatch_queue_t queue;
+    pith_nstat_manager manager;
+    void (*query_all)(pith_nstat_manager, void (^)(void));
+    void (*query_descriptions)(pith_nstat_manager, void (^)(void));
+    CFStringRef key_pid, key_received, key_sent;
+    uint64_t *received, *sent;
+    int querying;
+    /// Set once the first answer is in: sockets macOS reports after that opened while Pith watched.
+    int primed;
+} net;
+
+/// One socket's counts at its last report, so each report adds only what it grew by to its process.
+typedef struct {
+    int32_t pid;
+    /// Open before Pith's first answer: its first report sets where it starts, since those bytes moved before.
+    int started_before;
+    uint64_t received, sent;
+} pith_socket;
+
+static uint64_t pith_net_number(CFDictionaryRef dictionary, CFStringRef key) {
+    CFNumberRef number = CFDictionaryGetValue(dictionary, key);
+    int64_t value = 0;
+    if (number && CFGetTypeID(number) == CFNumberGetTypeID()) CFNumberGetValue(number, kCFNumberSInt64Type, &value);
+    return value > 0 ? (uint64_t)value : 0;
+}
+
+/// Asks for every socket's process, then its counts, and signals `answered` once they're in. A query still out
+/// from a reading that gave up waiting answers this one too. Runs on the counting queue.
+static void pith_net_query(dispatch_semaphore_t answered) {
+    if (net.querying) { dispatch_semaphore_signal(answered); return; }
+    net.querying = 1;
+    net.query_descriptions(net.manager, ^{
+        net.query_all(net.manager, ^{
+            net.querying = 0;
+            net.primed = 1;
+            dispatch_semaphore_signal(answered);
+        });
+    });
+}
+
+int pith_net_start(void) {
+    if (net.state != 0) return net.state == 1;
+    net.state = -1;
+    void *library = dlopen("/System/Library/PrivateFrameworks/NetworkStatistics.framework/NetworkStatistics", RTLD_NOW | RTLD_LOCAL);
+    if (!library) return 0;
+    pith_nstat_manager (*create)(CFAllocatorRef, dispatch_queue_t, void (^)(pith_nstat_source, void *)) = dlsym(library, "NStatManagerCreate");
+    void (*add_tcp)(pith_nstat_manager) = dlsym(library, "NStatManagerAddAllTCP");
+    void (*add_udp)(pith_nstat_manager) = dlsym(library, "NStatManagerAddAllUDP");
+    void (*set_description)(pith_nstat_source, void (^)(CFDictionaryRef)) = dlsym(library, "NStatSourceSetDescriptionBlock");
+    void (*set_counts)(pith_nstat_source, void (^)(CFDictionaryRef)) = dlsym(library, "NStatSourceSetCountsBlock");
+    void (*set_removed)(pith_nstat_source, void (^)(void)) = dlsym(library, "NStatSourceSetRemovedBlock");
+    net.query_all = dlsym(library, "NStatManagerQueryAllSources");
+    net.query_descriptions = dlsym(library, "NStatManagerQueryAllSourcesDescriptions");
+    CFStringRef *pid = dlsym(library, "kNStatSrcKeyPID"), *received = dlsym(library, "kNStatSrcKeyRxBytes"), *sent = dlsym(library, "kNStatSrcKeyTxBytes");
+    if (!create || !add_tcp || !add_udp || !set_description || !set_counts || !set_removed || !net.query_all || !net.query_descriptions
+        || !pid || !received || !sent || !*pid || !*received || !*sent) return 0;
+    net.key_pid = *pid; net.key_received = *received; net.key_sent = *sent;
+    net.received = calloc(PITH_NET_PIDS, sizeof(uint64_t));
+    net.sent = calloc(PITH_NET_PIDS, sizeof(uint64_t));
+    if (!net.received || !net.sent) { free(net.received); free(net.sent); return 0; }
+    net.queue = dispatch_queue_create("app.bruhs.pith.network", DISPATCH_QUEUE_SERIAL);
+    net.manager = create(kCFAllocatorDefault, net.queue, ^(pith_nstat_source source, void *unused) {
+        (void)unused;
+        pith_socket *socket = calloc(1, sizeof(pith_socket));
+        if (!socket) return;
+        socket->pid = -1;
+        socket->started_before = !net.primed;
+        set_description(source, ^(CFDictionaryRef description) {
+            int64_t owner = (int64_t)pith_net_number(description, net.key_pid);
+            if (owner > 0 && owner < PITH_NET_PIDS) socket->pid = (int32_t)owner;
+        });
+        set_counts(source, ^(CFDictionaryRef counts) {
+            // Until its process is known, its bytes wait: the first report after that carries them all.
+            if (socket->pid < 0) return;
+            uint64_t now_received = pith_net_number(counts, net.key_received), now_sent = pith_net_number(counts, net.key_sent);
+            if (socket->started_before) {
+                socket->started_before = 0;
+                socket->received = now_received; socket->sent = now_sent;
+                return;
+            }
+            if (now_received >= socket->received) net.received[socket->pid] += now_received - socket->received;
+            if (now_sent >= socket->sent) net.sent[socket->pid] += now_sent - socket->sent;
+            socket->received = now_received; socket->sent = now_sent;
+        });
+        set_removed(source, ^{ free(socket); });
+    });
+    if (!net.manager) return 0;
+    add_tcp(net.manager);
+    add_udp(net.manager);
+    net.state = 1;
+    return 1;
+}
+
+int pith_net_totals(pith_net_total *out, int capacity, int64_t wait_ns) {
+    if (net.state != 1) return -1;
+    // Fresh counts, so the figures cover the same seconds as the rest of the sample. Past the wait, the last
+    // answer stands and the late one lands in the next reading.
+    dispatch_semaphore_t answered = dispatch_semaphore_create(0);
+    dispatch_async(net.queue, ^{ pith_net_query(answered); });
+    dispatch_semaphore_wait(answered, dispatch_time(DISPATCH_TIME_NOW, wait_ns));
+    __block int count = 0;
+    dispatch_sync(net.queue, ^{
+        for (int32_t pid = 1; pid < PITH_NET_PIDS && count < capacity; pid++) {
+            if (!net.received[pid] && !net.sent[pid]) continue;
+            out[count].pid = pid;
+            out[count].received = net.received[pid];
+            out[count].sent = net.sent[pid];
+            count++;
+        }
+    });
+    return count;
+}

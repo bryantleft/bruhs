@@ -21,6 +21,8 @@ public struct AppUsage: Equatable, Sendable {
     public let memoryAcrossRange: Double?
     public let read: Double?
     public let written: Double?
+    /// Network bytes per second, received and sent.
+    public var network: Double? = nil
     /// Watts, averaged like CPU.
     public let power: Double?
     /// Distinct processes that belonged to the app at any sample in the range.
@@ -72,6 +74,7 @@ extension SessionHistory {
             memoryAcrossRange: average { point in point.memory.map { Double($0) } },
             read: average(\.read),
             written: average(\.written),
+            network: average(\.network),
             power: average(\.power),
             processes: Set(points.flatMap(\.members)).count)
     }

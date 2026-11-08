@@ -69,11 +69,11 @@ extension ActivityListing {
             text.contains(where: { $0 == "," || $0 == "\"" || $0.isNewline }) ? "\"" + text.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : text
         }
         func number(_ value: Double?) -> String { value.map { String(format: "%.2f", $0) } ?? "" }
-        var lines = ["Name,Kind,PIDs,CPU %,Memory bytes,Power W,Read bytes/s,Written bytes/s,Path"]
+        var lines = ["Name,Kind,PIDs,CPU %,Memory bytes,Power W,Read bytes/s,Written bytes/s,Network bytes/s,Path"]
         for app in apps + (system?.apps ?? []) {
             lines.append([field(app.identity.displayName), field(app.identity.kind.label), app.members.map { String($0.pid) }.joined(separator: " "),
                           number(app.values.cpu), app.values.memory.map(String.init) ?? "", number(app.values.power),
-                          number(app.values.read), number(app.values.written), field(app.executable)].joined(separator: ","))
+                          number(app.values.read), number(app.values.written), number(app.values.network), field(app.executable)].joined(separator: ","))
         }
         return lines.joined(separator: "\n") + "\n"
     }

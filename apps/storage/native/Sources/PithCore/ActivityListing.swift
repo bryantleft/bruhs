@@ -1,7 +1,7 @@
 import Foundation
 
 public enum ActivityColumn: String, Sendable, CaseIterable {
-    case name, cpu, memory, power, read, written
+    case name, cpu, memory, power, read, written, network
 }
 
 public struct ActivitySort: Equatable, Sendable {
@@ -26,8 +26,10 @@ public struct ActivityListing: Sendable {
         public var power: Double?
         /// The busiest process's CPU in cores, live only.
         public var cores: Double?
-        public init(cpu: Double?, memory: UInt64?, read: Double?, written: Double?, power: Double? = nil, cores: Double? = nil) {
-            self.cpu = cpu; self.memory = memory; self.read = read; self.written = written; self.power = power; self.cores = cores
+        /// Bytes per second sent and received over the network.
+        public var network: Double?
+        public init(cpu: Double?, memory: UInt64?, read: Double?, written: Double?, power: Double? = nil, cores: Double? = nil, network: Double? = nil) {
+            self.cpu = cpu; self.memory = memory; self.read = read; self.written = written; self.power = power; self.cores = cores; self.network = network
         }
     }
 
@@ -86,14 +88,16 @@ public struct ActivityListing: Sendable {
             let app: App
             if let usage {
                 guard let used = usage[timeline.id] else { continue }
-                app = row(Values(cpu: used.cpu, memory: used.memory, read: used.read, written: used.written, power: used.power), processCount: used.processes)
+                app = row(Values(cpu: used.cpu, memory: used.memory, read: used.read, written: used.written, power: used.power, network: used.network),
+                          processCount: used.processes)
                 if sample.identity.kind == .system, let memory = used.memoryAcrossRange { systemMemoryAcrossRange.append(memory) }
             } else if timeline.isRunning {
-                app = row(Values(cpu: sample.cpu, memory: sample.memory, read: sample.read, written: sample.written, power: sample.power, cores: sample.cores),
+                app = row(Values(cpu: sample.cpu, memory: sample.memory, read: sample.read, written: sample.written, power: sample.power, cores: sample.cores,
+                                 network: sample.network),
                     processCount: sample.members.count, helpers: sample.members.count > 1 ? Self.helpers(sample.members, processes, sort) : [])
             } else if includeExited {
                 // An app that has quit uses nothing now; its history is in the inspector and in ranked ranges.
-                app = row(Values(cpu: 0, memory: 0, read: 0, written: 0, power: 0), processCount: sample.members.count)
+                app = row(Values(cpu: 0, memory: 0, read: 0, written: 0, power: 0, network: sample.network.map { _ in 0 }), processCount: sample.members.count)
             } else { continue }
             guard filters.passes(kind: sample.identity.kind, executable: sample.executable, values: app.values) else { continue }
             if sample.identity.kind == .system { system.append(app) } else { apps.append(app) }
@@ -113,7 +117,7 @@ public struct ActivityListing: Sendable {
             self.system = System(
                 processCount: system.reduce(hidden) { $0 + $1.processCount },
                 protectedCount: system.filter(\.restricted).reduce(hidden) { $0 + $1.processCount },
-                values: Values(cpu: total(\.cpu), memory: memory, read: total(\.read), written: total(\.written), power: total(\.power)),
+                values: Values(cpu: total(\.cpu), memory: memory, read: total(\.read), written: total(\.written), power: total(\.power), network: total(\.network)),
                 apps: system.sorted { Self.ordered($0, $1, sort) })
         }
     }
@@ -168,7 +172,7 @@ public struct ActivityListing: Sendable {
             let footprints = samples.compactMap(\.memory)
             return Helper(name: name, pids: samples.map(\.key.pid).sorted(),
                 values: Values(cpu: sum(\.cpu), memory: footprints.count == samples.count ? footprints.reduce(0, +) : nil,
-                    read: sum(\.read), written: sum(\.written), power: sum(\.power), cores: samples.compactMap(\.cores).max()))
+                    read: sum(\.read), written: sum(\.written), power: sum(\.power), cores: samples.compactMap(\.cores).max(), network: sum(\.network)))
         }
         return helpers.sorted { lhs, rhs in
             switch compare(lhs.values, rhs.values, lhs.name, rhs.name, sort) {
@@ -200,6 +204,7 @@ public struct ActivityListing: Sendable {
         case .power: value = \.power
         case .read: value = \.read
         case .written: value = \.written
+        case .network: value = \.network
         }
         switch (value(lhs), value(rhs)) {
         case let (l?, r?) where l != r: return (l < r) == sort.ascending ? .orderedAscending : .orderedDescending

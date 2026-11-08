@@ -19,6 +19,12 @@ public actor SystemSampler {
     private struct IdentityKey: Hashable { let path: String; let name: String; let bundleName: String? }
     public init() {}
 
+    /// Whether macOS's private network statistics answered, so apps carry network figures. Started once, on first use.
+    public static let countsNetwork: Bool = pith_net_start() == 1
+    /// How long a sample waits for fresh network counts. Answers took 5 ms typically and under 8 ms in 40 readings
+    /// on an M2 Max; this leaves room for a far busier Mac and stays an eighth of the two seconds between samples.
+    private static let networkWait: Int64 = 250_000_000
+
     public func reset() {
         previous = [:]; previousCPU = nil; previousCores = []; previousNetwork = nil; previousUptime = nil
     }
@@ -65,6 +71,14 @@ public actor SystemSampler {
         defer { pith_free(capture) }
         let uptime = SampleClock.now
         let date = Date()
+        // Network bytes come by PID from a separate count, which starts once and may not be available at all.
+        var traffic: [Int32: UInt64] = [:]
+        if Self.countsNetwork {
+            // Room for every process: macOS caps them at kern.maxproc, 8,000 on the Macs Pith was checked on.
+            var totals = [pith_net_total](repeating: pith_net_total(), count: 8192)
+            let count = Int(pith_net_totals(&totals, Int32(totals.count), Self.networkWait))
+            for total in totals.prefix(max(0, count)) { traffic[total.pid] = total.received &+ total.sent }
+        }
         var processes: [RawProcess] = []
         if let pointer = capture.processes {
             processes.reserveCapacity(Int(capture.count))
@@ -74,7 +88,7 @@ public actor SystemSampler {
                 processes.append(RawProcess(key: ProcessKey(pid: p.pid, started: p.started_us), parent: p.parent_pid, name: name, path: path,
                     cpu: p.readable != 0 ? p.cpu_ns : nil, memory: p.readable != 0 ? p.footprint : nil,
                     read: p.readable != 0 ? p.read_bytes : nil, written: p.readable != 0 ? p.written_bytes : nil,
-                    energy: p.energy_valid != 0 ? p.energy_nj : nil))
+                    energy: p.energy_valid != 0 ? p.energy_nj : nil, network: Self.countsNetwork ? traffic[p.pid] ?? 0 : nil))
             }
         }
         let elapsed = previousUptime.map { uptime - $0 }
@@ -119,7 +133,8 @@ public actor SystemSampler {
         func watts(_ process: RawProcess) -> Double? { rate(process, \.energy).map { $0 / 1_000_000_000 } }
         let processSamples = processes.map { process in
             ProcessSample(key: process.key, name: process.name, path: process.path, parent: process.parent, cpu: cpuShare(process),
-                memory: process.memory, read: rate(process, \.read), written: rate(process, \.written), power: watts(process), cores: coresUsed(process))
+                memory: process.memory, read: rate(process, \.read), written: rate(process, \.written), power: watts(process), cores: coresUsed(process),
+                network: rate(process, \.network))
         }
         let awake = PowerAndGPU.sleepAssertions()
         let apps = grouped.map { id, members -> AppSample in
@@ -137,7 +152,8 @@ public actor SystemSampler {
                 read: sum { rate($0, \.read) }, written: sum { rate($0, \.written) },
                 restricted: members.contains { $0.cpu == nil },
                 openedBy: parent.flatMap { identities[groupID(owners[$0.key] ?? $0)]?.displayName },
-                power: sum(watts), cores: members.compactMap(coresUsed).max(), keepsAwake: members.flatMap { awake[$0.key.pid] ?? [] })
+                power: sum(watts), cores: members.compactMap(coresUsed).max(), keepsAwake: members.flatMap { awake[$0.key.pid] ?? [] },
+                network: sum { rate($0, \.network) })
         }.sorted { ($0.cpu ?? -1) > ($1.cpu ?? -1) }
         let activeBundles = Set(bundles.values.compactMap { $0 })
         names = names.filter { activeBundles.contains($0.key) }

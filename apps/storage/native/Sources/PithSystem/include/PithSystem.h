@@ -41,4 +41,18 @@ void pith_free(pith_capture capture);
 /// A process's start time in microseconds since 1970, or 0 when it's gone or unreadable. Checked again just before a
 /// signal, since macOS has no way to signal a process by identity and PIDs are reused.
 uint64_t pith_start_time(int32_t pid);
+
+/// Bytes a process has received and sent over the network since Pith began counting.
+typedef struct {
+    int32_t pid;
+    uint64_t received, sent;
+} pith_net_total;
+
+/// Starts counting network bytes by process with macOS's private NetworkStatistics framework, loaded at run time.
+/// Returns 0 when it's missing or has changed, and Pith then shows no network figures by app.
+int pith_net_start(void);
+
+/// The totals for up to `capacity` processes with any traffic, after waiting up to `wait_ns` for macOS's fresh counts.
+/// Returns how many it wrote, or -1 when counting isn't running.
+int pith_net_totals(pith_net_total *out, int capacity, int64_t wait_ns);
 #endif
