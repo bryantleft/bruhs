@@ -11,7 +11,8 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "dev.bruhs.outside",
-      "config": { "usesNonExemptEncryption": false }
+      "config": { "usesNonExemptEncryption": false },
+      "infoPlist": { "CFBundleDisplayName": "outside" }
     },
     "android": {
       "package": "dev.bruhs.outside",

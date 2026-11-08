@@ -339,7 +339,7 @@ function PartyContents({
                 onPress={() => {
                   setShareError(false);
                   void Share.share({
-                    message: `join my bruhs outside party.\ninvite code: ${party.invite}`,
+                    message: `join my bruhs / outside party.\ninvite code: ${party.invite}`,
                   }).catch((error: unknown) => {
                     // Web Share uses AbortError for dismissal or no available targets.
                     // The selectable code remains available in both cases.
