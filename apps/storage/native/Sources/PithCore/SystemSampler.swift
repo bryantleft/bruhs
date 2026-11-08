@@ -22,7 +22,8 @@ public actor SystemSampler {
     /// Whether macOS's private network statistics answered, so apps carry network figures. Started once, on first use.
     public static let countsNetwork: Bool = pith_net_start() == 1
     /// How long a sample waits for fresh network counts. Answers took 5 ms typically and under 8 ms in 40 readings
-    /// on an M2 Max; this leaves room for a far busier Mac and stays an eighth of the two seconds between samples.
+    /// on an M2 Max; this leaves room for a far busier Mac and stays a quarter of the second between samples while someone
+    /// is looking.
     private static let networkWait: Int64 = 250_000_000
 
     public func reset() {

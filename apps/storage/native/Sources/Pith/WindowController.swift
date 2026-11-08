@@ -17,8 +17,12 @@ enum WindowTab: String, CaseIterable, Identifiable {
 /// Which tab the main window shows, plus the Activity tab's own state.
 @MainActor @Observable final class MainWindowState {
     var tab: WindowTab {
-        didSet { if tab == .disk { diskOpened = true } }
+        didSet {
+            if tab == .disk { diskOpened = true }
+            if tab != oldValue { tabChanged?() }
+        }
     }
+    @ObservationIgnored var tabChanged: (() -> Void)?
     /// Disk stays alive once shown, so switching tabs keeps the map's open folder and highlight.
     private(set) var diskOpened: Bool
     let activity = ActivityState()
@@ -32,6 +36,10 @@ enum WindowTab: String, CaseIterable, Identifiable {
     let window: NSWindow
     let state: MainWindowState
     private let closed: () -> Void
+    /// Called when Activity comes on screen or leaves it: the window shows, hides, is covered or changes tab.
+    var visibilityChanged: (() -> Void)?
+    /// Whether Activity is on screen now.
+    var showsActivity: Bool { window.isVisible && window.occlusionState.contains(.visible) && state.tab == .activity }
 
     init(activity: ActivityModel, disk: DiskModel, tab: WindowTab, webCreated: @escaping (WKWebView) -> Void, closed: @escaping () -> Void) {
         state = MainWindowState(tab: tab)
@@ -57,7 +65,10 @@ enum WindowTab: String, CaseIterable, Identifiable {
         window.delegate = self
         window.center()
         window.setFrameAutosaveName("Pith Main Window")
+        state.tabChanged = { [weak self] in self?.visibilityChanged?() }
     }
+
+    func windowDidChangeOcclusionState(_ notification: Notification) { visibilityChanged?() }
 
     func show(_ tab: WindowTab) {
         state.tab = tab

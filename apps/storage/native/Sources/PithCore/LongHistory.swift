@@ -2,7 +2,7 @@ import Foundation
 
 /// How far back the Activity chart looks.
 public enum HistorySpan: String, CaseIterable, Sendable, Codable {
-    /// The live session window, every 2-second sample.
+    /// The live session window, every sample.
     case tenMinutes
     case sixHours
     case sevenDays

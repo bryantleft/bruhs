@@ -53,6 +53,8 @@ extension AppDelegate {
             showActivity()
             try await waitUntil("a CPU reading in Activity") { self.activity.snapshot?.cpu != nil }
             checks["native_metrics"] = activity.snapshot?.cpu != nil
+            // With Activity on screen samples come every second; they slow to two once the window closes, checked below.
+            checks["live_while_watched"] = await samplesApart(ActivityModel.watchedInterval)
             let pid = ProcessInfo.processInfo.processIdentifier
             let own = activity.snapshot?.apps.first { $0.members.contains { $0.pid == pid } }
             checks["own_process_metrics"] = (own?.memory ?? 0) > 0
@@ -126,6 +128,8 @@ extension AppDelegate {
             checks["main_window_released"] = mainWindow == nil
             let samples = activity.history.system.count
             checks["monitoring_survives_window_close"] = await eventually { !self.activity.paused && self.activity.history.system.count > samples }
+            // Before the panel opens, which would count as watching again.
+            checks["slower_when_unwatched"] = await samplesApart(ActivityModel.interval)
             statusItem?.togglePanel()
             checks["menu_panel_opens"] = statusItem?.panelWindow?.isVisible == true
             statusItem?.togglePanel()
@@ -190,6 +194,20 @@ extension AppDelegate {
         return ["treemap_rendered": rendered, "bundled_fonts": fonts, "accessible_map": labels,
             "selection_bridge": selection, "selection_frees_measured": frees, "map_follows_text_size": zooms, "map_keeps_size_on_select": before != nil && before == after,
             "remote_navigation_blocked": web.url?.scheme == "pith"]
+    }
+
+    /// Whether the next two samples arrive about `interval` apart, as the model's cadence promises.
+    private func samplesApart(_ interval: TimeInterval) async -> Bool {
+        guard let start = activity.snapshot?.uptime else { return false }
+        var arrivals: [Double] = []
+        let arrived = await eventually {
+            if let now = self.activity.snapshot?.uptime, now > (arrivals.last ?? start) { arrivals.append(now) }
+            return arrivals.count >= 2
+        }
+        guard arrived, arrivals.count >= 2 else { return false }
+        let gap = arrivals[1] - arrivals[0]
+        print("samples \(gap) s apart, expecting \(interval)")
+        return abs(gap - interval) < 0.35
     }
 
     /// Opens the kept map in a second model, as the next launch would. It must show what the live map does: the folder

@@ -217,7 +217,8 @@ import PithCore
         if mainWindow == nil {
             mainWindow = MainWindowController(activity: activity, disk: disk, tab: tab,
                 webCreated: { [weak self] web in self?.webView = web },
-                closed: { [weak self] in self?.mainWindow = nil })
+                closed: { [weak self] in self?.mainWindow = nil; self?.activity.activityOnScreen = false })
+            mainWindow?.visibilityChanged = { [weak self] in self?.activity.activityOnScreen = self?.mainWindow?.showsActivity == true }
         }
         mainWindow?.show(tab)
     }

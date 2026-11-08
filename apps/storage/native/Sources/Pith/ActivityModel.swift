@@ -16,8 +16,10 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
 }
 
 @MainActor @Observable final class ActivityModel {
-    // Warm sampling measured 10–15 ms on the development Mac. Two seconds
-    // amortizes this below 1% of one core before UI/history work; verify the bundle too.
+    /// How often samples come while Activity is on screen or the panel is open, so the figures read as live.
+    static let watchedInterval: TimeInterval = 1
+    /// How often samples come otherwise, for the menu bar figure and kept history. Each sample costs about the same
+    /// whatever the cadence, so sampling every second all the time would double Pith's cost in the background.
     static let interval: TimeInterval = 2
     var snapshot: ActivitySnapshot?
     var history = SessionHistory()
@@ -37,8 +39,16 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
     var volumeName: String?
     /// True while the panel is open, the one place that shows the startup disk's free space.
     var showsDiskSpace = false {
-        didSet { if showsDiskSpace && !oldValue { refreshDiskSpace() } }
+        didSet { if showsDiskSpace && !oldValue { refreshDiskSpace(); wake() } }
     }
+    /// True while Activity is on screen; the app delegate sets it as the main window shows, hides or changes tab.
+    var activityOnScreen = false {
+        didSet { if activityOnScreen && !oldValue { wake() } }
+    }
+    /// Someone is looking at the figures, so samples come every second.
+    private var watched: Bool { activityOnScreen || showsDiskSpace }
+    /// The wait before the next sample, which someone starting to look ends early.
+    private var nap: Task<Void, Never>?
     /// Set when the panel opens Activity for one app; Activity selects it and clears this.
     var focusAppID: String?
     /// A week of history, kept on this Mac only while the user has turned it on: Pith's promise was that history
@@ -79,13 +89,25 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
                 if keepsHistory { recordHistory(sample) }
                 if showsDiskSpace { refreshDiskSpace() }
                 onSample?()
-                do { try await Task.sleep(for: .seconds(Self.interval)) } catch { return }
+                await rest(after: sample.uptime)
             }
         }
     }
 
+    /// Waits for the next sample: a second while someone is looking, two otherwise. Someone starting to look ends the
+    /// wait early, though never within a second of the last sample, so a rate always covers at least a second.
+    private func rest(after uptime: Double) async {
+        let nap = Task { _ = try? await Task.sleep(for: .seconds(watched ? Self.watchedInterval : Self.interval)) }
+        self.nap = nap
+        await withTaskCancellationHandler { await nap.value } onCancel: { nap.cancel() }
+        let since = SampleClock.now - uptime
+        if !Task.isCancelled, since < Self.watchedInterval { try? await Task.sleep(for: .seconds(Self.watchedInterval - since)) }
+    }
+
+    private func wake() { nap?.cancel() }
+
     func pause() {
-        sampling?.cancel(); sampling = nil; paused = true
+        sampling?.cancel(); sampling = nil; nap?.cancel(); paused = true
         if keepsHistory { saveHistory() }
         onSample?()
     }

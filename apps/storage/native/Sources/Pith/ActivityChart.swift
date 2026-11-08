@@ -143,7 +143,7 @@ struct ActivityChart: View {
         }
         .chartXScale(domain: window)
         .chartYScale(domain: 0...100)
-        // Samples arrive every 2 s; live data jumps rather than animates.
+        // Samples arrive every second or two; live data jumps rather than animates.
         .transaction { $0.animation = nil }
         .chartYAxis {
             AxisMarks(position: .leading, values: [0, 50, 100]) { value in

@@ -20,7 +20,8 @@ struct PithIntentError: Error, CustomLocalizedStringResourceConvertible {
         }
     }
 
-    /// The latest sample, waiting up to 3 seconds for a first one when the action launched Pith: samples arrive every 2.
+    /// The latest sample, waiting up to 3 seconds for a first one when the action launched Pith: samples arrive at least
+    /// every 2.
     static func latest() async throws -> ActivitySnapshot {
         let activity = try app.activity
         for _ in 0..<30 {
