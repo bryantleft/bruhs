@@ -17,7 +17,7 @@ struct DiskView: View {
             Rectangle().fill(BruhsColor.hairline).frame(height: 1)
             ZStack(alignment: .top) {
                 // While a scan runs the map keeps the earlier scan, dimmed, until the new one arrives.
-                DiskWebView(model: model, visible: visible && model.result != nil, created: webCreated)
+                DiskWebView(model: model, visible: visible && model.result != nil, textScale: TextSize.shared.scale, created: webCreated)
                     .opacity(model.result == nil ? 0 : model.isScanning ? 0.35 : 1)
                     .allowsHitTesting(model.result != nil && !model.isScanning)
                     .accessibilityHidden(model.result == nil || model.isScanning)
@@ -510,6 +510,8 @@ private struct DiskSelectionBar: View {
 struct DiskWebView: NSViewRepresentable {
     let model: DiskModel
     let visible: Bool
+    /// The View menu's text size. The page zooms by it, so the map's labels and lists grow with the rest of Pith.
+    let textScale: Double
     let created: (WKWebView) -> Void
     func makeCoordinator() -> Coordinator { Coordinator(model: model) }
     func makeNSView(context: Context) -> WKWebView {
@@ -531,12 +533,14 @@ struct DiskWebView: NSViewRepresentable {
         view.underPageBackgroundColor = .clear
         context.coordinator.web = view
         created(view)
+        view.pageZoom = textScale
         if let url = URL(string: "pith://app/index.html") { view.load(URLRequest(url: url)) }
         return view
     }
     func updateNSView(_ nsView: WKWebView, context: Context) {
         // Hidden, it leaves the key view loop and can't take a click, but its page and open folder stay.
         if nsView.isHidden == visible { nsView.isHidden = !visible }
+        if nsView.pageZoom != textScale { nsView.pageZoom = textScale }
         context.coordinator.send(revision: model.revision)
     }
     static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) {

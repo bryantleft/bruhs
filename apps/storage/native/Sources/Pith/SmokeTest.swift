@@ -163,10 +163,17 @@ extension AppDelegate {
         let frees = await eventually { self.disk.selectedFrees != nil }
         let after = try await web.callAsyncJavaScript(mapHeight, in: nil, contentWorld: .page) as? Double
         print("map height before selection=\(before ?? -1) after=\(after ?? -1)")
+        // Bigger Text zooms the map's page too. The step is undone, since this runs with the user's settings, and the
+        // page is back at its usual zoom before anything after measures it.
+        let size = TextSize.shared, grow = size.canGrow, usual = size.scale
+        size.step(grow ? 1 : -1)
+        let zoomed = await eventually { web.pageZoom == size.scale } && size.scale != usual
+        size.step(grow ? -1 : 1)
+        let zooms = await eventually { web.pageZoom == usual } && zoomed
         _ = try await web.callAsyncJavaScript("window.location.href = 'https://example.com/'", in: nil, contentWorld: .page)
         try await Task.sleep(for: .milliseconds(200))
         return ["treemap_rendered": rendered, "bundled_fonts": fonts, "accessible_map": labels,
-            "selection_bridge": selection, "selection_frees_measured": frees, "map_keeps_size_on_select": before != nil && before == after,
+            "selection_bridge": selection, "selection_frees_measured": frees, "map_follows_text_size": zooms, "map_keeps_size_on_select": before != nil && before == after,
             "remote_navigation_blocked": web.url?.scheme == "pith"]
     }
 
