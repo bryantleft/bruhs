@@ -89,3 +89,10 @@ Verified on the same Mac after working through the feature-gap and UX audit (`re
 - **Audit:** offscreen renders of every native screen, light and dark, and the disk map in headless Chrome with a fresh scan of this repository. Removed the range's times from the window subtitle, "Ranked by average CPU", "Last elevated" under Activity's chart (VoiceOver still hears it), the System card's figures and busiest list, a second "protected" count, the one-row process list of a single-process app (its PID moved to the facts), the paused panel's extra "Paused" labels, and Scan Startup Disk above the list of disks before a first scan. The search prompt no longer cuts off at the default width.
 - **Signer:** code Pith couldn't read, such as an executable deleted since it started, read "Not signed"; it now has no Signed by row.
 - **Tests:** 131 Swift tests, new ones for the expiry boundary and unreadable code. 20 Rust tests and 78 node tests. All 37 smoke checks pass on the notarized build, two of them new for the cadence.
+
+## 2026-11-08: motion that answers at once
+
+- **Rules:** ease-out for anything entering or leaving, UI motion under 300 ms, strong custom curves, faster spinners, and no animation on keyboard actions.
+- **Changed:** the inspector slides on a strong ease-out both ways, in 150 ms as before; the standard curve's slow start read as a delay. Escape closes it at once. The menu panel opens and closes without a fade, as a menu does, by click or shortcut. macOS's spinner turns at a speed Pith can't set, so the scan shows the bruhs spinner instead: a ring turning every 0.75 s, 1.5 s with Reduce Motion, run by Core Animation (checked offscreen: `transform.rotation.z`, 0.75 s, repeating), rendered light and dark.
+- **Already right:** the disk map's hover colours (80 to 150 ms), live charts and the table, which jump to new figures rather than animate, and folder navigation, which is instant. Nothing in Pith uses an ease-in curve now.
+- **Packaged UI:** all 37 smoke checks pass on the notarized build; 131 Swift tests.
