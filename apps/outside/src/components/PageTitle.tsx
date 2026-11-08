@@ -5,6 +5,7 @@ import { type Art, UI_ART } from '../pixel/art';
 import { Sprite } from '../pixel/Sprite';
 import { palette } from '../theme/palette';
 import { color, font, shadow, space } from '../theme/theme';
+import { RollingNumber } from './RollingNumber';
 
 // Big numbers shrink so a title row fits a 320-wide screen; the spoken label keeps every digit.
 export function compact(value: number): string {
@@ -57,7 +58,11 @@ export function PageTitle({ title, stat }: Readonly<{ title: string; stat?: Stat
         <View accessible accessibilityLabel={stat.spoken} style={styles.stat}>
           {stat.art ? <Sprite art={stat.art} size={18} /> : null}
           {stat.label ? <Text style={styles.label}>{stat.label}</Text> : null}
-          <Text style={[styles.value, { color: stat.tint ?? color.gold }]}>{compact(stat.value)}</Text>
+          <RollingNumber
+            value={stat.value}
+            format={compact}
+            style={[styles.value, { color: stat.tint ?? color.gold }]}
+          />
         </View>
       ) : null}
     </View>

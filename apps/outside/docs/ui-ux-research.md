@@ -1908,3 +1908,10 @@ Checked against four rules: ease-out for instant feedback, UI motion under 300 m
 - The system spinner, which can't be sped up, is replaced in icon buttons by the refresh glyph turning in quarter steps, a full turn every 320 ms. Reduced motion still shows the still hourglass.
 - `easeOut` lives in `theme.ts` beside the motion tokens, replacing two copies of the curve. The unused 400 ms token is gone.
 - Left alone: the scene's 380 ms sprite frames are an ambient loop rather than feedback, and the native pull-to-sync spinner can't be restyled. Not yet checked on a device.
+
+## Rolling figures (November 8, 2026)
+
+Live figures roll to each new value, like NumberFlow, without adding Reanimated: `RollingNumber` gives each digit a wheel of 0 to 9 on the existing Animated API and native driver. Every place turns the way the figure moved, so 19 to 20 rolls the ones on from 9 to 0 (`pixel/odometer.ts`, tested). It moves only when the value changes, over 250 ms on `easeOut`, the one motion token above 200 ms. Under reduced motion it is plain text. The digits are hidden from screen readers; each figure's parent already speaks it in full.
+
+- Used for the figure beside each tab's title (waiting steps, coins, total level, quest points), the skills tab's total xp, and the loot report's xp, which counts up from 0 as the report appears.
+- Checked in the web dev build at 320×640: sewing a straw hat took the pouch from 6,240 to 6,158, each place rolled down and rested on the right digit, and the report's +23 and +6 xp rolled up from 0. The rolled figure takes the same width as plain text (about 58 px), so nothing shifts. With reduced motion there are no wheels. No console errors. Not checked on a device.

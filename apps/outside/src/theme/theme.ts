@@ -54,7 +54,8 @@ export const layout = { touch: 48, button: 52, navigation: 68, border: 2 } as co
 // UI motion stays under 300 ms. Things that appear start fast and settle (ease-out), so a tap
 // answers at once; nothing in the UI eases in. Ambient loops, like the scene's sprite frames,
 // keep their own pace.
-export const motion = { fast: 120, standard: 200 } as const;
+// A digit wheel travels up to nine rows, so it gets a little longer than a fade.
+export const motion = { fast: 120, standard: 200, roll: 250 } as const;
 export const easeOut = Easing.bezier(0.2, 0, 0, 1);
 
 // One-pixel drop shadow, the classic MMO text treatment.

@@ -15,6 +15,7 @@ import { Sprite } from '../pixel/Sprite';
 import { color, font, shadow, space } from '../theme/theme';
 import { Bruh } from './Bruh';
 import { useEntrance } from './MotionProvider';
+import { RollingNumber } from './RollingNumber';
 import { Button } from './ui';
 
 function headline(report: Report): string {
@@ -58,7 +59,7 @@ function SkillRow({
       <View style={styles.row}>
         <Sprite art={SKILL_ART[skill]} size={18} />
         <Text style={styles.rowLabel}>{skill}</Text>
-        <Text style={styles.xp}>+{amount.toLocaleString()} xp</Text>
+        <RollingNumber value={amount} from={0} format={gained} style={styles.xp} />
       </View>
       <View style={styles.progress}>
         <View style={styles.grow}>
@@ -74,6 +75,10 @@ function SkillRow({
       ) : null}
     </View>
   );
+}
+
+function gained(amount: number): string {
+  return `+${amount.toLocaleString()} xp`;
 }
 
 export function RewardOverlay(): React.JSX.Element | null {

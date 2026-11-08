@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '../../components/Icon';
 import { compact, PageTitle, useTabStat } from '../../components/PageTitle';
+import { RollingNumber } from '../../components/RollingNumber';
 import { Screen } from '../../components/ui';
 import {
   ACTIVITIES,
@@ -97,7 +98,7 @@ export default function SkillsScreen(): React.JSX.Element {
           accessibilityLabel={`${totalXp(game).toLocaleString()} xp in all`}
         >
           <Text style={styles.totalLabel}>total xp</Text>
-          <Text style={[styles.level, styles.totalValue]}>{compact(totalXp(game))}</Text>
+          <RollingNumber value={totalXp(game)} format={compact} style={[styles.level, styles.totalValue]} />
         </View>
       </View>
       <Panel title={detail.name} aside={`level ${progress.level}`}>
