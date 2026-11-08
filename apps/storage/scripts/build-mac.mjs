@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,9 +15,24 @@ if (process.platform !== "darwin") throw new Error("The Pith app requires macOS 
 run("cargo", ["build", "--release", "--manifest-path", "scanner/Cargo.toml"]);
 run("pnpm", ["exec", "bruhs-theme-fonts"]);
 run("pnpm", ["exec", "vite", "build", "--config", "vite.native.config.ts"]);
-run("swift", ["build", "-c", "release", "--package-path", "native", "-Xswiftc", "-warnings-as-errors"]);
-const bin = run("swift", ["build", "-c", "release", "--package-path", "native", "--show-bin-path"], true);
 const build = path.join(root, "native/.build");
+// App Intents: the compiler records the values of types conforming to these protocols, which Xcode's
+// appintentsmetadataprocessor turns into the bundle's Metadata.appintents. Xcode does both itself; SwiftPM needs asking.
+const intentProtocols = path.join(build, "appintents-protocols.json");
+mkdirSync(build, { recursive: true });
+writeFileSync(intentProtocols, JSON.stringify(["AppIntent", "EntityQuery", "AppEntity", "TransientEntity", "AppEnum", "AppShortcutProviding",
+  "AppShortcutsProvider", "AnyResolverProviding", "AppIntentsPackage", "DynamicOptionsProvider"]));
+const constValues = ["-Xswiftc", "-emit-const-values", "-Xswiftc", "-Xfrontend", "-Xswiftc", "-const-gather-protocols-file", "-Xswiftc", "-Xfrontend", "-Xswiftc", intentProtocols];
+run("swift", ["build", "-c", "release", "--package-path", "native", "-Xswiftc", "-warnings-as-errors", ...constValues]);
+const bin = run("swift", ["build", "-c", "release", "--package-path", "native", "--show-bin-path"], true);
+
+/** Every Swift file of the Pith target, which the metadata processor reads alongside the compiler's values. */
+function swiftSources(folder) {
+  return readdirSync(folder, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(folder, entry.name);
+    return entry.isDirectory() ? swiftSources(full) : entry.name.endsWith(".swift") ? [full] : [];
+  });
+}
 const staging = mkdtempSync(path.join(build, "bundle-"));
 const app = path.join(staging, "Pith.app");
 const macos = path.join(app, "Contents/MacOS");
@@ -55,6 +70,28 @@ try {
 <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>\n`);
+  // Shortcuts and Siri find Pith's actions through Metadata.appintents, then its phrases through the training data.
+  const constValueFile = path.join(bin, "Pith.build/Pith.swiftconstvalues");
+  if (!existsSync(constValueFile)) throw new Error(`The compiler didn't write ${constValueFile}, which App Intents metadata needs.`);
+  writeFileSync(path.join(staging, "sources.txt"), `${swiftSources(path.join(root, "native/Sources/Pith")).join("\n")}\n`);
+  writeFileSync(path.join(staging, "constvalues.txt"), `${constValueFile}\n`);
+  const toolchain = path.dirname(path.dirname(path.dirname(run("xcrun", ["--find", "swiftc"], true))));
+  const xcodeBuild = run("xcodebuild", ["-version"], true).match(/Build version (\S+)/)?.[1];
+  if (!xcodeBuild) throw new Error("xcodebuild -version didn't name a build, which App Intents metadata records.");
+  const arch = run("uname", ["-m"], true);
+  run("xcrun", ["appintentsmetadataprocessor", "--output", resources, "--toolchain-dir", toolchain, "--module-name", "Pith",
+    "--sdk-root", run("xcrun", ["--show-sdk-path"], true), "--xcode-version", xcodeBuild, "--platform-family", "macOS",
+    "--deployment-target", "14.0", "--target-triple", `${arch}-apple-macos14.0`,
+    "--source-file-list", path.join(staging, "sources.txt"), "--swift-const-vals-list", path.join(staging, "constvalues.txt")], true);
+  const metadata = path.join(resources, "Metadata.appintents");
+  mkdirSync(path.join(staging, "phrases"));
+  run("xcrun", ["appintentsnltrainingprocessor", "--extracted-metadata-path", metadata, "--infoplist-path", path.join(app, "Contents/Info.plist"),
+    "--temp-dir-path", path.join(staging, "phrases"), "--bundle-id", "app.bruhs.pith", "--product-path", resources], true);
+  // A tripwire: an action missing here is one Shortcuts never shows.
+  const actions = Object.keys(JSON.parse(readFileSync(path.join(metadata, "extract.actionsdata"), "utf8")).actions ?? {});
+  for (const action of ["GetBusiestAppsIntent", "GetMemoryPressureIntent", "ShowActivityIntent", "ScanFolderIntent"]) {
+    if (!actions.includes(action)) throw new Error(`Metadata.appintents is missing ${action} (found ${actions.join(", ") || "none"}).`);
+  }
   for (const target of [path.join(macos, "storage-scanner"), app]) {
     run("codesign", ["--force", "--sign", "-", "--options", "runtime", "--timestamp=none", target]);
   }
