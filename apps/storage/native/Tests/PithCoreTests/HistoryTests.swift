@@ -15,6 +15,20 @@ final class HistoryTests: XCTestCase {
         XCTAssertNil(history.apps[key.id])
     }
 
+    func testOnlyReadingsOlderThanTenMinutesExpire() {
+        var history = SessionHistory()
+        let key = ProcessKey(pid: 7, started: 1)
+        let app = AppSample(id: key.id, name: "Steady", executable: "/steady", members: [key], cpu: 1, memory: 1, read: 0, written: 0, restricted: false)
+        for second in stride(from: 0.0, through: 600, by: 1) { history.append(snapshot(second, apps: [app])) }
+        // At 600 s the reading from 0 s is exactly ten minutes old, which still counts.
+        XCTAssertEqual(history.system.first?.uptime, 0)
+        XCTAssertEqual(history.apps[key.id]?.points.first?.uptime, 0)
+        history.append(snapshot(603, apps: [app]))
+        XCTAssertEqual(history.system.map(\.uptime).prefix(2), [3, 4], "0, 1 and 2 s went, together")
+        XCTAssertEqual(history.apps[key.id]?.points.first?.uptime, 3)
+        XCTAssertEqual(history.apps[key.id]?.points.count, 599)
+    }
+
     func testPIDReuseCreatesSeparateTimelinesAndPreservesGap() {
         var history = SessionHistory()
         for (time, start) in [(0.0, UInt64(1)), (60.0, UInt64(2))] {

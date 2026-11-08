@@ -286,11 +286,14 @@ public struct SessionHistory: Sendable {
     }
     public mutating func append(_ snapshot: ActivitySnapshot) {
         let cutoff = snapshot.uptime - Self.retention
-        system.removeAll { $0.uptime < cutoff }
+        // Points arrive in time order, so the expired ones are the first few. Testing every point instead made each
+        // sample cost as much as the whole history: 11 ms for 300 apps' ten minutes at one sample a second.
+        system.removeFirst(system.prefix { $0.uptime < cutoff }.count)
         system.append(ActivityPoint(date: snapshot.date, uptime: snapshot.uptime, cpu: snapshot.cpu, pressure: snapshot.pressure, memory: snapshot.memory, thermal: snapshot.thermal))
         for id in Array(apps.keys) {
             apps[id]?.isRunning = false
-            apps[id]?.points.removeAll { $0.uptime < cutoff }
+            let expired = apps[id]?.points.prefix { $0.uptime < cutoff }.count ?? 0
+            if expired > 0 { apps[id]?.points.removeFirst(expired) }
             if apps[id]?.points.isEmpty == true { apps.removeValue(forKey: id) }
         }
         for app in snapshot.apps {
