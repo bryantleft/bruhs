@@ -172,7 +172,7 @@
 
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-entrance: cubic-bezier(0, 0, 0, 1);
-  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-exit: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-bloom: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* Default transition for any element that just says `transition` */

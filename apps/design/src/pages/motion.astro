@@ -12,7 +12,7 @@ const durations = [
 const easings = [
   { name: "ease-standard", curve: "cubic-bezier(0.2, 0, 0, 1)", cls: "ease-standard", use: "Most UI transitions" },
   { name: "ease-entrance", curve: "cubic-bezier(0, 0, 0, 1)", cls: "ease-entrance", use: "Content entering view" },
-  { name: "ease-exit", curve: "cubic-bezier(0.4, 0, 1, 1)", cls: "ease-exit", use: "Content leaving view" },
+  { name: "ease-exit", curve: "cubic-bezier(0.23, 1, 0.32, 1)", cls: "ease-exit", use: "Content leaving view" },
   { name: "ease-bloom", curve: "cubic-bezier(0.34, 1.56, 0.64, 1)", cls: "ease-bloom", use: "Playful overshoot for brand accents" },
 ];
 ---
@@ -68,9 +68,9 @@ const easings = [
       <div class="flex flex-col gap-3 max-w-[72ch]">
         <!-- bruhs-theme-ignore: names the classes this rule bans -->
         <p class="text-body text-rambutan-300 text-pretty">Name the property with <code class="code-inline">transition-colors</code> or <code class="code-inline">transition-[translate]</code>. Avoid <code class="code-inline">transition-all</code>.</p>
-        <p class="text-body text-rambutan-300 text-pretty">Use <code class="code-inline">ease-entrance</code> when opening and <code class="code-inline">ease-exit</code> when closing.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Use <code class="code-inline">ease-entrance</code> when opening and <code class="code-inline">ease-exit</code> when closing. Both start fast and settle, so motion answers at once.</p>
         <p class="text-body text-rambutan-300 text-pretty">Wrap decorative motion in <code class="code-inline">motion-safe:</code>. A spinner may keep moving at a slower speed.</p>
-        <p class="text-body text-rambutan-300 text-pretty">Keep frequent and keyboard actions immediate. Keep routine transitions at 400ms or less.</p>
+        <p class="text-body text-rambutan-300 text-pretty">Keep frequent and keyboard actions immediate. Keep routine transitions under 300ms.</p>
         <!-- bruhs-theme-ignore: names the classes this rule bans -->
         <p class="text-body text-rambutan-300 text-pretty">Use named motion tokens. The theme checker rejects raw values such as <code class="code-inline">duration-300</code> and <code class="code-inline">ease-in-out</code>.</p>
       </div>

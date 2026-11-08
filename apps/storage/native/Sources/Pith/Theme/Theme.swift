@@ -215,7 +215,7 @@ struct ProtectedMark: View {
 
 /// bruhs button tones for Pith's content. Toolbars and menus keep standard controls.
 /// The bruhs spinner, as the design system's `.spinner` draws it on the web: a ring with a quarter gone, turning once
-/// every 0.75 s, since a quicker turn makes a wait feel shorter. Reduce Motion slows it to 1.5 s, as the web's does.
+/// every 0.6 s, since a quicker turn makes a wait feel shorter. Reduce Motion slows it to 1.2 s, as the web's does.
 /// macOS's own spinner turns at a speed Pith can't set. Core Animation turns this one in the render server, so a long
 /// scan costs Pith nothing to show it.
 struct BruhsSpinner: NSViewRepresentable {
@@ -270,7 +270,7 @@ struct BruhsSpinner: NSViewRepresentable {
             // Clockwise, as the web's turns: a negative angle in AppKit's unflipped layers.
             turn.fromValue = 0
             turn.toValue = -2 * Double.pi
-            turn.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 1.5 : 0.75
+            turn.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 1.2 : 0.6
             turn.repeatCount = .infinity
             ring.add(turn, forKey: "spin")
         }

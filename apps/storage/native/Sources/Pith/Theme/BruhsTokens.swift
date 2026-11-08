@@ -177,7 +177,7 @@ enum BruhsMotion {
     static let bloom: Double = 0.6
     static func standard(duration: Double) -> Animation { .timingCurve(0.2, 0, 0, 1, duration: duration) }
     static func entrance(duration: Double) -> Animation { .timingCurve(0, 0, 0, 1, duration: duration) }
-    static func exit(duration: Double) -> Animation { .timingCurve(0.4, 0, 1, 1, duration: duration) }
+    static func exit(duration: Double) -> Animation { .timingCurve(0.23, 1, 0.32, 1, duration: duration) }
 }
 
 private func appearanceColor(dark: NSColor, light: NSColor, darkHighContrast: NSColor? = nil, lightHighContrast: NSColor? = nil) -> NSColor {
