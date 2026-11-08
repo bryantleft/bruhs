@@ -30,7 +30,8 @@ public enum ProcessDetails {
     private static let signers = Signers()
 
     /// Who signed the code at `path`, as Finder's Get Info and `codesign` name it: "Apple", a developer's name, "Signed
-    /// on this Mac" for an ad hoc signature, or "Not signed".
+    /// on this Mac" for an ad hoc signature, or "Not signed". Nil when the code can't be read, as when the file has gone
+    /// since the process started.
     public static func signer(_ path: String) -> String? { signers.signer(path) }
 
     private final class Signers: @unchecked Sendable {
@@ -47,7 +48,7 @@ public enum ProcessDetails {
         private func read(_ path: String) -> String? {
             guard !path.isEmpty else { return nil }
             var code: SecStaticCode?
-            guard SecStaticCodeCreateWithPath(URL(fileURLWithPath: path) as CFURL, [], &code) == errSecSuccess, let code else { return "Not signed" }
+            guard SecStaticCodeCreateWithPath(URL(fileURLWithPath: path) as CFURL, [], &code) == errSecSuccess, let code else { return nil }
             var info: CFDictionary?
             guard SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
                   let details = info as? [String: Any] else { return nil }
