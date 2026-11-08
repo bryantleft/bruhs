@@ -101,6 +101,20 @@ extension Font {
     static var sectionTitle: Font { .system(size: size(11), weight: .semibold) }
     /// Chips and buttons, which sit beside macOS's own controls.
     static var control: Font { .system(size: size(12), weight: .medium) }
+
+    /// The AppKit faces of the monaspace roles, for figures Core Animation draws: the same family, size and weight, at
+    /// the same text size, so a drawn figure measures as the role's text would.
+    static var readoutFace: NSFont { monaspaceFace(size(30), weight: .medium) }
+    static var dataFace: NSFont { monaspaceFace(size(12.5)) }
+    static var dataSmallFace: NSFont { monaspaceFace(size(11)) }
+    static var captionFace: NSFont { monaspaceFace(size(11)) }
+
+    private static func monaspaceFace(_ points: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
+        let fallback = NSFont.monospacedSystemFont(ofSize: points, weight: weight)
+        guard BruhsFonts.isAvailable else { return fallback }
+        let descriptor = NSFontDescriptor(fontAttributes: [.family: BruhsFonts.Family.neon.rawValue, .traits: [NSFontDescriptor.TraitKey.weight: weight]])
+        return NSFont(descriptor: descriptor, size: points) ?? fallback
+    }
 }
 
 extension MemoryPressure {
@@ -190,13 +204,17 @@ struct BruhsBadge: View {
 struct LabeledFigure: View {
     let label: String
     let value: String
-    /// The number behind a live value; nil for one that holds still.
+    /// The number behind a live value, so its digits spin to a new reading; nil for one that holds still.
     var amount: Double? = nil
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             Text(label).font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary)
-            Text(verbatim: value).font(BruhsType.caption).foregroundStyle(BruhsColor.textSecondary)
+            if let amount {
+                FlowText(value, amount: amount, face: BruhsType.captionFace, color: BruhsNSColor.textSecondary)
+            } else {
+                Text(verbatim: value).font(BruhsType.caption).foregroundStyle(BruhsColor.textSecondary)
+            }
         }
         .lineLimit(1)
         .fixedSize()

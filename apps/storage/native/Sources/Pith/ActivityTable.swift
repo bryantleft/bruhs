@@ -618,7 +618,7 @@ enum ActivityFigure: Equatable {
     case unavailable
     /// Below what the figure can show, such as CPU under 0.05%. Lists leave it empty; a labelled figure shows it, as "0%".
     case zero(String)
-    /// The figure as shown and as spoken, and the number behind it.
+    /// The figure as shown and as spoken, and the number behind it, whose rise or fall sets which way its digits spin.
     case value(String, spoken: String, amount: Double)
 
     init(_ column: ActivityColumn, _ values: ActivityListing.Values) {
@@ -663,11 +663,11 @@ enum ActivityFigure: Equatable {
 /// `showsZero` where the figure has its own label, so "Read" never stands beside nothing.
 struct FigureText: View {
     let figure: ActivityFigure
-    var color: Color = BruhsColor.textSecondary
+    var color: NSColor = BruhsNSColor.textSecondary
     var showsZero = false
 
     var body: some View {
-        Text(verbatim: text).font(BruhsType.dataSmall).foregroundStyle(tint)
+        FlowText(text, amount: figure.amount, face: BruhsType.dataSmallFace, color: tint)
     }
 
     private var text: String {
@@ -678,5 +678,5 @@ struct FigureText: View {
         }
     }
 
-    private var tint: Color { if case .zero = figure { BruhsColor.textTertiary } else { color } }
+    private var tint: NSColor { if case .zero = figure { BruhsNSColor.textTertiary } else { color } }
 }
