@@ -12,6 +12,10 @@ function run(command, args, capture = false) {
 }
 
 if (process.platform !== "darwin") throw new Error("The Pith app requires macOS and Xcode command-line tools.");
+// A release is signed with a Developer ID, notarized and stapled, so it opens on any Mac. Other builds are signed ad hoc,
+// which needs no keychain access and runs only where it was built.
+const release = process.argv.includes("--release");
+const identity = release ? developerID() : "-";
 run("cargo", ["build", "--release", "--manifest-path", "scanner/Cargo.toml"]);
 run("pnpm", ["exec", "bruhs-theme-fonts"]);
 run("pnpm", ["exec", "vite", "build", "--config", "vite.native.config.ts"]);
@@ -92,11 +96,65 @@ try {
   for (const action of ["GetBusiestAppsIntent", "GetMemoryPressureIntent", "ShowActivityIntent", "ScanFolderIntent"]) {
     if (!actions.includes(action)) throw new Error(`Metadata.appintents is missing ${action} (found ${actions.join(", ") || "none"}).`);
   }
+  // Notarization requires the hardened runtime and Apple's secure timestamp on every executable.
   for (const target of [path.join(macos, "storage-scanner"), app]) {
-    run("codesign", ["--force", "--sign", "-", "--options", "runtime", "--timestamp=none", target]);
+    run("codesign", ["--force", "--sign", identity, "--options", "runtime", release ? "--timestamp" : "--timestamp=none", target]);
   }
   const output = path.join(build, "Pith.app");
   rmSync(output, { recursive: true, force: true });
   renameSync(app, output);
-  console.log(`Built ${output}\nLocally ad-hoc signed. Developer ID signing and notarization are required before distribution.`);
+  if (release) {
+    const download = notarize(output);
+    console.log(`Built ${output}\nSigned with ${identity}, notarized and stapled. The download is ${download}.`);
+  } else {
+    console.log(`Built ${output}\nSigned ad hoc for this Mac. Run with --release to sign with Developer ID and notarize.`);
+  }
 } finally { rmSync(staging, { recursive: true, force: true }); }
+
+/** The Developer ID Application identity a release is signed with: PITH_SIGN_IDENTITY, or the keychain's only one. */
+function developerID() {
+  if (process.env.PITH_SIGN_IDENTITY) return process.env.PITH_SIGN_IDENTITY;
+  const identities = run("security", ["find-identity", "-v", "-p", "codesigning"], true)
+    .split("\n")
+    .map((line) => /"(Developer ID Application: [^"]+)"/.exec(line)?.[1])
+    .filter(Boolean);
+  if (identities.length !== 1) {
+    throw new Error(`A release is signed with a Developer ID Application certificate, and the keychain has ${identities.length}. ` +
+      "Create one in Xcode > Settings > Accounts > Manage Certificates, or set PITH_SIGN_IDENTITY to choose one.");
+  }
+  return identities[0];
+}
+
+/**
+ * Sends the signed app to Apple's notary service, staples the ticket so it opens offline too, checks Gatekeeper accepts
+ * it, and zips it for download. The credentials are a notarytool keychain profile, `pith-notary` unless
+ * PITH_NOTARY_PROFILE names another.
+ */
+function notarize(app) {
+  const profile = process.env.PITH_NOTARY_PROFILE ?? "pith-notary";
+  const archive = path.join(build, "Pith.zip");
+  rmSync(archive, { force: true });
+  run("ditto", ["-c", "-k", "--keepParent", app, archive]);
+  const submit = spawnSync("xcrun", ["notarytool", "submit", archive, "--keychain-profile", profile, "--wait", "--output-format", "json"],
+    { cwd: root, encoding: "utf8" });
+  let result;
+  try {
+    result = JSON.parse(submit.stdout);
+  } catch {
+    throw new Error(`notarytool couldn't submit (${submit.status}): ${submit.stderr || submit.stdout}\nWithout the "${profile}" profile, ` +
+      `store it once: xcrun notarytool store-credentials ${profile} --key <AuthKey.p8> --key-id <key ID> --issuer <issuer ID>`);
+  }
+  if (result.status !== "Accepted") {
+    const log = spawnSync("xcrun", ["notarytool", "log", result.id, "--keychain-profile", profile], { encoding: "utf8" });
+    throw new Error(`Apple's notary service answered ${result.status} for submission ${result.id}:\n${log.stdout || log.stderr}`);
+  }
+  run("xcrun", ["stapler", "staple", app]);
+  const verdict = spawnSync("spctl", ["--assess", "--type", "execute", "--verbose=4", app], { encoding: "utf8" });
+  if (verdict.status !== 0 || !verdict.stderr.includes("source=Notarized Developer ID")) {
+    throw new Error(`Gatekeeper didn't accept the notarized app: ${verdict.stderr}`);
+  }
+  // Zipped again after stapling, so the ticket travels with the download.
+  rmSync(archive);
+  run("ditto", ["-c", "-k", "--keepParent", app, archive]);
+  return archive;
+}

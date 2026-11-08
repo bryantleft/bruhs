@@ -7,6 +7,7 @@
     "build": "pnpm run build:scanner && bruhs-theme-fonts && vite build",
     "build:scanner": "cargo build --release --manifest-path scanner/Cargo.toml",
     "build:mac": "node scripts/build-mac.mjs",
+    "release:mac": "node scripts/build-mac.mjs --release",
     "open:mac": "open native/.build/Pith.app",
     "check:mac": "node scripts/brand.mjs --check && node ../../packages/ui/scripts/swift-tokens.mjs native/Sources/Pith/Theme/BruhsTokens.swift --check && node scripts/lint-native.mjs && cargo test --release --manifest-path scanner/Cargo.toml && swift test --package-path native -Xswiftc -warnings-as-errors && tsc --project native-web/tsconfig.json && biome check native-web vite.native.config.ts && bruhs-theme-lint native-web",
     "start": "vite preview",

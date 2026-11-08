@@ -13,7 +13,21 @@ pnpm open:pith
 
 The app is at `apps/storage/native/.build/Pith.app`. You can drag it to Applications. It is built for the current Mac's architecture, targets macOS 14+, and has been run locally on Apple Silicon/macOS 26.3. Older macOS versions and Intel need their own verification before release.
 
-The local build is ad-hoc signed, including the bundled scanner, with hardened runtime enabled. It is **not Developer ID signed or notarized**. Public distribution needs a stable signing identity, notarization and independent compatibility testing. Rebuilding the ad-hoc app can invalidate existing privacy grants; grant Full Disk Access to the final installed app when a partial scan requires it.
+`build:pith` signs the app and its bundled scanner ad hoc, with the hardened runtime, so it runs on the Mac that built it. Rebuilding an ad-hoc app can invalidate its privacy grants; grant Full Disk Access to the installed app when a partial scan needs it.
+
+### Release
+
+```sh
+pnpm --filter storage release:mac
+```
+
+This signs both with the keychain's Developer ID Application certificate and Apple's secure timestamp, sends the app to Apple's notary service, staples the ticket so it opens offline, checks that Gatekeeper accepts it, and leaves the download at `apps/storage/native/.build/Pith.zip`. It stops with Apple's log when notarization isn't accepted. It needs a notarytool keychain profile, stored once from an App Store Connect API key:
+
+```sh
+xcrun notarytool store-credentials pith-notary --key AuthKey_<key ID>.p8 --key-id <key ID> --issuer <issuer ID>
+```
+
+`PITH_SIGN_IDENTITY` picks the certificate when the keychain has several, and `PITH_NOTARY_PROFILE` names another profile. A release is still built for the building Mac's architecture only, and has no update feed: a new version is a new download.
 
 ## Use
 

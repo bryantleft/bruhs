@@ -56,6 +56,8 @@ extension AppDelegate {
             let pid = ProcessInfo.processInfo.processIdentifier
             let own = activity.snapshot?.apps.first { $0.members.contains { $0.pid == pid } }
             checks["own_process_metrics"] = (own?.memory ?? 0) > 0
+            // Network by app loads a private framework at run time, which the hardened runtime must still allow.
+            checks["network_by_app"] = SystemSampler.countsNetwork && own?.network != nil
             // Pith names itself from its bundle and sorts macOS's own daemons into System.
             checks["process_identity"] = own?.identity.kind == .app && own?.name == "Pith"
                 && activity.snapshot?.apps.contains { $0.identity.kind == .system } == true
@@ -160,7 +162,15 @@ extension AppDelegate {
         // Selecting shows the selection bar; the map mustn't change size under the pointer, or the second click of a
         // double-click lands on another block.
         let mapHeight = "return document.querySelector('canvas').getBoundingClientRect().height"
-        let before = try await web.callAsyncJavaScript(mapHeight, in: nil, contentWorld: .page) as? Double
+        // The canvas draws before the page finishes laying it out, which a slow first launch makes visible: the height is
+        // read once two readings a tenth of a second apart agree.
+        var before = try await web.callAsyncJavaScript(mapHeight, in: nil, contentWorld: .page) as? Double
+        for _ in 0..<50 {
+            try await Task.sleep(for: .milliseconds(100))
+            let again = try await web.callAsyncJavaScript(mapHeight, in: nil, contentWorld: .page) as? Double
+            if let again, again > 0, again == before { break }
+            before = again
+        }
         _ = try await web.callAsyncJavaScript("document.querySelector('aside button')?.click()", in: nil, contentWorld: .page)
         try await Task.sleep(for: .milliseconds(400))
         let selection = disk.selected != nil
