@@ -218,24 +218,31 @@ extension AppDelegate {
         return drawn == IconAppearance.allCases
     }
 
-    /// The path bar over the map: its disk reads as the disk's own name, not "/", and its menu lists the disks
-    /// attached, then Choose Folder. A folder of the path opens the map there, as clicking it does, and Back and Forward
-    /// in the Go menu, pressed as their keys, retrace the steps, each only when there's somewhere to go.
+    /// The path bar over the map: its disk reads as the disk's own name, not "/", and its menu lists every disk mounted,
+    /// each with its icon from the icon store, then Choose Folder. A folder of the path opens the map there, as clicking
+    /// it does, and Back and Forward, typed with the map focused, retrace the steps, each only when there's somewhere to
+    /// go.
     private func checkPathBar(_ fixture: String, in main: MainWindowController) async -> [String: Bool] {
         let sub = (fixture as NSString).appendingPathComponent("sub")
-        let startup = (try? URL(fileURLWithPath: "/").resourceValues(forKeys: [.volumeLocalizedNameKey]))?.volumeLocalizedName ?? ""
-        // The fixture is on the startup disk, which the bar names as Finder does, then each folder down to the map's.
+        // Disk lists the disks off the main thread as it opens.
+        let listed = await eventually { !self.disk.choices.isEmpty }
+        // The fixture is on the startup disk, which the bar names as macOS does, then each folder down to the map's.
         let path = disk.folderPath
-        let named = !startup.isEmpty && path?.volume == FolderPath.Volume(path: "/", name: startup) && path?.folders.last == fixture
-            && path?.folders.contains("/") == false
+        let named = listed && path?.volume == FolderPath.Volume(path: "/", name: DiskModel.startupDiskName) && path?.folders.last == fixture
+        // The path bar draws the disks' icons for the menu ahead of time.
+        let appearance = IconAppearance(main.window.effectiveAppearance), scale = main.window.backingScaleFactor
+        let drawn = await eventually {
+            self.disk.choices.allSatisfy { Icons.store.cachedIcon(for: DiskModel.menuIconRequest($0.url.path, appearance: appearance, scale: scale)) != nil }
+        }
         // A disk's item reads its name, then its free space: "Macintosh HD", a tab, "Free 49.3 GB".
-        let items = disk.diskMenu().menu.items
+        let items = disk.diskMenu(appearance: appearance, scale: scale).menu.items
         let disks = items.prefix { !$0.isSeparatorItem }
-        let shown = disks.first { $0.title.hasPrefix(startup + "\t") }
-        let listed = disks.count == disk.choices.count && disks.allSatisfy { $0.image != nil }
-            && shown?.title.hasPrefix(startup + "\tFree ") == true && shown?.state == .on
+        let mounted = Self.mountedDiskNames()
+        let startup = disks.first { $0.title.hasPrefix(DiskModel.startupDiskName + "\tFree ") }
+        let menu = drawn && !mounted.isEmpty && mounted.allSatisfy { name in disks.contains { $0.title == name || $0.title.hasPrefix(name + "\t") } }
+            && disks.allSatisfy { $0.image != nil } && startup?.state == .on
             && items.count == disks.count + 2 && items.last?.title == "Choose Folder…" && items.last?.keyEquivalent == "o"
-        print("path bar \(path?.volume.name ?? "none") then \(path?.folders.count ?? 0) folders; disk menu \(disks.map(\.title))")
+        print("path bar \(path?.volume.name ?? "none") then \(path?.folders.count ?? 0) folders; disk menu \(disks.map { $0.title }) for \(mounted.sorted())")
 
         // Nothing opened yet, so Back and Forward have nowhere to go.
         let nowhere = goItem("Back")?.isEnabled == false && goItem("Forward")?.isEnabled == false
@@ -245,7 +252,9 @@ extension AppDelegate {
         let enclosing = disk.folderPath?.folders.dropLast().last
         if let enclosing { disk.show(enclosing) }
         let up = await eventually { self.disk.openFolder == fixture }
-        // ⌘[ goes back to sub and ⌘] forward to the fixture again, after which Forward has nowhere to go.
+        // ⌘[ goes back to sub and ⌘] forward to the fixture again, typed with the map focused, as after a click on it.
+        if let web = webView { main.window.makeFirstResponder(web) }
+        let focused = webView.map { (main.window.firstResponder as? NSView)?.isDescendant(of: $0) == true } == true
         let canGoBack = goItem("Back")?.isEnabled == true
         pressCommand("[", keyCode: 33, in: main.window)
         let back = await eventually { self.disk.openFolder == sub }
@@ -253,9 +262,19 @@ extension AppDelegate {
         pressCommand("]", keyCode: 30, in: main.window)
         let forward = await eventually { self.disk.openFolder == fixture }
         let end = goItem("Forward")?.isEnabled == false && goItem("Back")?.isEnabled == true
-        print("path bar opened \(opened), then \(enclosing ?? "nothing") \(up); nowhere \(nowhere), back \(canGoBack) \(back), forward \(canGoForward) \(forward), then \(end)")
-        return ["path_bar_names_the_disk": named, "disk_menu_lists_disks": listed, "path_bar_opens_a_folder": opened && enclosing == fixture && up,
-                "go_back_and_forward": nowhere && canGoBack && back && canGoForward && forward && end]
+        print("path bar opened \(opened), then \(enclosing ?? "nothing") \(up); nowhere \(nowhere), focused \(focused), back \(canGoBack) \(back), forward \(canGoForward) \(forward), then \(end)")
+        return ["path_bar_names_the_disk": named, "disk_menu_lists_disks": menu, "path_bar_opens_a_folder": opened && enclosing == fixture && up,
+                "go_back_and_forward": nowhere && focused && canGoBack && back && canGoForward && forward && end]
+    }
+
+    /// The names of the disks mounted now that Finder's sidebar shows, as macOS gives them to this check.
+    private static func mountedDiskNames() -> Set<String> {
+        let keys: Set<URLResourceKey> = [.volumeLocalizedNameKey, .volumeIsBrowsableKey]
+        let volumes = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: Array(keys), options: [.skipHiddenVolumes]) ?? []
+        return Set(volumes.compactMap { url in
+            guard let values = try? url.resourceValues(forKeys: keys), values.volumeIsBrowsable != false else { return nil }
+            return values.volumeLocalizedName
+        })
     }
 
     /// The Go menu's item titled `title`, enabled as the menu bar shows it now.
@@ -265,12 +284,13 @@ extension AppDelegate {
         return go?.item(withTitle: title)
     }
 
-    /// Presses Command and `key` through the main menu, as typing it does.
+    /// Presses Command and `key` as AppKit routes a key equivalent: to the window's views first, the map's page among
+    /// them when it has the focus, then to the main menu.
     private func pressCommand(_ key: String, keyCode: UInt16, in window: NSWindow) {
         guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: ProcessInfo.processInfo.systemUptime,
                                            windowNumber: window.windowNumber, context: nil, characters: key, charactersIgnoringModifiers: key,
                                            isARepeat: false, keyCode: keyCode) else { return }
-        _ = NSApp.mainMenu?.performKeyEquivalent(with: event)
+        if !window.performKeyEquivalent(with: event) { _ = NSApp.mainMenu?.performKeyEquivalent(with: event) }
     }
 
     /// Whether the next two samples arrive about `interval` apart, as the model's cadence promises.

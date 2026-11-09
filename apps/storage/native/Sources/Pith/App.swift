@@ -82,6 +82,12 @@ import PithCore
         observers.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.activity.start() }
         })
+        // The disk menu and the path bar name the disks mounted now.
+        for name in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification, NSWorkspace.didRenameVolumeNotification] {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.disk.refreshChoices() }
+            })
+        }
         let automated = CommandLine.arguments.contains { ["--activity", "--scan", "--smoke-test"].contains($0) }
         // An automated run never goes online or asks the person anything, and leaves their update settings alone. Nor
         // does it map the person's disk, which the smoke test does with a folder of its own.
@@ -311,8 +317,12 @@ import PithCore
     private var diskShowing: Bool { mainWindow?.window.isVisible == true && mainWindow?.state.tab == .disk }
 
     @objc private func chooseFolder() { showDisk(); disk.chooseFolder() }
-    /// As the disk menu's startup disk: the map's page opens its root when the map shown is the whole disk.
-    @objc private func scanStartupDisk() { showDisk(); disk.show("/") }
+    /// Shows the startup disk from the live map, as the disk menu's startup disk does: at its root when the map shown is
+    /// the whole disk. Without the live map it scans the disk, again if the map shown is a scan of it.
+    @objc private func scanStartupDisk() {
+        showDisk()
+        if disk.liveMapRuns { disk.show("/") } else { disk.scan(URL(fileURLWithPath: "/")) }
+    }
     /// The live map lists the open folder again, everything in it; a scanned map is scanned again.
     @objc private func scanAgain() {
         if disk.liveView != nil {
@@ -367,12 +377,13 @@ import PithCore
             menuItem.title = live ? "Check Again" : "Scan Again"
             return diskShowing && !disk.isScanning && disk.scope != nil && (!live || disk.live?.state.isMapped == true)
         case #selector(scanStartupDisk):
-            menuItem.title = disk.live == nil || disk.live?.state.isFailed == true ? "Scan Startup Disk" : "Show Startup Disk"
+            menuItem.title = disk.liveMapRuns ? "Show Startup Disk" : "Scan Startup Disk"
             return !disk.isScanning && !disk.isTrashing
         case #selector(chooseFolder): return !disk.isScanning && !disk.isTrashing
-        case #selector(goBack): return diskShowing && disk.canGoBack
-        case #selector(goForward): return diskShowing && disk.canGoForward
-        case #selector(enclosingFolder): return diskShowing && disk.openFolder != nil && disk.openFolder != disk.result?.root.path
+        // While a scan runs, the map under it is dimmed and doesn't take clicks, so it doesn't move either.
+        case #selector(goBack): return diskShowing && !disk.isScanning && disk.canGoBack
+        case #selector(goForward): return diskShowing && !disk.isScanning && disk.canGoForward
+        case #selector(enclosingFolder): return diskShowing && !disk.isScanning && disk.openFolder != nil && disk.openFolder != disk.result?.root.path
         case #selector(biggerText): return TextSize.shared.canGrow
         case #selector(smallerText): return TextSize.shared.canShrink
         case #selector(actualTextSize): return TextSize.shared.scale != 1

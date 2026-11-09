@@ -128,6 +128,9 @@ enum MapCommand: Equatable {
     private(set) var openFolder: String? {
         didSet { if openFolder != oldValue, openFolder != nil, liveView != nil { refreshLive() } }
     }
+    /// A folder the page went back or forward to that the map's tree leaves out: the live map shows it in detail, so
+    /// the next tree holds it.
+    @ObservationIgnored private var wantedFolder: String?
     /// Whether the page's Back and Forward have somewhere to go, which the Go menu follows.
     private(set) var canGoBack = false
     private(set) var canGoForward = false
@@ -135,6 +138,7 @@ enum MapCommand: Equatable {
     @ObservationIgnored var pageCommand: ((MapCommand) -> Void)?
     /// The mounted volumes, for the disk menu, the path bar's names and the list shown when the live map can't run.
     private(set) var choices: [DiskVolumeChoice] = []
+    @ObservationIgnored private var choicesTask: Task<Void, Never>?
     private let runner = ScannerRunner()
     private var operation: Task<Void, Never>?
     private var generation = UUID()
@@ -229,7 +233,11 @@ enum MapCommand: Equatable {
         return listed.contains { $0.path == "/" } ? listed : listed + [FolderPath.Volume(path: "/", name: Self.startupDiskName)]
     }
 
-    private static let startupDiskName = (try? URL(fileURLWithPath: "/").resourceValues(forKeys: [.volumeLocalizedNameKey]))?.volumeLocalizedName ?? "Startup disk"
+    /// The startup disk's name, such as "Macintosh HD", for the path bar until the disks are listed.
+    static let startupDiskName = (try? URL(fileURLWithPath: "/").resourceValues(forKeys: [.volumeLocalizedNameKey]))?.volumeLocalizedName ?? "Startup disk"
+
+    /// Whether the live map runs, so the startup disk shows from it rather than from a scan.
+    var liveMapRuns: Bool { live.map { !$0.state.isFailed } ?? false }
 
     /// Shows `path`, as the path bar's folders and the disk menu's disks ask. The map's page opens a folder of the map
     /// shown; anything else goes as `scan` routes it, to the live map or a scan.
@@ -242,16 +250,23 @@ enum MapCommand: Equatable {
         }
     }
 
-    /// The page moved the map: the folder it shows now, and whether its Back and Forward can go anywhere.
-    func pageMoved(to folder: String, canGoBack: Bool, canGoForward: Bool) {
+    /// The page moved the map: the folder it shows now, one it went back or forward to that the tree leaves out, and
+    /// whether its Back and Forward can go anywhere.
+    func pageMoved(to folder: String, wanting wanted: String?, canGoBack: Bool, canGoForward: Bool) {
+        let refocus = wanted != wantedFolder
+        wantedFolder = wanted
+        // A new open folder asks for its tree in detail, the wanted folder's when there is one.
         openFolder = folder
+        if refocus, wanted != nil, liveView != nil { refreshLive() }
         self.canGoBack = canGoBack
         self.canGoForward = canGoForward
     }
 
-    /// A page that loads again opens the map at its root, with nowhere to go back or forward.
-    func pageLoaded() {
+    /// The page opens a map at its root, with nowhere to go back or forward: the page loaded again, or the map is of
+    /// another folder now.
+    func mapStartsOver() {
         openFolder = nil
+        wantedFolder = nil
         canGoBack = false
         canGoForward = false
     }
@@ -299,8 +314,7 @@ enum MapCommand: Equatable {
         if result?.root.path != path {
             select(nil)
             result = nil
-            // The page opens a map of another folder at its root.
-            openFolder = nil
+            mapStartsOver()
             accounting = nil
             revision = UUID()
         }
@@ -332,9 +346,10 @@ enum MapCommand: Equatable {
         detailAsked = detailFolder
     }
 
-    /// The open folder, when it's inside the view: the map shows it in finer detail.
+    /// The open folder, or the one the page wants while the tree leaves it out, when it's inside the view: the map
+    /// shows it in finer detail.
     private var detailFolder: String? {
-        guard let path = liveView, let open = openFolder, open != path, open.hasPrefix(path == "/" ? "/" : path + "/") else { return nil }
+        guard let path = liveView, let open = wantedFolder ?? openFolder, open != path, open.hasPrefix(path == "/" ? "/" : path + "/") else { return nil }
         return open
     }
     private var detailAsked: String?
@@ -413,11 +428,22 @@ enum MapCommand: Equatable {
         if picker.runModal() == .OK, let root = picker.url { scan(root) }
     }
 
-    /// The startup disk, then other volumes in Finder's sidebar, each with its capacity.
+    /// Lists the volumes again, off the main thread, since a network volume can be slow to answer: when Disk opens,
+    /// when a disk is mounted, unmounted or renamed, and when the disk menu opens, for the free space it shows next.
     func refreshChoices() {
+        choicesTask?.cancel()
+        choicesTask = Task { [weak self] in
+            let found = await Task.detached(priority: .userInitiated) { DiskModel.mountedVolumes() }.value
+            guard !Task.isCancelled, let self, found != self.choices else { return }
+            self.choices = found
+        }
+    }
+
+    /// The startup disk, then other volumes in Finder's sidebar, each with its capacity.
+    nonisolated private static func mountedVolumes() -> [DiskVolumeChoice] {
         let keys: [URLResourceKey] = [.volumeLocalizedNameKey, .volumeTotalCapacityKey, .volumeAvailableCapacityKey, .volumeIsRootFileSystemKey, .volumeIsBrowsableKey]
         let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
-        let found = urls.compactMap { url -> DiskVolumeChoice? in
+        return urls.compactMap { url -> DiskVolumeChoice? in
             guard let values = try? url.resourceValues(forKeys: Set(keys)), values.volumeIsBrowsable != false else { return nil }
             let startup = values.volumeIsRootFileSystem == true
             return DiskVolumeChoice(url: startup ? URL(fileURLWithPath: "/") : url, name: values.volumeLocalizedName ?? url.lastPathComponent,
@@ -425,14 +451,11 @@ enum MapCommand: Equatable {
                                     isStartup: startup)
         }
         .sorted { $0.isStartup && !$1.isStartup }
-        if found != choices { choices = found }
     }
 
     /// Shows `root`: from the live map when the map holds it, or scanned.
     func scan(_ root: URL) {
         guard !isTrashing, !isScanning else { return }
-        // A disk mounted since the list was made is named in the path bar too.
-        refreshChoices()
         let root = root.standardizedFileURL.resolvingSymlinksInPath()
         if let live, live.state != .off, !Self.failed(live.state), LivePlan.holds(root.path, mapOf: live.root) {
             showLive(root.path)
@@ -472,7 +495,7 @@ enum MapCommand: Equatable {
                 guard !Task.isCancelled, generation == id else { return }
                 select(nil)
                 // The page opens a map of another folder at its root; a new scan of the same one stays where it was.
-                if result?.root.path != value.root.path { openFolder = nil }
+                if result?.root.path != value.root.path { mapStartsOver() }
                 result = value; scannedAt = Date(); edited = false; trashed = nil
                 compareWithLastScan(value)
                 revision = UUID()

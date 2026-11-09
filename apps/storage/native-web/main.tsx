@@ -25,8 +25,8 @@ import { type NavigationAction, NO_MAP, navigate } from "./navigation";
 import "./styles.css";
 
 /**
- * What the page tells Pith: the selection, the open folder with whether Back and Forward can go anywhere, and
- * requests for native actions.
+ * What the page tells Pith: the selection; the open folder, with one gone back or forward to that the map leaves out
+ * and whether Back and Forward can go anywhere; and requests for native actions.
  */
 type Message =
   | { action: "ready" }
@@ -34,6 +34,7 @@ type Message =
   | {
       action: "location";
       path: string;
+      wanted: string | null;
       canGoBack: boolean;
       canGoForward: boolean;
     }
@@ -242,18 +243,20 @@ function DiskMap() {
     };
   }, [go]);
 
-  // Pith's path bar and bar under the map show the open folder, and its Go menu offers Back and Forward when they
-  // can go somewhere.
+  // Pith's path bar and bar under the map show the open folder, its live map shows a folder still wanted in detail
+  // so the next map holds it, and its Go menu offers Back and Forward when they can go somewhere.
+  const wanted = nav.wanted?.at(-1) ?? null;
   useEffect(() => {
     if (current) {
       post({
         action: "location",
         path: current.path,
+        wanted,
         canGoBack: nav.back.length > 0,
         canGoForward: nav.forward.length > 0,
       });
     }
-  }, [current, nav.back, nav.forward]);
+  }, [current, wanted, nav.back, nav.forward]);
 
   // Copy with an item selected copies its path, as Finder's Copy does with a file's name.
   useEffect(() => {

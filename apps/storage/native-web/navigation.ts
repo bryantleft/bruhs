@@ -92,37 +92,42 @@ function show(
   };
 }
 
-/** The person goes to the end of `chain`: where the map was becomes a step back, and the way forward goes. */
+/**
+ * Where the person is: the folder the map shows, or the one they went back or forward to while the map still lacks
+ * it, which the map shows the folder above meanwhile.
+ */
+function placeOf(state: Navigation): string | undefined {
+  return state.wanted?.at(-1) ?? state.trail.at(-1)?.path;
+}
+
+/** The person goes to the end of `chain`: where they were becomes a step back, and the way forward goes. */
 function step(
   state: Navigation,
   chain: readonly string[],
   from?: string,
 ): Navigation {
   const root = state.trail[0];
-  const here = state.trail.at(-1)?.path;
-  if (!root || here === undefined) return state;
-  // Staying put: a folder still wanted from going back or forward is given up.
-  if (chain.at(-1) === here)
-    return state.wanted ? { ...state, wanted: null } : state;
-  // A later level of the same opening finds the map already moved from where the person asked.
-  const leaving = from === undefined || from === here;
+  const place = placeOf(state);
+  if (!root || place === undefined || chain.at(-1) === place) return state;
+  // A later level of the same opening finds the map already moved from where it was when the person asked.
+  const leaving = from === undefined || from === state.trail.at(-1)?.path;
   return {
     ...show(root, chain),
-    back: leaving ? [...state.back, here] : state.back,
+    back: leaving ? [...state.back, place] : state.back,
     forward: [],
   };
 }
 
 function travel(state: Navigation, direction: "back" | "forward"): Navigation {
   const root = state.trail[0];
-  const here = state.trail.at(-1)?.path;
+  const place = placeOf(state);
   const steps = direction === "back" ? state.back : state.forward;
   const target = steps.at(-1);
   const chain =
     target === undefined || !root ? null : folderChain(root.path, target);
-  if (!root || here === undefined || !chain) return state;
+  if (!root || place === undefined || !chain) return state;
   const rest = steps.slice(0, -1);
-  const other = [...(direction === "back" ? state.forward : state.back), here];
+  const other = [...(direction === "back" ? state.forward : state.back), place];
   return {
     ...show(root, chain),
     back: direction === "back" ? rest : other,
@@ -137,16 +142,20 @@ function received(state: Navigation, root: DirNode | null): Navigation {
     return { ...NO_MAP, trail: [root], paths: [root.path] };
   }
   const shown = show(root, state.wanted ?? state.paths);
+  // While a folder is wanted the person is there, whatever this map holds of it: the steps stay as they are.
+  if (state.wanted) {
+    return {
+      ...shown,
+      // Wanted only while the map lacks it: a map that doesn't hold it yet keeps the request.
+      wanted: shown.wanted ? state.wanted : null,
+      back: state.back,
+      forward: state.forward,
+    };
+  }
   // A folder that went away moves the map up, though the person went nowhere: a step that leads back to where the
   // map now is would go nowhere either.
   const here = shown.trail.at(-1)?.path;
   const skip = (steps: readonly string[]) =>
     steps.at(-1) === here ? steps.slice(0, -1) : steps;
-  return {
-    ...shown,
-    // Wanted only while the map lacks it: a map that doesn't hold it yet keeps the request.
-    wanted: state.wanted && shown.wanted ? state.wanted : null,
-    back: skip(state.back),
-    forward: skip(state.forward),
-  };
+  return { ...shown, back: skip(state.back), forward: skip(state.forward) };
 }

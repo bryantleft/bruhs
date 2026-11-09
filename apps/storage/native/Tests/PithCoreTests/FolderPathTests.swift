@@ -84,6 +84,46 @@ final class FolderPathTests: XCTestCase {
         XCTAssertNil(a.folder(at: "/r"), "nothing above the tree's own root")
     }
 
+    // The disk, three folders between, and the open folder: each 100 wide whole, 30 as its icon alone, 40 at its
+    // shortest, 2 apart.
+    private func fit(_ width: CGFloat, parts: Int = 5) -> [CGFloat] {
+        FolderPath.fit(full: Array(repeating: 100, count: parts), icons: Array(repeating: 30, count: parts),
+                       minimum: Array(repeating: 40, count: parts), spacing: 2, width: width)
+    }
+
+    func testAPathWithRoomShowsEveryPartWhole() {
+        XCTAssertEqual(fit(508), [100, 100, 100, 100, 100])
+        XCTAssertEqual(fit(.infinity), [100, 100, 100, 100, 100])
+    }
+
+    func testTheFoldersBetweenGiveWayToTheirIconsOutermostFirst() {
+        XCTAssertEqual(fit(507), [100, 30, 100, 100, 100])
+        XCTAssertEqual(fit(437), [100, 30, 30, 100, 100])
+        XCTAssertEqual(fit(298), [100, 30, 30, 30, 100])
+    }
+
+    func testThenTheFoldersBetweenLeaveThePathOutermostFirst() {
+        XCTAssertEqual(fit(297), [100, 0, 30, 30, 100])
+        XCTAssertEqual(fit(234), [100, 0, 0, 30, 100])
+        XCTAssertEqual(fit(202), [100, 0, 0, 0, 100])
+    }
+
+    func testTheDiskAndTheOpenFolderKeepTheirNamesLongestTheDisksShorteningFirst() {
+        XCTAssertEqual(fit(170), [68, 0, 0, 0, 100])
+        XCTAssertEqual(fit(142), [40, 0, 0, 0, 100])
+        XCTAssertEqual(fit(100), [40, 0, 0, 0, 58])
+        XCTAssertEqual(fit(10), [40, 0, 0, 0, 40], "never below their shortest")
+    }
+
+    func testADiskAloneOrADiskAndItsOpenFolderFit() {
+        XCTAssertEqual(fit(500, parts: 1), [100])
+        XCTAssertEqual(fit(60, parts: 1), [60])
+        XCTAssertEqual(fit(10, parts: 1), [40])
+        XCTAssertEqual(fit(202, parts: 2), [100, 100])
+        XCTAssertEqual(fit(150, parts: 2), [48, 100])
+        XCTAssertEqual(fit(0, parts: 0), [])
+    }
+
     /// The path bar's icons follow Pith's icon rule: a folder above the map's root, inside a location macOS guards,
     /// isn't looked up by its path, since the map hasn't listed it.
     func testAFolderAboveTheMapInAGuardedPlaceGetsAPlainFolder() {

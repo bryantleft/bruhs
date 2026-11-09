@@ -109,7 +109,9 @@ extension Font {
     static var dataSmallFace: NSFont { monaspaceFace(size(11)) }
     static var captionFace: NSFont { monaspaceFace(size(11)) }
 
-    private static func monaspaceFace(_ points: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
+    /// Monaspace Neon at `points` as given, not scaled by the text size, as for a figure in a menu, which macOS draws at
+    /// its own size.
+    static func monaspaceFace(_ points: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
         let fallback = NSFont.monospacedSystemFont(ofSize: points, weight: weight)
         guard BruhsFonts.isAvailable else { return fallback }
         let descriptor = NSFontDescriptor(fontAttributes: [.family: BruhsFonts.Family.neon.rawValue, .traits: [NSFontDescriptor.TraitKey.weight: weight]])
@@ -300,14 +302,15 @@ struct BruhsSpinner: NSViewRepresentable {
 struct BruhsButtonStyle: ButtonStyle {
     enum Tone { case soft, ghost, softDanger }
     var tone: Tone = .soft
+    /// The room around the label: the theme's own, or less where buttons sit side by side, as in Disk's path bar.
+    var padding = EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10)
     @Environment(\.isEnabled) private var isEnabled
     @State private var hovering = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(BruhsType.control)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
+            .padding(padding)
             .foregroundStyle(foreground)
             .background(background(pressed: configuration.isPressed), in: RoundedRectangle(cornerRadius: BruhsRadius.grape, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: BruhsRadius.grape, style: .continuous))

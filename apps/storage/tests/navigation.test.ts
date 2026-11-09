@@ -211,6 +211,58 @@ describe("navigate", () => {
     assert.equal(here(state), "/r/a/b/c");
   });
 
+  /** /r, then a, b and d, with a map focused on d that leaves b out: Back wants b and shows a. */
+  function wantingB(): Navigation {
+    let state = walk(opened(), "/r/a", "/r/a/b", "/r/d");
+    const coarse = dir("/r", [dir("/r/a", [dir("/r/a/x")]), dir("/r/d")]);
+    state = navigate(state, { type: "received", root: coarse });
+    return navigate(state, { type: "back" });
+  }
+
+  test("while a folder is wanted, the step back is from it, though the map shows the folder above it", () => {
+    let state = wantingB();
+    assert.deepEqual(paths(state), ["/r", "/r/a"]);
+    assert.deepEqual(state.back, ["/r", "/r/a"]);
+    assert.deepEqual(state.forward, ["/r/d"]);
+    // A map asked for before the person went back arrives first, still without b.
+    const coarse = dir("/r", [dir("/r/a", [dir("/r/a/x")]), dir("/r/d")]);
+    state = navigate(state, { type: "received", root: coarse });
+    assert.deepEqual(state.back, ["/r", "/r/a"]);
+    state = navigate(state, { type: "received", root: map() });
+    assert.equal(here(state), "/r/a/b");
+    state = navigate(state, { type: "back" });
+    assert.equal(here(state), "/r/a");
+    assert.deepEqual(state.back, ["/r"]);
+    assert.deepEqual(state.forward, ["/r/d", "/r/a/b"]);
+  });
+
+  test("going back again before the folder wanted arrives steps back from it", () => {
+    let state = navigate(wantingB(), { type: "back" });
+    assert.equal(here(state), "/r/a");
+    assert.equal(state.wanted, null);
+    assert.deepEqual(state.back, ["/r"]);
+    assert.deepEqual(state.forward, ["/r/d", "/r/a/b"]);
+    state = navigate(state, { type: "forward" });
+    assert.deepEqual(state.wanted, ["/r", "/r/a", "/r/a/b"]);
+    assert.deepEqual(state.back, ["/r", "/r/a"]);
+    state = navigate(state, { type: "forward" });
+    assert.equal(here(state), "/r/d");
+    assert.deepEqual(state.back, ["/r", "/r/a", "/r/a/b"]);
+    assert.deepEqual(state.forward, []);
+  });
+
+  test("opening a folder while another is wanted leaves a step back to the one wanted", () => {
+    let state = wantingB();
+    state = navigate(state, { type: "open", path: "/r/d", from: "/r/a" });
+    assert.equal(here(state), "/r/d");
+    assert.equal(state.wanted, null);
+    assert.deepEqual(state.back, ["/r", "/r/a", "/r/a/b"]);
+    // Opening the folder the map shows gives up the one wanted, as a step of its own.
+    state = navigate(wantingB(), { type: "open", path: "/r/a" });
+    assert.equal(state.wanted, null);
+    assert.deepEqual(state.back, ["/r", "/r/a", "/r/a/b"]);
+  });
+
   test("a folder asked for and still missing is given up at the next step", () => {
     let state = walk(opened(), "/r/a", "/r/a/b", "/r/a/b/c", "/r");
     state = navigate(state, {

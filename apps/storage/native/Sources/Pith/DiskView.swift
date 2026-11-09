@@ -97,8 +97,6 @@ private struct DiskControlBar: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 DiskPathBar(model: model)
-                    // The path's icons line up with the caption, past each part's own inset.
-                    .padding(.leading, -PathPartStyle.inset)
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     switch model.caption {
                     case .message(let message)?:
@@ -147,188 +145,6 @@ private struct DiskControlBar: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .frame(minHeight: 52)
-    }
-}
-
-/// Where the map is, as Finder's path bar shows it: the disk, whose menu lists every disk and Choose Folder, then each
-/// folder down to the open one, each with its own icon. The parts sit apart by their icons and spacing alone.
-private struct DiskPathBar: View {
-    let model: DiskModel
-
-    var body: some View {
-        let path = model.folderPath
-        let folders = path?.nodes(in: model.result?.root) ?? []
-        HStack(spacing: 2) {
-            DiskMenuButton(model: model, volume: path?.volume)
-                .layoutPriority(2)
-            // A long path gives way from its middle folders first; the open folder keeps its name longest.
-            ForEach(Array(folders.enumerated()), id: \.element.path) { index, folder in
-                PathFolder(model: model, folder: folder, isOpen: index == folders.count - 1)
-                    .layoutPriority(index == folders.count - 1 ? 1 : 0)
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Path")
-    }
-}
-
-/// The path bar's first part: the disk the map is on, by its own icon and name. Its menu lists every disk with its
-/// free space, then Choose Folder.
-private struct DiskMenuButton: View {
-    let model: DiskModel
-    let volume: FolderPath.Volume?
-    @State private var anchor = MenuAnchor()
-
-    var body: some View {
-        Button { anchor.popUp(model.diskMenu()) } label: {
-            HStack(spacing: 5) {
-                if let volume { SystemIconView(key: .item(volume.path)) }
-                // Before any map there's no disk to name, only the list of them.
-                Text(verbatim: volume?.name ?? "Disks")
-                    .font(BruhsType.label)
-                    .foregroundStyle(BruhsColor.text)
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(BruhsType.note)
-                    .imageScale(.small)
-                    .foregroundStyle(BruhsColor.textTertiary)
-                    .accessibilityHidden(true)
-            }
-        }
-        .buttonStyle(PathPartStyle())
-        .background(MenuAnchorView(anchor: anchor))
-        .help(model.live == nil ? "Choose a disk or a folder to scan." : "Choose a disk or a folder to show. The startup disk shows at once; another disk is scanned.")
-        .accessibilityHint("Shows the disks and Choose Folder")
-    }
-}
-
-/// A folder of the path bar, with its icon and name. Clicking one of the open folder's enclosing folders goes there.
-private struct PathFolder: View {
-    let model: DiskModel
-    let folder: DiskNode
-    /// The folder the map shows, where the path ends.
-    let isOpen: Bool
-
-    private var label: some View {
-        HStack(spacing: 5) {
-            SystemIconView(key: model.iconKey(for: folder))
-            Text(verbatim: (folder.path as NSString).lastPathComponent)
-                .font(BruhsType.data)
-                .foregroundStyle(isOpen ? BruhsColor.text : BruhsColor.textSecondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-    }
-
-    var body: some View {
-        Group {
-            if isOpen {
-                label.padding(PathPartStyle.padding)
-            } else {
-                Button { model.show(folder.path) } label: { label }
-                    .buttonStyle(PathPartStyle())
-                    .disabled(model.isScanning || model.isTrashing)
-            }
-        }
-        .help(folder.path)
-        .contextMenu {
-            Button("Reveal in Finder") { model.reveal(folder.path) }
-            Button("Copy Path") { model.copyPath(folder.path) }
-        }
-    }
-}
-
-/// A part of the path bar: the theme's ghost button, closer set, since the parts sit side by side.
-private struct PathPartStyle: ButtonStyle {
-    static let inset: CGFloat = 6
-    static let padding = EdgeInsets(top: 3, leading: inset, bottom: 3, trailing: inset)
-    @Environment(\.isEnabled) private var isEnabled
-    @State private var hovering = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(Self.padding)
-            .background(BruhsColor.text.opacity(configuration.isPressed ? 0.12 : hovering && isEnabled ? 0.06 : 0),
-                        in: RoundedRectangle(cornerRadius: BruhsRadius.grape, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: BruhsRadius.grape, style: .continuous))
-            .opacity(isEnabled ? 1 : 0.5)
-            .onHover { hovering = $0 }
-    }
-}
-
-/// Where the disk menu opens: an AppKit view behind the disk's button, since SwiftUI can't place an NSMenu. It holds
-/// the menu while it shows, so the chosen item's action still has it.
-@MainActor private final class MenuAnchor {
-    weak var view: NSView?
-    private var menu: DiskItemMenu?
-
-    /// Opens `menu` under the button, as a pull-down menu opens.
-    func popUp(_ menu: DiskItemMenu) {
-        guard let view else { return }
-        self.menu = menu
-        menu.menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.bounds.height + 2), in: view)
-    }
-}
-
-private struct MenuAnchorView: NSViewRepresentable {
-    let anchor: MenuAnchor
-
-    func makeNSView(context: Context) -> NSView { Anchor() }
-    func updateNSView(_ view: NSView, context: Context) { anchor.view = view }
-
-    /// Flipped, so the menu's top meets the button's bottom edge, and never in the way of a click.
-    private final class Anchor: NSView {
-        override var isFlipped: Bool { true }
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-    }
-}
-
-extension DiskModel {
-    /// The disk menu: each disk Disk lists, with its icon and free space, then Choose Folder. The startup disk shows
-    /// from the live map; another disk is scanned, as Choose Folder scans a folder on one.
-    func diskMenu() -> DiskItemMenu {
-        // Disks come and go while Pith runs.
-        refreshChoices()
-        let menu = DiskItemMenu()
-        let busy = isScanning || isTrashing
-        let shown = folderPath?.volume.path
-        let font = NSFont.menuFont(ofSize: 0)
-        // The free space lines up in a column after the longest name.
-        let column = (choices.map { ($0.name as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0) + 24
-        for volume in choices {
-            let item = menu.add(volume.name, enabled: !busy) { [weak self] in self?.show(volume.url.path) }
-            item.image = Self.menuIcon(volume.url.path)
-            item.state = volume.url.path == shown ? .on : .off
-            if let available = volume.available {
-                item.attributedTitle = Self.menuTitle(volume.name, free: bytes(available), column: column, font: font)
-            }
-        }
-        menu.separator()
-        let choose = menu.add("Choose Folder…", enabled: !busy) { [weak self] in self?.chooseFolder() }
-        // ⌘O, as the File menu's Choose Folder.
-        choose.keyEquivalent = "o"
-        return menu
-    }
-
-    /// A disk's icon in the menu, as macOS draws it, at the menu's 16 pt.
-    private static func menuIcon(_ path: String) -> NSImage? {
-        let icon = NSWorkspace.shared.icon(forFile: path).copy() as? NSImage
-        icon?.size = NSSize(width: 16, height: 16)
-        return icon
-    }
-
-    /// "Macintosh HD", then its free space as a figure led by its name, "Free 245 GB", at `column`.
-    private static func menuTitle(_ name: String, free: String, column: CGFloat, font: NSFont) -> NSAttributedString {
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.tabStops = [NSTextTab(textAlignment: .left, location: column)]
-        let small = NSFont.menuFont(ofSize: NSFont.smallSystemFontSize)
-        let figure = BruhsFonts.isAvailable
-            ? NSFont(descriptor: NSFontDescriptor(fontAttributes: [.family: BruhsFonts.Family.neon.rawValue]), size: small.pointSize) ?? small
-            : NSFont.monospacedDigitSystemFont(ofSize: small.pointSize, weight: .regular)
-        let title = NSMutableAttributedString(string: name + "\t", attributes: [.font: font, .paragraphStyle: paragraph])
-        title.append(NSAttributedString(string: "Free ", attributes: [.font: small, .foregroundColor: NSColor.secondaryLabelColor, .paragraphStyle: paragraph]))
-        title.append(NSAttributedString(string: free, attributes: [.font: figure, .foregroundColor: NSColor.secondaryLabelColor, .paragraphStyle: paragraph]))
-        return title
     }
 }
 
@@ -788,10 +604,13 @@ struct DiskWebView: NSViewRepresentable {
             case "ready":
                 // Every page load starts empty, a reload or a restart after a crash included, so it gets the scan
                 // again, and the native selection and history it no longer has are dropped.
-                ready = true; revision = nil; model.select(nil); model.pageLoaded(); send(revision: model.revision)
+                ready = true; revision = nil; model.select(nil); model.mapStartsOver(); send(revision: model.revision)
             case "select": model.select(path)
             case "location":
-                if let path { model.pageMoved(to: path, canGoBack: body["canGoBack"] as? Bool == true, canGoForward: body["canGoForward"] as? Bool == true) }
+                if let path {
+                    model.pageMoved(to: path, wanting: body["wanted"] as? String, canGoBack: body["canGoBack"] as? Bool == true,
+                                    canGoForward: body["canGoForward"] as? Bool == true)
+                }
             case "quickLook": model.quickLook(path)
             case "trash": if let path { model.requestTrash(path, undoManager: web?.window?.undoManager) }
             case "menu": showMenu(for: path)

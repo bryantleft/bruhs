@@ -32,6 +32,25 @@ public struct FolderPath: Equatable, Sendable {
         })
     }
 
+    /// The width the path bar gives each of its parts in `width`: the disk first, then each folder, the open one last.
+    /// Each starts `full`. While they're too wide, the folders between the disk and the open one give way, outermost
+    /// first: to their icons alone, `icons`, then out of the bar, 0. Only then do the disk's name and the open folder's
+    /// shorten, the disk's first, never below `minimum`. Parts are `spacing` apart; one left out takes none.
+    public static func fit(full: [CGFloat], icons: [CGFloat], minimum: [CGFloat], spacing: CGFloat, width: CGFloat) -> [CGFloat] {
+        var given = full
+        func excess() -> CGFloat {
+            let shown = given.filter { $0 > 0 }
+            return shown.reduce(0, +) + spacing * CGFloat(max(0, shown.count - 1)) - width
+        }
+        let between = given.indices.dropFirst().dropLast()
+        for index in between where excess() > 0 { given[index] = icons[index] }
+        for index in between where excess() > 0 { given[index] = 0 }
+        for index in [given.startIndex, given.endIndex - 1] where given.indices.contains(index) && excess() > 0 {
+            given[index] = max(minimum[index], given[index] - excess())
+        }
+        return given
+    }
+
     /// Each folder's node from the map whose tree is `root`. A folder the tree doesn't hold, such as one above the
     /// map's root, gets a node with nothing listed: the map has no listing of it, which Pith's icon rule needs before
     /// it looks up a folder by its path inside a location macOS guards.
