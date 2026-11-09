@@ -10,7 +10,7 @@
 //! counted link are recorded with the generation of the folder they were found in, so a later listing of that folder
 //! retires them without having to remember each file: whatever it finds again it records again.
 
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -320,6 +320,10 @@ pub struct Index {
     pub(crate) entry_errors: HashMap<u32, u32>,
     /// Folders the startup disk shows at two paths, by inode, with the visible path the index counts them at.
     firmlinks: HashMap<u64, PathBuf>,
+    /// The same firmlinks by visible path, and the folders that hold them. A firmlinked folder's parent on the system
+    /// volume lists it by the system volume's inode, not the data volume's its own listing gives.
+    firmlink_inodes: HashMap<PathBuf, u64>,
+    firmlink_parents: HashSet<PathBuf>,
     limbo: HashMap<u64, Limbo>,
     /// Folders made new lately, by inode. A move whose new parent is listed before its old one makes a new folder
     /// for it first; when the old copy leaves, the new one is listed again in full, since its first listing skipped
@@ -340,6 +344,7 @@ impl Index {
     /// An index of `root` holding only the root, to be listed first. `firmlinks` are the startup disk's firmlinked
     /// folders inside it, by inode, with the path each is counted at.
     pub fn new(root: &str, firmlinks: HashMap<u64, PathBuf>) -> Index {
+        let (firmlink_inodes, firmlink_parents) = by_visible_path(&firmlinks);
         let mut index = Index {
             root: root.to_string(),
             folders: Vec::new(),
@@ -355,6 +360,8 @@ impl Index {
             cloud: HashMap::new(),
             entry_errors: HashMap::new(),
             firmlinks,
+            firmlink_inodes,
+            firmlink_parents,
             limbo: HashMap::new(),
             recent: HashMap::new(),
             rescans: Vec::new(),
@@ -378,6 +385,7 @@ impl Index {
     }
 
     pub fn set_firmlinks(&mut self, firmlinks: HashMap<u64, PathBuf>) {
+        (self.firmlink_inodes, self.firmlink_parents) = by_visible_path(&firmlinks);
         self.firmlinks = firmlinks;
     }
 
@@ -840,8 +848,13 @@ impl Index {
         let mut arrived = Totals::default();
         let mut leaving = Vec::new();
         let mut new = Vec::new();
+        let holds_firmlinks = self.firmlink_parents.contains(path);
         for (name, inode) in subfolders {
             let child_path = path.join(&name);
+            // A firmlinked folder is known by its data volume's inode, as its own listing gives it, however its parent
+            // lists it. Taken for two folders, each listing of `/` replaced /Users and the others with empty copies to
+            // walk again: 820 GB on the development Mac, and at every daily check.
+            let inode = if holds_firmlinks { self.firmlink_inodes.get(&child_path).copied().unwrap_or(inode) } else { inode };
             if self.firmlinks.get(&inode).is_some_and(|visible| *visible != child_path) {
                 // The startup disk's second path to a folder counted where it's visible.
                 continue;
@@ -1454,6 +1467,13 @@ impl Index {
     }
 }
 
+/// Firmlinks by visible path, with the folders holding them.
+fn by_visible_path(firmlinks: &HashMap<u64, PathBuf>) -> (HashMap<PathBuf, u64>, HashSet<PathBuf>) {
+    let inodes: HashMap<PathBuf, u64> = firmlinks.iter().map(|(&inode, path)| (path.clone(), inode)).collect();
+    let parents = inodes.keys().filter_map(|path| path.parent().map(Path::to_path_buf)).collect();
+    (inodes, parents)
+}
+
 /// What a snapshot holds, to rebuild an index from.
 pub(crate) struct Parts {
     pub(crate) folders: Vec<Folder>,
@@ -1571,6 +1591,35 @@ mod tests {
     fn a_folder_stays_small() {
         // 1.19 million folders on the development Mac: every byte here is about a megabyte of the index.
         assert!(std::mem::size_of::<Folder>() <= 88, "Folder grew to {} bytes", std::mem::size_of::<Folder>());
+    }
+
+    fn folder(name: &str, inode: u64) -> crate::walk::Entry {
+        crate::walk::Entry { name: name.into(), is_dir: true, is_file: false, inode, nlink: 1, size: 0, length: 0, flags: 0, error: 0, clone_id: 0, clone_refs: 0, ext_flags: 0, private: None }
+    }
+
+    fn file(name: &str, inode: u64, size: u64) -> crate::walk::Entry {
+        crate::walk::Entry { is_dir: false, is_file: true, size, length: size, ..folder(name, inode) }
+    }
+
+    /// Review of the map after a launch's catch-up: listing `/` again set /Users, /Applications, /Library and /private
+    /// aside as replaced, since `/` lists each by the system volume's inode, and walked them again from nothing.
+    #[test]
+    fn a_firmlinked_folder_stays_itself_when_its_parent_lists_it_again() {
+        // "/x/Users" is firmlinked: "/x" lists it by inode 900, its own listing gives 14490.
+        let mut index = Index::new("/x", HashMap::from([(14490, PathBuf::from("/x/Users"))]));
+        let root = || crate::listing::Listing { inode: 2, outcome: crate::listing::Outcome::Listed(vec![folder("Users", 900), folder("bin", 901)]) };
+        index.apply(ROOT, Path::new("/x"), root(), false, true);
+        let (users, exact) = index.find("/x/Users").unwrap();
+        assert!(exact);
+        let home = crate::listing::Listing { inode: 14490, outcome: crate::listing::Outcome::Listed(vec![file("big.mov", 50, 5_000_000_000)]) };
+        index.apply(users, Path::new("/x/Users"), home, false, true);
+        assert_eq!(index.totals(ROOT).size, 5_000_000_000);
+        // Listed again, as when something at the top changes, FSEvents asks for a rescan, or the daily check comes by.
+        let applied = index.apply(ROOT, Path::new("/x"), root(), true, false);
+        assert_eq!(index.find("/x/Users"), Some((users, true)));
+        assert_eq!(index.totals(ROOT).size, 5_000_000_000);
+        assert!(applied.next.iter().any(|(id, _)| *id == users), "a deep listing goes on to the same folder");
+        assert!(index.limbo.is_empty(), "nothing was set aside");
     }
 
     #[test]
