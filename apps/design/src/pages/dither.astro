@@ -14,9 +14,9 @@ const ruleCode = `<hr class="dither-rule">`;
     <section>
       <h1 class="text-display-sm font-semibold tracking-tight mb-2 text-balance">Dither</h1>
       <p class="text-body-lg text-rambutan-400 max-w-[65ch] text-pretty">
-        The brand texture: the Bruh and small indicators drawn as braille-style dots, two columns by four rows
-        per cell. An ordered dither decides which dots show, so the face is solid where the light hits and
-        scatters toward its edge. Keep it for brand moments, never for app chrome.
+        The brand texture: the Bruh and small indicators drawn in dots. The Bruh is a halftone, every dot sized
+        by the light on a sphere, so the face reads as a lit ball; the level meter is one braille cell. Keep it
+        for brand moments, never for app chrome.
       </p>
     </section>
 
@@ -57,7 +57,7 @@ const ruleCode = `<hr class="dither-rule">`;
 </BaseLayout>
 
 <script>
-  import { bruhDots, dotGrid, drawDots, meterDots, type BrailleBruh } from "@bruhs/theme/dither";
+  import { bruhDots, drawDots, meterDots, type BrailleBruh } from "@bruhs/theme/dither";
 
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -68,20 +68,18 @@ const ruleCode = `<hr class="dither-rule">`;
     const colors = {
       face: css.getPropertyValue("--color-bruh-base").trim(),
       mouth: css.getPropertyValue("--color-bruh-mouth").trim(),
-      halo: css.getPropertyValue("--color-longan-700").trim(),
     };
     let face: BrailleBruh = { cx: 0, cy: 0, r: 1 };
     let size = 0;
     const draw = () => {
-      const grid = dotGrid(Math.max(3.5, Math.min(6, face.r / 34)));
-      drawDots(ctx, size, size, bruhDots(size, size, face, grid), grid.dot, colors);
+      drawDots(ctx, size, size, bruhDots(size, size, face), colors);
     };
     new ResizeObserver(() => {
       size = canvas.clientWidth;
       const scale = Math.min(devicePixelRatio || 1, 2);
       canvas.width = canvas.height = Math.round(size * scale);
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
-      face = { ...face, cx: size / 2, cy: size / 2, r: size * 0.4 };
+      face = { ...face, cx: size / 2, cy: size / 2, r: size * 0.42 };
       draw();
     }).observe(canvas);
     let frame = 0;

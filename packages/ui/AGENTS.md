@@ -777,23 +777,22 @@ Pith's `scripts/lint-native.mjs` fails on the system accent, system colours, lar
 
 ## 19. Dither
 
-Dither is the brand texture: the Bruh and small indicators drawn as braille-style dots. Dots sit in braille cells, two columns by four rows, and a 4×4 ordered (Bayer) dither decides which dots show, so a lit shape is solid where the light hits and breaks into scattered dots at its edge.
+Dither is the brand texture: the Bruh and small indicators drawn in dots. The Bruh is a halftone on a hex grid: every dot is sized by the light on a sphere (dot area tracks brightness) and shrinks a little toward the rim, so the outline stays round and the face reads as a lit ball. Its eyes are holes and its mouth is one row of red. The level meter is one braille cell, two columns by four rows.
 
 ### Pieces
 
 | Piece | Where it lives | Use for |
 |---|---|---|
-| `bruhDots()`, `drawDots()` | `@bruhs/theme/dither` | A dithered Bruh on a canvas. It reads `bruhGeometry`, so it always matches the logo |
+| `bruhDots()`, `drawDots()` | `@bruhs/theme/dither` | A dot Bruh on a canvas. It reads `bruhGeometry`, so it always matches the logo, and picks its own dot spacing for the size |
 | `lookX` | `bruhDots()` face option | Turning the face. `-1` and `1` are the logo's `left` and `right` variants |
 | `meterDots()` + `.braille-meter` | dither module + component class | A live level, such as microphone input, as one braille cell |
 | `.dither-rule` | component class | A dotted divider between sections of a brand page |
 
 ```ts
-import { bruhDots, dotGrid, drawDots } from "@bruhs/theme/dither";
+import { bruhDots, drawDots } from "@bruhs/theme/dither";
 
-const grid = dotGrid(5); // dot pitch; gap and radius follow
-const dots = bruhDots(width, height, { cx: width / 2, cy: height / 2, r: width * 0.4 }, grid);
-drawDots(ctx, width, height, dots, grid.dot, { face: base, mouth, halo: longan700 });
+const dots = bruhDots(width, height, { cx: width / 2, cy: height / 2, r: width * 0.42 });
+drawDots(ctx, width, height, dots, { face: base, mouth }); // resolved bruh-base, bruh-mouth
 ```
 
 ```html
@@ -834,9 +833,9 @@ Draw a Bruh static by default. A reveal or a face that follows the pointer is fo
 
 Remove dither motion for `prefers-reduced-motion`: draw the finished dots and navigate without a transition.
 
-Keep the mascot's own colours for a dithered Bruh (`bruh-base` and `bruh-mouth`) and `longan-700` for halos, rules and unlit meter dots. Use the meter's fruit colours to tell its two inputs apart, and say what each column is in its label.
+Keep the mascot's own colours for a dot Bruh (`bruh-base` and `bruh-mouth`) and `longan-700` for rules and unlit meter dots. Use the meter's fruit colours to tell its two inputs apart, and say what each column is in its label.
 
-Treat a dithered Bruh as decoration. Hide its canvas from assistive technology, and keep the words that matter in text.
+Treat a dot Bruh as decoration. Hide its canvas from assistive technology, and keep the words that matter in text.
 
 ---
 

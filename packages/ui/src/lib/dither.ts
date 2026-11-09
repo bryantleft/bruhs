@@ -1,17 +1,19 @@
 /**
- * Dither: the Bruh mascot and small indicators drawn as braille-style dots.
+ * Dither: the Bruh mascot and small indicators drawn in dots.
  *
- * Dots sit in braille cells (2 columns × 4 rows). Brightness decides which dots
- * appear through a 4×4 ordered (Bayer) dither, so a lit sphere is solid where the
- * light hits and breaks into scattered dots toward its edge. The face comes from
- * `bruhGeometry`, so a dithered Bruh and the vector logo always agree, and
- * looking left or right turns toward the logo's own `left` and `right` variants.
+ * The Bruh is a halftone: a hex grid over the face, each dot sized by the light
+ * on a sphere (dot area tracks brightness) and shrunk a little toward the rim,
+ * so the silhouette stays round and the face reads as a lit ball. The eyes are
+ * holes and the mouth is one row of red. Geometry comes from `bruhGeometry`,
+ * so the dots always match the logo, and looking left or right turns toward
+ * the logo's own `left` and `right` variants. bruhs.ai and the bruhs-ai app
+ * carry ports of the same algorithm.
  *
  * Pure math plus one Canvas 2D draw call; no DOM lookups, so it runs in Node.
  */
 import { bruhGeometry, type Point } from "./logo.ts";
 
-/** 4×4 Bayer matrix as thresholds in (0, 1). */
+/** 4×4 Bayer matrix as thresholds in (0, 1): an order for dot dissolves. */
 const BAYER: readonly number[] = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((n) => (n + 0.5) / 16);
 
 /** Ordered-dither threshold for the dot at grid position (col, row). */
@@ -25,7 +27,7 @@ export function revealNoise(col: number, row: number): number {
   return n - Math.floor(n);
 }
 
-export type DotKind = "face" | "mouth" | "halo";
+export type DotKind = "face" | "mouth";
 
 export interface BrailleBruh {
   /** Center and radius, in canvas pixels. */
@@ -38,114 +40,100 @@ export interface BrailleBruh {
   readonly lookY?: number;
 }
 
-export interface DotGrid {
-  /** Distance between dots inside a cell. */
-  readonly pitch: number;
-  /** Extra space between cells, which is what makes the dots read as braille. */
-  readonly gap: number;
-  /** Dot radius. */
-  readonly dot: number;
-}
-
-/** Proportions used across Bruhs: gap 0.6 × pitch, dot radius 0.36 × pitch. */
-export function dotGrid(pitch: number): DotGrid {
-  return { pitch, gap: pitch * 0.6, dot: pitch * 0.36 };
+export interface Dot {
+  readonly x: number;
+  readonly y: number;
+  readonly radius: number;
+  readonly kind: DotKind;
+  /** Grid position, for `revealNoise` or `ditherThreshold`. */
+  readonly col: number;
+  readonly row: number;
 }
 
 const { base, eye, mouth, faces } = bruhGeometry;
 const unit = (p: Point): Point => ({ x: (p.x - base.cx) / base.r, y: (p.y - base.cy) / base.r });
-const toward = (from: Point, to: Point, t: number): Point => ({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t });
-const ORIGINAL = { leftEye: unit(faces.original.leftEye), rightEye: unit(faces.original.rightEye), mouth: unit(faces.original.mouth) };
-const LEFT = { leftEye: unit(faces.left.leftEye), rightEye: unit(faces.left.rightEye), mouth: unit(faces.left.mouth) };
-const RIGHT = { leftEye: unit(faces.right.leftEye), rightEye: unit(faces.right.rightEye), mouth: unit(faces.right.mouth) };
+const variant = (name: keyof typeof faces) => ({
+  leftEye: unit(faces[name].leftEye),
+  rightEye: unit(faces[name].rightEye),
+  mouth: unit(faces[name].mouth),
+});
+const ORIGINAL = variant("original");
+const LEFT = variant("left");
+const RIGHT = variant("right");
 const EYE_RX = eye.rx / base.r;
 const MOUTH_RX = mouth.rx / base.r;
 const FEATURE_RY = eye.ry / base.r;
-// Light from the upper left, mostly frontal.
-const LIGHT = { x: -0.36, y: -0.42, z: 0.83 };
+// Light from the upper left, mostly frontal; some ambient so the shadow side
+// keeps its dots and the outline stays whole.
+const LIGHT = normalize(-0.35, -0.45, 0.82);
+const AMBIENT = 0.25;
+const RIM = 0.35;
 
 /**
- * What lies under a point: the layer and its brightness (0 to 1), or `null` for an
- * eye, which is a hole. `minFeature` is the thinnest an eye or mouth may be, in
- * face radii; pass about 1.1 × pitch / r so the features survive the dot grid.
+ * Grid spacing for a face radius: about 15 dots per radius on a large face,
+ * down to 6 on a small one so each dot stays big enough to see.
  */
-export function sampleBruh(x: number, y: number, face: BrailleBruh, minFeature = 0): { kind: DotKind; value: number } | null {
-  const dx = (x - face.cx) / face.r;
-  const dy = (y - face.cy) / face.r;
+export function pitchFor(r: number): number {
+  return r / Math.max(6, Math.min(15, r / 10));
+}
+
+/** Brightness (0 to 1) of the sphere at a point in face radii, or `null` outside it. */
+export function shade(dx: number, dy: number): number | null {
   const d2 = dx * dx + dy * dy;
-  if (d2 > 1) {
-    // Fades to nothing a fifth of a radius out, inside any reasonable canvas edge.
-    const fade = Math.max(0, 1 - (Math.sqrt(d2) - 1) / 0.2);
-    return { kind: "halo", value: 0.24 * fade * fade };
-  }
-
-  const lookX = Math.max(-1, Math.min(1, face.lookX ?? 0));
-  const lookY = Math.max(-1, Math.min(1, face.lookY ?? 0)) * 0.05;
-  const turned = lookX < 0 ? LEFT : RIGHT;
-  const t = Math.abs(lookX);
-  const ry = Math.max(FEATURE_RY, minFeature);
-
-  const m = toward(ORIGINAL.mouth, turned.mouth, t);
-  const mx = (dx - m.x) / MOUTH_RX;
-  const my = (dy - m.y - lookY) / ry;
-  if (mx * mx + my * my <= 1) return { kind: "mouth", value: 1 };
-
-  for (const which of ["leftEye", "rightEye"] as const) {
-    const e = toward(ORIGINAL[which], turned[which], t);
-    const ex = (dx - e.x) / EYE_RX;
-    const ey = (dy - e.y - lookY) / ry;
-    if (ex * ex + ey * ey <= 1) return null;
-  }
-
+  if (d2 > 1) return null;
   const nz = Math.sqrt(1 - d2);
   const lambert = Math.max(0, LIGHT.x * dx + LIGHT.y * dy + LIGHT.z * nz);
-  return { kind: "face", value: Math.min(1, 0.1 + lambert) };
-}
-
-export interface Dot {
-  readonly x: number;
-  readonly y: number;
-  readonly kind: DotKind;
+  return (AMBIENT + (1 - AMBIENT) * lambert) * (1 - RIM + RIM * Math.sqrt(nz));
 }
 
 /**
- * Every dot to draw for a Bruh in a `width` × `height` box, grid centered.
- * `reveal` below 1 keeps only that share of dots, in `revealNoise` order, for an
- * entrance; leave it at 1 when motion is reduced.
+ * Every dot of a Bruh in a `width` × `height` box. The hex grid is anchored on
+ * the face's center, so the face is symmetric wherever it sits.
  */
-export function bruhDots(width: number, height: number, face: BrailleBruh, grid: DotGrid, reveal = 1): Dot[] {
-  const { pitch, gap } = grid;
-  const cellW = pitch * 2 + gap;
-  const cellH = pitch * 4 + gap;
-  const cols = Math.ceil(width / cellW);
-  const rows = Math.ceil(height / cellH);
-  const ox = (width - cols * cellW + gap + pitch) / 2;
-  const oy = (height - rows * cellH + gap + pitch) / 2;
-  const minFeature = (pitch * 1.1) / face.r;
+export function bruhDots(width: number, height: number, face: BrailleBruh): Dot[] {
+  const { cx, cy, r } = face;
+  const pitch = pitchFor(r);
+  const rowH = (pitch * Math.sqrt(3)) / 2;
+  const look = Math.max(-1, Math.min(1, face.lookX ?? 0));
+  const nudge = Math.max(-1, Math.min(1, face.lookY ?? 0)) * 0.05;
+  const turned = look < 0 ? LEFT : RIGHT;
+  const t = Math.abs(look);
+  const toward = (a: Point, b: Point): Point => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t + nudge });
+  const eyes = [toward(ORIGINAL.leftEye, turned.leftEye), toward(ORIGINAL.rightEye, turned.rightEye)];
+  const m = toward(ORIGINAL.mouth, turned.mouth);
+  const eyeRy = Math.max(FEATURE_RY, (pitch * 0.9) / r);
+  // The mouth is exactly one row: the one nearest its line.
+  const mouthRow = Math.round((m.y * r) / rowH);
+
   const dots: Dot[] = [];
-  for (let cr = 0; cr < rows; cr++) {
-    for (let cc = 0; cc < cols; cc++) {
-      for (let dr = 0; dr < 4; dr++) {
-        for (let dc = 0; dc < 2; dc++) {
-          const col = cc * 2 + dc;
-          const row = cr * 4 + dr;
-          if (reveal < 1 && revealNoise(col, row) > reveal) continue;
-          const x = ox + cc * cellW + dc * pitch;
-          const y = oy + cr * cellH + dr * pitch;
-          const hit = sampleBruh(x, y, face, minFeature);
-          if (hit && hit.value > ditherThreshold(col, row)) dots.push({ x, y, kind: hit.kind });
-        }
-      }
+  const rows = Math.ceil(r / rowH) + 1;
+  const cols = Math.ceil(r / pitch) + 1;
+  for (let row = -rows; row <= rows; row++) {
+    const y = cy + row * rowH;
+    if (y < -pitch || y > height + pitch) continue;
+    const offset = row & 1 ? pitch / 2 : 0;
+    for (let col = -cols; col <= cols; col++) {
+      const x = cx + col * pitch + offset;
+      if (x < -pitch || x > width + pitch) continue;
+      const dx = (x - cx) / r;
+      const dy = (y - cy) / r;
+      let value = shade(dx, dy);
+      if (value === null) continue;
+      if (eyes.some((e) => ((dx - e.x) / EYE_RX) ** 2 + ((dy - e.y) / eyeRy) ** 2 <= 1)) continue;
+      const isMouth = row === mouthRow && Math.abs((dx - m.x) / MOUTH_RX) <= 1;
+      if (isMouth) value = Math.max(value, 0.75);
+      const radius = (pitch / 2) * 0.92 * Math.sqrt(value);
+      if (radius < pitch * 0.07) continue;
+      dots.push({ x, y, radius, kind: isMouth ? "mouth" : "face", col, row });
     }
   }
   return dots;
 }
 
-/** Defaults: the mascot's own colors, and a quiet longan halo. */
+/** Defaults: the mascot's own colors. */
 export const BRUH_DOT_COLORS: Readonly<Record<DotKind, string>> = {
   face: "var(--color-bruh-base)",
   mouth: "var(--color-bruh-mouth)",
-  halo: "var(--color-longan-700)",
 };
 
 /** Minimal Canvas 2D surface, so callers can pass any context-like object. */
@@ -161,20 +149,33 @@ export interface DotContext {
 /**
  * Draws `dots` into a 2D context, one path per color. Canvas can't read CSS
  * variables, so resolve `colors` first (e.g. with getComputedStyle) when using
- * the `var(...)` defaults.
+ * the `var(...)` defaults. `reveal` below 1 keeps that share of the dots, in
+ * `revealNoise` order, for an entrance; leave it at 1 under reduced motion.
  */
-export function drawDots(ctx: DotContext, width: number, height: number, dots: readonly Dot[], dot: number, colors: Readonly<Record<DotKind, string>>): void {
+export function drawDots(
+  ctx: DotContext,
+  width: number,
+  height: number,
+  dots: readonly Dot[],
+  colors: Readonly<Record<DotKind, string>>,
+  reveal = 1,
+): void {
   ctx.clearRect(0, 0, width, height);
-  for (const kind of ["halo", "face", "mouth"] as const) {
+  for (const kind of ["face", "mouth"] as const) {
     ctx.beginPath();
     for (const d of dots) {
-      if (d.kind !== kind) continue;
-      ctx.moveTo(d.x + dot, d.y);
-      ctx.arc(d.x, d.y, dot, 0, Math.PI * 2);
+      if (d.kind !== kind || (reveal < 1 && revealNoise(d.col, d.row) > reveal)) continue;
+      ctx.moveTo(d.x + d.radius, d.y);
+      ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2);
     }
     ctx.fillStyle = colors[kind];
     ctx.fill();
   }
+}
+
+function normalize(x: number, y: number, z: number): { x: number; y: number; z: number } {
+  const length = Math.hypot(x, y, z);
+  return { x: x / length, y: y / length, z: z / length };
 }
 
 /**
