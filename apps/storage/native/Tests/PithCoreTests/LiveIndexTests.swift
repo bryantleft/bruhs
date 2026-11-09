@@ -120,6 +120,39 @@ final class LiveIndexTests: XCTestCase {
         wait(for: [drained], timeout: 5)
     }
 
+    /// Review of Pith with Disk on screen: the thread reading the scanner kept every buffer it read until it ended,
+    /// 1.8 GB within half an hour, since `availableData` hands back autoreleased buffers.
+    func testReadingTheScannerKeepsNoBuffers() throws {
+        let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        // A stand-in scanner that writes 50 reports of 1 MB each.
+        let line = folder.appendingPathComponent("line")
+        try Data((#"{"type":"stats","pad":""# + String(repeating: "x", count: 1_000_000) + "\"}\n").utf8).write(to: line)
+        let script = folder.appendingPathComponent("scanner")
+        try "#!/bin/sh\nfor i in $(seq 1 50); do cat '\(line.path)'; done\n".write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        let received = LockedValue<Int>(0)
+        let before = footprint()
+        let process = LiveProcess(binary: script, receive: { report in
+            if case .stats = report { received.update { $0 += 1 } }
+        }, exited: { _ in })
+        try process.start()
+        let deadline = Date().addingTimeInterval(30)
+        while received.value < 50, Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.05)) }
+        XCTAssertEqual(received.value, 50)
+        let grown = footprint() - before
+        XCTAssertLessThan(grown, 20_000_000, "reading 50 MB kept \(grown / 1_000_000) MB")
+    }
+
+    private func footprint() -> Int64 {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let status = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count) }
+        }
+        return status == KERN_SUCCESS ? Int64(info.phys_footprint) : 0
+    }
+
     func testTheStreamNamesEachItemWithItsInode() throws {
         let folder = try temporaryFolder().resolvingSymlinksInPath()
         defer { try? FileManager.default.removeItem(at: folder) }

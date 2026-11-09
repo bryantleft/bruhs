@@ -164,15 +164,19 @@ public final class LiveProcess: @unchecked Sendable {
         try process.run()
         Thread.detachNewThread {
             var lines = LineSplitter()
-            while true {
+            // Each read gets a pool of its own: `availableData` hands back an autoreleased buffer, and this thread's
+            // pool would drain only when the thread ends. Every byte the scanner sent stayed, 1.8 GB within half an
+            // hour of Disk on screen.
+            while autoreleasepool(invoking: { () -> Bool in
                 let data = handle.availableData
-                if data.isEmpty { break }
+                if data.isEmpty { return false }
                 for line in lines.feed(data) where !line.isEmpty {
                     do { receive(try LiveDecoder.decode(line)) } catch {
                         receive(.failed(request: nil, reason: "Pith couldn’t read the map’s report: \(error.localizedDescription)"))
                     }
                 }
-            }
+                return true
+            }) {}
         }
     }
 
