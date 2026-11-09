@@ -775,7 +775,72 @@ Pith's `scripts/lint-native.mjs` fails on the system accent, system colours, lar
 
 ---
 
-## 19. When in doubt
+## 19. Dither
+
+Dither is the brand texture: the Bruh and small indicators drawn as braille-style dots. Dots sit in braille cells, two columns by four rows, and a 4×4 ordered (Bayer) dither decides which dots show, so a lit shape is solid where the light hits and breaks into scattered dots at its edge.
+
+### Pieces
+
+| Piece | Where it lives | Use for |
+|---|---|---|
+| `bruhDots()`, `drawDots()` | `@bruhs/theme/dither` | A dithered Bruh on a canvas. It reads `bruhGeometry`, so it always matches the logo |
+| `lookX` | `bruhDots()` face option | Turning the face. `-1` and `1` are the logo's `left` and `right` variants |
+| `meterDots()` + `.braille-meter` | dither module + component class | A live level, such as microphone input, as one braille cell |
+| `.dither-rule` | component class | A dotted divider between sections of a brand page |
+
+```ts
+import { bruhDots, dotGrid, drawDots } from "@bruhs/theme/dither";
+
+const grid = dotGrid(5); // dot pitch; gap and radius follow
+const dots = bruhDots(width, height, { cx: width / 2, cy: height / 2, r: width * 0.4 }, grid);
+drawDots(ctx, width, height, dots, grid.dot, { face: base, mouth, halo: longan700 });
+```
+
+```html
+<span class="braille-meter" role="meter" aria-label="Microphone" aria-valuenow="0.4" aria-valuemin="0" aria-valuemax="1">
+  <i></i><i></i><i data-lit></i><i data-lit></i>  <!-- left column, top to bottom -->
+  <i></i><i></i><i></i><i data-lit></i>            <!-- right column -->
+</span>
+```
+
+### Page transitions
+
+Brand sites can dissolve between pages through a dot screen with cross-document view transitions. CSS only: the next page grows in through four interleaved dot layers in 2×2 Bayer order, about 300ms in all.
+
+```css
+@view-transition { navigation: auto; }
+@property --dot-a { syntax: "<length>"; inherits: false; initial-value: 0px; }
+/* …--dot-b, --dot-c and --dot-d the same */
+::view-transition-old(root) { animation: none; }
+::view-transition-new(root) {
+  mask-image: radial-gradient(circle, #000 var(--dot-a), transparent calc(var(--dot-a) + .5px)) /* , …b, c, d */;
+  mask-size: 16px 16px;
+  mask-position: 0 0, 8px 8px, 8px 0, 0 8px;
+  animation: dot-a 200ms var(--ease-entrance) both, dot-b 200ms var(--ease-entrance) 33ms both /* , … */;
+}
+@keyframes dot-a { to { --dot-a: 6px; } } /* 6px covers an 8px cell's corners */
+@media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+```
+
+bruhs.ai is the reference: `bruhs-site/src/styles/site.css` in bruhs-ai.
+
+### Rules
+
+Keep dither for brand moments: landing pages, about and update screens, onboarding, and live indicators such as a recording meter. Leave it out of dense app chrome, lists and anything typed or navigated by keyboard.
+
+Never make an action wait for a dither effect. Show the new state at once and let the dots resolve over it, under 300ms, or skip the effect.
+
+Draw a Bruh static by default. A reveal or a face that follows the pointer is for a page's first view, once.
+
+Remove dither motion for `prefers-reduced-motion`: draw the finished dots and navigate without a transition.
+
+Keep the mascot's own colours for a dithered Bruh (`bruh-base` and `bruh-mouth`) and `longan-700` for halos, rules and unlit meter dots. Use the meter's fruit colours to tell its two inputs apart, and say what each column is in its label.
+
+Treat a dithered Bruh as decoration. Hide its canvas from assistive technology, and keep the words that matter in text.
+
+---
+
+## 20. When in doubt
 
 Start with whitespace. Add a divider or surface only when the content needs more separation.
 

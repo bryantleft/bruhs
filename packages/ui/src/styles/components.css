@@ -405,6 +405,40 @@
     color: var(--color-rambutan-50);
   }
 
+  /* Dither. A row of braille-sized dots that divides brand surfaces (landing pages,
+   * about screens). Set --dither-color to tint it. Not for dense app chrome. */
+  .dither-rule {
+    display: block;
+    height: 7px;
+    border: 0;
+    margin: 0;
+    background: radial-gradient(circle, var(--dither-color, var(--color-longan-700)) 1px, transparent 1.5px) 0 50% / 7px 7px repeat-x;
+  }
+
+  /* One braille cell as a level meter: two columns of four dots, filled from the
+   * bottom. Put eight <i> in it, column by column, top to bottom; set data-lit on the
+   * lit ones (meterDots() from @bruhs/theme/dither turns a level into a count). Color
+   * each column with --meter-left and --meter-right. */
+  .braille-meter {
+    display: inline-grid;
+    grid-template-rows: repeat(4, var(--meter-dot, 4px));
+    grid-auto-flow: column;
+    gap: calc(var(--meter-dot, 4px) * 0.5) calc(var(--meter-dot, 4px) * 0.75);
+    flex-shrink: 0;
+  }
+  .braille-meter > i {
+    width: var(--meter-dot, 4px);
+    height: var(--meter-dot, 4px);
+    border-radius: var(--radius-orb);
+    background-color: var(--color-longan-700);
+  }
+  .braille-meter > i:nth-child(-n + 4)[data-lit] {
+    background-color: var(--meter-left, var(--color-dragonfruit-400));
+  }
+  .braille-meter > i:nth-child(n + 5)[data-lit] {
+    background-color: var(--meter-right, var(--color-pandan-400));
+  }
+
   /* Empty, error and 404 states: a centred column. Bring your own heading and action. */
   .empty-state {
     display: flex;

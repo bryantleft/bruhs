@@ -22,6 +22,7 @@ const expected = [
   ...["input", "surface-panel", "surface-card", "surface-floating", "surface-modal", "surface-well", "surface-interactive"],
   ...["dialog", "popover", "menu-item", "tooltip", "kbd", "code-block", "code-inline", "spinner"],
   ...["segmented", "segmented-item", "empty-state"],
+  ...["dither-rule", "braille-meter"],
 ];
 
 const missing = expected.filter((name) => !new RegExp(`\\.${name}(?![\\w-])`).test(css));
