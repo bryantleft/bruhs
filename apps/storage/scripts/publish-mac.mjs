@@ -101,7 +101,7 @@ run(path.join(tools, "sign_update"), ["--account", KEY_ACCOUNT, feedFile]);
 run(path.join(tools, "sign_update"), ["--account", KEY_ACCOUNT, "--verify", feedFile]);
 const notesFile = path.join(work, "notes.md");
 writeFileSync(notesFile, [...notes, `Pith ${version} needs macOS 14 or later on a Mac with Apple silicon. Download ${archiveName(version)}, ` +
-  "open it, and move Pith to the Applications folder. From then on, Pith updates itself."].join("\n\n"));
+  "open it, and move Pith to the Applications folder."].join("\n\n"));
 
 if (dryRun) {
   console.log(`Dry run: Pith ${version} from ${commit.slice(0, 7)} is ready to publish, and nothing was uploaded.\n` +

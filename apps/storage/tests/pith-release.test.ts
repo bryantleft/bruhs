@@ -113,4 +113,32 @@ describe("feed", () => {
     const signed = `${xml}<!-- sparkle-signatures:\nedSignature: abc\nlength: 10\n-->\n`;
     assert.equal(feedItems(signed).length, 2);
   });
+
+  test("reads a feed as sign_update rewrites it when signing", () => {
+    // Sparkle 2.10.1's sign_update serializes the XML again: a standalone declaration, its warning comment, and the
+    // enclosure as an open and close tag. The next release reads the published feed back in this form.
+    const resigned = `<?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+  <channel>
+    <title>Pith</title>
+    <item>
+      <title>Pith 0.1.0</title>
+      <sparkle:version>0.1.0</sparkle:version>
+      <enclosure url="${archiveURL("0.1.0")}" length="6275849" type="application/octet-stream" sparkle:edSignature="c2ln"></enclosure>
+    </item>
+  </channel>
+</rss><!-- sparkle-signatures:
+edSignature: abc
+length: 10
+-->
+`;
+    const [entry] = feedItems(resigned);
+    assert.equal(entry.version, "0.1.0");
+    assert.match(entry.xml, /<\/enclosure>\n {4}<\/item>$/);
+    assert.deepEqual(
+      feedItems(feed([item, entry.xml])).map((read) => read.version),
+      ["0.2.0", "0.1.0"],
+    );
+  });
 });
