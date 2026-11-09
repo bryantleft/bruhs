@@ -142,19 +142,29 @@ public protocol IconRenderer: Sendable {
 
 /// Pith's icons, drawn once and kept. The first drawing of an icon at a size costs 6 to 35 ms, so the store never
 /// draws on its caller's thread: it draws on a queue of its own, a few at a time, and keeps each drawing by key,
-/// appearance and size. Asking for an icon while it's being drawn waits for that drawing.
+/// appearance and size, letting the least recently used go once it holds too many. Asking for an icon while it's being
+/// drawn waits for that drawing.
 public final class IconStore: @unchecked Sendable {
     /// Half the Mac's cores, from four to eight: the map's icons come quickly without crowding out everything else.
     public static let defaultConcurrency = min(8, max(4, ProcessInfo.processInfo.activeProcessorCount / 2))
 
+    /// A kept drawing, linked to the drawings used just before and after it, so a use or an eviction costs the same
+    /// however many are kept.
+    private struct Kept {
+        let icon: RenderedIcon
+        var older: IconRequest?
+        var newer: IconRequest?
+    }
+
     private let renderer: any IconRenderer
     private let queue = OperationQueue()
-    /// How many bytes of drawings the store keeps. Past it the oldest go first.
+    /// How many bytes of drawings the store keeps. Past it the least recently used go first.
     private let budget: Int
     private let lock = NSLock()
-    private var cache: [IconRequest: RenderedIcon] = [:]
-    /// The kept requests, oldest first.
-    private var order: [IconRequest] = []
+    private var cache: [IconRequest: Kept] = [:]
+    /// The ends of the order the kept drawings were last used in.
+    private var leastRecent: IconRequest?
+    private var mostRecent: IconRequest?
     private var bytes = 0
     /// Who's waiting for each icon being drawn.
     private var waiting: [IconRequest: [@Sendable (RenderedIcon?) -> Void]] = [:]
@@ -167,10 +177,10 @@ public final class IconStore: @unchecked Sendable {
         queue.qualityOfService = .utility
     }
 
-    /// The icon if it's drawn already, from any thread, without waiting.
+    /// The icon if it's drawn already, from any thread, without waiting. Showing it counts as a use.
     public func cachedIcon(for request: IconRequest) -> RenderedIcon? {
         lock.lock(); defer { lock.unlock() }
-        return cache[request]
+        return use(request)
     }
 
     /// The icon, drawn first unless it's kept. Nil when there's no such icon.
@@ -185,7 +195,7 @@ public final class IconStore: @unchecked Sendable {
     /// it's drawn there. This thread never draws.
     public func icon(for request: IconRequest, completion: @escaping @Sendable (RenderedIcon?) -> Void) {
         lock.lock()
-        if let kept = cache[request] { lock.unlock(); completion(kept); return }
+        if let kept = use(request) { lock.unlock(); completion(kept); return }
         let drawing = waiting[request] != nil
         waiting[request, default: []].append(completion)
         lock.unlock()
@@ -212,14 +222,40 @@ public final class IconStore: @unchecked Sendable {
         return body()
     }
 
-    /// Keeps `icon`, letting the oldest drawings go once the kept ones pass the budget. Called with the lock held.
-    private func keep(_ icon: RenderedIcon, for request: IconRequest) {
-        cache[request] = icon
-        order.append(request)
-        bytes += icon.bytes
-        while bytes > budget, order.count > 1 {
-            if let gone = cache.removeValue(forKey: order.removeFirst()) { bytes -= gone.bytes }
+    /// The kept drawing for `request`, now the most recently used. Called with the lock held.
+    private func use(_ request: IconRequest) -> RenderedIcon? {
+        guard let kept = cache[request] else { return nil }
+        if request != mostRecent {
+            unlink(kept)
+            append(kept.icon, for: request)
         }
+        return kept.icon
+    }
+
+    /// Keeps `icon` as the most recently used, letting the least recently used drawings go once the kept ones pass the
+    /// budget. Called with the lock held.
+    private func keep(_ icon: RenderedIcon, for request: IconRequest) {
+        if let earlier = cache[request] { unlink(earlier); bytes -= earlier.icon.bytes }
+        append(icon, for: request)
+        bytes += icon.bytes
+        while bytes > budget, cache.count > 1, let oldest = leastRecent, let gone = cache.removeValue(forKey: oldest) {
+            unlink(gone)
+            bytes -= gone.icon.bytes
+        }
+    }
+
+    /// Takes `kept` out of the order of use, joining its neighbours. Its own entry is left for the caller to replace or
+    /// remove. Called with the lock held.
+    private func unlink(_ kept: Kept) {
+        if let older = kept.older { cache[older]?.newer = kept.newer } else { leastRecent = kept.newer }
+        if let newer = kept.newer { cache[newer]?.older = kept.older } else { mostRecent = kept.older }
+    }
+
+    /// Keeps `icon` at the most recent end of the order of use. Called with the lock held.
+    private func append(_ icon: RenderedIcon, for request: IconRequest) {
+        cache[request] = Kept(icon: icon, older: mostRecent, newer: nil)
+        if let mostRecent { cache[mostRecent]?.newer = request } else { leastRecent = request }
+        mostRecent = request
     }
 }
 

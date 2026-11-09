@@ -548,11 +548,13 @@ struct DiskWebView: NSViewRepresentable {
     /// The View menu's text size. The page zooms by it, so the map's labels and lists grow with the rest of Pith.
     let textScale: Double
     let created: (WKWebView) -> Void
+    /// Light or dark, which the page's icons are drawn in.
+    @Environment(\.colorScheme) private var colorScheme
     func makeCoordinator() -> Coordinator { Coordinator(model: model) }
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
-        config.setURLSchemeHandler(BundledAssets(), forURLScheme: "pith")
+        config.setURLSchemeHandler(BundledAssets { [weak model] in model?.iconPolicy }, forURLScheme: "pith")
         config.userContentController.add(context.coordinator, name: "pith")
         // Tab reaches the map's buttons even when the Mac's Keyboard navigation setting is off.
         config.preferences.tabFocusesLinks = true
@@ -577,6 +579,7 @@ struct DiskWebView: NSViewRepresentable {
         // Hidden, it leaves the key view loop and can't take a click, but its page and open folder stay.
         if nsView.isHidden == visible { nsView.isHidden = !visible }
         if nsView.pageZoom != textScale { nsView.pageZoom = textScale }
+        context.coordinator.iconAppearance = colorScheme == .dark ? .dark : .light
         context.coordinator.send(revision: model.revision)
     }
     static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) {
@@ -595,6 +598,19 @@ struct DiskWebView: NSViewRepresentable {
         var ready = false
         var revision: UUID?
         private var menu: DiskItemMenu?
+        /// The appearance the page's icons are drawn in, the web view's own. A new one takes a new generation of icon
+        /// URLs, since WebKit keeps an image from Pith's scheme for as long as its URL stays the same, and the page gets
+        /// their new base at once.
+        var iconAppearance: IconAppearance? {
+            didSet {
+                guard iconAppearance != oldValue else { return }
+                if oldValue != nil { iconGeneration += 1 }
+                sendIconBase()
+            }
+        }
+        private var iconGeneration = 1
+        /// Where the page loads its icons from, up to their size and key (`IconPolicy.base`).
+        private var iconBase: String? { iconAppearance.map { IconPolicy.base(generation: iconGeneration, appearance: $0) } }
         init(model: DiskModel) { self.model = model }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard BridgePolicy.allows(url: message.frameInfo.request.url, mainFrame: message.frameInfo.isMainFrame),
@@ -684,11 +700,21 @@ struct DiskWebView: NSViewRepresentable {
                     }
                     return growth
                 }
-                web.callAsyncJavaScript("window.pithReceive(payload); window.pithReceiveGrowth?.(growth)",
-                                        arguments: ["payload": payload as Any? ?? NSNull(), "growth": growth as Any? ?? NSNull()], in: nil, in: .page) { [weak self] result in
+                // The icons' base comes first, so the map's icons load from the current one.
+                web.callAsyncJavaScript("window.pithReceiveIconBase?.(iconBase); window.pithReceive(payload); window.pithReceiveGrowth?.(growth)",
+                                        arguments: ["iconBase": iconBase as Any? ?? NSNull(), "payload": payload as Any? ?? NSNull(), "growth": growth as Any? ?? NSNull()],
+                                        in: nil, in: .page) { [weak self] result in
                     if case .failure(let error) = result { self?.model.problem = DiskProblem(message: "Pith couldn’t draw the disk map: \(error.localizedDescription)") }
                 }
             } catch { model.problem = DiskProblem(message: "Pith couldn’t prepare the disk map: \(error.localizedDescription)") }
+        }
+
+        /// Gives the page the icons' new base, between maps, once it's ready for one; until then each map brings it.
+        private func sendIconBase() {
+            guard ready, let web else { return }
+            web.callAsyncJavaScript("window.pithReceiveIconBase?.(iconBase)", arguments: ["iconBase": iconBase as Any? ?? NSNull()], in: nil, in: .page) { result in
+                if case .failure(let error) = result { NSLog("Pith: the disk map didn’t take its icons’ new base: \(error.localizedDescription)") }
+            }
         }
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
             decisionHandler(BridgePolicy.allows(url: navigationAction.request.url, mainFrame: navigationAction.targetFrame?.isMainFrame == true) ? .allow : .cancel)
@@ -723,12 +749,24 @@ struct DiskWebView: NSViewRepresentable {
     @objc private func run(_ sender: NSMenuItem) { actions[sender.tag]() }
 }
 
+/// Pith's own scheme, `pith://app/`: the disk map's page and the files beside it, from the app's bundle, and under
+/// `icon/` the icons of what the map shows, as `IconPolicy` allows, from the icon store.
 @MainActor final class BundledAssets: NSObject, WKURLSchemeHandler {
+    /// What the page may load from the icon route, as the map stands when it asks.
+    private let icons: () -> IconPolicy?
+    /// Icon requests waiting for their drawing. WebKit stops a request the page no longer needs and raises an exception
+    /// when one is answered after that, so a drawing answers its request only while it's still here.
+    private var waiting: Set<ObjectIdentifier> = []
+
+    init(icons: @escaping () -> IconPolicy?) { self.icons = icons }
+
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
         guard let url = urlSchemeTask.request.url, url.host == "app", url.scheme == "pith",
               let resources = Bundle.main.resourceURL else {
             urlSchemeTask.didFailWithError(DiskFailure("Invalid bundled resource request.")); return
         }
+        // Everything under icon/, however it's spelled, is the icon route's to answer, and never a file's.
+        if url.path.hasPrefix("/icon/") { serveIcon(url, to: urlSchemeTask); return }
         let root = resources.appendingPathComponent("web").standardizedFileURL.resolvingSymlinksInPath()
         let target = root.appendingPathComponent(url.path).standardizedFileURL.resolvingSymlinksInPath()
         guard target.pathComponents.starts(with: root.pathComponents), target.path != root.path else {
@@ -741,5 +779,35 @@ struct DiskWebView: NSViewRepresentable {
             urlSchemeTask.didReceive(data); urlSchemeTask.didFinish()
         } catch { urlSchemeTask.didFailWithError(error) }
     }
-    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
+
+    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
+        waiting.remove(ObjectIdentifier(urlSchemeTask))
+    }
+
+    /// Answers with the icon `url` asks for, drawn off the main thread unless the store has it, or with a 404 when the
+    /// page may not have it or macOS has none.
+    private func serveIcon(_ url: URL, to task: any WKURLSchemeTask) {
+        guard let request = icons()?.request(for: url) else { Self.answer(task, url: url, png: nil); return }
+        if let icon = Icons.store.cachedIcon(for: request) { Self.answer(task, url: url, png: icon.png); return }
+        let id = ObjectIdentifier(task)
+        waiting.insert(id)
+        Task {
+            let icon = await Icons.store.icon(for: request)
+            // This closure holds the task, so no request WebKit starts meanwhile can share its identifier.
+            guard waiting.remove(id) != nil else { return }
+            Self.answer(task, url: url, png: icon?.png)
+        }
+    }
+
+    /// The PNG with its type and length, or a 404 without one. No caching headers: the URL's generation, appearance and
+    /// size are what make WebKit load an icon again.
+    private static func answer(_ task: any WKURLSchemeTask, url: URL, png: Data?) {
+        let headers = png.map { ["Content-Type": "image/png", "Content-Length": String($0.count)] } ?? ["Content-Length": "0"]
+        guard let response = HTTPURLResponse(url: url, statusCode: png == nil ? 404 : 200, httpVersion: "HTTP/1.1", headerFields: headers) else {
+            task.didFailWithError(DiskFailure("Pith couldn’t answer for an icon.")); return
+        }
+        task.didReceive(response)
+        if let png { task.didReceive(png) }
+        task.didFinish()
+    }
 }

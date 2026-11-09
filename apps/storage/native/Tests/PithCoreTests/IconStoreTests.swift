@@ -196,6 +196,46 @@ final class IconStoreTests: XCTestCase {
         XCTAssertNotNil(store.cachedIcon(for: request(3)))
     }
 
+    func testAnIconInUseOutlastsOnesUsedLessRecently() throws {
+        let renderer = RecordingRenderer()
+        let request = { (n: Int) in IconRequest(.type("ext\(n)"), size: IconSize(pixels: 32, scale: 2), appearance: .light) }
+        let one = try XCTUnwrap(draw([request(0)], in: IconStore(renderer: renderer)).first ?? nil)
+        let store = IconStore(renderer: renderer, budget: 2 * one.bytes + one.bytes / 2)
+        _ = draw([request(1)], in: store)
+        _ = draw([request(2)], in: store)
+        // Showing the first again makes it the most recently used, so the second goes in its place.
+        XCTAssertNotNil(store.cachedIcon(for: request(1)))
+        _ = draw([request(3)], in: store)
+        XCTAssertNil(store.cachedIcon(for: request(2)), "the least recently used went")
+        XCTAssertNotNil(store.cachedIcon(for: request(3)))
+        XCTAssertNotNil(store.cachedIcon(for: request(1)))
+        // Asking for a kept icon with a completion uses it too.
+        _ = draw([request(3)], in: store)
+        _ = draw([request(4)], in: store)
+        XCTAssertNil(store.cachedIcon(for: request(1)))
+        XCTAssertNotNil(store.cachedIcon(for: request(3)))
+        XCTAssertEqual(renderer.recorded.filter { $0.request == request(3) }.count, 1, "a kept icon isn't drawn again")
+    }
+
+    /// Through a run of icons asked for, the store draws exactly those a list of the kept icons, least recently used
+    /// first, doesn't hold, and ends keeping what that list keeps.
+    func testTheStoreKeepsTheIconsUsedMostRecently() throws {
+        let request = { (n: Int) in IconRequest(.type("ext\(n)"), size: IconSize(pixels: 32, scale: 2), appearance: .light) }
+        let one = try XCTUnwrap(draw([request(0)], in: IconStore(renderer: RecordingRenderer())).first ?? nil)
+        let renderer = RecordingRenderer()
+        let store = IconStore(renderer: renderer, budget: 3 * one.bytes + one.bytes / 2)
+        var kept: [Int] = [], drawn: [Int] = []
+        for n in [1, 2, 3, 1, 4, 4, 2, 5, 1, 6, 6, 3, 2, 1, 7, 1, 8, 2, 9, 9, 1, 3] {
+            _ = draw([request(n)], in: store)
+            if !kept.contains(n) { drawn.append(n) }
+            kept.removeAll { $0 == n }
+            kept.append(n)
+            if kept.count > 3 { kept.removeFirst() }
+        }
+        XCTAssertEqual(renderer.recorded.map(\.request), drawn.map(request))
+        XCTAssertEqual(Set((1...9).filter { store.cachedIcon(for: request($0)) != nil }), Set(kept))
+    }
+
     func testAnIconComesAsPNGAndAsAnImage() throws {
         let store = IconStore(renderer: RecordingRenderer())
         let icon = try XCTUnwrap(draw([IconRequest(.folder, size: small, appearance: .light)], in: store).first ?? nil)

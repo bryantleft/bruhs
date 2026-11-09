@@ -477,3 +477,81 @@ public enum BridgePolicy {
             && url.user == nil && url.password == nil && url.port == nil && url.query == nil
     }
 }
+
+/// Which of macOS's icons the disk map's page may load from Pith's own scheme, at
+/// `pith://app/icon/<generation>/<appearance>/<points>@<scale>x/<key>.png`. The route shares the page's scheme and host,
+/// so its images are the page's own and a canvas that draws them can read their pixels back.
+public struct IconPolicy: Sendable {
+    /// The start of every icon's URL, up to its size: `pith://app/icon/<generation>/<appearance>/`. WebKit keeps an
+    /// image from Pith's scheme for as long as its URL stays the same, so a new generation loads every icon again.
+    public static func base(generation: Int, appearance: IconAppearance) -> String {
+        "pith://app/icon/\(generation)/\(appearance.rawValue)/"
+    }
+
+    private let map: DiskNode?
+    private let places: KnownPlaces
+    private let asking: Bool
+    private let volumes: Set<String>
+    private let apps: Set<String>
+
+    /// - Parameters:
+    ///   - map: the tree of the map the page shows.
+    ///   - places: the known places, whose ids the page may ask for and which Pith's icon rule needs.
+    ///   - asking: whether macOS may be holding some of the map's folders, as `KnownPlaces.iconKey(for:asking:)` takes it.
+    ///   - volumes: the roots of the disks the disk menu lists.
+    ///   - apps: the bundles of the apps the page names from Activity's history, under Wrote the most since.
+    public init(map: DiskNode?, places: KnownPlaces, asking: Bool, volumes: Set<String>, apps: Set<String>) {
+        self.map = map; self.places = places; self.asking = asking; self.volumes = volumes; self.apps = apps
+    }
+
+    /// The icon `url` asks for, or nil when Pith refuses it, as it does anything that isn't an icon's URL in its one
+    /// spelling at a size the store draws. The key is read from the URL's path as it arrives, still escaped: decoding
+    /// it first would turn an item path's escaped slashes into the URL's own.
+    public func request(for url: URL) -> IconRequest? {
+        guard url.scheme == "pith", url.host == "app", url.user == nil, url.password == nil, url.port == nil, url.query == nil, url.fragment == nil,
+              let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath,
+              path.hasPrefix("/icon/"), path.hasSuffix(".png") else { return nil }
+        let parts = path.dropFirst("/icon/".count).dropLast(".png".count).split(separator: "/", maxSplits: 3, omittingEmptySubsequences: false)
+        guard parts.count == 4, Self.number(parts[0]) != nil, let appearance = IconAppearance(rawValue: String(parts[1])),
+              let size = Self.size(parts[2]), let key = IconKey(string: String(parts[3])), allows(key) else { return nil }
+        return IconRequest(key, size: size, appearance: appearance)
+    }
+
+    /// Whether the page may have `key`'s icon. A file type, the plain folder, the group and a known place need no path,
+    /// so any of them may load. An item's own icon is looked up by its path, so it loads only for a folder, package, app
+    /// or volume the map shows with that very key by Pith's icon rule, a disk the disk menu lists, or an app on the
+    /// page. A folder the map couldn't read, one macOS may be holding, a known place or a path the map doesn't show
+    /// never gets looked up by its path this way.
+    private func allows(_ key: IconKey) -> Bool {
+        switch key {
+        case .type, .folder, .group: return true
+        case .place(let id): return places.place(id: id) != nil
+        case .item(let path):
+            if volumes.contains(path) || apps.contains(path) { return true }
+            return item(at: path).map { places.iconKey(for: $0, asking: asking) == key } ?? false
+        }
+    }
+
+    /// The map's folder or volume at `path`, found by following the path down from the map's root.
+    private func item(at path: String) -> DiskNode? {
+        guard let map else { return nil }
+        if let folder = map.folder(at: path) { return folder }
+        // A volume mounted inside the map is a block of its own in the folder it's mounted in.
+        return map.folder(at: (path as NSString).deletingLastPathComponent)?.children?.first { $0.kind == .volume && $0.path == path }
+    }
+
+    /// A size as `<points>@<scale>x`, such as `16@2x`, when the store draws it as it is.
+    private static func size(_ text: Substring) -> IconSize? {
+        guard text.hasSuffix("x") else { return nil }
+        let parts = text.dropLast().split(separator: "@", omittingEmptySubsequences: false)
+        guard parts.count == 2, let points = number(parts[0]), let scale = number(parts[1]) else { return nil }
+        let (pixels, overflow) = points.multipliedReportingOverflow(by: scale)
+        let size = IconSize(pixels: pixels, scale: scale)
+        return !overflow && size.pixels == pixels && size.scale == scale ? size : nil
+    }
+
+    /// A whole number written as `String(_:)` writes it, so each has one spelling: no sign, leading zero or fraction.
+    private static func number(_ text: Substring) -> Int? {
+        Int(text).flatMap { $0 >= 0 && String($0) == text ? $0 : nil }
+    }
+}

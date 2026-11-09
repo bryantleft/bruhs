@@ -87,6 +87,14 @@ declare global {
     pithReceive: (payload: string | null) => void;
     pithReceiveGrowth: (growth: GrowthMessage | null) => void;
     /**
+     * Where Pith serves macOS's icons for the map, `pith://app/icon/<generation>/<appearance>/`, which an icon's
+     * `<points>@<scale>x/<key>.png` follows. Pith sends it with each map, and again with a new generation when the
+     * appearance changes, since WebKit keeps an image from Pith's scheme for as long as its URL stays the same.
+     */
+    pithReceiveIconBase: (base: string | null) => void;
+    /** The icons' base as Pith last sent it. */
+    pithIconBase?: string;
+    /**
      * Pith's path bar and Go menu: open a folder of the map, go back or forward through the folders opened, or up
      * to the open folder's enclosing folder.
      */
@@ -173,10 +181,14 @@ function DiskMap() {
           typeof value.writersHint === "string" ? value.writersHint : undefined,
       });
     };
+    window.pithReceiveIconBase = (base) => {
+      window.pithIconBase = typeof base === "string" ? base : undefined;
+    };
     post({ action: "ready" });
     return () => {
       window.pithReceive = () => {};
       window.pithReceiveGrowth = () => {};
+      window.pithReceiveIconBase = () => {};
     };
   }, []);
 

@@ -200,7 +200,7 @@ private struct MenuAnchorView: NSViewRepresentable {
 
 extension DiskModel {
     /// A disk's icon in the disk menu, at the menu's 16 pt, as the icon store draws it. The path bar asks for it ahead of
-    /// time, so the menu finds it drawn.
+    /// time, so the menu usually finds it drawn.
     static func menuIconRequest(_ path: String, appearance: IconAppearance, scale: CGFloat) -> IconRequest {
         IconRequest(.item(path), size: IconSize(points: 16, scale: scale), appearance: appearance)
     }
@@ -216,7 +216,14 @@ extension DiskModel {
         let column = (choices.map { ($0.name as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0) + 24
         for volume in choices {
             let item = menu.add(volume.name, enabled: !busy) { [weak self] in self?.show(volume.url.path) }
-            item.image = Icons.store.cachedIcon(for: Self.menuIconRequest(volume.url.path, appearance: appearance, scale: scale))?.nsImage
+            let icon = Self.menuIconRequest(volume.url.path, appearance: appearance, scale: scale)
+            if let drawn = Icons.store.cachedIcon(for: icon) {
+                item.image = drawn.nsImage
+            } else {
+                // An icon the store hasn't drawn, or has let go, is drawn off the main thread and shows once it's ready,
+                // whether the menu is open by then or not.
+                Task { item.image = await Icons.store.icon(for: icon)?.nsImage }
+            }
             item.state = volume.url.path == shown ? .on : .off
             if let available = volume.available {
                 item.attributedTitle = Self.menuTitle(volume.name, free: bytes(available), column: column, font: font)

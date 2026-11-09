@@ -616,6 +616,13 @@ enum MapCommand: Equatable {
         Icons.places.iconKey(for: item, asking: macOSMayHoldFolders)
     }
 
+    /// What the map's page may load from Pith's icon route, by the same rule: an item's own icon only for what the map
+    /// shows with that key and for the disks the disk menu lists. The apps under Wrote the most since reach the page
+    /// without their bundles' paths, so none of theirs loads by path.
+    var iconPolicy: IconPolicy {
+        IconPolicy(map: result?.root, places: Icons.places, asking: macOSMayHoldFolders, volumes: Set(choices.map(\.url.path)), apps: [])
+    }
+
     /// Whether macOS may be holding some of the live map's folders: it's asking about some, or the map is catching up
     /// after a launch, listing again what changed meanwhile and what was waiting on macOS when it was saved.
     private var macOSMayHoldFolders: Bool {
