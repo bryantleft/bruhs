@@ -68,13 +68,10 @@ jobs:
 
   pith-older-macos:
     # Pith runs on macOS 14 and later but is built with Xcode 26, which older macOS can't run. So the app packaged above
-    # runs here as people get it, with the scanner's tests built for each system.
+    # runs here as people get it, with the scanner's tests built for this system. GitHub no longer runs macOS 14: a
+    # job asking for it is refused ("macos-14-arm64-us-default is not supported").
     needs: pith-macos
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [macos-14, macos-15]
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
