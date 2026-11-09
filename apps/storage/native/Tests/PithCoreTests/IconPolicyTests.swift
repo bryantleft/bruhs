@@ -42,8 +42,8 @@ final class IconPolicyTests: XCTestCase {
         ])
     }
 
-    private func policy(_ map: DiskNode?, asking: Bool = false, volumes: Set<String> = [], apps: Set<String> = []) -> IconPolicy {
-        IconPolicy(map: map, places: places, asking: asking, volumes: volumes, apps: apps)
+    private func policy(_ map: DiskNode?, volumes: Set<String> = [], apps: Set<String> = []) -> IconPolicy {
+        IconPolicy(places: places, map: map, volumes: volumes, apps: apps)
     }
 
     /// An icon's URL as the page writes one.
@@ -51,14 +51,14 @@ final class IconPolicyTests: XCTestCase {
         "pith://app/icon/\(generation)/\(appearance)/\(size)/\(key).png"
     }
 
-    /// What `policy` makes of `string`, a URL as WebKit hands it over.
-    private func request(_ string: String, _ policy: IconPolicy) throws -> IconRequest? {
-        policy.request(for: try XCTUnwrap(URL(string: string), string))
+    /// What `policy` makes of `string`, a URL as WebKit hands it over, while macOS is `asking` or not.
+    private func request(_ string: String, _ policy: IconPolicy, asking: Bool = false) throws -> IconRequest? {
+        policy.request(for: try XCTUnwrap(URL(string: string), string), asking: asking)
     }
 
     /// Whether `policy` lets the page have `key`'s icon.
-    private func loads(_ key: IconKey, _ policy: IconPolicy) throws -> Bool {
-        try request(url(key.string), policy) != nil
+    private func loads(_ key: IconKey, _ policy: IconPolicy, asking: Bool = false) throws -> Bool {
+        try request(url(key.string), policy, asking: asking) != nil
     }
 
     func testItReadsTheIconAURLAsksFor() throws {
@@ -111,9 +111,9 @@ final class IconPolicyTests: XCTestCase {
         XCTAssertFalse(try loads(.item(home + "/Documents/New"), policy), "a guarded folder the map hasn't listed shows a plain folder")
         XCTAssertFalse(try loads(.item(home + "/Projects/notes.pdf"), policy), "a file shows its type's icon")
         XCTAssertFalse(try loads(.item(home + "/Projects/__other__"), policy), "the smaller items show a group")
-        let asking = self.policy(map, asking: true)
-        XCTAssertFalse(try loads(.item(home + "/Documents/Taxes"), asking), "while macOS may be holding a guarded folder")
-        XCTAssertTrue(try loads(.item(home + "/Projects"), asking), "outside the locations macOS guards, asking changes nothing")
+        XCTAssertFalse(try loads(.item(home + "/Documents/Taxes"), policy, asking: true), "while macOS may be holding a guarded folder")
+        XCTAssertTrue(try loads(.item(home + "/Documents/Taxes"), policy), "and once it can't be")
+        XCTAssertTrue(try loads(.item(home + "/Projects"), policy, asking: true), "outside the locations macOS guards, asking changes nothing")
     }
 
     func testPathsOutsideTheMapAreRefused() throws {
@@ -125,14 +125,46 @@ final class IconPolicyTests: XCTestCase {
     }
 
     func testTheDiskMenusDisksAndActivitysAppsLoadByTheirPaths() throws {
-        let policy = policy(nil, asking: true, volumes: ["/", "/Volumes/Archive"], apps: ["/Applications/Safari.app"])
-        XCTAssertTrue(try loads(.item("/"), policy))
-        XCTAssertTrue(try loads(.item("/Volumes/Archive"), policy))
-        XCTAssertTrue(try loads(.item("/Applications/Safari.app"), policy))
+        let policy = policy(nil, volumes: ["/", "/Volumes/Archive"], apps: ["/Applications/Safari.app"])
+        XCTAssertTrue(try loads(.item("/"), policy, asking: true))
+        XCTAssertTrue(try loads(.item("/Volumes/Archive"), policy, asking: true))
+        XCTAssertTrue(try loads(.item("/Applications/Safari.app"), policy, asking: true))
         XCTAssertFalse(try loads(.item("/Volumes/Archive/Photos"), policy), "a disk's root, not what's on it")
         XCTAssertFalse(try loads(.item("/Volumes/Other"), policy))
         XCTAssertFalse(try loads(.item("/Applications/Mail.app"), policy))
         XCTAssertFalse(try loads(.item("/Applications/Safari.app/Contents"), policy))
+    }
+
+    /// What the policy found in a map lasts until the map changes, and the disks and apps it allows are the ones set
+    /// last, so nothing an earlier map, disk or app allowed lets a path through after a change.
+    func testAChangeDropsWhatTheLastMapDisksAndAppsAllowed() throws {
+        let policy = policy(map, volumes: ["/Volumes/Archive"], apps: ["/Applications/Safari.app"])
+        XCTAssertTrue(try loads(.item(home + "/Projects/Pith.app"), policy), "found in the map")
+        // A newer map without Projects or Backup, in which Locked could be read and Documents' New folder is listed.
+        policy.map = folder(home, [
+            folder(home + "/Documents", [folder(home + "/Documents/New", size: 4096)]),
+            folder(home + "/Locked"),
+            node(.unreadable, home + "/Projects 2"),
+        ])
+        for path in [home + "/Projects", home + "/Projects/Pith.app", home + "/Backup", home + "/Documents/Taxes"] {
+            XCTAssertFalse(try loads(.item(path), policy), "\(path) went with the last map")
+        }
+        XCTAssertTrue(try loads(.item(home + "/Locked"), policy), "read in the newer map")
+        XCTAssertTrue(try loads(.item(home + "/Documents/New"), policy), "listed in the newer map")
+        XCTAssertFalse(try loads(.item(home + "/Documents/New"), policy, asking: true))
+        XCTAssertFalse(try loads(.item(home + "/Projects 2"), policy), "unreadable in the newer map")
+        policy.map = nil
+        XCTAssertFalse(try loads(.item(home), policy), "no map, no items")
+        policy.map = map
+        XCTAssertTrue(try loads(.item(home + "/Projects/Pith.app"), policy), "back with the map")
+        XCTAssertFalse(try loads(.item(home + "/Locked"), policy), "unreadable again")
+        XCTAssertTrue(try loads(.item("/Volumes/Archive"), policy))
+        XCTAssertTrue(try loads(.item("/Applications/Safari.app"), policy))
+        policy.volumes = ["/Volumes/Other"]
+        policy.apps = []
+        XCTAssertFalse(try loads(.item("/Volumes/Archive"), policy), "a disk the menu no longer lists")
+        XCTAssertTrue(try loads(.item("/Volumes/Other"), policy))
+        XCTAssertFalse(try loads(.item("/Applications/Safari.app"), policy), "an app the page no longer names")
     }
 
     /// A `..` in an item's path, written out or escaped, would reach a folder of the map if the path were resolved, so

@@ -383,6 +383,13 @@ enum Icons {
     }
 }
 
+extension IconAppearance {
+    /// The light or dark half of a SwiftUI view's colour scheme, which its icons are drawn in.
+    init(_ colorScheme: ColorScheme) {
+        self = colorScheme == .dark ? .dark : .light
+    }
+}
+
 /// A map item's or place's icon as macOS draws it, which the icon store renders for this view's appearance and
 /// display: switching between light and dark draws it again. It's decorative, since the name beside it says what it is.
 struct SystemIconView: View {
@@ -394,7 +401,7 @@ struct SystemIconView: View {
     @State private var shown: (key: IconKey, icon: RenderedIcon)?
 
     private var request: IconRequest {
-        IconRequest(key, size: IconSize(points: size, scale: displayScale), appearance: colorScheme == .dark ? .dark : .light)
+        IconRequest(key, size: IconSize(points: size, scale: displayScale), appearance: IconAppearance(colorScheme))
     }
 
     var body: some View {

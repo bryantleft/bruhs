@@ -65,8 +65,11 @@ enum MapCommand: Equatable {
 
 @MainActor @Observable final class DiskModel {
     var result: DiskResult? {
-        // JSON kept for a map that's changed since is a stale picture of it.
-        didSet { if !settingLive { resultJSON = nil } }
+        didSet {
+            // JSON kept for a map that's changed since is a stale picture of it.
+            if !settingLive { resultJSON = nil }
+            icons.map = result?.root
+        }
     }
     /// The live map's own JSON of `result`, while `result` is just as the live map sent it.
     private(set) var resultJSON: String?
@@ -137,7 +140,9 @@ enum MapCommand: Equatable {
     /// Runs a command of the path bar or the Go menu in the map's page; the page's coordinator connects it.
     @ObservationIgnored var pageCommand: ((MapCommand) -> Void)?
     /// The mounted volumes, for the disk menu, the path bar's names and the list shown when the live map can't run.
-    private(set) var choices: [DiskVolumeChoice] = []
+    private(set) var choices: [DiskVolumeChoice] = [] {
+        didSet { icons.volumes = Set(choices.map(\.url.path)) }
+    }
     @ObservationIgnored private var choicesTask: Task<Void, Never>?
     private let runner = ScannerRunner()
     private var operation: Task<Void, Never>?
@@ -617,10 +622,13 @@ enum MapCommand: Equatable {
     }
 
     /// What the map's page may load from Pith's icon route, by the same rule: an item's own icon only for what the map
-    /// shows with that key and for the disks the disk menu lists. The apps under Wrote the most since reach the page
-    /// without their bundles' paths, so none of theirs loads by path.
-    var iconPolicy: IconPolicy {
-        IconPolicy(map: result?.root, places: Icons.places, asking: macOSMayHoldFolders, volumes: Set(choices.map(\.url.path)), apps: [])
+    /// shows with that key and for the disks the disk menu lists. It's given the map and the disks as they change. The
+    /// apps under Wrote the most since reach the page without their bundles' paths, so it allows none of theirs.
+    @ObservationIgnored private lazy var icons = IconPolicy(places: Icons.places)
+
+    /// The icon the page asks for at `url` on Pith's icon route, or nil when it may not have it.
+    func iconRequest(for url: URL) -> IconRequest? {
+        icons.request(for: url, asking: macOSMayHoldFolders)
     }
 
     /// Whether macOS may be holding some of the live map's folders: it's asking about some, or the map is catching up

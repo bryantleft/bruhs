@@ -16,7 +16,7 @@ struct DiskPathBar: View {
     var body: some View {
         let path = model.folderPath
         let folders = path?.nodes(in: model.result?.root) ?? []
-        let appearance: IconAppearance = colorScheme == .dark ? .dark : .light
+        let appearance = IconAppearance(colorScheme)
         let menuIcons = model.choices.map { DiskModel.menuIconRequest($0.url.path, appearance: appearance, scale: displayScale) }
         PathRow(spacing: 2) {
             DiskMenuButton(model: model, volume: path?.volume)
@@ -83,7 +83,7 @@ private struct DiskMenuButton: View {
 
     var body: some View {
         Button {
-            anchor.popUp(model.diskMenu(appearance: colorScheme == .dark ? .dark : .light, scale: displayScale))
+            anchor.popUp(model.diskMenu(appearance: IconAppearance(colorScheme), scale: displayScale))
         } label: {
             HStack(spacing: 5) {
                 if let volume { SystemIconView(key: .item(volume.path)) }

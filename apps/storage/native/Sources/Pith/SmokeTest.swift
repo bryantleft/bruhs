@@ -221,27 +221,36 @@ extension AppDelegate {
 
     /// The map's page loads icons from Pith's own scheme, so a canvas can read them back. The map's own folder draws on
     /// a canvas whose pixels `getImageData` returns, which it refuses for an image from another origin, while a folder
-    /// outside the map and a key of no kind get a 404. Loads the page stops while their icons are still being drawn get
-    /// no late answer, which WebKit would raise an exception for, and the route goes on serving. A new appearance gives
-    /// the page a new base, a generation on, whose icons load too.
+    /// outside the map and a key of no kind get a 404. When the page stops loads while their icons are still being
+    /// drawn, WebKit stops the route's requests, and each of their drawings still comes and goes unanswered, since
+    /// WebKit raises an exception for an answer to a stopped request; the route then answers a URL it hasn't served. A
+    /// new appearance gives the page a new base, a generation on, whose icons load too.
     private func checkIconRoute(_ fixture: String) async -> [String: Bool] {
         let names = ["icon_route_draws_on_canvas", "icon_route_refuses_what_the_map_doesnt_show", "icon_route_survives_stopped_loads",
                      "icon_base_follows_appearance"]
-        guard let web = webView, let window = web.window else { return Dictionary(uniqueKeysWithValues: names.map { ($0, false) }) }
+        guard let web = webView, let window = web.window, let assets = web.configuration.urlSchemeHandler(forURLScheme: "pith") as? BundledAssets else {
+            return Dictionary(uniqueKeysWithValues: names.map { ($0, false) })
+        }
         let own = IconKey.item(fixture).string
-        // Whether `key`'s icon loads at 16 pt at 2x and draws on a canvas, with how many of its pixels show, and which of
-        // `others` load.
-        func draw(_ key: String, others: [String] = []) async -> (drawn: Bool, painted: Int, loaded: [Bool]) {
-            let result = try? await web.callAsyncJavaScript(Self.drawIcons, arguments: ["keys": [key] + others], in: nil, contentWorld: .page) as? [String: Any]
+        // Whether `key`'s icon loads at `points` pt at 2x and draws on a canvas, with how many of its pixels show, and
+        // which of `others` load. WebKit keeps an image for as long as its URL stays the same, so only a URL the page
+        // hasn't loaded reaches the route.
+        func draw(_ key: String, points: Int = 16, others: [String] = []) async -> (drawn: Bool, painted: Int, loaded: [Bool]) {
+            let result = try? await web.callAsyncJavaScript(Self.drawIcons, arguments: ["keys": [key] + others, "size": "\(points)@2x"], in: nil,
+                                                            contentWorld: .page) as? [String: Any]
             let painted = result?["painted"] as? Int ?? 0
-            return (result?["width"] as? Int == 32 && painted > 0, painted, result?["loaded"] as? [Bool] ?? [])
+            return (result?["width"] as? Int == points * 2 && painted > 0, painted, result?["loaded"] as? [Bool] ?? [])
         }
         let before = await pageIconBase(web)
         let first = await draw(own, others: [IconKey.item("/Applications").string, "thing/x"])
-        let stopped = (try? await web.callAsyncJavaScript(Self.stopIcons, in: nil, contentWorld: .page)) as? Int ?? 0
-        // The store goes on drawing what was asked for; its late answers arrive meanwhile.
-        try? await Task.sleep(for: .seconds(2))
-        let afterStopping = await draw(own)
+
+        let stoppedBefore = assets.stoppedWhileDrawing, lateBefore = assets.drawnAfterStopping
+        let unfinished = (try? await web.callAsyncJavaScript(Self.stopIcons, in: nil, contentWorld: .page)) as? Int ?? -1
+        let stopped = assets.stoppedWhileDrawing - stoppedBefore
+        let caughtUp = await eventually { assets.drawnAfterStopping - lateBefore >= stopped }
+        let late = assets.drawnAfterStopping - lateBefore
+        // At a size the page hasn't loaded, so the route answers it.
+        let afterStopping = await draw(own, points: 12)
 
         let chosen = window.appearance
         defer { window.appearance = chosen }
@@ -249,44 +258,48 @@ extension AppDelegate {
         let expected = before.flatMap(Self.generation).map { IconPolicy.base(generation: $0 + 1, appearance: other) }
         window.appearance = NSAppearance(named: other == .dark ? .darkAqua : .aqua)
         let after = await pageIconBase(web) { $0 == expected }
+        // The new base makes these URLs the page hasn't loaded too.
         let inOther = await draw(own)
-        print("icon route from \(before ?? "no base"): \(own) painted \(first.painted) pixels, others loaded \(first.loaded); stopped \(stopped) of 200 loads, "
-              + "then drew \(afterStopping.drawn); \(other.rawValue) gave \(after ?? "no base") for \(expected ?? "nothing"), drew \(inOther.drawn)")
-        return [names[0]: first.drawn, names[1]: first.loaded == [false, false], names[2]: stopped > 0 && afterStopping.drawn,
+        print("icon route from \(before ?? "no base"): \(own) painted \(first.painted) pixels, others loaded \(first.loaded); "
+              + "\(stopped) requests stopped while drawing, \(late) of their drawings came unanswered, \(unfinished) of 120 loads unfinished on the page, "
+              + "then a new size drew \(afterStopping.drawn); \(other.rawValue) gave \(after ?? "no base") for \(expected ?? "nothing"), drew \(inOther.drawn)")
+        return [names[0]: first.drawn, names[1]: first.loaded == [false, false], names[2]: stopped > 0 && caughtUp && afterStopping.drawn,
                 names[3]: expected != nil && after == expected && inOther.drawn]
     }
 
-    /// Loads `keys`' icons from the page's icon base at 16 pt at 2x, and draws the first on a canvas: its width, how many
-    /// of its pixels show, and which of the rest loaded. `getImageData` throws for a canvas another origin's image drew on.
+    /// Loads `keys`' icons from the page's icon base at `size`, and draws the first on a canvas: its width, how many of
+    /// its pixels show, and which of the rest loaded. `getImageData` throws for a canvas another origin's image drew on.
     private static let drawIcons = """
         const base = window.pithIconBase;
         if (typeof base !== "string") return null;
         const load = async (key) => {
           const image = new Image();
-          image.src = base + "16@2x/" + key + ".png";
+          image.src = base + size + "/" + key + ".png";
           try { await image.decode(); return image; } catch { return null; }
         };
         const [first, ...rest] = await Promise.all(keys.map(load));
         let painted = 0;
         if (first) {
           const canvas = document.createElement("canvas");
-          canvas.width = canvas.height = 32;
+          canvas.width = first.naturalWidth;
+          canvas.height = first.naturalHeight;
           const context = canvas.getContext("2d");
           context.drawImage(first, 0, 0);
-          const pixels = context.getImageData(0, 0, 32, 32).data;
+          const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
           for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) painted += 1;
         }
         return { width: first ? first.naturalWidth : 0, painted, loaded: rest.map((image) => image !== null) };
         """
 
-    /// Asks for 200 icons nothing has drawn, then stops every load once the first has come, while most of the rest are
-    /// still being drawn: how many loads it stopped.
+    /// Asks for 120 icons nothing has drawn, each at a size of its own, since macOS draws an icon at a new size slowly
+    /// the first time, then stops every load once the first has come, while most are still being drawn: how many of
+    /// the loads didn't finish.
     private static let stopIcons = """
         const base = window.pithIconBase;
-        if (typeof base !== "string") return 0;
-        const loads = Array.from({ length: 200 }, (_, n) => {
+        if (typeof base !== "string") return -1;
+        const loads = Array.from({ length: 120 }, (_, n) => {
           const image = new Image();
-          image.src = base + "20@2x/type/pith-smoke-" + n + ".png";
+          image.src = base + (8 + n) + "@1x/type/pith-smoke-" + n + ".png";
           return image.decode().then(() => true, () => false);
         });
         await Promise.race(loads);

@@ -481,39 +481,45 @@ public enum BridgePolicy {
 /// Which of macOS's icons the disk map's page may load from Pith's own scheme, at
 /// `pith://app/icon/<generation>/<appearance>/<points>@<scale>x/<key>.png`. The route shares the page's scheme and host,
 /// so its images are the page's own and a canvas that draws them can read their pixels back.
-public struct IconPolicy: Sendable {
+///
+/// It keeps the map, the disks and the apps as they're set. The page asks for an icon for each row and block it shows,
+/// so the map's folders and volumes are found by path once for each map, at the first request that needs them, and a
+/// request costs a lookup however wide the map is. Nothing found in one map outlasts it.
+public final class IconPolicy {
     /// The start of every icon's URL, up to its size: `pith://app/icon/<generation>/<appearance>/`. WebKit keeps an
     /// image from Pith's scheme for as long as its URL stays the same, so a new generation loads every icon again.
     public static func base(generation: Int, appearance: IconAppearance) -> String {
         "pith://app/icon/\(generation)/\(appearance.rawValue)/"
     }
 
-    private let map: DiskNode?
+    /// The known places, whose ids the page may ask for and which Pith's icon rule needs.
     private let places: KnownPlaces
-    private let asking: Bool
-    private let volumes: Set<String>
-    private let apps: Set<String>
+    /// The tree of the map the page shows. A new one, or none, drops the folders found in the last.
+    public var map: DiskNode? {
+        didSet { items = nil }
+    }
+    /// The roots of the disks the disk menu lists.
+    public var volumes: Set<String>
+    /// The bundles of the apps the page names from Activity's history, under Wrote the most since.
+    public var apps: Set<String>
+    /// The map's folders and volumes by path, found at the first request since the map was set.
+    private var items: [String: DiskNode]?
 
-    /// - Parameters:
-    ///   - map: the tree of the map the page shows.
-    ///   - places: the known places, whose ids the page may ask for and which Pith's icon rule needs.
-    ///   - asking: whether macOS may be holding some of the map's folders, as `KnownPlaces.iconKey(for:asking:)` takes it.
-    ///   - volumes: the roots of the disks the disk menu lists.
-    ///   - apps: the bundles of the apps the page names from Activity's history, under Wrote the most since.
-    public init(map: DiskNode?, places: KnownPlaces, asking: Bool, volumes: Set<String>, apps: Set<String>) {
-        self.map = map; self.places = places; self.asking = asking; self.volumes = volumes; self.apps = apps
+    public init(places: KnownPlaces, map: DiskNode? = nil, volumes: Set<String> = [], apps: Set<String> = []) {
+        self.places = places; self.map = map; self.volumes = volumes; self.apps = apps
     }
 
     /// The icon `url` asks for, or nil when Pith refuses it, as it does anything that isn't an icon's URL in its one
     /// spelling at a size the store draws. The key is read from the URL's path as it arrives, still escaped: decoding
-    /// it first would turn an item path's escaped slashes into the URL's own.
-    public func request(for url: URL) -> IconRequest? {
+    /// it first would turn an item path's escaped slashes into the URL's own. `asking` is whether macOS may be holding
+    /// some of the map's folders, as `KnownPlaces.iconKey(for:asking:)` takes it, which can change between requests.
+    public func request(for url: URL, asking: Bool) -> IconRequest? {
         guard url.scheme == "pith", url.host == "app", url.user == nil, url.password == nil, url.port == nil, url.query == nil, url.fragment == nil,
               let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath,
               path.hasPrefix("/icon/"), path.hasSuffix(".png") else { return nil }
         let parts = path.dropFirst("/icon/".count).dropLast(".png".count).split(separator: "/", maxSplits: 3, omittingEmptySubsequences: false)
         guard parts.count == 4, Self.number(parts[0]) != nil, let appearance = IconAppearance(rawValue: String(parts[1])),
-              let size = Self.size(parts[2]), let key = IconKey(string: String(parts[3])), allows(key) else { return nil }
+              let size = Self.size(parts[2]), let key = IconKey(string: String(parts[3])), allows(key, asking: asking) else { return nil }
         return IconRequest(key, size: size, appearance: appearance)
     }
 
@@ -522,7 +528,7 @@ public struct IconPolicy: Sendable {
     /// or volume the map shows with that very key by Pith's icon rule, a disk the disk menu lists, or an app on the
     /// page. A folder the map couldn't read, one macOS may be holding, a known place or a path the map doesn't show
     /// never gets looked up by its path this way.
-    private func allows(_ key: IconKey) -> Bool {
+    private func allows(_ key: IconKey, asking: Bool) -> Bool {
         switch key {
         case .type, .folder, .group: return true
         case .place(let id): return places.place(id: id) != nil
@@ -532,12 +538,22 @@ public struct IconPolicy: Sendable {
         }
     }
 
-    /// The map's folder or volume at `path`, found by following the path down from the map's root.
+    /// The map's folder or volume at `path`.
     private func item(at path: String) -> DiskNode? {
-        guard let map else { return nil }
-        if let folder = map.folder(at: path) { return folder }
-        // A volume mounted inside the map is a block of its own in the folder it's mounted in.
-        return map.folder(at: (path as NSString).deletingLastPathComponent)?.children?.first { $0.kind == .volume && $0.path == path }
+        if items == nil { items = map.map { Self.foldersAndVolumes(in: $0) } ?? [:] }
+        return items?[path]
+    }
+
+    /// Every folder and volume in `tree` by its path: only those can show an icon of their own. Of two at one path,
+    /// the first is kept, as following the path down from the root would find.
+    private static func foldersAndVolumes(in tree: DiskNode) -> [String: DiskNode] {
+        var items: [String: DiskNode] = [:]
+        func add(_ node: DiskNode) {
+            if node.kind == .dir || node.kind == .volume, items[node.path] == nil { items[node.path] = node }
+            node.children?.forEach(add)
+        }
+        add(tree)
+        return items
     }
 
     /// A size as `<points>@<scale>x`, such as `16@2x`, when the store draws it as it is.
