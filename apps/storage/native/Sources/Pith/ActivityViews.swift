@@ -128,12 +128,10 @@ struct ActivityView: View {
         return max(range.lowerBound, oldest)...range.upperBound
     }
 
-    /// Whether sampling runs. While a range is ranked it still does: the chart moves on, and the bar under it says the
-    /// range the table shows.
+    /// Said only while sampling is paused: otherwise Activity is always live, ranked range or not, and the chart's
+    /// axis says when a young session's readings began.
     private var subtitle: String {
-        if model.paused { return "Sampling paused" }
-        // The chart's axis shows the ten-minute window; a young session says when its readings began.
-        return model.historyStart.map { "Live since \(PanelSummary.clock($0))" } ?? "Live"
+        model.paused ? "Sampling paused" : ""
     }
 
     @ViewBuilder private func emptyState(_ listing: ActivityListing, range: ClosedRange<Double>?) -> some View {

@@ -71,9 +71,10 @@ extension AppDelegate {
                 && activity.snapshot?.apps.contains { $0.identity.kind == .system } == true
 
             guard let main = mainWindow else { throw DiskFailure("Activity didn't open the main window.") }
-            // Title, subtitle, toolbar items and search reach the NSWindow through scene bridging.
+            // Title, subtitle, toolbar items and search reach the NSWindow through scene bridging. Live, the window has
+            // no subtitle; pausing, below, checks that one arrives.
             checks["window_toolbar_bridged"] = await eventually {
-                main.window.title == "Pith" && main.window.subtitle.hasPrefix("Live")
+                main.window.title == "Pith" && main.window.subtitle.isEmpty
                     && main.window.toolbar?.items.contains { $0 is NSSearchToolbarItem } == true
             }
 
@@ -83,7 +84,7 @@ extension AppDelegate {
             let range = (window.upperBound - 3 * ActivityModel.interval)...window.upperBound
             main.state.activity.rank(by: range)
             let ranked = ActivityListing(history: activity.history, latest: activity.snapshot, range: range, search: "", includeExited: false, sort: main.state.activity.sort)
-            checks["range_ranking_scope"] = await eventually { main.state.activity.range != nil && main.window.subtitle.hasPrefix("Live") }
+            checks["range_ranking_scope"] = await eventually { main.state.activity.range != nil && main.window.subtitle.isEmpty }
                 && activity.history.systemCPU(in: range) != nil && !ranked.apps.isEmpty && main.state.activity.sort == .cpuDescending
             // Escape with the table focused arrives as SwiftUI's exit command.
             if let content = main.window.contentView, let table = firstView(NSOutlineView.self, in: content) { main.window.makeFirstResponder(table) }
@@ -91,10 +92,12 @@ extension AppDelegate {
                                              windowNumber: main.window.windowNumber, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53) {
                 main.window.sendEvent(escape)
             }
-            checks["escape_returns_to_live"] = await eventually { main.state.activity.range == nil && main.window.subtitle.hasPrefix("Live") }
+            checks["escape_returns_to_live"] = await eventually { main.state.activity.range == nil && main.window.subtitle.isEmpty }
             checks["search_cut_and_undo"] = await checkSearchCutAndUndo(in: main)
 
             activity.pause()
+            let subtitled = await eventually { main.window.subtitle == "Sampling paused" }
+            checks["window_toolbar_bridged"] = checks["window_toolbar_bridged"] == true && subtitled
             let pausedCount = activity.history.system.count
             // Longer than a sampling interval, so a pause that didn't stop sampling can't pass by luck.
             try await Task.sleep(for: .seconds(ActivityModel.interval * 1.5))
