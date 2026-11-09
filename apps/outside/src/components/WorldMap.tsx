@@ -17,6 +17,7 @@ export function WorldMap({
   onSelect,
   skin,
   travel,
+  preview,
   locked,
 }: Readonly<{
   location: string;
@@ -24,17 +25,15 @@ export function WorldMap({
   onSelect: (id: string) => void;
   skin: SkinId;
   travel: Readonly<{ path: readonly string[]; progress: number }> | null;
+  // The road a trip to the selected place would take, drawn before it starts.
+  preview?: readonly string[] | null;
   locked: ReadonlySet<string>;
 }>): React.JSX.Element {
   const terrain = terrainPaths();
   const roads = roadPath();
-  const route = useMemo(() => {
-    if (!travel) return '';
-    let d = '';
-    for (let index = 1; index < travel.path.length; index += 1)
-      d += dottedLine(travel.path[index - 1] ?? location, travel.path[index] ?? location, 1);
-    return d;
-  }, [travel, location]);
+  const route = useMemo(() => (travel ? solidRoute(travel.path, location) : ''), [travel, location]);
+  const planned = useMemo(() => (preview ? solidRoute(preview, location) : ''), [preview, location]);
+  const focus = tileCenter(selected);
   const marker = useMemo(() => {
     if (!travel || travel.path.length < 2) return tileCenter(location);
     // Walk the route's legs in proportion to their pixel length.
@@ -61,6 +60,7 @@ export function WorldMap({
           <Path key={fill} d={d} fill={fill} />
         ))}
         <Path d={roads} fill={palette['durian-200']} />
+        {planned ? <Path d={planned} fill={palette['rambutan-50']} /> : null}
         {route ? <Path d={route} fill={palette['persimmon-400']} /> : null}
         {LOCATIONS.map((place) => {
           const { x, y } = tileCenter(place.id);
@@ -72,14 +72,13 @@ export function WorldMap({
               : palette['lychee-400'];
           return (
             <G key={place.id}>
-              <Path
-                d={`M${x - 3} ${y - 3}h6v6h-6z`}
-                fill={place.id === selected ? palette['rambutan-50'] : color.ink}
-              />
+              <Path d={`M${x - 3} ${y - 3}h6v6h-6z`} fill={color.ink} />
               <Path d={`M${x - 2} ${y - 2}h4v4h-4z`} fill={isHere ? palette['pandan-300'] : fill} />
             </G>
           );
         })}
+        <Path d={brackets(focus.x, focus.y, 1)} fill={color.ink} />
+        <Path d={brackets(focus.x, focus.y, 0)} fill={palette['durian-300']} />
         <G transform={`translate(${Math.round(marker.x) - 5} ${Math.round(marker.y) - 13}) scale(0.625)`}>
           {artPaths(bruh).map(([fill, d]) => (
             <Path key={fill} d={d} fill={fill} />
@@ -109,13 +108,39 @@ export function WorldMap({
                 left > 75 ? styles.labelEnd : left < 15 ? styles.labelStart : null,
               ]}
             >
-              <Text style={[styles.label, isSelected && { color: color.gold }]}>{place.name}</Text>
+              <Text style={[styles.label, isSelected && styles.labelSelected]}>{place.name}</Text>
             </View>
           </Pressable>
         );
       })}
     </View>
   );
+}
+
+function solidRoute(path: readonly string[], fallback: string): string {
+  let d = '';
+  for (let index = 1; index < path.length; index += 1)
+    d += dottedLine(path[index - 1] ?? fallback, path[index] ?? fallback, 1);
+  return d;
+}
+
+// `grow` widens it by that much on every side, for the dark outline drawn beneath.
+function rect(x: number, y: number, w: number, h: number, grow: number): string {
+  return `M${x - grow} ${y - grow}h${w + grow * 2}v${h + grow * 2}h${-(w + grow * 2)}z`;
+}
+
+// Four pixel corners around the selected place, a pixel clear of its marker so they read at a glance.
+function brackets(x: number, y: number, grow: number): string {
+  return [
+    rect(x - 6, y - 6, 3, 1, grow),
+    rect(x - 6, y - 5, 1, 2, grow),
+    rect(x + 3, y - 6, 3, 1, grow),
+    rect(x + 5, y - 5, 1, 2, grow),
+    rect(x - 6, y + 5, 3, 1, grow),
+    rect(x - 6, y + 3, 1, 2, grow),
+    rect(x + 3, y + 5, 3, 1, grow),
+    rect(x + 5, y + 3, 1, 2, grow),
+  ].join('');
 }
 
 const styles = StyleSheet.create({
@@ -148,6 +173,12 @@ const styles = StyleSheet.create({
     lineHeight: 12,
     color: color.text,
     ...shadow,
+  },
+  // The selected name is the brightest thing on the map, so the selection reads at a glance.
+  labelSelected: {
+    backgroundColor: palette['durian-300'],
+    color: color.ink,
+    textShadowColor: 'transparent',
   },
   labelAbove: { top: -4 },
   labelStart: { left: -4, alignItems: 'flex-start' },

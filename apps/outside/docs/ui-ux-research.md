@@ -1915,3 +1915,12 @@ Live figures roll to each new value, like NumberFlow, without adding Reanimated:
 
 - Used for the figure beside each tab's title (waiting steps, coins, total level, quest points), the skills tab's total xp, and the loot report's xp, which counts up from 0 as the report appears.
 - Checked in the web dev build at 320×640: sewing a straw hat took the pouch from 6,240 to 6,158, each place rolled down and rested on the right digit, and the report's +23 and +6 xp rolled up from 0. The rolled figure takes the same width as plain text (about 58 px), so nothing shifts. With reduced motion there are no wheels. No console errors. Not checked on a device.
+
+## Map tab (November 9, 2026)
+
+The map filled the screen, so tapping a place changed only the pinned button: what the place offers sat below the fold, and at 320 wide nothing of it showed. The selected place had a one-pixel ring, the route was a "via" line under the map, and the legend used ■ markers and grey text.
+
+- **Place card.** The pinned footer is now the selected place: its name, then its cost in steps, "you are here" or "locked". Below that sit its finds (each with the skill and level it needs) and its stations (forge, range, workbench, bank, store). The travel button names only the place, since the card shows the cost. A find you can do is a button that travels there and starts it, said once in body text. A locked place shows why in place of the button.
+- **On the map.** The selected place gets pixel corners with a dark outline and a gold name plate. A reachable place's road is drawn in solid white before you leave, so the "via" line now only reads out the towns the road passes through.
+- **Legend.** Colour swatches drawn like the markers (you, town with a bank, wilds, locked), with no bullet glyphs. The blurb moved to its own panel under the map.
+- Checked in the web dev build at 320×640, 390×844 and 1280×900: the home town, a reachable place, a locked place, and travelling and starting from a find (it went to pebble hills and mined). No console errors. Not checked: a trip in progress (the demo spends its steps at once), larger text, and a device. Metro stopped noticing edits three times during this pass; restart it with `--clear` after every change before trusting a screenshot.
