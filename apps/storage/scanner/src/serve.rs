@@ -183,6 +183,8 @@ struct Server {
     last_dispatch: Instant,
     /// Something happened that can change the status since it was last worked out.
     stirred: bool,
+    /// FSEvents lost track of the whole map, so every folder is to be listed again.
+    rescan_wanted: bool,
     repairs: u64,
     repair_time: Duration,
     /// Listings landed since the last repair.
@@ -216,6 +218,7 @@ impl Server {
             last_relief: now,
             last_dispatch: now,
             stirred: false,
+            rescan_wanted: false,
             repairs: 0,
             repair_time: Duration::ZERO,
             unrepaired: false,
@@ -262,10 +265,7 @@ impl Server {
             },
             Command::Check => {
                 if self.walking.is_none() {
-                    if let Some(request) = self.index.as_ref().and_then(|index| self.sched.start_check(index)) {
-                        self.check_started = Some(Instant::now());
-                        self.run(request);
-                    }
+                    self.begin_check();
                 }
             }
             Command::Keep { snapshot } => {
@@ -389,6 +389,14 @@ impl Server {
                 continue;
             }
             let Some(path) = self.inside(&path) else { continue };
+            // FSEvents lost track of the whole map. It drops what arrives while it replays a long history, as at a
+            // launch after a busy morning, and asks for every folder to be scanned. Every folder is listed again as the
+            // daily check lists them, on two threads with throttled I/O; listed again all at once, they held four cores
+            // for six minutes.
+            if flags & MUST_SCAN_SUB_DIRS != 0 && path == self.root {
+                self.rescan_wanted = true;
+                continue;
+            }
             // A file-level event names the item that changed, which its folder's listing shows; anything else names
             // the folder. Lost events come with MustScanSubDirs on the folder to list again whole.
             let item = flags & ITEM_FLAGS != 0 && flags & MUST_SCAN_SUB_DIRS == 0;
@@ -497,6 +505,14 @@ impl Server {
         self.pool.as_ref().map_or(0, Pool::stalled_count)
     }
 
+    /// Starts listing every folder again, unless a check is under way.
+    fn begin_check(&mut self) {
+        if let Some(request) = self.index.as_ref().and_then(|index| self.sched.start_check(index)) {
+            self.check_started = Some(Instant::now());
+            self.run(request);
+        }
+    }
+
     /// Folders waiting on macOS to let them be listed, or behind one that is.
     fn asking(&self) -> HashSet<u32> {
         self.pool.as_ref().map(Pool::stalled).unwrap_or_default().into_iter().collect()
@@ -601,6 +617,11 @@ impl Server {
         }
         if now.duration_since(self.last_recheck) >= RECHECK {
             self.recheck();
+        }
+        // After a walk or a check under way, since what FSEvents lost may be in folders either had listed already.
+        if self.rescan_wanted && !self.sched.checking() && self.index.is_some() {
+            self.rescan_wanted = false;
+            self.begin_check();
         }
         if now.duration_since(self.last_dispatch) >= DISPATCH {
             self.last_dispatch = now;

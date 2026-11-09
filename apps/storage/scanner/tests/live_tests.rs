@@ -643,6 +643,26 @@ fn the_map_has_the_scan_results_shape() {
     remove(&root);
 }
 
+#[test]
+fn serve_checks_every_folder_when_fsevents_loses_track_of_the_map() {
+    // Review of a launch's catch-up: FSEvents dropped what arrived while it replayed a long history and asked for the
+    // whole disk to be scanned, which listed every folder again at once on every thread.
+    let root = fixture("serve_checks_every_folder_when_fsevents_loses_track_of_the_map");
+    seeded(&root);
+    let mut serve = Serve::start();
+    serve.send(serde_json::json!({ "cmd": "open", "root": root, "snapshot": null, "volume": "V" }));
+    serve.until("opened");
+    serve.send(serde_json::json!({ "cmd": "walk", "since": 100 }));
+    let walked = serve.until("walked");
+    // MustScanSubDirs and UserDropped, on the map's root.
+    serve.send(serde_json::json!({ "cmd": "events", "events": [[101, 0x3, format!("{}/", root.display()), 0]] }));
+    let checked = serve.until("checked");
+    // The check counts the root too, which the walk's folder count doesn't.
+    assert!(checked["folders"].as_u64() >= walked["folders"].as_u64(), "checked {checked}, walked {walked}");
+    assert_eq!(checked["corrected"], 0);
+    serve.close();
+}
+
 /// `serve` over its pipes: walk, report, apply events, answer for the map, save and reopen.
 #[test]
 fn serve_keeps_a_map_current_over_its_pipes() {
