@@ -227,7 +227,6 @@ struct ChartControls: View {
             .fixedSize()
             .disabled(!keepsHistory)
             .help(keepsHistory ? "How far back the chart looks" : "Turn on Keep a week of history in Pith Settings to look back hours and days.")
-            Text(state.chartMetric == .cpu ? "share of your Mac" : "share of your Mac’s memory").font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
         }
     }
 }
