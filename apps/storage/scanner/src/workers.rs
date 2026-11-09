@@ -494,7 +494,9 @@ mod tests {
         submit(&pool, &["/home/Library", "/home/Movies", "/home/Music", "/home/Pictures", "/home/Desktop", "/home/Documents", "/home/Downloads"]);
         let done = landed(&rx, 4);
         assert_eq!(done, ["/home/Library", "/home/Movies", "/home/Music", "/home/Pictures"].iter().map(PathBuf::from).collect());
-        assert_eq!(pool.stalled().len(), 3);
+        // The thread can take the other folders as they're submitted, before these three are, so they may still be
+        // opening when the others land.
+        assert!(eventually(|| pool.stalled().len() == 3), "{} waiting", pool.stalled().len());
         question.answer();
         assert_eq!(landed(&rx, 3).len(), 3);
     }
