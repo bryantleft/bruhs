@@ -4,10 +4,12 @@
 //!   storage-scanner scan --root <path> [--within <map root>] [--engine bulk|std]
 //!   storage-scanner trash --path <path>
 //!   storage-scanner frees --path <path> [--path <path>…]
+//!   storage-scanner serve
 //!
 //! `scan` streams NDJSON: repeated `{"type":"progress",...}` lines, then one
 //! `{"type":"result",...}` line with the pruned treemap tree, largest files, and a summary.
 //! `frees` prints one `{"type":"frees",...}` line: what deleting the paths would free now.
+//! `serve` keeps a live index of a disk for Pith, taking commands on stdin (see `serve.rs`).
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,7 +19,8 @@ use std::time::Instant;
 use storage_scanner::model::PruneConfig;
 use storage_scanner::frees;
 use storage_scanner::output::{self, Clones, CloudOnly, Summary, Unreadable};
-use storage_scanner::trash;
+use storage_scanner::system::stop_cloud_downloads;
+use storage_scanner::{serve, trash};
 use storage_scanner::walk::{self, Engine, Scanner};
 
 fn main() {
@@ -26,8 +29,9 @@ fn main() {
         Some("scan") => cmd_scan(&args[1..]),
         Some("trash") => cmd_trash(&args[1..]),
         Some("frees") => cmd_frees(&args[1..]),
+        Some("serve") => std::process::exit(serve::run()),
         _ => {
-            eprintln!("usage: storage-scanner <scan|trash|frees> [options]");
+            eprintln!("usage: storage-scanner <scan|trash|frees|serve> [options]");
             std::process::exit(2);
         }
     }
@@ -134,25 +138,4 @@ fn cmd_scan(args: &[String]) {
     };
 
     output::emit_result(tree_node, &top_files, &volumes, &unreadable_folders, summary);
-}
-
-/// Reading an iCloud file that isn't downloaded makes macOS download it, and so can reading its
-/// attributes when a folder above it isn't downloaded either (Apple TN3150). This process opts out
-/// before it reads anything; a scan that can't opt out doesn't run.
-fn stop_cloud_downloads() -> Result<(), String> {
-    const IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES: libc::c_int = 3;
-    const IOPOL_SCOPE_PROCESS: libc::c_int = 0;
-    const IOPOL_MATERIALIZE_DATALESS_FILES_OFF: libc::c_int = 1;
-    extern "C" {
-        fn setiopolicy_np(iotype: libc::c_int, scope: libc::c_int, policy: libc::c_int) -> libc::c_int;
-    }
-    let status = unsafe { setiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES, IOPOL_SCOPE_PROCESS, IOPOL_MATERIALIZE_DATALESS_FILES_OFF) };
-    if status == 0 {
-        Ok(())
-    } else {
-        Err(format!(
-            "The scan didn't start: macOS wouldn't let it skip iCloud downloads ({}).",
-            std::io::Error::last_os_error()
-        ))
-    }
 }

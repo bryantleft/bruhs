@@ -26,18 +26,20 @@ public struct ScanMemory: Codable, Sendable, Equatable {
     public func comparable(to result: DiskResult) -> Bool { version == result.version && root == result.root.path }
 
     /// How much each item changed since this scan, largest change first, at most `limit` of them and none under
-    /// `threshold` bytes either way. Items new since then count from zero; items gone count down to zero.
-    public func changes(to result: DiskResult, threshold: UInt64 = 1_000_000, limit: Int = 2000) -> [String: Int64] {
+    /// `threshold` bytes either way. Items new since then count from zero, unless `countingNew` is off, as for the live
+    /// map, whose finer detail around the open folder holds items this one never could; items gone count down to zero.
+    public func changes(to result: DiskResult, threshold: UInt64 = 1_000_000, limit: Int = 2000, countingNew: Bool = true) -> [String: Int64] {
         var changes: [String: Int64] = [:]
         let now = ScanMemory(result, date: date).sizes
         for (path, size) in now {
-            let before = sizes[path] ?? 0
+            guard let before = sizes[path] ?? (countingNew ? 0 : nil) else { continue }
             let delta = Int64(bitPattern: size &- before)
             if delta.magnitude >= threshold { changes[path] = delta }
         }
+        let folders = Set(result.root.entries.lazy.filter { $0.kind == .dir }.map(\.path))
         for (path, size) in sizes where now[path] == nil && size >= threshold {
             // Gone, unless the new tree just folded it into a group: then its parent's change says it.
-            if result.root.entries.contains(where: { $0.path == (path as NSString).deletingLastPathComponent && $0.kind == .dir }) {
+            if folders.contains((path as NSString).deletingLastPathComponent) {
                 changes[path] = -Int64(size)
             }
         }

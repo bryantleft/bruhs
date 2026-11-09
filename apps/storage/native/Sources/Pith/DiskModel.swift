@@ -43,7 +43,7 @@ struct DiskWriter: Equatable {
     let bytes: UInt64
 }
 
-/// A volume Pith can scan, for the list shown before any scan.
+/// A volume Pith can scan, for the list shown when the live map can't run.
 struct DiskVolumeChoice: Identifiable, Equatable {
     let url: URL
     let name: String
@@ -54,12 +54,19 @@ struct DiskVolumeChoice: Identifiable, Equatable {
 }
 
 @MainActor @Observable final class DiskModel {
-    var result: DiskResult?
+    var result: DiskResult? {
+        // JSON kept for a map that's changed since is a stale picture of it.
+        didSet { if !settingLive { resultJSON = nil } }
+    }
+    /// The live map's own JSON of `result`, while `result` is just as the live map sent it.
+    private(set) var resultJSON: String?
+    @ObservationIgnored private var settingLive = false
+    /// When a scan made the map; nil while the map is the live one, which says when it was last brought up to date.
     var scannedAt: Date?
-    /// True once the map has changed since its scan: an item moved to the Trash, or a folder scanned again.
+    /// True once a scanned map has changed since its scan: an item moved to the Trash, or a folder scanned again.
     private(set) var edited = false
     var selected: String?
-    /// The selected item as the scan has it.
+    /// The selected item as the map has it.
     private(set) var selectedItem: DiskNode?
     /// What moving the selected item to the Trash would do, or why it can't go.
     private(set) var selectedPlan: Result<TrashPlan, DiskFailure>?
@@ -69,35 +76,32 @@ struct DiskVolumeChoice: Identifiable, Equatable {
     private var freesTask: Task<Void, Never>?
     /// A move to the Trash waiting for the user to confirm what it does to a synced item.
     var confirming: TrashPlan?
-    /// Where the scanned volume's space went, for a scan of a whole volume.
+    /// Where the volume's space went, for a map of a whole volume.
     private(set) var accounting: DiskAccounting?
+    private var accountedAt = Date.distantPast
     /// Shows items in Quick Look; the app delegate owns the panel.
     var showQuickLook: (([URL]) -> Void)?
     /// Who wrote to disk since a date, from Activity's history; the app delegate connects it.
     var writers: ((Date) -> DiskWriters)?
-    /// Keep each scan's folder sizes, so the next scan of the same folder shows what grew, and the last map, so Pith opens
-    /// on it at the next launch. On unless the user turns it off.
+    /// Keep the live map between launches, so Pith opens on it and catches up from what FSEvents saw, and a day's
+    /// folder sizes, so the map shows what grew. On unless the user turns it off.
     var remembersScans = UserDefaults.standard.object(forKey: "remembersScans") as? Bool ?? true {
         didSet {
             UserDefaults.standard.set(remembersScans, forKey: "remembersScans")
             if !remembersScans { forgetScans() }
+            live?.keep(remembersScans ? liveSnapshot : nil)
         }
     }
-    /// How much items changed since the last scan of this folder, and when that scan was.
+    /// How much items changed since the baseline, and when that was.
     private(set) var growth: [String: Int64] = [:]
     private(set) var growthSince: Date?
-    /// Folders FSEvents says changed since the map's scan began.
+    /// Folders FSEvents says changed since a scanned map's scan began. The live map follows changes itself.
     private(set) var changes = DiskChanges()
     private var watcher: DiskWatcher?
-    /// How far FSEvents has reached the map: the event ID through which every change is in the map or in `changes`,
-    /// and the volume those IDs describe. Saved with the map, so the next launch replays only what came after.
-    private var watched: (through: UInt64, volume: String?)?
-    /// Where kept scans go: each folder's sizes and its saved map, in ~/Library/Application Support/Pith/Scans. The
-    /// smoke test points it at a folder of its own, so its fixture never touches the user's scans.
+    /// Where kept maps go: the live map, a day's folder sizes, and each scanned folder's sizes, in
+    /// ~/Library/Application Support/Pith/Scans. The smoke test points it at a folder of its own, so its fixture never
+    /// touches the user's.
     var scansFolder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Pith/Scans")
-    private var restoreAttempted = false
-    /// Saves run one at a time, so an older map never lands after a newer one.
-    private static let saving = DispatchQueue(label: "app.bruhs.pith.saved-scans", qos: .utility)
     var problem: DiskProblem?
     var isScanning = false
     var isTrashing = false
@@ -111,13 +115,25 @@ struct DiskVolumeChoice: Identifiable, Equatable {
     private(set) var note: String?
     private(set) var trashed: TrashedItem?
     /// The folder the map is showing, as the page reports it.
-    var openFolder: String?
-    /// The volumes listed before a scan.
+    var openFolder: String? {
+        didSet { if openFolder != oldValue, liveView != nil { refreshLive() } }
+    }
+    /// The volumes listed when the live map can't run.
     private(set) var choices: [DiskVolumeChoice] = []
     private let runner = ScannerRunner()
     private var operation: Task<Void, Never>?
     private var generation = UUID()
     var binary: URL { Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/storage-scanner") }
+
+    /// The startup disk's live map.
+    private(set) var live: LiveMap?
+    /// The folder of the live map the view shows: its root, or a folder in it someone chose. Nil while the view
+    /// shows a scan of somewhere else.
+    private(set) var liveView: String?
+    /// Whether Disk is on screen, where the map refreshes as it changes.
+    private var isVisible = false
+    private var lastTree = Date.distantPast
+    private var treeLater: Task<Void, Never>?
 
     /// A figure under the scope, such as "Files 123,697".
     struct Figure: Hashable {
@@ -125,13 +141,30 @@ struct DiskVolumeChoice: Identifiable, Equatable {
         let value: String
     }
 
-    /// The line under the scope: figures while scanning and for the map it holds, or a message about the scan.
+    /// The line under the scope: figures while scanning and for the map it holds, or a message about the map.
     enum Caption: Equatable {
         case message(String)
         case figures([Figure])
     }
 
     var caption: Caption? {
+        if let live, liveView != nil {
+            switch live.state {
+            case .mapping(let progress?):
+                return .figures([Figure(label: "Mapped", value: bytes(progress.bytes)), Figure(label: "Files", value: monaspaced(progress.files.formatted()))])
+            case .mapping(nil): return .message("Starting the map…")
+            case .catchingUp(let waiting) where waiting > 0:
+                return .message("Catching up on \(waiting.formatted()) \(waiting == 1 ? "folder" : "folders") that changed while Pith was closed.")
+            case .catchingUp: return .message("Catching up on what changed while Pith was closed.")
+            // A busy Mac always has a few folders waiting their turn; the count matters only when many are.
+            case .live(let waiting) where waiting >= Self.catchingUpCount:
+                return .message("Catching up on \(waiting.formatted()) folders that changed.")
+            case .live:
+                return live.updatedAt.map { .figures([Figure(label: "Up to date", value: monaspaced(scanTime($0)))]) }
+            case .failed(let message): return .message(message)
+            case .off, .opening, .unmapped: return nil
+            }
+        }
         if isScanning {
             guard let progress else { return .message(rescanning == nil ? "Starting the scan…" : "Scanning \(URL(fileURLWithPath: rescanning ?? "").lastPathComponent) again…") }
             return .figures([Figure(label: "Size", value: bytes(progress.bytes)), Figure(label: "Files", value: monaspaced(progress.files.formatted()))])
@@ -143,7 +176,7 @@ struct DiskVolumeChoice: Identifiable, Equatable {
         return note.map { .message($0) }
     }
 
-    /// "Today 1:57 PM", "Yesterday 9:02 AM" or "Nov 3, 9:02 AM": a scan can be days old, unlike Activity's ten minutes.
+    /// "Today 1:57 PM", "Yesterday 9:02 AM" or "Nov 3, 9:02 AM": a map can be days old, unlike Activity's ten minutes.
     private func scanTime(_ date: Date) -> String {
         let time = date.formatted(date: .omitted, time: .shortened)
         if Calendar.current.isDateInToday(date) { return "Today \(time)" }
@@ -151,13 +184,161 @@ struct DiskVolumeChoice: Identifiable, Equatable {
         return date.formatted(.dateTime.month(.abbreviated).day().hour().minute())
     }
 
-    /// Folders the last scan couldn't read, so its map leaves them out.
+    /// Folders the map couldn't read, so it leaves them out.
     var unreadableFolders: UInt64 { result?.summary.errors ?? 0 }
+
+    // MARK: The live map
+
+    private var liveSnapshot: URL? { scansFolder?.appendingPathComponent("startup-disk.index") }
+
+    /// Folders waiting to be listed again before the caption says it's catching up. Following the development Mac's
+    /// whole disk, 0 to 30 were waiting at any moment, each listed within seconds.
+    static let catchingUpCount = 100
+
+    /// Starts the live map of `root`, the startup disk unless a test gives a folder of its own, keeping it between
+    /// launches as Settings says unless `keep` says otherwise.
+    func startLive(root: String = "/", keep: Bool? = nil) {
+        guard live == nil else { return }
+        let live = LiveMap(root: root)
+        live.received = { [weak self] value, json in self?.showLive(value, json: json) }
+        live.treeFailed = { [weak self] reason in self?.liveTreeFailed(reason) }
+        live.changed = { [weak self] in self?.refreshLive() }
+        self.live = live
+        liveView = root
+        scope = root
+        live.start(binary: binary, snapshot: keep ?? remembersScans ? liveSnapshot : nil)
+    }
+
+    /// Disk came on screen or left it. On screen, the map refreshes as it changes, and the first map gets made.
+    func visibilityChanged(_ visible: Bool) {
+        isVisible = visible
+        guard visible, let live, liveView != nil else { return }
+        live.makeFirstMap()
+        refreshLive()
+    }
+
+    /// Shows `path` from the live map: the startup disk, or a folder in it.
+    func showLive(_ path: String) {
+        guard let live else { return }
+        operation?.cancel()
+        runner.cancelImmediately()
+        watcher?.stop(); watcher = nil
+        changes = DiskChanges()
+        generation = UUID()
+        isScanning = false; rescanning = nil; progress = nil
+        problem = nil; note = nil; scannedAt = nil; edited = false; trashed = nil
+        if result?.root.path != path {
+            select(nil)
+            result = nil
+            accounting = nil
+            revision = UUID()
+        }
+        liveView = path
+        scope = path
+        live.makeFirstMap()
+        refreshLive(now: true)
+    }
+
+    /// Asks the live map for the view's tree, at most every two seconds. A map of the whole startup disk is a few
+    /// megabytes of JSON for Pith to decode and the page to lay out, so it doesn't follow every listing.
+    private func refreshLive(now: Bool = false) {
+        guard let live, let path = liveView, live.state.isMapped, isVisible || result == nil || now else { return }
+        guard live.changedSinceTree || result?.root.path != path || openFolderNeedsDetail else { return }
+        let wait = 2.0 - Date().timeIntervalSince(lastTree)
+        if wait > 0 && !now {
+            guard treeLater == nil else { return }
+            treeLater = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(wait))
+                guard let self, !Task.isCancelled else { return }
+                self.treeLater = nil
+                self.refreshLive()
+            }
+            return
+        }
+        treeLater?.cancel(); treeLater = nil
+        lastTree = Date()
+        live.request(path: path, focus: detailFolder)
+        detailAsked = detailFolder
+    }
+
+    /// The open folder, when it's inside the view: the map shows it in finer detail.
+    private var detailFolder: String? {
+        guard let path = liveView, let open = openFolder, open != path, open.hasPrefix(path == "/" ? "/" : path + "/") else { return nil }
+        return open
+    }
+    private var detailAsked: String?
+    /// The live map's baseline for what grew, kept rather than read from disk for every map.
+    @ObservationIgnored private var baseline: ScanMemory?
+    private var openFolderNeedsDetail: Bool { detailFolder != detailAsked }
+
+    private func showLive(_ value: DiskResult, json: String) {
+        guard value.root.path == liveView else { return }
+        let rootChanged = result?.root.path != value.root.path
+        settingLive = true
+        result = value
+        resultJSON = json
+        settingLive = false
+        scope = value.root.path
+        if rootChanged || Date().timeIntervalSince(accountedAt) > 300 { refreshAccounting() }
+        compareWithBaseline(value)
+        keepSelection()
+        revision = UUID()
+    }
+
+    /// The selection, as the newer map has it. What deleting it frees isn't measured again: a busy folder changes with
+    /// every map, and measuring again each time would never finish.
+    private func keepSelection() {
+        guard let path = selected else { return }
+        guard let item = result?.item(at: path) else { select(nil); return }
+        selectedItem = item
+        selectedPlan = trashPlan(path)
+    }
+
+    /// The live map's folder sizes against a baseline kept from up to a day before, so the map shows what grew. A day
+    /// old, the baseline is replaced by the map as it is then. A map in finer detail around the open folder holds items
+    /// the baseline never could, so only items the baseline has are compared, and a baseline is only ever taken from
+    /// a map without that detail.
+    private func compareWithBaseline(_ value: DiskResult) {
+        guard remembersScans, let folder = scansFolder, let live, value.root.path == live.root else { return }
+        let file = ScanMemory.file(for: value.root.path, in: folder)
+        if baseline?.root != value.root.path {
+            baseline = (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode(ScanMemory.self, from: $0) }
+        }
+        if let kept = baseline, kept.comparable(to: value), Date().timeIntervalSince(kept.date) < 24 * 60 * 60 {
+            growth = kept.changes(to: value, countingNew: false)
+            growthSince = kept.date
+            return
+        }
+        growth = [:]; growthSince = nil
+        guard detailAsked == nil else { return }
+        let memory = ScanMemory(value, date: Date())
+        baseline = memory
+        Task.detached(priority: .utility) {
+            do {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                try JSONEncoder().encode(memory).write(to: file, options: [.atomic])
+            } catch {
+                NSLog("Pith: couldn't keep the day's folder sizes of \(memory.root): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Lists a folder of the live map again, with everything in it, for when it looks off.
+    func checkAgain(_ folder: String) {
+        live?.relist(folder, deep: true)
+    }
+
+    /// Lists the folders the map couldn't read again, as after Full Disk Access is granted.
+    func retryUnreadable() {
+        live?.retryUnreadable()
+    }
+
+    // MARK: Scans
 
     func chooseFolder() {
         let picker = NSOpenPanel()
         picker.canChooseDirectories = true; picker.canChooseFiles = false
-        picker.allowsMultipleSelection = false; picker.prompt = "Scan Folder"
+        picker.allowsMultipleSelection = false; picker.prompt = live == nil ? "Scan Folder" : "Show Folder"
         if picker.runModal() == .OK, let root = picker.url { scan(root) }
     }
 
@@ -175,17 +356,38 @@ struct DiskVolumeChoice: Identifiable, Equatable {
         .sorted { $0.isStartup && !$1.isStartup }
     }
 
-    /// Scans `root`. The current map stays until the new one arrives, so a cancelled or failed scan leaves it.
+    /// Shows `root`: from the live map when the map holds it, or scanned.
     func scan(_ root: URL) {
         guard !isTrashing, !isScanning else { return }
+        let root = root.standardizedFileURL.resolvingSymlinksInPath()
+        if let live, live.state != .off, !Self.failed(live.state), LivePlan.holds(root.path, mapOf: live.root) {
+            showLive(root.path)
+            return
+        }
+        scanOnce(root)
+    }
+
+    /// The live map couldn't show the folder asked for: one it lacks, such as a folder inside one it couldn't read,
+    /// is scanned instead.
+    private func liveTreeFailed(_ reason: String) {
+        guard let live, let path = liveView else { return }
+        if path == live.root {
+            problem = DiskProblem(message: reason)
+        } else {
+            scanOnce(URL(fileURLWithPath: path))
+        }
+    }
+
+    /// Scans `root` once. The current map stays until the new one arrives, so a cancelled or failed scan leaves it.
+    private func scanOnce(_ root: URL) {
+        liveView = nil
         operation?.cancel()
         let id = UUID(); generation = id
         problem = nil; note = nil; progress = nil; isScanning = true; rescanning = nil
-        let root = root.standardizedFileURL.resolvingSymlinksInPath()
         let shown = scope
         scope = root.path
         // Watching from before the scan begins catches what changes while it runs.
-        let start = (since: DiskWatcher.currentEventID, volume: DiskWatcher.volumeUUID(for: root.path))
+        let since = DiskWatcher.currentEventID
         operation = Task {
             defer { if generation == id { isScanning = false } }
             await runner.cancel()
@@ -200,9 +402,7 @@ struct DiskVolumeChoice: Identifiable, Equatable {
                 revision = UUID()
                 refreshAccounting()
                 changes = DiskChanges()
-                watched = (start.since, start.volume)
-                watch(root.path, since: start.since)
-                saveScan()
+                watch(root.path, since: since)
             } catch {
                 guard generation == id else { return }
                 // The map still shows the earlier scan, so the scope goes back to it.
@@ -213,13 +413,21 @@ struct DiskVolumeChoice: Identifiable, Equatable {
         }
     }
 
-    /// Scans one folder of the map again and puts the result in its place, rather than the whole scan.
-    func rescan(_ folder: String) { rescan([folder]) }
+    private static func failed(_ state: LiveMap.State) -> Bool {
+        if case .failed = state { return true }
+        return false
+    }
 
-    /// Catches the map up with what changed since its scan: scans the changed folders again, or the whole folder when
-    /// FSEvents lost track or too many changed.
+    /// Scans one folder of a scanned map again and puts the result in its place; in the live map, lists it again.
+    func rescan(_ folder: String) {
+        if liveView != nil { checkAgain(folder); return }
+        rescan([folder])
+    }
+
+    /// Catches a scanned map up with what changed since its scan: scans the changed folders again, or the whole
+    /// folder when FSEvents lost track or too many changed.
     func refresh() {
-        guard let result, !changes.isEmpty else { return }
+        guard liveView == nil, let result, !changes.isEmpty else { return }
         if let targets = changes.refreshTargets(in: result) { rescan(targets) } else { scan(URL(fileURLWithPath: result.root.path)) }
     }
 
@@ -259,7 +467,6 @@ struct DiskVolumeChoice: Identifiable, Equatable {
                     return
                 }
             }
-            saveScan()
         }
     }
 
@@ -276,7 +483,7 @@ struct DiskVolumeChoice: Identifiable, Equatable {
         runner.cancelImmediately()
     }
 
-    /// Selects a real item from the current scan; anything else clears the selection.
+    /// Selects a real item from the current map; anything else clears the selection.
     func select(_ path: String?) {
         freesTask?.cancel()
         selectedFrees = nil
@@ -307,7 +514,7 @@ struct DiskVolumeChoice: Identifiable, Equatable {
 
     /// What moving `path` to the Trash would do, or why it can't go.
     func trashPlan(_ path: String) -> Result<TrashPlan, DiskFailure> {
-        guard let result else { return .failure(DiskFailure("Scan a folder first.")) }
+        guard let result else { return .failure(DiskFailure("Open the map first.")) }
         do { return .success(try TrashPolicy.plan(path, result: result, home: FileManager.default.homeDirectoryForCurrentUser)) }
         catch let failure as DiskFailure { return .failure(failure) }
         catch { return .failure(DiskFailure(error.localizedDescription)) }
@@ -323,7 +530,8 @@ struct DiskVolumeChoice: Identifiable, Equatable {
         }
     }
 
-    /// Moves the item to the Trash and takes it off the map, so nothing waits on a rescan. Undo puts it back.
+    /// Moves the item to the Trash and takes it off the map at once; the live map then follows the move itself.
+    /// Undo puts it back.
     func trash(_ plan: TrashPlan, undoManager: UndoManager?) {
         guard let result, !isScanning, !isTrashing else { return }
         isTrashing = true; problem = nil
@@ -334,13 +542,13 @@ struct DiskVolumeChoice: Identifiable, Equatable {
             if selected == plan.target.path { select(nil) }
             if let updated = result.removing(plan.target.path) {
                 self.result = updated
-            } else {
+            } else if liveView == nil {
                 // The tree didn't hold it (an item inside a group of smaller ones): the next scan reflects it.
                 edited = true
             }
             trashed = (trashedURL as URL?).map { TrashedItem(name: plan.name, size: plan.size, original: plan.target, trashed: $0, previous: result) }
-            edited = true; revision = UUID()
-            saveScan()
+            if liveView == nil { edited = true }
+            revision = UUID()
             if trashed != nil {
                 undoManager?.registerUndo(withTarget: self) { model in MainActor.assumeIsolated { model.undoTrash() } }
                 undoManager?.setActionName("Move to Trash")
@@ -357,7 +565,6 @@ struct DiskVolumeChoice: Identifiable, Equatable {
             try FileManager.default.moveItem(at: item.trashed, to: item.original)
             result = item.previous; trashed = nil; revision = UUID()
             select(item.original.path)
-            saveScan()
         } catch {
             problem = DiskProblem(message: "Pith couldn’t put \(item.name) back. Open the Trash in Finder and drag it out instead.")
             trashed = nil
@@ -398,67 +605,28 @@ struct DiskVolumeChoice: Identifiable, Equatable {
         }
     }
 
-    /// Deletes every kept scan: folder sizes and saved maps.
+    /// Deletes everything kept: the live map, the day's folder sizes and each scanned folder's. A live map Pith
+    /// still keeps is saved again at its next save.
     func forgetScans() {
-        growth = [:]; growthSince = nil; revision = UUID()
+        growth = [:]; growthSince = nil; baseline = nil; revision = UUID()
         guard let folder = scansFolder else { return }
-        // On the save queue, so a save already queued can't put a map back after this.
-        Self.saving.async { try? FileManager.default.removeItem(at: folder) }
+        try? FileManager.default.removeItem(at: folder)
     }
 
-    /// Follows FSEvents for the map's folder from `since`, noting which folders change.
+    /// Follows FSEvents for a scanned map's folder from `since`, noting which folders change.
     private func watch(_ root: String, since: UInt64) {
         watcher?.stop()
         watcher = DiskWatcher(root: root, since: since) { [weak self] events in
-            guard let self, self.result?.root.path == root else { return }
+            guard let self, self.liveView == nil, self.result?.root.path == root else { return }
             for event in events { self.changes.note(event.path, flags: event.flags, root: root) }
-            // Changes only: the marker that a replay is done names no change.
-            let last = events.lazy.filter { $0.flags & DiskChanges.Flag.historyDone == 0 }.map(\.id).max()
-            if let last, let watched = self.watched, last > watched.through { self.watched = (last, watched.volume) }
         }
     }
 
-    /// Keeps the map for the next launch, with how far FSEvents had reached it and what was still to catch up.
-    private func saveScan() {
-        guard remembersScans, let result, let scannedAt, let watched, let folder = scansFolder else { return }
-        let saved = SavedScan(result: result, date: scannedAt, since: watched.through, volume: watched.volume, edited: edited, changes: changes)
-        Self.saving.async {
-            do {
-                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                try JSONEncoder().encode(saved).write(to: SavedScan.file(for: saved.result.root.path, in: folder), options: [.atomic])
-            } catch {
-                NSLog("Pith: couldn't keep the scan of \(saved.result.root.path) for next time: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    /// Opens on the map Pith showed last, at an earlier launch, if there is one, and asks FSEvents what changed since.
-    func restoreLastScan() {
-        guard !restoreAttempted else { return }
-        restoreAttempted = true
-        guard remembersScans, result == nil, !isScanning, let folder = scansFolder else { return }
-        Task {
-            let saved = await Task.detached(priority: .userInitiated) { SavedScan.newest(in: folder) }.value
-            // A scan that started meanwhile wins, and a saved map from another scanner version would count differently.
-            guard let saved, saved.result.version == DiskResult.version, self.result == nil, !self.isScanning,
-                  FileManager.default.fileExists(atPath: saved.result.root.path) else { return }
-            let root = saved.result.root.path
-            result = saved.result; scannedAt = saved.date; edited = saved.edited; scope = root
-            watched = (saved.since, saved.volume)
-            changes = saved.changes ?? DiskChanges()
-            // Event IDs describe a volume's history only while it's the same volume.
-            if saved.volume == nil || saved.volume != DiskWatcher.volumeUUID(for: root) { changes.markEverything() }
-            watch(root, since: saved.since)
-            revision = UUID()
-            refreshAccounting()
-        }
-    }
-
-    /// Works out where the space went after a scan of a whole volume: what's on hidden volumes, what the walk
-    /// couldn't measure, local snapshots and purgeable space. Off the main thread: `tmutil` takes a moment.
+    /// Works out where the space went for a map of a whole volume: what's on hidden volumes, what the map couldn't
+    /// measure, local snapshots and purgeable space. Off the main thread: `tmutil` takes a moment.
     private func refreshAccounting() {
-        accounting = nil
-        guard let result else { return }
+        guard let result else { accounting = nil; return }
+        accountedAt = Date()
         let root = result.root.path
         Task {
             let value = await Task.detached(priority: .utility) { () -> DiskAccounting? in

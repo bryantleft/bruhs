@@ -6,6 +6,7 @@ import { retraceFolders } from "../src/lib/folder-trail";
 import { formatBytes } from "../src/lib/format";
 import { LARGEST_FILES_SHOWN, largestFilesIn } from "../src/lib/largest-files";
 import { parseResultEvent } from "../src/lib/protocol";
+import { findByPath } from "../src/lib/tree-utils";
 import { type Kind, kindBytesByFolder } from "../src/lib/treemap-layout";
 import type {
   DirNode,
@@ -116,8 +117,15 @@ function DiskMap() {
         }
         setError(null);
         setResult(parsed);
-        setSelected(null);
-        setHovered(null);
+        // The live map sends a newer map as the disk changes: what's selected or under the pointer stays while it's
+        // still there.
+        const stillThere = (path: string | null) =>
+          path !== null &&
+          parsed !== null &&
+          (findByPath(parsed.root, path) !== null ||
+            parsed.topFiles.some((file) => file.path === path));
+        setSelected((path) => (stillThere(path) ? path : null));
+        setHovered((path) => (stillThere(path) ? path : null));
         if (!parsed) {
           setTrail([]);
           return;

@@ -44,6 +44,23 @@ final class ScanMemoryTests: XCTestCase {
         XCTAssertFalse(old.comparable(to: now))
     }
 
+    /// Review finding: the live map's baseline and its later maps differ in detail around the open folder, so items
+    /// the baseline never held counted as new, and an unchanged disk showed growth.
+    func testFinerDetailIsntGrowthWhenNewItemsDontCount() {
+        let mb: UInt64 = 1_000_000
+        let baseline = ScanMemory(result([DiskNode(kind: .dir, name: "lib", path: "/r/lib", size: 60 * mb, files: 2, children: [])]), date: Date())
+        // The same disk, with the open folder in finer detail: its subfolders appear for the first time.
+        let detailed = result([DiskNode(kind: .dir, name: "lib", path: "/r/lib", size: 60 * mb, files: 2, children: [
+            DiskNode(kind: .dir, name: "Caches", path: "/r/lib/Caches", size: 30 * mb, files: 1, children: []),
+            DiskNode(kind: .dir, name: "Mail", path: "/r/lib/Mail", size: 20 * mb, files: 1, children: []),
+        ])])
+        XCTAssertTrue(baseline.changes(to: detailed, countingNew: false).isEmpty)
+        XCTAssertEqual(baseline.changes(to: detailed).count, 2, "a scan of the same folder still counts what's new")
+        // What the baseline does hold still shows its growth.
+        let grown = result([DiskNode(kind: .dir, name: "lib", path: "/r/lib", size: 90 * mb, files: 2, children: [])])
+        XCTAssertEqual(baseline.changes(to: grown, countingNew: false)["/r/lib"], 30_000_000)
+    }
+
     func testEachFolderHasItsOwnFile() {
         let folder = URL(fileURLWithPath: "/tmp")
         XCTAssertNotEqual(ScanMemory.file(for: "/Users/me", in: folder), ScanMemory.file(for: "/", in: folder))

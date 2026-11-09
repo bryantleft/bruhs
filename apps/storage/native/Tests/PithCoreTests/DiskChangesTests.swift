@@ -86,49 +86,6 @@ final class DiskChangesTests: XCTestCase {
         XCTAssertEqual(changes, earlier, "a failed scan puts its folders' changes back")
     }
 
-    func testASavedScanRoundTripsBesideItsFolderSizes() throws {
-        var pending = DiskChanges()
-        pending.note("/Users/me/projects/app/", flags: 0, root: "/Users/me")
-        pending.note("/Users/me/Music/", flags: DiskChanges.Flag.mustScanSubDirs, root: "/Users/me")
-        let saved = SavedScan(result: map(), date: Date(timeIntervalSince1970: 1_000), since: 343_968_750, volume: "A9DE7092", edited: true, changes: pending)
-        let decoded = try JSONDecoder().decode(SavedScan.self, from: JSONEncoder().encode(saved))
-        XCTAssertEqual(decoded.result.root, saved.result.root)
-        XCTAssertEqual(decoded.since, 343_968_750)
-        XCTAssertEqual(decoded.volume, "A9DE7092")
-        XCTAssertTrue(decoded.edited)
-        XCTAssertEqual(decoded.changes, pending, "what wasn't caught up yet comes back with the map")
-        let folder = URL(fileURLWithPath: "/tmp")
-        XCTAssertNotEqual(SavedScan.file(for: "/", in: folder), ScanMemory.file(for: "/", in: folder))
-    }
-
-    func testPithOpensOnTheMapSavedLast() throws {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("pith-saved-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: folder) }
-        XCTAssertNil(SavedScan.newest(in: folder))
-        // Saved second but scanned first: a map Refresh caught up is saved again, and it's the one on screen.
-        let shown = SavedScan(result: map(), date: Date(timeIntervalSince1970: 1_000), since: 2, volume: nil, edited: true, changes: DiskChanges())
-        let older = SavedScan(result: map(), date: Date(timeIntervalSince1970: 2_000), since: 1, volume: nil, edited: false, changes: DiskChanges())
-        let files = [(older, "/Users/me/Downloads", Date(timeIntervalSince1970: 3_000)), (shown, "/Users/me", Date(timeIntervalSince1970: 4_000))]
-        for (scan, root, saved) in files {
-            let file = SavedScan.file(for: root, in: folder)
-            try JSONEncoder().encode(scan).write(to: file)
-            try FileManager.default.setAttributes([.modificationDate: saved], ofItemAtPath: file.path)
-        }
-        // Folder sizes share the folder, and are newer still.
-        try Data("{}".utf8).write(to: ScanMemory.file(for: "/Users/me", in: folder))
-        XCTAssertEqual(SavedScan.newest(in: folder)?.since, 2)
-    }
-
-    func testAScanSavedBeforeChangesWereKeptStillLoads() throws {
-        let saved = SavedScan(result: map(), date: Date(timeIntervalSince1970: 1_000), since: 343_968_750, volume: nil, edited: false, changes: DiskChanges())
-        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(saved)) as? [String: Any])
-        object["changes"] = nil
-        let decoded = try JSONDecoder().decode(SavedScan.self, from: JSONSerialization.data(withJSONObject: object))
-        XCTAssertNil(decoded.changes, "its since is where its scan began, so the replay brings the changes back")
-        XCTAssertEqual(decoded.result.root, saved.result.root)
-    }
-
     @MainActor func testTheWatcherHearsAnotherProcessChangeAFolder() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("pith-watch-\(UUID().uuidString)").resolvingSymlinksInPath()
         let inside = root.appendingPathComponent("inside")

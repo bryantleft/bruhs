@@ -52,7 +52,7 @@ pub struct UnreadableFolder {
 }
 
 /// `st_flags` bit for an iCloud or File Provider item whose contents aren't on this Mac (`<sys/stat.h>`).
-const SF_DATALESS: u32 = 0x4000_0000;
+pub(crate) const SF_DATALESS: u32 = 0x4000_0000;
 
 /// Counts of unreadable folders by reason, for the summary.
 #[derive(Default)]
@@ -104,15 +104,15 @@ pub struct CloudCounts {
 }
 
 /// What the walk needs to know about the scanned folder before it starts.
-struct Context {
-    device: u64,
+pub struct Context {
+    pub(crate) device: u64,
     /// The APFS container holding the scanned folder, such as "disk3".
-    container: Option<String>,
-    firmlinks: HashMap<Identity, PathBuf>,
+    pub(crate) container: Option<String>,
+    pub(crate) firmlinks: HashMap<Identity, PathBuf>,
 }
 
 impl Context {
-    fn of(root: &Path) -> Self {
+    pub fn of(root: &Path) -> Self {
         let device = std::fs::symlink_metadata(root).map(|m| m.dev()).unwrap_or(0);
         let container = volumes::mounted_from(root).and_then(|from| volumes::container_of(&from).map(str::to_owned));
         let list = std::fs::read_to_string(volumes::FIRMLINKS).unwrap_or_default();
@@ -437,33 +437,33 @@ impl Scanner {
 }
 
 /// A directory entry with the attributes the scanner needs.
-pub(crate) struct Entry {
-    pub(crate) name: String,
-    pub(crate) is_dir: bool,
-    pub(crate) is_file: bool,
-    pub(crate) inode: u64,
-    pub(crate) nlink: u32,
+pub struct Entry {
+    pub name: String,
+    pub is_dir: bool,
+    pub is_file: bool,
+    pub inode: u64,
+    pub nlink: u32,
     /// Allocated (on-disk) bytes.
-    pub(crate) size: u64,
+    pub size: u64,
     /// Logical length in bytes, which a cloud-only file has though it takes no space.
-    pub(crate) length: u64,
-    pub(crate) flags: u32,
+    pub length: u64,
+    pub flags: u32,
     /// Non-zero when macOS couldn't describe this entry.
-    pub(crate) error: u32,
+    pub error: u32,
     /// The data stream's ID, which pure clones share; 0 when the volume doesn't say.
-    pub(crate) clone_id: u64,
+    pub clone_id: u64,
     /// How many files share all their blocks with this one, itself included.
-    pub(crate) clone_refs: u32,
+    pub clone_refs: u32,
     /// `EF_*` flags: whether it shares some or all of its blocks with another file.
-    pub(crate) ext_flags: u64,
+    pub ext_flags: u64,
     /// Bytes that deleting it would free now, read only when asked: it costs more than every other attribute together.
-    pub(crate) private: Option<u64>,
+    pub private: Option<u64>,
 }
 
 impl Entry {
     /// The clone ID of a full clone, which shares every block with the other files that have the same ID: the walk
     /// counts each such group once.
-    fn clone_group(&self) -> Option<u64> {
+    pub fn clone_group(&self) -> Option<u64> {
         (self.ext_flags & EF_SHARES_ALL_BLOCKS != 0 && self.clone_id != 0).then_some(self.clone_id)
     }
 }
@@ -511,14 +511,14 @@ impl OpenDir {
 }
 
 /// The file-system ID of the volume holding `path`, which fsgetpath(2) takes.
-fn volume_id(path: &Path) -> Option<libc::fsid_t> {
+pub(crate) fn volume_id(path: &Path) -> Option<libc::fsid_t> {
     let cpath = CString::new(path.as_os_str().as_bytes()).ok()?;
     let mut info: libc::statfs = unsafe { std::mem::zeroed() };
     (unsafe { libc::statfs(cpath.as_ptr(), &mut info) } == 0).then_some(info.f_fsid)
 }
 
 /// The path of the file with inode `id` on the volume `fsid`, or nil when there's none.
-fn path_of(mut fsid: libc::fsid_t, id: u64) -> Option<PathBuf> {
+pub(crate) fn path_of(mut fsid: libc::fsid_t, id: u64) -> Option<PathBuf> {
     let mut buffer = vec![0u8; libc::PATH_MAX as usize];
     let length = unsafe { fsgetpath(buffer.as_mut_ptr().cast(), buffer.len(), &mut fsid, id) };
     if length <= 0 {

@@ -107,12 +107,12 @@ struct SettingsView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         Section {
-            Toggle("Remember scans to show what grew", isOn: $disk.remembersScans)
-            if disk.remembersScans { Button("Forget Scans") { disk.forgetScans() } }
+            Toggle("Keep the disk map between launches", isOn: $disk.remembersScans)
+            if disk.remembersScans { Button("Forget the Map") { disk.forgetScans() } }
         } header: {
             Text("Disk")
         } footer: {
-            Text("Pith keeps each scan's map on this Mac, never what's in the files, so it can open on the last map and show what changed and grew since.")
+            Text("Pith keeps the startup disk's map on this Mac, with folder names and sizes but never what's in the files. It opens on it at once and catches up on what changed, instead of mapping the disk again, and it shows what grew since the day before. Once a day, on power, it checks every folder for changes macOS didn't report.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

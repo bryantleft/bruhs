@@ -101,27 +101,21 @@ extension AppDelegate {
             checks["pause_stops_history"] = activity.history.system.count == pausedCount
             activity.start()
 
+            // The fixture's map is a live one, as the startup disk's is: made once when Disk opens, then kept current.
+            let fixture = root.resolvingSymlinksInPath().path
+            disk.startLive(root: fixture, keep: true)
             showDisk()
             checks["tab_switches"] = await eventually { main.window.title == "Pith" && main.state.tab == .disk }
-            disk.scan(root)
-            try await waitUntil("the scan to finish") { !self.disk.isScanning }
+            try await waitUntil("the first map") { self.disk.result?.root.path == fixture }
             if let problem = disk.problem { throw DiskFailure(problem.message) }
-            checks["native_scan"] = disk.result?.root.path == root.resolvingSymlinksInPath().path
+            checks["live_map_made"] = disk.live?.state.isMapped == true && disk.live?.restored == false
+            // It counts what a scan of the same folder does.
+            let scanned = try await ScannerRunner().scan(binary: disk.binary, root: URL(fileURLWithPath: fixture)) { _ in }
+            print("live map \(disk.result?.root.size ?? 0) bytes, \(disk.result?.summary.files ?? 0) files; scan \(scanned.root.size) bytes, \(scanned.summary.files) files")
+            checks["live_map_matches_scan"] = disk.result?.root.size == scanned.root.size && disk.result?.summary.files == scanned.summary.files
             checks.merge(try await inspectDisk(), uniquingKeysWith: { _, new in new })
-            // FSEvents marks a folder another process changes, and Refresh catches the map up.
-            let changed = root.resolvingSymlinksInPath().appendingPathComponent("sub")
-            let added = changed.appendingPathComponent("pith-smoke-\(UUID().uuidString).txt")
-            defer { try? FileManager.default.removeItem(at: added) }
-            let touch = Process()
-            touch.executableURL = URL(fileURLWithPath: "/usr/bin/touch")
-            touch.arguments = [added.path]
-            try touch.run()
-            touch.waitUntilExit()
-            checks["changes_noticed"] = await eventually { self.disk.changes.touches(changed.path) }
-            disk.refresh()
-            try await waitUntil("the refresh to finish") { !self.disk.isScanning }
-            checks["refresh_catches_up"] = disk.changes.isEmpty && disk.problem == nil
-            checks.merge(try await checkSavedScan(changed: changed), uniquingKeysWith: { _, new in new })
+            checks.merge(try await checkLiveFollows(disk, in: fixture, prefix: "live_map"), uniquingKeysWith: { _, new in new })
+            checks.merge(try await checkLiveReopens(fixture), uniquingKeysWith: { _, new in new })
             // Leaving the Disk tab keeps the map, so its open folder survives; closing the window frees WebKit.
             // An identity, not a reference: holding the view here would keep it alive past the window's close.
             let shown = webView.map(ObjectIdentifier.init)
@@ -216,34 +210,49 @@ extension AppDelegate {
         return abs(gap - interval) < 0.35
     }
 
-    /// Opens the kept map in a second model, as the next launch would. It must show what the live map does: the folder
-    /// Refresh caught up stays caught up rather than coming back in FSEvents' replay, and changes after still arrive.
-    private func checkSavedScan(changed folder: URL) async throws -> [String: Bool] {
-        guard let result = disk.result, let scans = disk.scansFolder else { return ["saved_scan_reopens": false] }
-        let file = SavedScan.file(for: result.root.path, in: scans)
-        let saved = await eventually {
-            let kept = (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode(SavedScan.self, from: $0) }
-            return kept?.result.root.size == result.root.size && kept?.edited == true
-        }
-        let reopened = DiskModel()
-        reopened.scansFolder = scans
-        reopened.restoreLastScan()
-        let reopens = await eventually { reopened.result != nil }
-        let same = reopened.result?.root.path == result.root.path && reopened.result?.root.size == result.root.size
-            && reopened.scannedAt.map { abs($0.timeIntervalSince(disk.scannedAt ?? .distantPast)) < 0.001 } == true
-        // The replay is in after FSEvents' one-second latency.
-        try await Task.sleep(for: .seconds(2.5))
-        let caughtUp = reopened.changes == disk.changes
-        print("saved scan kept=\(saved) reopened=\(reopens) same=\(same) changes reopened=\(reopened.changes.count) live=\(disk.changes.count)")
-        let added = folder.appendingPathComponent("pith-smoke-\(UUID().uuidString).txt")
+    /// Writes a file in the fixture from another process, as most changes come, then deletes it: the map follows both
+    /// by itself.
+    private func checkLiveFollows(_ model: DiskModel, in fixture: String, prefix: String) async throws -> [String: Bool] {
+        let before = model.result?.root.size ?? 0
+        let added = URL(fileURLWithPath: fixture).appendingPathComponent("sub/pith-smoke-\(UUID().uuidString).bin")
         defer { try? FileManager.default.removeItem(at: added) }
-        let touch = Process()
-        touch.executableURL = URL(fileURLWithPath: "/usr/bin/touch")
-        touch.arguments = [added.path]
-        try touch.run()
-        touch.waitUntilExit()
-        let follows = await eventually { reopened.changes.touches(folder.path) }
-        return ["saved_scan_reopens": saved && reopens && same, "saved_scan_stays_caught_up": caughtUp, "saved_scan_follows_changes": follows]
+        let write = Process()
+        write.executableURL = URL(fileURLWithPath: "/bin/dd")
+        write.arguments = ["if=/dev/zero", "of=\(added.path)", "bs=65536", "count=4"]
+        write.standardError = FileHandle.nullDevice
+        try write.run()
+        write.waitUntilExit()
+        let grew = await eventually { (model.result?.root.size ?? 0) >= before + 262_144 }
+        try FileManager.default.removeItem(at: added)
+        let shrank = await eventually { model.result?.root.size == before }
+        print("\(prefix): before \(before), grew \(grew), back \(shrank) at \(model.result?.root.size ?? 0)")
+        return ["\(prefix)_follows_a_new_file": grew, "\(prefix)_follows_a_deletion": shrank]
+    }
+
+    /// Quits the live map as Pith's quit does, which saves it, then opens it in a second model as the next launch
+    /// would: it must open on the saved map, not walk again, and go on following changes.
+    private func checkLiveReopens(_ fixture: String) async throws -> [String: Bool] {
+        guard let live = disk.live, let size = disk.result?.root.size else { return ["live_map_reopens": false] }
+        final class Flag { var on = false }
+        let stopped = Flag()
+        live.stop(timeout: .seconds(10)) { stopped.on = true }
+        try await waitUntil("the map to be saved") { stopped.on }
+        let reopened = DiskModel()
+        reopened.scansFolder = disk.scansFolder
+        reopened.startLive(root: fixture, keep: true)
+        reopened.visibilityChanged(true)
+        let opens = await eventually { reopened.result?.root.path == fixture }
+        let restored = reopened.live?.restored == true && reopened.live?.rebuildReason == nil
+        let same = reopened.result?.root.size == size
+        print("reopened: opens \(opens), restored \(restored), size \(reopened.result?.root.size ?? 0) against \(size)")
+        let follows = try await checkLiveFollows(reopened, in: fixture, prefix: "reopened_map")
+        // As Pith's quit stops it: on the main thread, the scanner saving as it exits.
+        let quitting = Date()
+        reopened.live?.stopNow(timeout: 5)
+        let quit = Date().timeIntervalSince(quitting)
+        print("the reopened map stopped as at quit in \(String(format: "%.2f", quit)) s")
+        return ["live_map_reopens_without_walking": opens && restored, "live_map_reopens_the_same": same, "live_map_stops_at_quit": quit < 5]
+            .merging(follows) { _, new in new }
     }
 
     /// Command-X then Command-Z in Activity's search field, through the Edit menu as a key press would go. The user's

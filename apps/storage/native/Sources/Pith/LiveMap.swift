@@ -1,0 +1,308 @@
+import AppKit
+import CoreServices
+import IOKit.ps
+import Observation
+import PithCore
+
+/// The startup disk's map, kept current by the scanner's `serve` process from FSEvents, so nobody has to scan.
+///
+/// At launch it opens the map saved last and replays what FSEvents saw change since, or, with nothing saved, waits
+/// for Disk to open the first time, then walks the disk once. From then on FSEvents' events go to the scanner, which
+/// lists again only the folders that changed and reports how many it's waiting on.
+@MainActor @Observable final class LiveMap {
+    enum State: Equatable {
+        /// Not started, as in automated runs.
+        case off
+        case opening
+        /// No saved map: the first walk waits until Disk opens, since it can bring macOS's permission questions.
+        case unmapped
+        /// The first walk, or a new one after the saved map couldn't catch up.
+        case mapping(DiskProgress?)
+        /// Replaying what changed while Pith was closed.
+        case catchingUp(Int)
+        /// Current, with this many folders waiting to be listed again.
+        case live(Int)
+        case failed(String)
+
+        var isMapped: Bool {
+            switch self {
+            case .catchingUp, .live: true
+            default: false
+            }
+        }
+
+        var isFailed: Bool {
+            if case .failed = self { return true }
+            return false
+        }
+    }
+
+    let root: String
+    private(set) var state: State = .off
+    /// Why the last walk began, when the saved map couldn't catch up, for the progress view to say.
+    private(set) var rebuildReason: String?
+    /// The map opened on a saved one and caught up from FSEvents, rather than walking.
+    private(set) var restored = false
+    /// When the map shown was last brought up to date.
+    private(set) var updatedAt: Date?
+    /// The last check of every folder, for the verification notes and Settings.
+    private(set) var lastCheck: LiveCheck?
+    /// Something the map shows changed since the last tree was asked for.
+    private(set) var changedSinceTree = true
+    /// A tree arrived: the map for `path`, as asked for, with its JSON for the page.
+    var received: ((DiskResult, String) -> Void)?
+    /// The map changed, so a view on screen should ask for its tree again.
+    var changed: (() -> Void)?
+    /// The tree asked for last couldn't be made, as for a folder the map lacks.
+    var treeFailed: ((String) -> Void)?
+
+    private var process: LiveProcess?
+    private var stream: LiveStream?
+    private var snapshot: URL?
+    private var volume: String?
+    private var historyDone = false
+    private var pending = 0
+    private var nextRequest = 0
+    /// The tree asked for last; older answers are dropped.
+    private var wanted = 0
+    private var stopped: (@MainActor () -> Void)?
+    private var checker: NSBackgroundActivityScheduler?
+    /// Disk asked for the first map while the scanner was still opening.
+    private var firstMapWanted = false
+
+    init(root: String) {
+        self.root = root
+    }
+
+    /// Starts the scanner and opens the saved map at `snapshot`, or none when Pith doesn't keep it.
+    func start(binary: URL, snapshot: URL?) {
+        guard state == .off else { return }
+        state = .opening
+        self.snapshot = snapshot
+        volume = DiskWatcher.volumeUUID(for: root)
+        let process = LiveProcess(binary: binary, receive: { [weak self] report in
+            Task { @MainActor in self?.handle(report) }
+        }, exited: { [weak self] status in
+            Task { @MainActor in self?.exited(status) }
+        })
+        do {
+            try process.start()
+        } catch {
+            state = .failed("Pith couldn’t start its disk map: \(error.localizedDescription)")
+            return
+        }
+        self.process = process
+        process.open(root: root, snapshot: snapshot, volume: volume)
+        scheduleChecks()
+    }
+
+    /// Walks the disk for the first map, if there's none yet. Asked before the scanner has opened what's saved, it
+    /// waits for that answer.
+    func makeFirstMap() {
+        switch state {
+        case .unmapped: walk(reason: nil)
+        case .opening: firstMapWanted = true
+        default: break
+        }
+    }
+
+    private func walk(reason: String?) {
+        guard let process else { return }
+        stream?.stop()
+        rebuildReason = reason
+        // Watching from before the walk begins catches what changes while it runs.
+        let since = FSEventsGetCurrentEventId()
+        historyDone = true
+        state = .mapping(nil)
+        startStream(since: since, replay: false)
+        process.walk(since: since)
+    }
+
+    private func startStream(since: UInt64, replay: Bool) {
+        let process = process
+        stream = LiveStream(root: root, since: since, replay: replay) { events in process?.events(events) }
+        if stream == nil { state = .failed("FSEvents can’t watch \(root), so Pith can’t keep its map current.") }
+    }
+
+    /// Asks for the map of `path`, with `focus` in finer detail. The answer goes to `received`; asking again first
+    /// drops it.
+    func request(path: String, focus: String?) {
+        guard let process, state.isMapped else { return }
+        nextRequest += 1
+        wanted = nextRequest
+        changedSinceTree = false
+        process.tree(path: path, focus: focus, request: nextRequest)
+    }
+
+    /// Lists a folder again now, everything in it with `deep`.
+    func relist(_ path: String, deep: Bool) { process?.relist(path: path, deep: deep) }
+
+    /// Lists the folders the map couldn't read again, as after Full Disk Access is granted.
+    func retryUnreadable() { process?.retryUnreadable() }
+
+    func save() { process?.save() }
+
+    /// Keeps the map in `snapshot` from now on, or nowhere.
+    func keep(_ snapshot: URL?) {
+        self.snapshot = snapshot
+        process?.keep(snapshot: snapshot)
+        if snapshot != nil { process?.save() }
+    }
+
+    /// Lists every folder again, slowly, to catch what FSEvents didn't report.
+    func check() {
+        guard state.isMapped else { return }
+        process?.check()
+    }
+
+    /// Stops at quit: the scanner saves and exits, waited for here for up to `timeout` seconds. It waits on the main
+    /// thread rather than calling back, since AppKit runs none of Pith's tasks while a quit waits on
+    /// `.terminateLater`, and a quit waiting on one never finished.
+    func stopNow(timeout: TimeInterval) {
+        stream?.stop()
+        stream = nil
+        checker?.invalidate()
+        guard let process, process.isRunning else { return }
+        process.close()
+        if !process.waitUntilExit(timeout: timeout) {
+            NSLog("Pith: the disk map didn’t finish saving within \(timeout) s, so Pith quit without waiting.")
+            process.terminate()
+        }
+    }
+
+    /// Stops watching and lets the scanner save and exit, then calls `done`, or after `timeout` whatever happened.
+    func stop(timeout: Duration, done: @escaping @MainActor () -> Void) {
+        stream?.stop()
+        stream = nil
+        checker?.invalidate()
+        guard let process, process.isRunning else { Task { @MainActor in done() }; return }
+        stopped = done
+        process.close()
+        Task { [weak self] in
+            try? await Task.sleep(for: timeout)
+            guard let self, let stopped = self.stopped else { return }
+            self.stopped = nil
+            NSLog("Pith: the disk map didn’t finish saving within \(timeout), so Pith quit without waiting.")
+            self.process?.terminate()
+            stopped()
+        }
+    }
+
+    private func handle(_ report: LiveReport) {
+        switch report {
+        case .opened(let opened):
+            if opened.locked { NSLog("Pith: another copy of Pith keeps the disk map, so this one won’t save it.") }
+            guard opened.restored, let through = opened.through, let savedAt = opened.savedAt else {
+                state = .unmapped
+                if firstMapWanted { walk(reason: nil) }
+                return
+            }
+            updatedAt = savedAt
+            let plan = LivePlan.after(through: through, savedAt: savedAt, current: FSEventsGetCurrentEventId()) { [root] date in
+                LivePlan.lastEvent(before: date, onVolumeOf: root)
+            }
+            switch plan {
+            case .replay(let since):
+                restored = true
+                historyDone = false
+                state = .catchingUp(0)
+                startStream(since: since, replay: true)
+                // The saved map shows at once, while the replay catches it up.
+                changedSinceTree = true
+                changed?()
+            case .rebuild(let reason):
+                walk(reason: reason)
+            }
+        case .progress(_, let files, let bytes, let errors):
+            if case .mapping = state { state = .mapping(DiskProgress(files: files, bytes: bytes, errors: errors)) }
+        case .walked:
+            rebuildReason = nil
+            updatedAt = Date()
+            state = .live(0)
+            changedSinceTree = true
+            changed?()
+        case .status(let status):
+            pending = status.pending
+            historyDone = historyDone || status.historyDone
+            if status.changed {
+                updatedAt = Date()
+                changedSinceTree = true
+            }
+            guard state.isMapped else { return }
+            state = historyDone ? .live(status.pending) : .catchingUp(status.pending)
+            if status.changed { changed?() }
+        case .historyDone:
+            historyDone = true
+            if case .catchingUp(let waiting) = state { state = .live(waiting) }
+        case .rebuild(let reason):
+            walk(reason: reason)
+        case .tree(let request, let result, let json):
+            guard request == wanted else { return }
+            received?(result, json)
+        case .saved(let through, let bytes, let ms):
+            NSLog("Pith: kept the disk map through event \(through): \(bytes) bytes in \(ms) ms.")
+        case .checked(let check):
+            lastCheck = check
+            checkDone?(.finished)
+            checkDone = nil
+            NSLog("Pith: checked \(check.folders) folders in \(check.ms) ms; \(check.corrected) had changed without an event, by \(check.bytes) bytes.")
+        case .stats(let line):
+            NSLog("Pith: disk map \(line)")
+        case .failed(let request, let reason):
+            NSLog("Pith: the disk map reported: \(reason)")
+            if let request, request == wanted { treeFailed?(reason) }
+        case .fatal(let reason):
+            state = .failed(reason)
+        }
+    }
+
+    private func exited(_ status: Int32) {
+        stream?.stop()
+        stream = nil
+        process = nil
+        if let stopped {
+            self.stopped = nil
+            stopped()
+            return
+        }
+        if state != .off { state = .failed("Pith’s disk map stopped (exit code \(status)). Quit and reopen Pith to start it again.") }
+    }
+
+    // MARK: The daily check
+
+    private var checkDone: NSBackgroundActivityScheduler.CompletionHandler?
+
+    /// Lists every folder again once a day, as Apple asks backup software to sweep in full now and then: FSEvents is
+    /// a hint, and in research one deletion never arrived. Only on power, and not when macOS asks Pith to wait.
+    private func scheduleChecks() {
+        let scheduler = NSBackgroundActivityScheduler(identifier: "app.bruhs.pith.disk-check")
+        scheduler.repeats = true
+        scheduler.interval = 24 * 60 * 60
+        scheduler.tolerance = 4 * 60 * 60
+        scheduler.qualityOfService = .background
+        scheduler.schedule { [weak self] completion in
+            Task { @MainActor in
+                guard let self, self.state.isMapped, Self.checkMayRun else { completion(.deferred); return }
+                self.checkDone = completion
+                self.check()
+            }
+        }
+        checker = scheduler
+    }
+
+    /// On power, outside Low Power Mode, and not running hot.
+    private static var checkMayRun: Bool {
+        let info = ProcessInfo.processInfo
+        guard !info.isLowPowerModeEnabled, info.thermalState == .nominal || info.thermalState == .fair else { return false }
+        return PowerSource.onPower
+    }
+}
+
+/// Whether the Mac runs on power rather than its battery, from IOKit's power sources.
+enum PowerSource {
+    static var onPower: Bool {
+        guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let type = IOPSGetProvidingPowerSourceType(blob)?.takeUnretainedValue() as String? else { return true }
+        return type == kIOPMACPowerKey
+    }
+}

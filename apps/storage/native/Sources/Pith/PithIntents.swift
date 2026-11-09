@@ -92,7 +92,7 @@ struct ShowActivityIntent: AppIntent {
 
 struct ScanFolderIntent: AppIntent {
     static let title: LocalizedStringResource = "Scan Folder"
-    static let description = IntentDescription("Opens Pith’s Disk tab and scans a folder, to show what takes its space.")
+    static let description = IntentDescription("Opens Pith’s Disk tab on a folder, to show what takes its space: from the live map on the startup disk, or scanned on another disk.")
     static let openAppWhenRun = true
 
     // Limiting the picker to folders needs macOS 15, and Pith runs on 14, so a file is turned away here instead.

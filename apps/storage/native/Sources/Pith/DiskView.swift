@@ -22,7 +22,9 @@ struct DiskView: View {
                     .allowsHitTesting(model.result != nil && !model.isScanning)
                     .accessibilityHidden(model.result == nil || model.isScanning)
                 if model.result == nil {
-                    if model.isScanning {
+                    if let live = model.live, model.liveView != nil, !live.state.isFailed {
+                        LiveMapWaiting(live: live)
+                    } else if model.isScanning {
                         VStack(spacing: 10) {
                             BruhsSpinner(diameter: 24, lineWidth: 2.5).accessibilityLabel("Scanning")
                             Text("The map appears when the scan finishes.").font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
@@ -58,8 +60,10 @@ struct DiskView: View {
         }
         .onAppear {
             model.refreshChoices()
-            model.restoreLastScan()
+            model.visibilityChanged(visible)
         }
+        .onChange(of: visible) { _, now in model.visibilityChanged(now) }
+        .onDisappear { model.visibilityChanged(false) }
         .alert(model.confirming.map { "Move “\($0.name)” to the Trash?" } ?? "", isPresented: Binding(get: { model.confirming != nil }, set: { if !$0 { model.confirming = nil } })) {
             Button("Cancel", role: .cancel) { model.confirming = nil }
             Button("Move to Trash", role: .destructive) {
@@ -112,7 +116,7 @@ private struct DiskControlBar: View {
                     case nil:
                         EmptyView()
                     }
-                    if model.result != nil, !model.isScanning, !model.changes.isEmpty {
+                    if model.liveView == nil, model.result != nil, !model.isScanning, !model.changes.isEmpty {
                         let count = model.changes.count
                         Text(model.changes.everything || count == 0 ? "Folders changed since then." : "\(count.formatted()) \(count == 1 ? "folder" : "folders") changed since then.")
                             .font(BruhsType.note)
@@ -144,8 +148,12 @@ private struct DiskControlBar: View {
                 Button("Cancel") { model.cancel() }
                     .buttonStyle(.bruhsGhost)
             } else {
-                // Before a first scan, the list of disks under this bar has the startup disk's own Scan.
-                if model.result != nil {
+                if let live = model.live, model.liveView != live.root, !live.state.isFailed {
+                    Button("Startup Disk") { model.showLive(live.root) }
+                        .buttonStyle(.bruhsGhost)
+                        .disabled(model.isTrashing)
+                        .help("Show the whole startup disk, which Pith keeps current.")
+                } else if model.live == nil || model.live?.state.isFailed == true, model.result != nil {
                     Button("Scan Startup Disk") { model.scan(URL(fileURLWithPath: "/")) }
                         .buttonStyle(.bruhsGhost)
                         .disabled(model.isTrashing)
@@ -154,7 +162,7 @@ private struct DiskControlBar: View {
                 Button("Choose Folder…") { model.chooseFolder() }
                     .buttonStyle(.bruhsSoft)
                     .disabled(model.isTrashing)
-                    .help("Choose a folder to scan.")
+                    .help(model.live == nil ? "Choose a folder to scan." : "Choose a folder to show. One on the startup disk shows at once; one elsewhere is scanned.")
             }
         }
         .padding(.horizontal, 16)
@@ -264,7 +272,12 @@ private struct DiskNotices: View {
                 if result.summary.unreadable.protected > 0 {
                     Button("Full Disk Access…") { openDiskAccess() }
                         .buttonStyle(.bruhsGhost)
-                        .help("Grant Pith access in System Settings, then scan again.")
+                        .help(model.liveView == nil ? "Grant Pith access in System Settings, then scan again." : "Grant Pith access in System Settings, then read them again.")
+                    if model.liveView != nil {
+                        Button("Read Again") { model.retryUnreadable() }
+                            .buttonStyle(.bruhsGhost)
+                            .help("Read the folders the map couldn’t, as after Full Disk Access is granted.")
+                    }
                 }
             }
         }
@@ -352,7 +365,46 @@ extension DiskNotice where Action == EmptyView {
     }
 }
 
-/// The volumes to scan, before any scan: each with its capacity, as Finder's sidebar lists them.
+/// What shows before the live map's first tree: the first walk with why it's needed, or the saved map opening.
+private struct LiveMapWaiting: View {
+    let live: LiveMap
+
+    var body: some View {
+        VStack(spacing: 10) {
+            BruhsSpinner(diameter: 24, lineWidth: 2.5).accessibilityLabel(title)
+            Text(title).font(BruhsType.label).foregroundStyle(BruhsColor.text)
+            if let detail {
+                Text(detail)
+                    .font(BruhsType.body)
+                    .foregroundStyle(BruhsColor.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var title: String {
+        switch live.state {
+        case .mapping: "Mapping the startup disk"
+        case .catchingUp: "Catching up"
+        default: "Opening the map"
+        }
+    }
+
+    private var detail: String? {
+        switch live.state {
+        case .mapping:
+            if let reason = live.rebuildReason { return "\(reason) Pith maps the disk again, in about a minute, and keeps it current after." }
+            return "Pith maps the disk once, in about a minute. After that the map keeps itself current as files change, with no scans."
+        case .catchingUp: return "Pith is listing what changed while it was closed."
+        default: return nil
+        }
+    }
+}
+
+/// The volumes to scan, when the live map can't run: each with its capacity, as Finder's sidebar lists them.
 private struct DiskVolumeList: View {
     let model: DiskModel
 
@@ -475,7 +527,7 @@ private struct DiskSelectionBar: View {
             }
             .layoutPriority(1)
             Spacer(minLength: 12)
-            if item.kind == .dir, model.changes.touches(path), !model.isScanning {
+            if model.liveView == nil, item.kind == .dir, model.changes.touches(path), !model.isScanning {
                 Button("Scan Again") { model.rescan(path) }
                     .buttonStyle(.bruhsGhost)
                     .fixedSize()
@@ -587,7 +639,12 @@ struct DiskWebView: NSViewRepresentable {
                 menu.add("Copy Path") { [model] in model.copyPath(target.path) }
             }
             let rescan = folder ?? model.openFolder ?? result.root.path
-            menu.add(rescan == result.root.path ? "Scan Again" : "Scan This Folder Again", enabled: !model.isScanning) { [model] in model.rescan(rescan) }
+            if model.liveView != nil {
+                // The live map follows changes itself; this is for when something looks off.
+                menu.add(rescan == result.root.path ? "Check Again" : "Check This Folder Again", enabled: model.live?.state.isMapped == true) { [model] in model.checkAgain(rescan) }
+            } else {
+                menu.add(rescan == result.root.path ? "Scan Again" : "Scan This Folder Again", enabled: !model.isScanning) { [model] in model.rescan(rescan) }
+            }
             if let target {
                 menu.separator()
                 let plan = model.trashPlan(target.path)
@@ -605,7 +662,7 @@ struct DiskWebView: NSViewRepresentable {
             guard ready, revision != self.revision, let web else { return }
             self.revision = revision
             do {
-                let payload = try model.result.map { String(decoding: try JSONEncoder().encode($0), as: UTF8.self) }
+                let payload = try model.resultJSON ?? model.result.map { String(decoding: try JSONEncoder().encode($0), as: UTF8.self) }
                 // What grew since the last scan of this folder travels apart from the scanner's own result.
                 let growth = model.growthSince.map { since in
                     var growth: [String: Any] = ["since": Self.day(since), "changes": model.growth]

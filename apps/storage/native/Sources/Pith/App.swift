@@ -76,14 +76,16 @@ import PithCore
         activity.start(); statusItem?.update()
         let center = NSWorkspace.shared.notificationCenter
         observers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.activity.pause() }
+            // The map is saved before the Mac sleeps, since a Mac that doesn't wake up again never quits Pith.
+            Task { @MainActor in self?.activity.pause(); self?.disk.live?.save() }
         })
         observers.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.activity.start() }
         })
         let automated = CommandLine.arguments.contains { ["--activity", "--scan", "--smoke-test"].contains($0) }
-        // An automated run never goes online or asks the person anything, and leaves their update settings alone.
-        if !automated { startUpdates() }
+        // An automated run never goes online or asks the person anything, and leaves their update settings alone. Nor
+        // does it map the person's disk, which the smoke test does with a folder of its own.
+        if !automated { startUpdates(); disk.startLive() }
         if CommandLine.arguments.contains("--activity") { showActivity() }
         if let index = CommandLine.arguments.firstIndex(of: "--scan"), CommandLine.arguments.indices.contains(index + 1) {
             showDisk(); disk.scan(URL(fileURLWithPath: CommandLine.arguments[index + 1]))
@@ -127,9 +129,9 @@ import PithCore
         add(app, "Quit Pith", #selector(NSApplication.terminate(_:)), "q")
 
         let file = submenu("File")
-        add(file, "Choose Folder to Scan…", #selector(chooseFolder), "o", target: self)
-        add(file, "Scan Startup Disk", #selector(scanStartupDisk), target: self)
-        add(file, "Scan Again", #selector(scanAgain), "r", target: self)
+        add(file, "Choose Folder…", #selector(chooseFolder), "o", target: self)
+        add(file, "Show Startup Disk", #selector(scanStartupDisk), target: self)
+        add(file, "Check Again", #selector(scanAgain), "r", target: self)
         file.addItem(.separator())
         add(file, "Quick Look", #selector(quickLookSelection), "y", target: self)
         add(file, "Reveal in Finder", #selector(revealSelection), "r", [.command, .option], target: self)
@@ -308,7 +310,12 @@ import PithCore
 
     @objc private func chooseFolder() { showDisk(); disk.chooseFolder() }
     @objc private func scanStartupDisk() { showDisk(); disk.scan(URL(fileURLWithPath: "/")) }
+    /// The live map lists the open folder again, everything in it; a scanned map is scanned again.
     @objc private func scanAgain() {
+        if disk.liveView != nil {
+            if let folder = disk.openFolder ?? disk.result?.root.path { disk.checkAgain(folder) }
+            return
+        }
         guard let root = disk.result?.root.path ?? disk.scope else { return }
         disk.scan(URL(fileURLWithPath: root))
     }
@@ -349,8 +356,14 @@ import PithCore
         case #selector(findInActivity): return activityShowing
         case #selector(quickLookSelection), #selector(revealSelection), #selector(copySelectionPath): return selection
         case #selector(trashSelection): return selection && !disk.isScanning && (try? disk.selectedPlan?.get()) != nil
-        case #selector(scanAgain): return diskShowing && !disk.isScanning && disk.scope != nil
-        case #selector(scanStartupDisk), #selector(chooseFolder): return !disk.isScanning && !disk.isTrashing
+        case #selector(scanAgain):
+            let live = disk.liveView != nil
+            menuItem.title = live ? "Check Again" : "Scan Again"
+            return diskShowing && !disk.isScanning && disk.scope != nil && (!live || disk.live?.state.isMapped == true)
+        case #selector(scanStartupDisk):
+            menuItem.title = disk.live == nil || disk.live?.state.isFailed == true ? "Scan Startup Disk" : "Show Startup Disk"
+            return !disk.isScanning && !disk.isTrashing
+        case #selector(chooseFolder): return !disk.isScanning && !disk.isTrashing
         case #selector(enclosingFolder): return diskShowing && disk.openFolder != nil && disk.openFolder != disk.result?.root.path
         case #selector(biggerText): return TextSize.shared.canGrow
         case #selector(smallerText): return TextSize.shared.canShrink
@@ -401,6 +414,9 @@ import PithCore
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         activity.pause(); disk.cancel()
+        // The scanner saves the map as it exits, so the next launch catches up from here rather than walking again.
+        // Saving the development Mac's map took 0.65 to 0.99 s; past five, Pith quits regardless.
+        disk.live?.stopNow(timeout: 5)
         return .terminateNow
     }
     func applicationWillTerminate(_ notification: Notification) {
