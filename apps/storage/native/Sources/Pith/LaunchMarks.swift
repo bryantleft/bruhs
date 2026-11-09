@@ -20,7 +20,7 @@ struct LaunchMarker: Identifiable {
     }
 }
 
-/// Thin dashed lines where apps opened, each named beside its top, so a rise lines up with what started it.
+/// Thin dashed lines where apps opened, so a rise lines up with what started it. `LaunchLabels` names them.
 struct LaunchMarks: ChartContent {
     let markers: [LaunchMarker]
 
@@ -29,12 +29,34 @@ struct LaunchMarks: ChartContent {
             RuleMark(x: .value("Opened", marker.x))
                 .foregroundStyle(BruhsColor.textTertiary.opacity(0.6))
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
-                .annotation(position: .trailing, alignment: .top, spacing: 3, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                    Text(marker.launch.name)
-                        .font(BruhsType.caption)
-                        .foregroundStyle(BruhsColor.textTertiary)
-                        .lineLimit(1)
-                }
         }
+    }
+}
+
+/// The names of the apps that opened, along the top of the plot beside their lines. Placed together rather than
+/// each beside its own line, so apps that opened within moments share a label rather than covering each other.
+/// VoiceOver hears every name in the chart's summary.
+struct LaunchLabels: View {
+    let markers: [LaunchMarker]
+    let proxy: ChartProxy
+    let plot: CGRect
+
+    var body: some View {
+        let marks = markers.compactMap { marker in proxy.position(forX: marker.x).map { MarkLabels.Mark(x: $0, name: marker.launch.name) } }
+        let labels = MarkLabels.place(marks, width: plot.width) { ($0 as NSString).size(withAttributes: [.font: BruhsType.captionFace]).width }
+        ZStack(alignment: .topLeading) {
+            ForEach(Array(labels.enumerated()), id: \.offset) { _, label in
+                Text(label.text)
+                    .font(BruhsType.caption)
+                    .foregroundStyle(BruhsColor.textTertiary)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .offset(x: label.x)
+            }
+        }
+        .frame(width: plot.width, height: plot.height, alignment: .topLeading)
+        .position(x: plot.midX, y: plot.midY)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }

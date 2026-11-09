@@ -176,6 +176,7 @@ struct ActivityChart: View {
                     interaction(proxy, window: window)
                         .frame(width: plot.width, height: plot.height)
                         .position(x: plot.midX, y: plot.midY)
+                    LaunchLabels(markers: launches(window: window), proxy: proxy, plot: plot)
                     // Who was busy at the hovered moment, beside the pointer: the history already knows every app.
                     if let cursor, let x = proxy.position(forX: cursor) {
                         let busiest = model.history.topApps(at: cursor, byMemory: metric == .memory, limit: 3, tolerance: ActivityModel.interval)

@@ -138,6 +138,7 @@ struct ActivityHistoryChart: View {
                     interaction(proxy)
                         .frame(width: plot.width, height: plot.height)
                         .position(x: plot.midX, y: plot.midY)
+                    LaunchLabels(markers: launches(domain: domain), proxy: proxy, plot: plot)
                     PanelPressureBand(runs: runs(buckets), window: domain)
                         .frame(width: plot.width)
                         .position(x: plot.midX, y: plot.maxY + 6)
