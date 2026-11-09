@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { createRoot } from "react-dom/client";
 import { LargestFiles } from "../src/components/largest-files";
 import { TreemapCanvas } from "../src/components/treemap-canvas";
-import { retraceFolders } from "../src/lib/folder-trail";
 import { formatBytes } from "../src/lib/format";
 import { LARGEST_FILES_SHOWN, largestFilesIn } from "../src/lib/largest-files";
 import { parseResultEvent } from "../src/lib/protocol";
@@ -15,14 +21,22 @@ import type {
   TreeNode,
 } from "../src/lib/types";
 import { KindLegend } from "./kind-legend";
-import { PathBar } from "./path-bar";
+import { type NavigationAction, NO_MAP, navigate } from "./navigation";
 import "./styles.css";
 
-/** What the page tells Pith: the selection, the open folder, and requests for native actions. */
+/**
+ * What the page tells Pith: the selection, the open folder with whether Back and Forward can go anywhere, and
+ * requests for native actions.
+ */
 type Message =
   | { action: "ready" }
   | { action: "select"; path: string | null }
-  | { action: "location"; path: string }
+  | {
+      action: "location";
+      path: string;
+      canGoBack: boolean;
+      canGoForward: boolean;
+    }
   | { action: "menu"; path: string | null }
   | { action: "quickLook"; path: string }
   | { action: "trash"; path: string };
@@ -71,8 +85,14 @@ declare global {
   interface Window {
     pithReceive: (payload: string | null) => void;
     pithReceiveGrowth: (growth: GrowthMessage | null) => void;
-    /** Pith's menu commands that act on the map, such as Go, Enclosing Folder. */
-    pithCommand: (command: "up") => void;
+    /**
+     * Pith's path bar and Go menu: open a folder of the map, go back or forward through the folders opened, or up
+     * to the open folder's enclosing folder.
+     */
+    pithCommand: (
+      command: "open" | "back" | "forward" | "up",
+      path?: string | null,
+    ) => void;
     webkit?: {
       messageHandlers?: {
         pith?: {
@@ -89,20 +109,15 @@ function post(message: Message): void {
 
 function DiskMap() {
   const [result, setResult] = useState<ResultEvent | null>(null);
-  const [trail, setTrail] = useState<readonly DirNode[]>([]);
+  // The open folders and where Back and Forward go, which Pith's path bar and Go menu move.
+  const [nav, dispatch] = useReducer(navigate, NO_MAP);
   const [selected, setSelected] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<Kind | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [growth, setGrowth] = useState<Growth | null>(null);
-  // The open folders, kept across the empty payload a rescan sends first, so the map
-  // stays where it was after Move to Trash.
-  const openPaths = useRef<readonly string[]>([]);
-  useEffect(() => {
-    if (trail.length > 0) {
-      openPaths.current = trail.map((folder) => folder.path);
-    }
-  }, [trail]);
+  // The folder of the last map, kept across an empty payload: a map of another folder stops highlighting.
+  const mapRoot = useRef<string | null>(null);
 
   useEffect(() => {
     window.pithReceive = (payload) => {
@@ -126,12 +141,11 @@ function DiskMap() {
             parsed.topFiles.some((file) => file.path === path));
         setSelected((path) => (stillThere(path) ? path : null));
         setHovered((path) => (stillThere(path) ? path : null));
-        if (!parsed) {
-          setTrail([]);
-          return;
+        if (parsed) {
+          if (mapRoot.current !== parsed.root.path) setHighlight(null);
+          mapRoot.current = parsed.root.path;
         }
-        if (openPaths.current[0] !== parsed.root.path) setHighlight(null);
-        setTrail(retraceFolders(parsed.root, openPaths.current));
+        dispatch({ type: "received", root: parsed?.root ?? null });
       } catch {
         setError("The disk map could not read this scan. Try scanning again.");
       }
@@ -196,35 +210,50 @@ function DiskMap() {
     [select],
   );
 
-  /** Show another folder; the selection and hover belonged to the old map. */
-  const showFolders = useCallback(
-    (next: (folders: readonly DirNode[]) => readonly DirNode[]) => {
-      setTrail(next);
+  /** Show another folder; the selection and hover belonged to the old one. */
+  const go = useCallback(
+    (action: NavigationAction) => {
+      dispatch(action);
       setHovered(null);
       select(null);
     },
     [select],
   );
-  const goBack = useCallback(
-    (index: number) => showFolders((folders) => folders.slice(0, index + 1)),
-    [showFolders],
-  );
+  const current = nav.trail.at(-1) ?? null;
+  const here = current?.path;
+  // The map opens a folder further down one level at a time, all from here: one step back.
   const openFolder = useCallback(
-    (folder: DirNode) => showFolders((folders) => [...folders, folder]),
-    [showFolders],
+    (folder: DirNode) => go({ type: "open", path: folder.path, from: here }),
+    [go, here],
   );
 
-  // Go, Enclosing Folder (Command–Up Arrow) is Pith's menu command, so it works wherever focus is.
+  // Pith's path bar and Go menu (Back, Forward and Enclosing Folder) move the map, wherever focus is.
   useEffect(() => {
-    window.pithCommand = (command) => {
-      if (command === "up" && trail.length > 1) goBack(trail.length - 2);
+    window.pithCommand = (command, path) => {
+      if (command === "open") {
+        if (typeof path === "string") go({ type: "open", path });
+      } else if (
+        command === "back" ||
+        command === "forward" ||
+        command === "up"
+      ) {
+        go({ type: command });
+      }
     };
-  }, [trail.length, goBack]);
+  }, [go]);
 
-  const current = trail.at(-1) ?? null;
+  // Pith's path bar and bar under the map show the open folder, and its Go menu offers Back and Forward when they
+  // can go somewhere.
   useEffect(() => {
-    if (current) post({ action: "location", path: current.path });
-  }, [current]);
+    if (current) {
+      post({
+        action: "location",
+        path: current.path,
+        canGoBack: nav.back.length > 0,
+        canGoForward: nav.forward.length > 0,
+      });
+    }
+  }, [current, nav.back, nav.forward]);
 
   // Copy with an item selected copies its path, as Finder's Copy does with a file's name.
   useEffect(() => {
@@ -263,7 +292,7 @@ function DiskMap() {
       </p>
     );
   }
-  // Before a scan the page stays empty: Pith's bar above says there's no scan yet and holds the scan buttons.
+  // Before a map the page stays empty: Pith's bar above says there's no map yet and holds the disk menu.
   if (!result || !current) return null;
 
   // Unreadable folders in the open folder, which the map can't size, so it lists them instead.
@@ -281,8 +310,6 @@ function DiskMap() {
 
   return (
     <main className="flex h-full min-h-0 flex-col gap-2 px-4 pt-3 pb-4">
-      {/* At the scan's own folder, Pith's bar above already shows its path and size. */}
-      {trail.length > 1 && <PathBar trail={trail} onOpen={goBack} />}
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_17rem] gap-5">
         <section aria-label="Disk space treemap" className="min-h-0">
           <TreemapCanvas

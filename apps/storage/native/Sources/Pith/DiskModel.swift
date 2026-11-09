@@ -43,7 +43,7 @@ struct DiskWriter: Equatable {
     let bytes: UInt64
 }
 
-/// A volume Pith can scan, for the list shown when the live map can't run.
+/// A volume Pith can scan, for the disk menu and the list shown when the live map can't run.
 struct DiskVolumeChoice: Identifiable, Equatable {
     let url: URL
     let name: String
@@ -51,6 +51,16 @@ struct DiskVolumeChoice: Identifiable, Equatable {
     let available: UInt64?
     let isStartup: Bool
     var id: URL { url }
+}
+
+/// What the path bar and the Go menu ask of the map's page (`pithCommand` in native-web/main.tsx), which keeps the
+/// open folders and the history Back and Forward go through.
+enum MapCommand: Equatable {
+    /// Opens a folder of the map shown.
+    case open(String)
+    case back, forward
+    /// Opens the open folder's enclosing folder.
+    case up
 }
 
 @MainActor @Observable final class DiskModel {
@@ -114,11 +124,16 @@ struct DiskVolumeChoice: Identifiable, Equatable {
     /// How the last scan ended when it didn't produce a map.
     private(set) var note: String?
     private(set) var trashed: TrashedItem?
-    /// The folder the map is showing, as the page reports it.
-    var openFolder: String? {
-        didSet { if openFolder != oldValue, liveView != nil { refreshLive() } }
+    /// The folder the map is showing, as the page reports it. Nil until the page reports a new map's folder.
+    private(set) var openFolder: String? {
+        didSet { if openFolder != oldValue, openFolder != nil, liveView != nil { refreshLive() } }
     }
-    /// The volumes listed when the live map can't run.
+    /// Whether the page's Back and Forward have somewhere to go, which the Go menu follows.
+    private(set) var canGoBack = false
+    private(set) var canGoForward = false
+    /// Runs a command of the path bar or the Go menu in the map's page; the page's coordinator connects it.
+    @ObservationIgnored var pageCommand: ((MapCommand) -> Void)?
+    /// The mounted volumes, for the disk menu, the path bar's names and the list shown when the live map can't run.
     private(set) var choices: [DiskVolumeChoice] = []
     private let runner = ScannerRunner()
     private var operation: Task<Void, Never>?
@@ -135,13 +150,13 @@ struct DiskVolumeChoice: Identifiable, Equatable {
     private var lastTree = Date.distantPast
     private var treeLater: Task<Void, Never>?
 
-    /// A figure under the scope, such as "Files 123,697".
+    /// A figure in the caption under the path bar, such as "Files 123,697".
     struct Figure: Hashable {
         let label: String
         let value: String
     }
 
-    /// The line under the scope: figures while scanning and for the map it holds, or a message about the map.
+    /// The caption under the path bar: figures while scanning and for the map it holds, or a message about the map.
     enum Caption: Equatable {
         case message(String)
         case figures([Figure])
@@ -194,6 +209,53 @@ struct DiskVolumeChoice: Identifiable, Equatable {
         "macOS is asking whether Pith may read \(folders.formatted()) \(folders == 1 ? "folder" : "folders"). They join the map once you answer."
     }
 
+    // MARK: The path bar
+
+    /// The folder the path bar shows: the map's open folder, or the folder a scan is mapping.
+    var location: String? {
+        if isScanning, rescanning == nil { return scope }
+        guard let result else { return scope }
+        return openFolder.flatMap { DiskChanges.isInside($0, result.root.path) ? $0 : nil } ?? result.root.path
+    }
+
+    /// Where `location` is, as the path bar shows it: its disk, by the disk's name, then each folder down to it.
+    var folderPath: FolderPath? {
+        location.flatMap { FolderPath($0, volumes: volumes) }
+    }
+
+    /// The disks the path bar names: those the disk menu lists, and the startup disk even before it lists any.
+    private var volumes: [FolderPath.Volume] {
+        let listed = choices.map { FolderPath.Volume(path: $0.url.path, name: $0.name) }
+        return listed.contains { $0.path == "/" } ? listed : listed + [FolderPath.Volume(path: "/", name: Self.startupDiskName)]
+    }
+
+    private static let startupDiskName = (try? URL(fileURLWithPath: "/").resourceValues(forKeys: [.volumeLocalizedNameKey]))?.volumeLocalizedName ?? "Startup disk"
+
+    /// Shows `path`, as the path bar's folders and the disk menu's disks ask. The map's page opens a folder of the map
+    /// shown; anything else goes as `scan` routes it, to the live map or a scan.
+    func show(_ path: String) {
+        guard !isTrashing, !isScanning else { return }
+        if let result, DiskChanges.isInside(path, result.root.path), let pageCommand {
+            pageCommand(.open(path))
+        } else {
+            scan(URL(fileURLWithPath: path))
+        }
+    }
+
+    /// The page moved the map: the folder it shows now, and whether its Back and Forward can go anywhere.
+    func pageMoved(to folder: String, canGoBack: Bool, canGoForward: Bool) {
+        openFolder = folder
+        self.canGoBack = canGoBack
+        self.canGoForward = canGoForward
+    }
+
+    /// A page that loads again opens the map at its root, with nowhere to go back or forward.
+    func pageLoaded() {
+        openFolder = nil
+        canGoBack = false
+        canGoForward = false
+    }
+
     // MARK: The live map
 
     private var liveSnapshot: URL? { scansFolder?.appendingPathComponent("startup-disk.index") }
@@ -237,6 +299,8 @@ struct DiskVolumeChoice: Identifiable, Equatable {
         if result?.root.path != path {
             select(nil)
             result = nil
+            // The page opens a map of another folder at its root.
+            openFolder = nil
             accounting = nil
             revision = UUID()
         }
@@ -353,7 +417,7 @@ struct DiskVolumeChoice: Identifiable, Equatable {
     func refreshChoices() {
         let keys: [URLResourceKey] = [.volumeLocalizedNameKey, .volumeTotalCapacityKey, .volumeAvailableCapacityKey, .volumeIsRootFileSystemKey, .volumeIsBrowsableKey]
         let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
-        choices = urls.compactMap { url in
+        let found = urls.compactMap { url -> DiskVolumeChoice? in
             guard let values = try? url.resourceValues(forKeys: Set(keys)), values.volumeIsBrowsable != false else { return nil }
             let startup = values.volumeIsRootFileSystem == true
             return DiskVolumeChoice(url: startup ? URL(fileURLWithPath: "/") : url, name: values.volumeLocalizedName ?? url.lastPathComponent,
@@ -361,11 +425,14 @@ struct DiskVolumeChoice: Identifiable, Equatable {
                                     isStartup: startup)
         }
         .sorted { $0.isStartup && !$1.isStartup }
+        if found != choices { choices = found }
     }
 
     /// Shows `root`: from the live map when the map holds it, or scanned.
     func scan(_ root: URL) {
         guard !isTrashing, !isScanning else { return }
+        // A disk mounted since the list was made is named in the path bar too.
+        refreshChoices()
         let root = root.standardizedFileURL.resolvingSymlinksInPath()
         if let live, live.state != .off, !Self.failed(live.state), LivePlan.holds(root.path, mapOf: live.root) {
             showLive(root.path)
@@ -404,6 +471,8 @@ struct DiskVolumeChoice: Identifiable, Equatable {
                 }
                 guard !Task.isCancelled, generation == id else { return }
                 select(nil)
+                // The page opens a map of another folder at its root; a new scan of the same one stays where it was.
+                if result?.root.path != value.root.path { openFolder = nil }
                 result = value; scannedAt = Date(); edited = false; trashed = nil
                 compareWithLastScan(value)
                 revision = UUID()

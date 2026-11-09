@@ -162,6 +162,8 @@ import PithCore
         add(view, "Actual Size", #selector(actualTextSize), "0", target: self)
 
         let go = submenu("Go")
+        add(go, "Back", #selector(goBack), "[", target: self)
+        add(go, "Forward", #selector(goForward), "]", target: self)
         add(go, "Enclosing Folder", #selector(enclosingFolder), String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), target: self)
 
         let window = submenu("Window")
@@ -309,7 +311,8 @@ import PithCore
     private var diskShowing: Bool { mainWindow?.window.isVisible == true && mainWindow?.state.tab == .disk }
 
     @objc private func chooseFolder() { showDisk(); disk.chooseFolder() }
-    @objc private func scanStartupDisk() { showDisk(); disk.scan(URL(fileURLWithPath: "/")) }
+    /// As the disk menu's startup disk: the map's page opens its root when the map shown is the whole disk.
+    @objc private func scanStartupDisk() { showDisk(); disk.show("/") }
     /// The live map lists the open folder again, everything in it; a scanned map is scanned again.
     @objc private func scanAgain() {
         if disk.liveView != nil {
@@ -323,7 +326,10 @@ import PithCore
     @objc private func revealSelection() { if let path = disk.selected { disk.reveal(path) } }
     @objc private func copySelectionPath() { if let path = disk.selected { disk.copyPath(path) } }
     @objc private func trashSelection() { if let path = disk.selected { disk.requestTrash(path, undoManager: mainWindow?.window.undoManager) } }
-    @objc private func enclosingFolder() { webView?.evaluateJavaScript("window.pithCommand && window.pithCommand('up')") }
+    // The map's page keeps the open folders and Back and Forward's history, so the Go menu moves it.
+    @objc private func goBack() { disk.pageCommand?(.back) }
+    @objc private func goForward() { disk.pageCommand?(.forward) }
+    @objc private func enclosingFolder() { disk.pageCommand?(.up) }
 
     /// Saves Activity's table, as it's searched, sorted and ranked now, as CSV.
     @objc private func exportActivity() {
@@ -364,6 +370,8 @@ import PithCore
             menuItem.title = disk.live == nil || disk.live?.state.isFailed == true ? "Scan Startup Disk" : "Show Startup Disk"
             return !disk.isScanning && !disk.isTrashing
         case #selector(chooseFolder): return !disk.isScanning && !disk.isTrashing
+        case #selector(goBack): return diskShowing && disk.canGoBack
+        case #selector(goForward): return diskShowing && disk.canGoForward
         case #selector(enclosingFolder): return diskShowing && disk.openFolder != nil && disk.openFolder != disk.result?.root.path
         case #selector(biggerText): return TextSize.shared.canGrow
         case #selector(smallerText): return TextSize.shared.canShrink

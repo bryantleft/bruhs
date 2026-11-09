@@ -117,6 +117,7 @@ extension AppDelegate {
             print("live map \(disk.result?.root.size ?? 0) bytes, \(disk.result?.summary.files ?? 0) files; scan \(scanned.root.size) bytes, \(scanned.summary.files) files")
             checks["live_map_matches_scan"] = disk.result?.root.size == scanned.root.size && disk.result?.summary.files == scanned.summary.files
             checks.merge(try await inspectDisk(), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkPathBar(fixture, in: main), uniquingKeysWith: { _, new in new })
             checks.merge(try await checkLiveFollows(disk, in: fixture, prefix: "live_map"), uniquingKeysWith: { _, new in new })
             checks.merge(try await checkLiveReopens(fixture), uniquingKeysWith: { _, new in new })
             // Leaving the Disk tab keeps the map, so its open folder survives; closing the window frees WebKit.
@@ -215,6 +216,61 @@ extension AppDelegate {
         }
         print("selection icon \(key.string) drawn for \(drawn.map(\.rawValue))")
         return drawn == IconAppearance.allCases
+    }
+
+    /// The path bar over the map: its disk reads as the disk's own name, not "/", and its menu lists the disks
+    /// attached, then Choose Folder. A folder of the path opens the map there, as clicking it does, and Back and Forward
+    /// in the Go menu, pressed as their keys, retrace the steps, each only when there's somewhere to go.
+    private func checkPathBar(_ fixture: String, in main: MainWindowController) async -> [String: Bool] {
+        let sub = (fixture as NSString).appendingPathComponent("sub")
+        let startup = (try? URL(fileURLWithPath: "/").resourceValues(forKeys: [.volumeLocalizedNameKey]))?.volumeLocalizedName ?? ""
+        // The fixture is on the startup disk, which the bar names as Finder does, then each folder down to the map's.
+        let path = disk.folderPath
+        let named = !startup.isEmpty && path?.volume == FolderPath.Volume(path: "/", name: startup) && path?.folders.last == fixture
+            && path?.folders.contains("/") == false
+        // A disk's item reads its name, then its free space: "Macintosh HD", a tab, "Free 49.3 GB".
+        let items = disk.diskMenu().menu.items
+        let disks = items.prefix { !$0.isSeparatorItem }
+        let shown = disks.first { $0.title.hasPrefix(startup + "\t") }
+        let listed = disks.count == disk.choices.count && disks.allSatisfy { $0.image != nil }
+            && shown?.title.hasPrefix(startup + "\tFree ") == true && shown?.state == .on
+            && items.count == disks.count + 2 && items.last?.title == "Choose Folder…" && items.last?.keyEquivalent == "o"
+        print("path bar \(path?.volume.name ?? "none") then \(path?.folders.count ?? 0) folders; disk menu \(disks.map(\.title))")
+
+        // Nothing opened yet, so Back and Forward have nowhere to go.
+        let nowhere = goItem("Back")?.isEnabled == false && goItem("Forward")?.isEnabled == false
+        // Sub opens in the map; then the folder enclosing it in the path, the fixture's own, opens as its button does.
+        disk.pageCommand?(.open(sub))
+        let opened = await eventually { self.disk.openFolder == sub && self.disk.folderPath?.folders.last == sub }
+        let enclosing = disk.folderPath?.folders.dropLast().last
+        if let enclosing { disk.show(enclosing) }
+        let up = await eventually { self.disk.openFolder == fixture }
+        // ⌘[ goes back to sub and ⌘] forward to the fixture again, after which Forward has nowhere to go.
+        let canGoBack = goItem("Back")?.isEnabled == true
+        pressCommand("[", keyCode: 33, in: main.window)
+        let back = await eventually { self.disk.openFolder == sub }
+        let canGoForward = goItem("Forward")?.isEnabled == true
+        pressCommand("]", keyCode: 30, in: main.window)
+        let forward = await eventually { self.disk.openFolder == fixture }
+        let end = goItem("Forward")?.isEnabled == false && goItem("Back")?.isEnabled == true
+        print("path bar opened \(opened), then \(enclosing ?? "nothing") \(up); nowhere \(nowhere), back \(canGoBack) \(back), forward \(canGoForward) \(forward), then \(end)")
+        return ["path_bar_names_the_disk": named, "disk_menu_lists_disks": listed, "path_bar_opens_a_folder": opened && enclosing == fixture && up,
+                "go_back_and_forward": nowhere && canGoBack && back && canGoForward && forward && end]
+    }
+
+    /// The Go menu's item titled `title`, enabled as the menu bar shows it now.
+    private func goItem(_ title: String) -> NSMenuItem? {
+        let go = NSApp.mainMenu?.item(withTitle: "Go")?.submenu
+        go?.update()
+        return go?.item(withTitle: title)
+    }
+
+    /// Presses Command and `key` through the main menu, as typing it does.
+    private func pressCommand(_ key: String, keyCode: UInt16, in window: NSWindow) {
+        guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: ProcessInfo.processInfo.systemUptime,
+                                           windowNumber: window.windowNumber, context: nil, characters: key, charactersIgnoringModifiers: key,
+                                           isARepeat: false, keyCode: keyCode) else { return }
+        _ = NSApp.mainMenu?.performKeyEquivalent(with: event)
     }
 
     /// Whether the next two samples arrive about `interval` apart, as the model's cadence promises.
