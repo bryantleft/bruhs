@@ -185,6 +185,7 @@ extension AppDelegate {
         let frees = await eventually { self.disk.selectedFrees != nil }
         let after = try await web.callAsyncJavaScript(mapHeight, in: nil, contentWorld: .page) as? Double
         print("map height before selection=\(before ?? -1) after=\(after ?? -1)")
+        let icon = await checkSelectionIcon()
         // Bigger Text zooms the map's page too. The step is undone, since this runs with the user's settings, and the
         // page is back at its usual zoom before anything after measures it.
         let size = TextSize.shared, grow = size.canGrow, usual = size.scale
@@ -195,8 +196,25 @@ extension AppDelegate {
         _ = try await web.callAsyncJavaScript("window.location.href = 'https://example.com/'", in: nil, contentWorld: .page)
         try await Task.sleep(for: .milliseconds(200))
         return ["treemap_rendered": rendered, "bundled_fonts": fonts, "accessible_map": labels,
-            "selection_bridge": selection, "selection_frees_measured": frees, "map_follows_text_size": zooms, "map_keeps_size_on_select": before != nil && before == after,
-            "remote_navigation_blocked": web.url?.scheme == "pith"]
+            "selection_bridge": selection, "selection_frees_measured": frees, "selection_icon_follows_appearance": icon,
+            "map_follows_text_size": zooms, "map_keeps_size_on_select": before != nil && before == after, "remote_navigation_blocked": web.url?.scheme == "pith"]
+    }
+
+    /// Switches the window to light and then to dark: the bar under the map draws the selection's icon again for
+    /// each, off the main thread. The window goes back to following the system after.
+    private func checkSelectionIcon() async -> Bool {
+        guard let window = mainWindow?.window, let item = disk.selectedItem else { return false }
+        let key = disk.iconKey(for: item)
+        let size = IconSize(points: 16, scale: window.backingScaleFactor)
+        let chosen = window.appearance
+        defer { window.appearance = chosen }
+        var drawn: [IconAppearance] = []
+        for appearance in IconAppearance.allCases {
+            window.appearance = NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
+            if await eventually({ Icons.store.cachedIcon(for: IconRequest(key, size: size, appearance: appearance)) != nil }) { drawn.append(appearance) }
+        }
+        print("selection icon \(key.string) drawn for \(drawn.map(\.rawValue))")
+        return drawn == IconAppearance.allCases
     }
 
     /// Whether the next two samples arrive about `interval` apart, as the model's cadence promises.

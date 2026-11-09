@@ -61,6 +61,7 @@ struct DiskView: View {
         .onAppear {
             model.refreshChoices()
             model.visibilityChanged(visible)
+            Icons.prepare()
         }
         .onChange(of: visible) { _, now in model.visibilityChanged(now) }
         .onDisappear { model.visibilityChanged(false) }
@@ -451,7 +452,15 @@ private struct DiskVolumeList: View {
     }
 }
 
-/// The selected item, or the open folder while nothing is selected, and what can be done with it.
+extension DiskModel {
+    /// The icon for an item of the map, by Pith's icon rule. While macOS is still asking about folders of the live
+    /// map, no folder inside a location it guards is looked up by its path.
+    func iconKey(for item: DiskNode) -> IconKey {
+        Icons.places.iconKey(for: item, asking: liveView != nil && (live?.asking ?? 0) > 0)
+    }
+}
+
+/// The selected item, or the open folder while nothing is selected, led by its icon, and what can be done with it.
 private struct DiskSelectionBar: View {
     let model: DiskModel
     let item: DiskNode
@@ -514,11 +523,14 @@ private struct DiskSelectionBar: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // A short path shows whole; a long one truncates in its middle at a third of a narrow window, so the
-            // figures keep their room.
-            ViewThatFits(in: .horizontal) {
-                pathText.fixedSize()
-                pathText.frame(maxWidth: 260, alignment: .leading)
+            HStack(spacing: 6) {
+                SystemIconView(key: model.iconKey(for: item))
+                // A short path shows whole; a long one truncates in its middle at a third of a narrow window, so the
+                // figures keep their room.
+                ViewThatFits(in: .horizontal) {
+                    pathText.fixedSize()
+                    pathText.frame(maxWidth: 260, alignment: .leading)
+                }
             }
             .layoutPriority(2)
             // The buttons keep their labels; at narrow widths the figures give way, Files first, then Clones.

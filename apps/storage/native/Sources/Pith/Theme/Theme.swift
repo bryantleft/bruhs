@@ -347,20 +347,66 @@ extension View {
     }
 }
 
-/// App icons by executable path. `.app` bundles get their own icon; anything else gets the
-/// generic executable icon, so command-line tools and daemons still have a consistent mark.
+/// The app's icons, every one drawn by macOS: Pith shows icons of real things on this Mac and bundles none of Apple's
+/// art (native/README.md).
+enum Icons {
+    /// This Mac's known places, found once.
+    static let places = KnownPlaces.current()
+    /// One store, so every view and the disk map share each drawing.
+    static let store = IconStore(renderer: SystemIconRenderer(places: places, symbolColor: BruhsNSColor.textSecondary))
+
+    /// Makes the store off the main thread before the first icon needs it, since finding the places asks
+    /// LaunchServices for a few apps.
+    static func prepare() {
+        Task.detached(priority: .utility) { _ = store }
+    }
+}
+
+/// App icons by executable path. `.app` bundles get their own icon, the icon store's `item` key for the bundle;
+/// anything else gets the generic executable icon, so command-line tools and daemons still have a consistent mark.
+/// Activity shows NSWorkspace's image as it is: it draws itself in each row's appearance, at once.
 @MainActor final class AppIconCache {
     static let shared = AppIconCache()
-    private var icons: [String: NSImage] = [:]
+    private var icons: [IconKey: NSImage] = [:]
     private lazy var executable = NSWorkspace.shared.icon(for: .unixExecutable)
 
     func icon(for path: String) -> NSImage {
-        let key = SystemSampler.bundlePath(path) ?? (path.hasSuffix(".app") ? path : "")
-        guard !key.isEmpty else { return executable }
+        guard let bundle = SystemSampler.bundlePath(path) ?? (path.hasSuffix(".app") ? path : nil) else { return executable }
+        let key = IconKey.item(bundle)
         if let cached = icons[key] { return cached }
-        let icon = NSWorkspace.shared.icon(forFile: key)
+        let icon = SystemIconRenderer.image(for: key) ?? executable
         icons[key] = icon
         return icon
+    }
+}
+
+/// A map item's or place's icon as macOS draws it, which the icon store renders for this view's appearance and
+/// display: switching between light and dark draws it again. It's decorative, since the name beside it says what it is.
+struct SystemIconView: View {
+    let key: IconKey
+    var size: CGFloat = 16
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
+    /// The last icon shown. It stays while the same icon draws for another appearance, so it doesn't blink.
+    @State private var shown: (key: IconKey, icon: RenderedIcon)?
+
+    private var request: IconRequest {
+        IconRequest(key, size: IconSize(points: size, scale: displayScale), appearance: colorScheme == .dark ? .dark : .light)
+    }
+
+    var body: some View {
+        let request = request
+        let icon = Icons.store.cachedIcon(for: request) ?? shown.flatMap { $0.key == key ? $0.icon : nil }
+        ZStack {
+            if let icon {
+                Image(decorative: icon.image, scale: CGFloat(icon.size.scale)).resizable().interpolation(.high)
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+        .task(id: request) {
+            if let icon = await Icons.store.icon(for: request) { shown = (request.key, icon) }
+        }
     }
 }
 
