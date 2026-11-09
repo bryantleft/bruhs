@@ -71,10 +71,10 @@ const RIM = 0.35;
 
 /**
  * Grid spacing for a face radius: about 15 dots per radius on a large face,
- * down to 6 on a small one so each dot stays big enough to see.
+ * down to 9 on a small one (fewer turns the outline into a hexagon).
  */
 export function pitchFor(r: number): number {
-  return r / Math.max(6, Math.min(15, r / 10));
+  return r / Math.max(9, Math.min(15, r / 10));
 }
 
 /** Brightness (0 to 1) of the sphere at a point in face radii, or `null` outside it. */
