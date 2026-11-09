@@ -225,6 +225,8 @@ export function stopReasonText(reason: StopReason): string {
       return 'your bag is full';
     case 'missing':
       return `out of ${pluralName(keyName(reason.item))}`;
+    case 'enough':
+      return `you have enough for ${getQuest(reason.quest)?.name ?? 'your quest'}`;
     case 'level':
       return `your ${reason.skill} level is too low`;
   }

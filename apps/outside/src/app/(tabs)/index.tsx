@@ -1,13 +1,15 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { type ComponentRef, useEffect, useRef, useState } from 'react';
+import { type ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ActivityList } from '../../components/ActivityList';
 import { ActivitySheet } from '../../components/ActivitySheet';
+import { useReducedMotion } from '../../components/MotionProvider';
 import { PageTitle, useTabStat } from '../../components/PageTitle';
+import { PlaceCard, PlaceMap } from '../../components/PlaceMap';
 import { Scene } from '../../components/Scene';
 import { StepSyncNotice } from '../../components/StepSyncNotice';
 import { Button, Screen } from '../../components/ui';
-import { getActivity, getItem, getLocation, START_LOCATION } from '../../game/content';
+import { getActivity, getItem, getLocation, type Place, START_LOCATION } from '../../game/content';
 import { useGame } from '../../game/GameProvider';
 import {
   atBank,
@@ -15,6 +17,7 @@ import {
   type NextStep,
   nearestBank,
   nextStep,
+  questShortfall,
   readyMissions,
   route,
   runsLeft,
@@ -27,8 +30,9 @@ import { formatPercent, keyItem, keyName, slotsUsed, statLabel, totalsFor } from
 import { stopReasonText } from '../../game/session';
 import { useScreenFocus } from '../../navigation/useScreenFocus';
 import { SKILL_ART } from '../../pixel/art';
-import { Bar, Panel, Tag } from '../../pixel/chrome';
+import { Bar, Panel, Segments, Tag } from '../../pixel/chrome';
 import { Sprite } from '../../pixel/Sprite';
+import { MAP_HEIGHT, MAP_WIDTH, tileCenter } from '../../pixel/world';
 import { color, font, shadow, space } from '../../theme/theme';
 
 function BagStrip(): React.JSX.Element {
@@ -61,7 +65,10 @@ function BagStrip(): React.JSX.Element {
   );
 }
 
-function StatusPanel({ onDetails }: Readonly<{ onDetails: () => void }>): React.JSX.Element {
+function StatusPanel({
+  onDetails,
+  onMap,
+}: Readonly<{ onDetails: () => void; onMap: () => void }>): React.JSX.Element {
   const { game, act } = useGame();
   if (game.travel) {
     const { travel } = game;
@@ -157,14 +164,16 @@ function StatusPanel({ onDetails }: Readonly<{ onDetails: () => void }>): React.
           ) : null}
         </>
       ) : stopped ? (
-        <Text style={[styles.detail, { color: color.danger }]}>
+        <Text
+          style={[styles.detail, { color: game.stopped?.kind === 'enough' ? color.success : color.danger }]}
+        >
           stopped {stopped.verb} {stopped.name}: {game.stopped ? stopReasonText(game.stopped) : null}.
         </Text>
       ) : null}
       {full ? null : next ? (
         <NextStepButton step={next} />
       ) : (
-        <Button label="find work on the map" icon="map" onPress={() => router.navigate('/map')} />
+        <Button label="find work on the map" icon="map" onPress={onMap} />
       )}
       <Text style={styles.detail}>
         steps you walk wait in your pouch until your bruh has something to do.
@@ -181,6 +190,11 @@ function NextStepButton({ step }: Readonly<{ step: NextStep }>): React.JSX.Eleme
   let icon: 'trail' | 'check' | 'plus' | undefined;
   let onPress: () => void;
   let detail: string | null = why;
+  // Work for a quest stops once the quest has enough, so the estimate counts only what it needs.
+  const goal =
+    'activity' in step && step.activity && 'quest' in step && step.quest
+      ? questShortfall(game, step.quest.id, step.activity.output.item)
+      : Number.POSITIVE_INFINITY;
   switch (step.kind) {
     case 'hand-in':
       label = `hand in ${step.quest.name}`;
@@ -196,15 +210,19 @@ function NextStepButton({ step }: Readonly<{ step: NextStep }>): React.JSX.Eleme
       break;
     case 'start': {
       label = `start ${step.activity.verb} ${step.activity.name}`;
-      // Starting spends the whole pouch, so say how far it goes.
+      // Starting spends the pouch until the work runs out or a quest has enough, so say how far it goes.
       const each = stepsPerAction(game, step.activity);
-      const runs = Math.min(Math.floor(pouch / each), runsLeft(game, step.activity));
+      const runs = Math.min(Math.floor(pouch / each), runsLeft(game, step.activity), goal);
+      const actions = `${runs.toLocaleString()} ${runs === 1 ? 'action' : 'actions'}`;
       const cost =
-        pouch > 0
-          ? `uses your waiting steps: about ${runs.toLocaleString()} ${runs === 1 ? 'action' : 'actions'}`
-          : null;
+        pouch <= 0
+          ? null
+          : runs === goal && runs * each < pouch
+            ? `about ${actions}; the rest of your steps wait in your pouch`
+            : `uses your waiting steps: about ${actions}`;
       detail = [why, cost].filter(Boolean).join(' · ') || null;
-      onPress = () => act({ type: 'start', activity: step.activity.id });
+      onPress = () =>
+        act({ type: 'start', activity: step.activity.id, ...(step.quest ? { quest: step.quest.id } : {}) });
       break;
     }
     case 'travel': {
@@ -216,16 +234,29 @@ function NextStepButton({ step }: Readonly<{ step: NextStep }>): React.JSX.Eleme
       const road = path ? travelCost(game, path.distance) : 0;
       const rest = Math.max(0, pouch - road);
       const runs = step.activity
-        ? Math.min(Math.floor(rest / stepsPerAction(game, step.activity)), runsLeft(game, step.activity))
+        ? Math.min(
+            Math.floor(rest / stepsPerAction(game, step.activity)),
+            runsLeft(game, step.activity),
+            goal,
+          )
         : 0;
+      const actions = `${runs.toLocaleString()} ${runs === 1 ? 'action' : 'actions'}`;
+      const capped = step.activity && runs === goal && runs * stepsPerAction(game, step.activity) < rest;
       const cost = `${road.toLocaleString()} steps on the road${
         step.activity && runs > 0
-          ? `, then about ${runs.toLocaleString()} ${runs === 1 ? 'action' : 'actions'} with the rest`
+          ? capped
+            ? `, then about ${actions}; the rest waits in your pouch`
+            : `, then about ${actions} with the rest`
           : ''
       }`;
       detail = [why, cost].filter(Boolean).join(' · ');
       onPress = () =>
-        act({ type: 'travel', to: step.place.id, ...(step.activity ? { next: step.activity.id } : {}) });
+        act({
+          type: 'travel',
+          to: step.place.id,
+          ...(step.activity ? { next: step.activity.id } : {}),
+          ...(step.activity && step.quest ? { quest: step.quest.id } : {}),
+        });
       break;
     }
   }
@@ -237,16 +268,50 @@ function NextStepButton({ step }: Readonly<{ step: NextStep }>): React.JSX.Eleme
   );
 }
 
+const VIEWS = ['here', 'map'] as const;
+type WorldView = (typeof VIEWS)[number];
+
 export default function WorldScreen(): React.JSX.Element {
-  const { game, today, act, tracking, syncHealth } = useGame();
+  const { game, tracking, syncHealth } = useGame();
   const screen = useScreenFocus({ returnToTab: true });
   const steps = useTabStat('steps');
   const [details, setDetails] = useState(false);
+  // The world tab has two views: here (your bruh and what it's doing) and the map (where to go next).
+  const [view, setView] = useState<WorldView>('here');
+  const [selected, setSelected] = useState(game.travel?.to ?? game.location);
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  const reduced = useReducedMotion();
+  const mapFrame = useRef<Readonly<{ y: number; width: number }> | null>(null);
+  const viewport = useRef({ offset: 0, height: 0 });
+  // The place card changes height with the place, which resizes the scroll area after a tap.
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [reveal, setReveal] = useState(0);
+  const show = (next: WorldView): void => {
+    if (next === 'map') setSelected(game.travel?.to ?? game.location);
+    setView(next);
+    scroll.current?.scrollTo({ y: 0, animated: false });
+    viewport.current.offset = 0;
+    if (next === 'map') setReveal((count) => count + 1);
+  };
+  const select = (id: string): void => {
+    setSelected(id);
+    setReveal((count) => count + 1);
+  };
+  // Keep the chosen place, its marker above and its label below, inside the scroll area, so a
+  // trip's far end or a tap near the bottom edge isn't left under the place card.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs per selection, map open and card resize.
+  useEffect(() => {
+    const frame = mapFrame.current;
+    const { offset, height } = viewport.current;
+    if (!reveal || view !== 'map' || !frame || !height) return;
+    const y = frame.y + (tileCenter(selected).y / MAP_HEIGHT) * ((frame.width * MAP_HEIGHT) / MAP_WIDTH);
+    const top = y - 48;
+    const bottom = y + 64;
+    const to = bottom > offset + height ? bottom - height : top < offset ? Math.max(0, top) : null;
+    if (to !== null) scroll.current?.scrollTo({ y: to, animated: !reduced });
+  }, [reveal, viewportHeight]);
   const place = getLocation(game.location) ?? getLocation(START_LOCATION);
   const activity = game.task ? getActivity(game.task.id) : undefined;
-  const ready = readyMissions(game, today).length;
-  // While working, a quest ready to hand in right here still gets a button (idle shows it anyway).
-  const handIn = game.task ? nextStep({ ...game, task: null }) : null;
   if (!place) return <Screen rootRef={screen}>{null}</Screen>;
   const traveling = !!game.travel;
   const sceneLabel = traveling
@@ -255,11 +320,71 @@ export default function WorldScreen(): React.JSX.Element {
       ? `Your bruh ${activity.verb} at ${place.name}`
       : `Your bruh standing in ${place.name}`;
   return (
-    <Screen rootRef={screen} onRefresh={syncHealth} refreshing={tracking.status === 'syncing'}>
+    <Screen
+      rootRef={screen}
+      scrollRef={scroll}
+      onRefresh={syncHealth}
+      refreshing={tracking.status === 'syncing'}
+      footer={view === 'map' ? <PlaceCard selected={selected} onTravel={() => show('here')} /> : undefined}
+      onViewport={(height) => {
+        viewport.current.height = height;
+        setViewportHeight(height);
+      }}
+      onScroll={(event) => {
+        viewport.current.offset = event.nativeEvent.contentOffset.y;
+      }}
+    >
       <View style={styles.header}>
         <PageTitle title={traveling ? 'on the road' : place.name} stat={steps} />
-        <Text style={styles.blurb}>{traveling ? 'step by step, the fruitlands go by.' : place.blurb}</Text>
+        {view === 'here' ? (
+          <Text style={styles.blurb}>{traveling ? 'step by step, the fruitlands go by.' : place.blurb}</Text>
+        ) : null}
       </View>
+      <Segments value={view} options={VIEWS} onChange={show} />
+      {view === 'map' ? (
+        <PlaceMap
+          selected={selected}
+          onSelect={select}
+          onMapLayout={(frame) => {
+            const first = !mapFrame.current;
+            mapFrame.current = frame;
+            if (first) setReveal((count) => count + 1);
+          }}
+        />
+      ) : (
+        <Here
+          place={place}
+          details={details}
+          setDetails={setDetails}
+          onMap={() => show('map')}
+          sceneLabel={sceneLabel}
+        />
+      )}
+    </Screen>
+  );
+}
+
+function Here({
+  place,
+  details,
+  setDetails,
+  onMap,
+  sceneLabel,
+}: Readonly<{
+  place: Place;
+  details: boolean;
+  setDetails: (open: boolean) => void;
+  onMap: () => void;
+  sceneLabel: string;
+}>): React.JSX.Element {
+  const { game, today, act } = useGame();
+  const activity = game.task ? getActivity(game.task.id) : undefined;
+  const ready = readyMissions(game, today).length;
+  // While working, a quest ready to hand in right here still gets a button (idle shows it anyway).
+  const handIn = game.task ? nextStep({ ...game, task: null }) : null;
+  const traveling = !!game.travel;
+  return (
+    <>
       <Scene
         biome={traveling ? 'forest' : place.biome}
         skin={game.equipped}
@@ -269,7 +394,7 @@ export default function WorldScreen(): React.JSX.Element {
         label={sceneLabel}
       />
       <StepSyncNotice />
-      <StatusPanel onDetails={() => setDetails(true)} />
+      <StatusPanel onDetails={() => setDetails(true)} onMap={onMap} />
       <BagStrip />
       {handIn?.kind === 'hand-in' ? (
         <Button
@@ -299,7 +424,7 @@ export default function WorldScreen(): React.JSX.Element {
       {details && activity ? (
         <ActivitySheet activity={activity} canStart={false} onClose={() => setDetails(false)} />
       ) : null}
-    </Screen>
+    </>
   );
 }
 

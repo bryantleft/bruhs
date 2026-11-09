@@ -1,4 +1,5 @@
 import {
+  ACTIVITIES,
   type Activity,
   ADVENTURER_CHANCE,
   BAG_UPGRADE_SLOTS,
@@ -109,14 +110,19 @@ export type Travel = Readonly<{
   cost: number;
   progress: number;
   next: string | null;
+  // The started quest the queued activity works for; it stops once the quest has enough.
+  quest?: string;
 }>;
-export type Task = Readonly<{ id: string; progress: number }>;
-// Why the current task stopped: the bag filled, an input ran out, or the skill level is too low
-// (only reachable from an edited save).
+// `quest` is set when the next-step button started the work for a quest: the bruh stops once
+// that quest has enough, so the rest of the pouch waits for the next step.
+export type Task = Readonly<{ id: string; progress: number; quest?: string }>;
+// Why the current task stopped: the bag filled, an input ran out, the quest it worked for has
+// enough, or the skill level is too low (only reachable from an edited save).
 export type StopReason = Readonly<
   { activity: string } & (
     | { kind: 'bag-full' }
     | { kind: 'missing'; item: string }
+    | { kind: 'enough'; quest: string }
     | { kind: 'level'; skill: SkillId }
   )
 >;
@@ -188,9 +194,9 @@ export type GameAction =
   | Readonly<{ type: 'upgrade-bag' }>
   | Readonly<{ type: 'goal'; date: string; goal: Goal }>
   | Readonly<{ type: 'equip'; skin: SkinId }>
-  | Readonly<{ type: 'start'; activity: string }>
+  | Readonly<{ type: 'start'; activity: string; quest?: string }>
   | Readonly<{ type: 'stop' }>
-  | Readonly<{ type: 'travel'; to: string; next?: string }>
+  | Readonly<{ type: 'travel'; to: string; next?: string; quest?: string }>
   | Readonly<{ type: 'cancel-travel' }>
   | Readonly<{ type: 'wear'; item: string; slot?: GearSlot }>
   | Readonly<{ type: 'unwear'; slot: GearSlot }>
@@ -380,6 +386,38 @@ export function burnChance(game: Pick<Game, 'xp'>, activity: Activity): number {
   if (!activity.burn) return 0;
   const above = skillLevel(game, activity.skill) - activity.level;
   return Math.max(0, activity.burn.chance - above * 0.02);
+}
+
+// How many more of `item` a started quest needs: the delivery itself, or what recipes turn into
+// it, up to two steps back (ore to bar to gear, raw fish to cooked). Bank and bag both count.
+// Inputs to a recipe that burns carry a 25% margin over the expected burns, so one trip to the
+// water is nearly always enough.
+export function questShortfall(
+  game: Pick<Game, 'quests' | 'inventory' | 'bank' | 'xp'>,
+  questId: string,
+  item: string,
+): number {
+  const quest = getQuest(questId);
+  if (!quest || game.quests[quest.id] !== 'started') return 0;
+  const owned = (id: string): number => countOf(game.inventory, id) + countOf(game.bank, id);
+  const need = (target: string, short: number, depth: number): number => {
+    if (short <= 0) return 0;
+    if (target === item) return short;
+    if (depth >= 2) return 0;
+    const recipe = ACTIVITIES.filter((entry) => entry.output.item === target && entry.inputs?.length).sort(
+      (a, b) => a.level - b.level,
+    )[0];
+    if (!recipe?.inputs) return 0;
+    const runs = Math.ceil(short / recipe.output.qty);
+    const margin = recipe.burn ? 1.25 / (1 - burnChance(game, recipe)) : 1;
+    return Math.max(
+      0,
+      ...recipe.inputs.map((input) =>
+        need(input.item, Math.ceil(runs * input.qty * margin) - owned(input.item), depth + 1),
+      ),
+    );
+  };
+  return Math.max(0, ...quest.deliver.map((stack) => need(stack.item, stack.qty - owned(stack.item), 0)));
 }
 
 // Chance of each quality tier for a crafted item, normal first.
@@ -691,16 +729,23 @@ export function advance(game: Game): Game {
       if (work.travel.progress < work.travel.cost) break;
       work.location = work.travel.to;
       const next = work.travel.next ? getActivity(work.travel.next) : undefined;
+      const quest = work.travel.quest;
       work.travel = null;
       work.task =
         next && placeOffers(work.location, next.id) && !activityBlocker(freeze(work), next)
-          ? { id: next.id, progress: 0 }
+          ? { id: next.id, progress: 0, ...(quest ? { quest } : {}) }
           : null;
       continue;
     }
     if (!work.task) break;
     const activity = getActivity(work.task.id);
     if (!activity) {
+      work.task = null;
+      break;
+    }
+    const quest = work.task.quest;
+    if (quest && questShortfall(work, quest, activity.output.item) <= 0) {
+      work.stopped = { activity: activity.id, kind: 'enough', quest };
       work.task = null;
       break;
     }
@@ -719,15 +764,21 @@ export function advance(game: Game): Game {
     if (pouch < need) {
       work.spent += pouch;
       work.worked += pouch;
-      work.task = { id: work.task.id, progress: work.task.progress + pouch };
+      work.task = { ...work.task, progress: work.task.progress + pouch };
       pouch = 0;
       break;
     }
     pouch -= need;
     work.spent += need;
     work.worked += need;
-    work.task = { id: work.task.id, progress: 0 };
+    work.task = { ...work.task, progress: 0 };
     completeAction(work, dice, activity);
+    // Checked after each action too, so the stop shows in this report even if the pouch ran out.
+    if (quest && questShortfall(work, quest, activity.output.item) <= 0) {
+      work.stopped = { activity: activity.id, kind: 'enough', quest };
+      work.task = null;
+      break;
+    }
   }
   work.xp = { ...work.xp, agility: work.xp.agility + agilityXp(game, work) };
   work.seed = dice.seed;
@@ -850,8 +901,13 @@ function applyRules(game: Game, action: GameAction): RuleResult {
       if (!placeOffers(game.location, activity.id)) return refuse({ kind: 'not-here', place: null });
       const requirement = activityRequirement(game, activity);
       if (requirement) return refuse({ kind: 'requires', requirement });
-      if (game.task?.id === activity.id) return NO_CHANGE;
-      return accept({ ...game, task: { id: activity.id, progress: 0 }, stopped: null });
+      const quest = action.quest && getQuest(action.quest) ? action.quest : undefined;
+      if (game.task?.id === activity.id && game.task.quest === quest) return NO_CHANGE;
+      return accept({
+        ...game,
+        task: { id: activity.id, progress: 0, ...(quest ? { quest } : {}) },
+        stopped: null,
+      });
     }
     case 'stop':
       return game.task || game.stopped ? accept({ ...game, task: null, stopped: null }) : NO_CHANGE;
@@ -865,6 +921,7 @@ function applyRules(game: Game, action: GameAction): RuleResult {
       const path = route(game.location, place.id);
       if (!path) return INVALID;
       const next = action.next && placeOffers(place.id, action.next) ? action.next : null;
+      const quest = next && action.quest && getQuest(action.quest) ? action.quest : undefined;
       return accept({
         ...game,
         task: null,
@@ -875,6 +932,7 @@ function applyRules(game: Game, action: GameAction): RuleResult {
           cost: travelCost(game, path.distance),
           progress: 0,
           next,
+          ...(quest ? { quest } : {}),
         },
       });
     }

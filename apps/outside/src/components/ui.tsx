@@ -219,6 +219,7 @@ export function Screen({
   automaticallyAdjustKeyboardInsets,
   onRefresh,
   refreshing = false,
+  onViewport,
 }: PropsWithChildren<
   Readonly<{
     style?: ViewStyle;
@@ -235,6 +236,8 @@ export function Screen({
     // Pull down to refresh, on phones. Web has no pull gesture, so it gets nothing.
     onRefresh?: () => void;
     refreshing?: boolean;
+    // The scroll area's visible height, for screens that keep something in view.
+    onViewport?: (height: number) => void;
   }>
 >): React.JSX.Element {
   const focused = useIsFocused();
@@ -298,7 +301,10 @@ export function Screen({
           keyboardShouldPersistTaps={keyboardShouldPersistTaps}
           automaticallyAdjustKeyboardInsets={automaticallyAdjustKeyboardInsets}
           scrollEventThrottle={scrollEventThrottle}
-          onLayout={() => keepFocusVisibleOnFocus(scroll.current?.getNativeScrollRef())}
+          onLayout={(event) => {
+            keepFocusVisibleOnFocus(scroll.current?.getNativeScrollRef());
+            onViewport?.(event.nativeEvent.layout.height);
+          }}
           onFocus={
             Platform.OS === 'web'
               ? () => keepFocusVisibleOnFocus(scroll.current?.getNativeScrollRef())

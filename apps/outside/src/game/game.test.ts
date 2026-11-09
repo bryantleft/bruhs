@@ -39,6 +39,7 @@ import {
   periodDaysLeft,
   periodRange,
   playGame,
+  questShortfall,
   questsNeeding,
   readyMissions,
   route,
@@ -383,6 +384,36 @@ test('quests are handed in where the giver lives', () => {
   });
   assert.equal(shown.quests['fashion-show'], 'done');
   assert.equal(shown.inventory['wicker-pack'], 1);
+});
+
+test('work started for a quest stops once the quest has enough, and keeps the rest of the pouch', () => {
+  const quest = 'hungry-innkeeper';
+  const started = updateGame(at('bruhbridge'), { type: 'quest-start', quest });
+  // 5 cooked minnows; cooking burns 35% at level 1, so 5 × 1.25 / 0.65 is 9.6: catch 10 raw.
+  assert.equal(questShortfall(started, quest, 'raw-minnow'), 10);
+  assert.equal(questShortfall(started, quest, 'minnow'), 5);
+  assert.equal(questShortfall({ ...started, bank: { minnow: 5 } }, quest, 'raw-minnow'), 0);
+  assert.equal(questShortfall(started, 'rock-collector', 'copper-ore'), 0);
+
+  const trip = { type: 'travel', to: 'longan-lake', next: 'fish-minnow' } as const;
+  const fished = walk(updateGame(started, { ...trip, quest }), 6_000);
+  assert.equal(fished.task, null);
+  assert.deepEqual(fished.stopped, { activity: 'fish-minnow', kind: 'enough', quest });
+  assert.ok((fished.inventory['raw-minnow'] ?? 0) >= 10 && (fished.inventory['raw-minnow'] ?? 0) <= 11);
+  assert.ok(unspentSteps(fished) > 4_000);
+  // A save keeps the goal on the trip and the task, and the reason it stopped.
+  const queued = updateGame(started, { ...trip, quest });
+  assert.equal(queued.travel?.quest, quest);
+  for (const game of [queued, walk(queued, 1_000), fished])
+    assert.deepEqual(decodeGame(JSON.stringify(game), TODAY), { ok: true, game, migrated: false });
+
+  // Work started by hand has no goal and keeps going.
+  const steady = walk(updateGame(started, trip), 6_000);
+  assert.ok((steady.inventory['raw-minnow'] ?? 0) > 50);
+  assert.equal(steady.stopped, null);
+  // Starting here for a quest that already has enough stops at once, spending nothing.
+  const stocked = updateGame({ ...fished, stopped: null }, { type: 'start', activity: 'fish-minnow', quest });
+  assert.equal(walk(stocked, 500).spent, stocked.spent);
 });
 
 test('mission periods start on the day, the monday and the first of the month', () => {

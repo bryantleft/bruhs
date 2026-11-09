@@ -1101,7 +1101,7 @@ const FORGE_TIERS: Readonly<
   sunsteel: { level: 85, steps: 360, xp: 520, log: 'starwood-logs' },
 };
 
-export const ACTIVITIES: readonly Activity[] = [
+const BASE_ACTIVITIES: readonly Activity[] = [
   gather('chop-pandan', 'pandan tree', 'chopping', 'woodcutting', 'axe', TIERS[0], 'pandan-logs'),
   gather('chop-longan', 'longan tree', 'chopping', 'woodcutting', 'axe', TIERS[1], 'longan-logs'),
   gather('chop-mahogany', 'mahogany tree', 'chopping', 'woodcutting', 'axe', TIERS[2], 'mahogany-logs'),
@@ -1282,6 +1282,19 @@ export const ACTIVITIES: readonly Activity[] = [
     ];
   }),
 ];
+
+// Higher-level work pays more xp per action: twice as much every 25 levels above 1, so about
+// ×3.9 at level 50 and ×10 at level 85. RuneScape's curve doubles the xp per level every 7
+// levels, and without this one skill took about 25 days to reach 50 and 140 days to reach 70 at
+// 8,000 steps a day. With it, about 2 weeks to 50, 6 weeks to 70 and 3 months to 85.
+export function tierXpScale(level: number): number {
+  return 2 ** ((level - 1) / 25);
+}
+
+export const ACTIVITIES: readonly Activity[] = BASE_ACTIVITIES.map((activity) => ({
+  ...activity,
+  xp: Math.round(activity.xp * tierXpScale(activity.level)),
+}));
 const ACTIVITY_MAP = new Map(ACTIVITIES.map((activity) => [activity.id, activity]));
 export function getActivity(id: string): Activity | undefined {
   return ACTIVITY_MAP.get(id);

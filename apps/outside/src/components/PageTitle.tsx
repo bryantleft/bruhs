@@ -16,7 +16,7 @@ export function compact(value: number): string {
 
 type Stat = Readonly<{ value: number; spoken: string; art?: Art; label?: string; tint?: string }>;
 
-// The one figure each tab is about, beside its title: waiting steps on the world and map,
+// The one figure each tab is about, beside its title: waiting steps on the world tab,
 // coins in the bag, total level on skills, quest points on quests.
 export function useTabStat(kind: 'steps' | 'coins' | 'level' | 'quest-points'): Stat {
   const { game } = useGame();

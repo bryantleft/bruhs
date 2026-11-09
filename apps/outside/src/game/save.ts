@@ -138,6 +138,8 @@ function decodeStopped(value: unknown): StopReason | null {
   if (!isRecord(value) || typeof value.activity !== 'string' || !getActivity(value.activity)) return null;
   const activity = value.activity;
   if (value.kind === 'bag-full') return { activity, kind: 'bag-full' };
+  if (value.kind === 'enough' && typeof value.quest === 'string' && getQuest(value.quest))
+    return { activity, kind: 'enough', quest: value.quest };
   if (value.kind === 'missing' && typeof value.item === 'string' && getItem(value.item))
     return { activity, kind: 'missing', item: value.item };
   const skill = SKILL_IDS.find((id) => id === value.skill);
@@ -147,6 +149,11 @@ function decodeStopped(value: unknown): StopReason | null {
   const leveled = SKILL_IDS.find((id) => value.missing === `${id}-level`);
   if (leveled) return { activity, kind: 'level', skill: leveled };
   return getItem(value.missing) ? { activity, kind: 'missing', item: value.missing } : null;
+}
+
+// A quest id a task or trip works for; unknown ids (from a newer build) drop the goal.
+function questOf(value: unknown): string | undefined {
+  return typeof value === 'string' && getQuest(value) ? value : undefined;
 }
 
 const isStatKey = (key: string): key is StatKey => STAT_KEYS.some((stat) => stat === key);
@@ -200,7 +207,10 @@ function decodeSave(value: Record<string, unknown>, days: Day[]): Game | Invalid
   if (value.task !== null && value.task !== undefined) {
     if (!isRecord(value.task) || typeof value.task.id !== 'string' || !isCount(value.task.progress))
       return invalid('task');
-    task = getActivity(value.task.id) ? { id: value.task.id, progress: value.task.progress } : null;
+    const quest = questOf(value.task.quest);
+    task = getActivity(value.task.id)
+      ? { id: value.task.id, progress: value.task.progress, ...(quest ? { quest } : {}) }
+      : null;
   }
   let travel: Travel | null = null;
   if (value.travel !== null && value.travel !== undefined) {
@@ -217,7 +227,15 @@ function decodeSave(value: Record<string, unknown>, days: Day[]): Game | Invalid
       !(t.next === null || (typeof t.next === 'string' && getActivity(t.next)))
     )
       return invalid('travel');
-    travel = { from: t.from, to: t.to, cost: t.cost, progress: t.progress, next: t.next };
+    const quest = t.next ? questOf(t.quest) : undefined;
+    travel = {
+      from: t.from,
+      to: t.to,
+      cost: t.cost,
+      progress: t.progress,
+      next: t.next,
+      ...(quest ? { quest } : {}),
+    };
   }
   const stopped = decodeStopped(value.stopped);
   const gear: Partial<Record<GearSlot, string>> = {};

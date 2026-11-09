@@ -25,7 +25,11 @@ function headline(report: Report): string {
   if (report.levels.length) return 'level up!';
   if (report.arrived && report.actions === 0) return 'you have arrived';
   if (report.stopped && report.actions === 0)
-    return report.stopped.kind === 'bag-full' ? 'your bag is full' : 'your bruh stopped';
+    return report.stopped.kind === 'bag-full'
+      ? 'your bag is full'
+      : report.stopped.kind === 'enough'
+        ? 'that’s enough'
+        : 'your bruh stopped';
   return report.walked ? 'while you walked…' : 'your bruh got to work';
 }
 
@@ -181,7 +185,12 @@ export function RewardOverlay(): React.JSX.Element | null {
                 </Text>
               ) : null}
               {stopped ? (
-                <Text style={[styles.note, { color: color.danger }]}>
+                <Text
+                  style={[
+                    styles.note,
+                    { color: reward.stopped?.kind === 'enough' ? color.success : color.danger },
+                  ]}
+                >
                   {reward.stopped?.kind === 'bag-full'
                     ? `stopped ${stopped.verb} ${stopped.name}: your bag is full. bank, sell or drop items, then start again.`
                     : `stopped ${stopped.verb} ${stopped.name}: ${reward.stopped ? stopReasonText(reward.stopped) : 'out of materials'}.`}{' '}

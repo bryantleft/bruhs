@@ -122,7 +122,7 @@ export function ridgeTile(from: string, to: string, phase = 0, height = 6): stri
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
-// The app's world map, pinned as the map tab draws a new save: the bruh stands in `home`,
+// The app's world map, pinned as the app’s map view draws a new save: the bruh stands in `home`,
 // shops are gold, places a new bruh can't reach yet are grey. Each pin carries `pin-<id>` so
 // the page can light it up from the place list.
 export function worldMapSvg(
