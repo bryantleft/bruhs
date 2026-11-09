@@ -10,6 +10,8 @@ Pith keeps the map between launches and catches up on what changed while it was 
 
 Choose Folder shows a folder on your startup disk at once, from the same map, and still scans a folder on another disk. The map shows what grew since the day before.
 
+Without Full Disk Access, macOS asks about some folders as Pith maps the disk, such as Documents and other apps' data. The map shows the rest meanwhile and adds each folder once you answer.
+
 ## 0.1.0
 
 The first public release. Pith shows CPU, memory and disk in the menu bar, every app's activity live and over the last ten minutes, and a map of what takes up space on your disk.
