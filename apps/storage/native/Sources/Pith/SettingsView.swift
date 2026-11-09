@@ -50,7 +50,6 @@ struct SettingsView: View {
             LaunchAtLoginToggle()
             Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
         }
-        // A build for this Mac only has no updater.
         if updates.isAvailable {
             Section {
                 Toggle("Check for updates automatically", isOn: Binding(get: { updates.checksAutomatically }, set: { updates.setChecksAutomatically($0) }))
@@ -64,11 +63,18 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        } else {
+            // A build made on this Mac has no updater, so the section says why rather than going missing.
+            Section("Updates") {
+                Text("This copy of Pith was built on this Mac, so it doesn’t update itself. This is version \(updates.version).")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         Section("Privacy") {
             Text(updates.isAvailable
-                 ? "Activity stays on this Mac. Pith goes online only to check for updates, when you allow it. Disk scans run only when you request them."
-                 : "Activity stays on this Mac, and Pith makes no network connections. Disk scans run only when you request them.")
+                 ? "Activity and the disk map stay on this Mac. Pith goes online only to check for updates, when you allow it."
+                 : "Activity and the disk map stay on this Mac, and Pith makes no network connections.")
                 .fixedSize(horizontal: false, vertical: true)
             Button("Full Disk Access…") { openDiskAccess() }
         }
