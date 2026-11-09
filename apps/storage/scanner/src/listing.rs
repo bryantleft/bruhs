@@ -14,7 +14,7 @@ pub enum Outcome {
     /// Opening or listing it failed with this errno.
     Unreadable(i32),
     /// Another file system is mounted here. Its used space counts when it shares the indexed disk, as the startup
-    /// disk's Preboot and VM volumes do.
+    /// disk's Preboot and VM volumes do; any other is never opened, so its listing has no inode.
     Volume { shares_disk: bool, used: u64, name: String },
     /// Nothing is at the path any more, or it isn't a folder now.
     Missing,
@@ -42,8 +42,19 @@ impl Listing {
 /// Lists the folder at `path`. It never follows a symlink at the path itself: an event can name a folder that a link
 /// has since replaced, and the index must not count what the link points at.
 pub fn list(path: &Path, cx: &Context) -> Listing {
+    list_with(path, cx, &mut || {})
+}
+
+/// Lists the folder at `path`, calling `opened` once opening it is over. Opening a folder macOS protects waits until
+/// the person answers macOS's question about Pith; reading what's in it never does.
+pub fn list_with(path: &Path, cx: &Context, opened: &mut dyn FnMut()) -> Listing {
+    if let Some(name) = volumes::left_unopened(path, cx.device, cx.container.as_deref()) {
+        opened();
+        return Listing { inode: 0, outcome: Outcome::Volume { shares_disk: false, used: 0, name } };
+    }
     let Ok(cpath) = CString::new(path.as_os_str().as_bytes()) else { return Listing::failed(libc::ENOENT) };
     let raw = unsafe { libc::open(cpath.as_ptr(), libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC) };
+    opened();
     if raw < 0 {
         return Listing::failed(errno());
     }

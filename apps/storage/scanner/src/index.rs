@@ -657,7 +657,10 @@ impl Index {
                 self.unreadable.remove(&id);
                 self.set_status(id, Status::Volume);
                 self.clear_contents(id);
-                self.folders[id as usize].inode = listing.inode;
+                // A volume left unopened keeps the inode its parent's listing gave it.
+                if listing.inode != 0 {
+                    self.folders[id as usize].inode = listing.inode;
+                }
             }
             Outcome::Listed(entries) => {
                 let folder = &self.folders[id as usize];
@@ -1360,9 +1363,10 @@ impl Index {
         all.into_iter().map(|(size, folder, file)| (folder, PathBuf::from(join(&self.path(folder), &file.name)), size)).collect()
     }
 
-    /// The volumes mounted inside the map, with the space each was found holding.
+    /// The volumes mounted inside the map that share its disk, with the space each was found holding. Only their space
+    /// counts, and only they may be read again: reading any other could make macOS ask the person about Pith.
     pub fn volume_folders(&self) -> Vec<(u32, PathBuf, u64)> {
-        self.volumes.iter().filter(|(&f, _)| self.is_live(f)).map(|(&f, v)| (f, PathBuf::from(self.path(f)), v.used)).collect()
+        self.volumes.iter().filter(|(&f, v)| v.shares_disk && self.is_live(f)).map(|(&f, v)| (f, PathBuf::from(self.path(f)), v.used)).collect()
     }
 
     /// The folders the index couldn't read, to try again once Full Disk Access may have been granted.

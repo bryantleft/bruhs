@@ -395,6 +395,8 @@ private struct LiveMapWaiting: View {
 
     private var detail: String? {
         switch live.state {
+        case .mapping where live.asking > 0:
+            return "macOS is asking whether Pith may read some folders. Pith maps the rest meanwhile, and adds those once you answer."
         case .mapping:
             if let reason = live.rebuildReason { return "\(reason) Pith maps the disk again, in about a minute, and keeps it current after." }
             return "Pith maps the disk once, in about a minute. After that the map keeps itself current as files change, with no scans."

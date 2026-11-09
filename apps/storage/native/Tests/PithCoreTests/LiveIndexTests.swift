@@ -13,10 +13,15 @@ final class LiveIndexTests: XCTestCase {
         }
         XCTAssertFalse(fresh.restored)
         XCTAssertTrue(fresh.locked)
-        guard case .status(let status) = try decode(#"{"type":"status","through":9,"pending":3,"changed":true,"checking":false,"historyDone":true}"#) else {
+        guard case .status(let status) = try decode(#"{"type":"status","through":9,"pending":3,"changed":true,"checking":false,"historyDone":true,"asking":2}"#) else {
             return XCTFail("not a status")
         }
-        XCTAssertEqual(status, LiveStatus(through: 9, pending: 3, changed: true, checking: false, historyDone: true))
+        XCTAssertEqual(status, LiveStatus(through: 9, pending: 3, changed: true, checking: false, historyDone: true, asking: 2))
+        guard case .walked(_, let folders, _, _, let asking) = try decode(#"{"type":"walked","ms":5,"folders":7,"files":3,"bytes":10,"asking":4}"#) else {
+            return XCTFail("not a walk's end")
+        }
+        XCTAssertEqual(folders, 7)
+        XCTAssertEqual(asking, 4)
         guard case .checked(let check) = try decode(#"{"type":"checked","folders":100,"corrected":2,"bytes":4096,"ms":900}"#) else {
             return XCTFail("not a check")
         }
@@ -28,6 +33,31 @@ final class LiveIndexTests: XCTestCase {
         XCTAssertEqual(reason, "The map has no folder at /x.")
         guard case .fatal = try decode(#"{"type":"fatal","reason":"no"}"#) else { return XCTFail("not fatal") }
         XCTAssertThrowsError(try decode(#"{"type":"surprise"}"#))
+    }
+
+    func testLinesAreSplitWhereverTheReadsFall() {
+        var lines = LineSplitter()
+        XCTAssertEqual(lines.feed(Data("ab".utf8)), [])
+        XCTAssertEqual(lines.feed(Data("c\nd\n\ne".utf8)), [Data("abc".utf8), Data("d".utf8), Data()])
+        XCTAssertEqual(lines.feed(Data("f".utf8)), [])
+        XCTAssertEqual(lines.feed(Data("\n".utf8)), [Data("ef".utf8)])
+        XCTAssertEqual(lines.rest(), Data())
+        XCTAssertEqual(lines.feed(Data("tail".utf8)), [])
+        XCTAssertEqual(lines.rest(), Data("tail".utf8))
+    }
+
+    /// Review of the whole disk's map on screen: a 3 MB line read 64 KB at a time was searched from its start with
+    /// every read, a quarter of a core while Disk refreshed every two seconds.
+    func testALongLineInManyReadsIsSearchedOnce() {
+        let line = Data(repeating: UInt8(ascii: "x"), count: 3_000_000) + Data([10])
+        var lines = LineSplitter()
+        let started = Date()
+        var found: [Data] = []
+        for offset in stride(from: 0, to: line.count, by: 65_536) {
+            found += lines.feed(line.subdata(in: offset..<min(offset + 65_536, line.count)))
+        }
+        XCTAssertEqual(found.map(\.count), [3_000_000])
+        XCTAssertLessThan(Date().timeIntervalSince(started), 0.1)
     }
 
     func testATreeIsCheckedLikeAScanResult() throws {

@@ -4,9 +4,10 @@ import Foundation
 /// What the scanner's `serve` command reports, one JSON line each (scanner/src/serve.rs).
 public enum LiveReport: Sendable {
     case opened(LiveOpened)
-    /// A walk's progress: folders listed, and the files and bytes found so far.
-    case progress(dirs: UInt64, files: UInt64, bytes: UInt64, errors: UInt64)
-    case walked(ms: UInt64, folders: UInt64, files: UInt64, bytes: UInt64)
+    /// A walk's progress: folders listed, the files and bytes found so far, and folders waiting on macOS.
+    case progress(dirs: UInt64, files: UInt64, bytes: UInt64, errors: UInt64, asking: Int)
+    /// The walk is over but for the folders waiting on macOS, which join the map once the person answers.
+    case walked(ms: UInt64, folders: UInt64, files: UInt64, bytes: UInt64, asking: Int)
     case status(LiveStatus)
     /// FSEvents finished replaying what changed while Pith wasn't watching.
     case historyDone
@@ -47,9 +48,13 @@ public struct LiveStatus: Sendable, Equatable {
     public let changed: Bool
     public let checking: Bool
     public let historyDone: Bool
+    /// Folders waiting for macOS to let Pith read them, as while it asks the person about iCloud Drive, or waiting
+    /// behind one that is.
+    public let asking: Int
 
-    public init(through: UInt64, pending: Int, changed: Bool, checking: Bool, historyDone: Bool) {
+    public init(through: UInt64, pending: Int, changed: Bool, checking: Bool, historyDone: Bool, asking: Int) {
         self.through = through; self.pending = pending; self.changed = changed; self.checking = checking; self.historyDone = historyDone
+        self.asking = asking
     }
 }
 
@@ -83,17 +88,17 @@ public enum LiveDecoder {
             return .opened(LiveOpened(restored: o.restored, through: o.through, savedAt: o.savedAt.map { Date(timeIntervalSince1970: TimeInterval($0)) },
                                       folders: o.folders, reason: o.reason, locked: o.locked ?? false))
         case "progress":
-            struct Progress: Decodable { let dirs: UInt64; let files: UInt64; let bytes: UInt64; let errors: UInt64 }
+            struct Progress: Decodable { let dirs: UInt64; let files: UInt64; let bytes: UInt64; let errors: UInt64; let asking: Int }
             let p = try decoder.decode(Progress.self, from: line)
-            return .progress(dirs: p.dirs, files: p.files, bytes: p.bytes, errors: p.errors)
+            return .progress(dirs: p.dirs, files: p.files, bytes: p.bytes, errors: p.errors, asking: p.asking)
         case "walked":
-            struct Walked: Decodable { let ms: UInt64; let folders: UInt64; let files: UInt64; let bytes: UInt64 }
+            struct Walked: Decodable { let ms: UInt64; let folders: UInt64; let files: UInt64; let bytes: UInt64; let asking: Int }
             let w = try decoder.decode(Walked.self, from: line)
-            return .walked(ms: w.ms, folders: w.folders, files: w.files, bytes: w.bytes)
+            return .walked(ms: w.ms, folders: w.folders, files: w.files, bytes: w.bytes, asking: w.asking)
         case "status":
-            struct Status: Decodable { let through: UInt64; let pending: Int; let changed: Bool; let checking: Bool; let historyDone: Bool }
+            struct Status: Decodable { let through: UInt64; let pending: Int; let changed: Bool; let checking: Bool; let historyDone: Bool; let asking: Int }
             let s = try decoder.decode(Status.self, from: line)
-            return .status(LiveStatus(through: s.through, pending: s.pending, changed: s.changed, checking: s.checking, historyDone: s.historyDone))
+            return .status(LiveStatus(through: s.through, pending: s.pending, changed: s.changed, checking: s.checking, historyDone: s.historyDone, asking: s.asking))
         case "historyDone":
             return .historyDone
         case "rebuild":
@@ -158,15 +163,11 @@ public final class LiveProcess: @unchecked Sendable {
         process.terminationHandler = { process in exited(process.terminationStatus) }
         try process.run()
         Thread.detachNewThread {
-            var pending = Data()
+            var lines = LineSplitter()
             while true {
                 let data = handle.availableData
                 if data.isEmpty { break }
-                pending.append(data)
-                while let end = pending.firstIndex(of: 10) {
-                    let line = Data(pending[pending.startIndex..<end])
-                    pending.removeSubrange(pending.startIndex...end)
-                    guard !line.isEmpty else { continue }
+                for line in lines.feed(data) where !line.isEmpty {
                     do { receive(try LiveDecoder.decode(line)) } catch {
                         receive(.failed(request: nil, reason: "Pith couldn’t read the map’s report: \(error.localizedDescription)"))
                     }

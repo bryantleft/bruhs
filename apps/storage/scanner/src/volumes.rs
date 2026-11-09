@@ -8,10 +8,11 @@
 //! firmlinked folder at its visible path and skips the copy under `/System/Volumes/Data`.
 
 use std::collections::HashMap;
-use std::ffi::{CStr, CString};
+use std::ffi::{CStr, CString, OsStr};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 
 use serde::Serialize;
 
@@ -56,6 +57,74 @@ pub fn mounted_from(path: &Path) -> Option<String> {
         return None;
     }
     Some(unsafe { CStr::from_ptr(info.f_mntfromname.as_ptr()) }.to_string_lossy().into_owned())
+}
+
+/// The name the map gives another volume mounted at `path`, which it shows without opening it, or none when the path
+/// may be opened: it isn't a mount point, or it's the mapped volume itself, or it's in the mapped disk's own APFS
+/// container, as the startup disk's Preboot is, whose used space the map counts. Opening any other volume's mount
+/// point can make macOS ask the person about Pith, for network and removable volumes, and the automount every Mac
+/// has at /System/Volumes/Data/home counts as a network volume.
+pub fn left_unopened(path: &Path, device: u64, container: Option<&str>) -> Option<String> {
+    let mount = mount_at(path)?;
+    if mount.device == device {
+        return None;
+    }
+    let theirs = container_of(&mount.from);
+    if theirs.is_some() && theirs == container {
+        return None;
+    }
+    Some(path.file_name().map_or_else(|| path.to_string_lossy().into_owned(), |name| name.to_string_lossy().into_owned()))
+}
+
+/// A file system as the mount table gives it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Mount {
+    /// The device its files report, as `st_dev` gives it.
+    pub device: u64,
+    /// Where it's mounted from, such as "/dev/disk3s2" or "map auto_home".
+    pub from: String,
+}
+
+/// The file system mounted at exactly `path`, from the mount table rather than from the path, which isn't touched.
+pub fn mount_at(path: &Path) -> Option<Mount> {
+    mount_table().iter().find(|(at, _)| at == path).map(|(_, mount)| mount.clone())
+}
+
+type MountTable = Arc<Vec<(PathBuf, Mount)>>;
+
+/// The mount table, read again whenever the number of file systems mounted changes. Counting them takes 0.44 µs on
+/// the development Mac, which every listing can afford, so a disk plugged in mid-walk is never opened.
+fn mount_table() -> MountTable {
+    static TABLE: RwLock<Option<(i32, MountTable)>> = RwLock::new(None);
+    let count = unsafe { libc::getfsstat(std::ptr::null_mut(), 0, libc::MNT_NOWAIT) };
+    if let Some((read, table)) = TABLE.read().unwrap().as_ref() {
+        if *read == count {
+            return table.clone();
+        }
+    }
+    let table = Arc::new(read_mount_table());
+    *TABLE.write().unwrap() = Some((count, table.clone()));
+    table
+}
+
+fn read_mount_table() -> Vec<(PathBuf, Mount)> {
+    let count = unsafe { libc::getfsstat(std::ptr::null_mut(), 0, libc::MNT_NOWAIT) };
+    // Room for a few more, in case some mount in between.
+    let mut all: Vec<libc::statfs> = vec![unsafe { std::mem::zeroed() }; count.max(0) as usize + 4];
+    let size = (all.len() * std::mem::size_of::<libc::statfs>()) as libc::c_int;
+    // MNT_NOWAIT answers from the kernel's table without asking any file system, a network one included.
+    let read = unsafe { libc::getfsstat(all.as_mut_ptr(), size, libc::MNT_NOWAIT) };
+    all.truncate(read.max(0) as usize);
+    all.iter()
+        .map(|fs| {
+            let at = PathBuf::from(OsStr::from_bytes(unsafe { CStr::from_ptr(fs.f_mntonname.as_ptr()) }.to_bytes()));
+            let from = unsafe { CStr::from_ptr(fs.f_mntfromname.as_ptr()) }.to_string_lossy().into_owned();
+            // fsid_t's first half is the device number its files report; libc keeps the field private.
+            let fsid: [i32; 2] = unsafe { std::mem::transmute(fs.f_fsid) };
+            // Darwin's dev_t is signed; sign-extended as listings do.
+            (at, Mount { device: i64::from(fsid[0]) as u64, from })
+        })
+        .collect()
 }
 
 /// A volume's own name and used space. `statfs(2)` can't give the space: APFS volumes in one container report
@@ -146,6 +215,34 @@ mod tests {
         assert!(volume < container / 4, "Preboot's {volume} bytes should be a fraction of the container's {container}");
         assert!(disk < container, "the system volume's own use, not the container's");
         assert_eq!(volume_info(preboot).name.as_deref(), Some("Preboot"));
+    }
+
+    #[test]
+    fn the_mount_table_matches_what_files_report() {
+        let data = Path::new("/System/Volumes/Data");
+        let Some(mount) = mount_at(data) else { return }; // Not a Mac with the startup disk's volume layout.
+        assert_eq!(mount.device, std::fs::metadata("/Users").unwrap().dev());
+        assert_eq!(mount_at(Path::new("/System/Volumes/Preboot")).map(|m| m.device), Some(std::fs::metadata("/System/Volumes/Preboot").unwrap().dev()));
+        assert!(mount_at(Path::new("/Users")).is_none(), "a firmlink isn't a mount point");
+    }
+
+    /// Review of a whole-disk walk without Full Disk Access: opening every Mac's automount asked the person about
+    /// "files on a network volume", and the walk waited on the answer.
+    #[test]
+    fn other_volumes_are_shown_without_being_opened() {
+        let root = Path::new("/");
+        let device = std::fs::metadata(root).unwrap().dev();
+        let container = mounted_from(root).as_deref().and_then(container_of).map(str::to_owned);
+        let left = |path: &str| left_unopened(Path::new(path), device, container.as_deref());
+        assert_eq!(left("/dev").as_deref(), Some("dev"));
+        if mount_at(Path::new("/System/Volumes/Data/home")).is_some() {
+            assert_eq!(left("/System/Volumes/Data/home").as_deref(), Some("home"));
+        }
+        // The startup disk's own volumes are opened for their used space, and plain folders as ever.
+        assert_eq!(left("/System/Volumes/Data"), None);
+        assert_eq!(left("/System/Volumes/Preboot"), None);
+        assert_eq!(left("/Users"), None);
+        assert_eq!(left("/"), None);
     }
 
     #[test]

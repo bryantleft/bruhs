@@ -330,6 +330,11 @@ impl Scanner {
     fn walk_dir(&self, path: &Path, name: String, cx: &Context) -> Option<DirNode> {
         let mut node = DirNode::new(name, path.to_string_lossy().into_owned());
         node.id = self.next_dir.fetch_add(1, Ordering::Relaxed);
+        if let Some(name) = volumes::left_unopened(path, cx.device, cx.container.as_deref()) {
+            node.status = DirStatus::Volume { shares_disk: false };
+            self.volumes.lock().unwrap().push(VolumeEntry { path: node.path.clone(), name, bytes: 0, shares_disk: false });
+            return Some(node);
+        }
         let folder = match open_dir(path, self.engine) {
             Ok(folder) => folder,
             Err(error) => {

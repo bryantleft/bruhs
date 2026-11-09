@@ -11,6 +11,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufRead, Write};
 use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
+use std::collections::HashSet;
 use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -18,12 +19,13 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde::Deserialize;
 
 use crate::index::{Index, Status, ROOT};
-use crate::scheduler::{Request, Scheduler};
+use crate::listing;
+use crate::scheduler::{CheckReport, Request, Scheduler};
 use crate::snapshot;
 use crate::system::{self, Purpose};
 use crate::volumes;
 use crate::walk::Context;
-use crate::workers::{Done, Job, Pool};
+use crate::workers::{Done, Job, Lister, Pool};
 
 /// How long a changed folder waits before it's listed. Over half the folders that changed during research on the
 /// development Mac were gone within seconds (839 of 1,530), so waiting skips temporary folders for free, and a few
@@ -98,6 +100,8 @@ enum Command {
 enum Msg {
     Line(String),
     Listed(Box<Done>),
+    /// Listings were caught waiting on macOS, or landed after waiting.
+    Stalled,
     Closed,
 }
 
@@ -134,6 +138,7 @@ pub fn run() -> i32 {
             match message {
                 Msg::Line(line) => server.command(&line),
                 Msg::Listed(done) => server.landed(*done),
+                Msg::Stalled => server.finish_waiting(),
                 Msg::Closed => closed = true,
             }
         };
@@ -184,7 +189,7 @@ struct Server {
     unrepaired: bool,
     last_progress: Instant,
     last_status: Instant,
-    reported: Option<(u64, usize, bool)>,
+    reported: Option<(u64, usize, bool, usize)>,
 }
 
 impl Server {
@@ -300,9 +305,15 @@ impl Server {
         let done: Arc<dyn Fn(Done) + Send + Sync> = Arc::new(move |done| {
             let _ = tx.send(Msg::Listed(Box::new(done)));
         });
+        let tx = self.tx.clone();
+        let stalled: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+            let _ = tx.send(Msg::Stalled);
+        });
+        let within = cx.clone();
+        let lister: Arc<Lister> = Arc::new(move |path: &Path, opened: &mut dyn FnMut()| listing::list_with(path, &within, opened));
         // As many listing threads as cores: the fastest walkers on macOS use about one per core.
         let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
-        self.pool = Some(Pool::new(threads, CHECK_THREADS, cx.clone(), done));
+        self.pool = Some(Pool::new(threads, CHECK_THREADS, lister, done, stalled));
         self.root = root.clone();
         self.volume = volume.clone().unwrap_or_default();
         let mut locked = false;
@@ -424,22 +435,47 @@ impl Server {
             self.run(request);
         }
         if let Some(report) = landed.checked {
-            if let Some(index) = &mut self.index {
-                // A check lists each folder once: copies listed before their holder's folder showed it gone count
-                // none until repaired.
-                index.repair();
-                index.compact();
-            }
-            let ms = self.check_started.take().map(|started| started.elapsed().as_millis() as u64).unwrap_or(0);
-            send(&serde_json::json!({ "type": "checked", "folders": report.folders, "corrected": report.corrected, "bytes": report.drift, "ms": ms }).to_string());
-            self.save_quietly();
+            self.checked(report);
         }
-        self.finish_walk();
+        self.finish_waiting();
     }
 
+    fn checked(&mut self, report: CheckReport) {
+        if let Some(index) = &mut self.index {
+            // A check lists each folder once: copies listed before their holder's folder showed it gone count none
+            // until repaired.
+            index.repair();
+            index.compact();
+        }
+        let ms = self.check_started.take().map(|started| started.elapsed().as_millis() as u64).unwrap_or(0);
+        send(&serde_json::json!({ "type": "checked", "folders": report.folders, "corrected": report.corrected, "bytes": report.drift, "ms": ms }).to_string());
+        self.save_quietly();
+    }
+
+    /// Ends a walk or a check that waits only on folders waiting for macOS.
+    fn finish_waiting(&mut self) {
+        self.finish_walk();
+        let waited_on = self.sched.in_flight().1;
+        if waited_on > 0 && waited_on <= self.stalled_count() {
+            let asking = self.asking();
+            if !asking.is_empty() && self.sched.check_waits_only_on(&asking) {
+                if let Some(report) = self.sched.end_check() {
+                    self.checked(report);
+                }
+            }
+        }
+    }
+
+    /// Ends the walk once every folder is listed but those waiting on macOS: the map shows without them, and each
+    /// joins it when the person answers, however long that takes.
     fn finish_walk(&mut self) {
         let Some(started) = self.walking else { return };
-        if !self.sched.idle() {
+        // Counts first: comparing every listing in flight with every one waiting after each landing was quadratic.
+        if self.sched.in_flight().0 > self.stalled_count() {
+            return;
+        }
+        let asking = self.asking();
+        if !self.sched.idle_except(&asking) {
             return;
         }
         self.walking = None;
@@ -448,10 +484,22 @@ impl Server {
         index.walk_ms = ms;
         index.compact();
         let totals = index.totals(ROOT);
-        send(&serde_json::json!({ "type": "walked", "ms": ms, "folders": index.folder_count(), "files": totals.files, "bytes": totals.size }).to_string());
+        send(&serde_json::json!({
+            "type": "walked", "ms": ms, "folders": index.folder_count(), "files": totals.files, "bytes": totals.size, "asking": asking.len(),
+        })
+        .to_string());
         self.changed = true;
         self.dirty = true;
         self.save_quietly();
+    }
+
+    fn stalled_count(&self) -> usize {
+        self.pool.as_ref().map_or(0, Pool::stalled_count)
+    }
+
+    /// Folders waiting on macOS to let them be listed, or behind one that is.
+    fn asking(&self) -> HashSet<u32> {
+        self.pool.as_ref().map(Pool::stalled).unwrap_or_default().into_iter().collect()
     }
 
     fn save(&mut self) -> Result<String, String> {
@@ -498,7 +546,7 @@ impl Server {
         }
         for (_, path, used) in index.volume_folders() {
             let now = volumes::volume_info(&path).used.unwrap_or(0);
-            if used != 0 && now != used {
+            if now != used {
                 grown.push(path.to_string_lossy().into_owned());
             }
         }
@@ -517,14 +565,15 @@ impl Server {
         self.stirred = false;
         self.last_status = now;
         let through = self.sched.through();
+        let asking = self.stalled_count();
         let waiting = self.sched.waiting();
-        let state = (through, waiting, self.sched.checking());
+        let state = (through, waiting, self.sched.checking(), asking);
         if self.reported == Some(state) && !self.changed {
             return;
         }
         send(&serde_json::json!({
             "type": "status", "through": through, "pending": waiting, "changed": self.changed, "checking": self.sched.checking(),
-            "historyDone": self.history_done,
+            "historyDone": self.history_done, "asking": asking,
         })
         .to_string());
         self.reported = Some(state);
@@ -536,10 +585,16 @@ impl Server {
         if self.walking.is_some() {
             if now.duration_since(self.last_progress) >= PROGRESS {
                 self.last_progress = now;
+                let asking = self.stalled_count();
                 if let Some(index) = &self.index {
                     let totals = index.totals(ROOT);
                     let errors = index.unreadable.len();
-                    send(&format!(r#"{{"type":"progress","dirs":{},"files":{},"bytes":{},"errors":{errors}}}"#, index.folder_count(), totals.files, totals.size));
+                    send(&format!(
+                        r#"{{"type":"progress","dirs":{},"files":{},"bytes":{},"errors":{errors},"asking":{asking}}}"#,
+                        index.folder_count(),
+                        totals.files,
+                        totals.size
+                    ));
                 }
             }
             return;

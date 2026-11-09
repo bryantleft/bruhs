@@ -277,22 +277,52 @@ public enum DiskEvent: Sendable {
     case result(DiskResult)
 }
 
+/// Splits a byte stream into its newline-ended lines, looking at each byte once. The scanner's map of a whole disk is
+/// one 3 MB line that arrives 64 KB at a time: searching all that had arrived again with every read took a quarter of a
+/// core while Disk was on screen.
+public struct LineSplitter {
+    private var buffer = Data()
+    /// The bytes of `buffer` already searched, none of them a newline.
+    private var searched = 0
+
+    public init() {}
+
+    /// The lines `bytes` completes, without their newlines.
+    public mutating func feed(_ bytes: Data) -> [Data] {
+        buffer.append(bytes)
+        var lines: [Data] = []
+        var start = 0
+        buffer.withUnsafeBytes { raw in
+            guard let base = raw.baseAddress else { return }
+            var from = searched
+            while from < raw.count, let newline = memchr(base + from, 10, raw.count - from) {
+                let end = UnsafeRawPointer(newline) - base
+                lines.append(Data(bytes: base + start, count: end - start))
+                start = end + 1
+                from = start
+            }
+        }
+        if start > 0 { buffer.removeSubrange(0..<start) }
+        searched = buffer.count
+        return lines
+    }
+
+    /// What came after the last newline, as when a stream ends without one.
+    public mutating func rest() -> Data {
+        defer { buffer = Data(); searched = 0 }
+        return buffer
+    }
+}
+
 public struct DiskStreamDecoder {
-    private var pending = Data()
+    private var lines = LineSplitter()
     public init() {}
     public mutating func feed(_ bytes: Data) throws -> [DiskEvent] {
-        pending.append(bytes)
-        var events: [DiskEvent] = []
-        while let end = pending.firstIndex(of: 10) {
-            let line = Data(pending[..<end])
-            pending.removeSubrange(...end)
-            if !line.isEmpty { events.append(try decode(line)) }
-        }
-        return events
+        try lines.feed(bytes).filter { !$0.isEmpty }.map(decode)
     }
     public mutating func finish() throws -> [DiskEvent] {
-        guard !pending.isEmpty else { return [] }
-        let line = pending; pending.removeAll()
+        let line = lines.rest()
+        guard !line.isEmpty else { return [] }
         return [try decode(line)]
     }
     private func decode(_ data: Data) throws -> DiskEvent {

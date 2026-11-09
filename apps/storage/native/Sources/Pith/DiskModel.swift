@@ -149,6 +149,8 @@ struct DiskVolumeChoice: Identifiable, Equatable {
 
     var caption: Caption? {
         if let live, liveView != nil {
+            // Ahead of everything else: only the person can bring these folders into the map.
+            if live.asking > 0, live.state.isMapped { return .message(Self.asking(live.asking)) }
             switch live.state {
             case .mapping(let progress?):
                 return .figures([Figure(label: "Mapped", value: bytes(progress.bytes)), Figure(label: "Files", value: monaspaced(progress.files.formatted()))])
@@ -186,6 +188,11 @@ struct DiskVolumeChoice: Identifiable, Equatable {
 
     /// Folders the map couldn't read, so it leaves them out.
     var unreadableFolders: UInt64 { result?.summary.errors ?? 0 }
+
+    /// What to say while macOS asks the person whether Pith may read `folders` folders, which the map lacks until then.
+    static func asking(_ folders: Int) -> String {
+        "macOS is asking whether Pith may read \(folders.formatted()) \(folders == 1 ? "folder" : "folders"). They join the map once you answer."
+    }
 
     // MARK: The live map
 

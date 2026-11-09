@@ -419,9 +419,30 @@ impl Scheduler {
         self.check.is_some()
     }
 
+    /// Whether the check under way waits on listings of `folders` and nothing else.
+    pub fn check_waits_only_on(&self, folders: &HashSet<u32>) -> bool {
+        self.check.is_some() && self.flights.iter().filter(|(_, f)| f.purpose == Purpose::Check || f.check).all(|(id, _)| folders.contains(id))
+    }
+
+    /// Ends the check under way with what it found so far. The folders it was waiting on are still listed when they
+    /// can be, as for any change.
+    pub fn end_check(&mut self) -> Option<CheckReport> {
+        self.check.take().map(|(_, report)| report)
+    }
+
     /// Whether no listing is in flight.
     pub fn idle(&self) -> bool {
         self.flights.is_empty()
+    }
+
+    /// Listings in flight, and those the check under way waits on.
+    pub fn in_flight(&self) -> (usize, usize) {
+        (self.flights.len(), self.check.as_ref().map_or(0, |(waiting, _)| *waiting))
+    }
+
+    /// Whether no listing is in flight but those of `waiting`.
+    pub fn idle_except(&self, waiting: &HashSet<u32>) -> bool {
+        self.flights.keys().all(|folder| waiting.contains(folder))
     }
 
     /// Folders waiting to be listed for a change, and being listed. Folders found missing aren't counted: most were
@@ -478,5 +499,28 @@ fn earliest(a: Option<u64>, b: Option<u64>) -> Option<u64> {
     match (a, b) {
         (Some(a), Some(b)) => Some(a.min(b)),
         (a, b) => a.or(b),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_walk_or_a_check_ends_with_only_folders_waiting_on_macos_left() {
+        let index = Index::new("/x", HashMap::new());
+        let mut sched = Scheduler::new(Duration::from_secs(3), 200);
+        assert!(sched.submit(7, PathBuf::from("/x/a"), Purpose::Walk, false, None).is_some());
+        assert!(sched.submit(8, PathBuf::from("/x/b"), Purpose::Walk, false, None).is_some());
+        assert!(!sched.idle_except(&HashSet::from([7])), "the other folder is still being listed");
+        assert!(sched.idle_except(&HashSet::from([7, 8])));
+        // A check reaching a folder that waits on macOS waits on it too, and on its own listings.
+        assert!(sched.start_check(&index).is_some());
+        assert!(sched.submit(7, PathBuf::from("/x/a"), Purpose::Check, true, None).is_none());
+        assert!(!sched.check_waits_only_on(&HashSet::from([7, 8])), "the check's own listing of the root is under way");
+        assert!(sched.check_waits_only_on(&HashSet::from([ROOT, 7, 8])));
+        assert!(sched.end_check().is_some());
+        assert!(!sched.checking());
+        assert!(!sched.check_waits_only_on(&HashSet::from([ROOT, 7, 8])), "no check is under way");
     }
 }

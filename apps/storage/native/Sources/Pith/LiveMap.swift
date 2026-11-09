@@ -49,6 +49,9 @@ import PithCore
     private(set) var lastCheck: LiveCheck?
     /// Something the map shows changed since the last tree was asked for.
     private(set) var changedSinceTree = true
+    /// Folders the map lacks until the person answers macOS's question about Pith, as for iCloud Drive: opening one
+    /// waits on that answer, and the map goes on without them meanwhile.
+    private(set) var asking = 0
     /// A tree arrived: the map for `path`, as asked for, with its JSON for the page.
     var received: ((DiskResult, String) -> Void)?
     /// The map changed, so a view on screen should ask for its tree again.
@@ -69,6 +72,8 @@ import PithCore
     private var checker: NSBackgroundActivityScheduler?
     /// Disk asked for the first map while the scanner was still opening.
     private var firstMapWanted = false
+    /// When a walk or a check last listed every folder.
+    private var listedAt: Date?
 
     init(root: String) {
         self.root = root
@@ -213,9 +218,12 @@ import PithCore
             case .rebuild(let reason):
                 walk(reason: reason)
             }
-        case .progress(_, let files, let bytes, let errors):
+        case .progress(_, let files, let bytes, let errors, let asking):
+            self.asking = asking
             if case .mapping = state { state = .mapping(DiskProgress(files: files, bytes: bytes, errors: errors)) }
-        case .walked:
+        case .walked(_, _, _, _, let asking):
+            self.asking = asking
+            listedAt = Date()
             rebuildReason = nil
             updatedAt = Date()
             state = .live(0)
@@ -223,6 +231,7 @@ import PithCore
             changed?()
         case .status(let status):
             pending = status.pending
+            asking = status.asking
             historyDone = historyDone || status.historyDone
             if status.changed {
                 updatedAt = Date()
@@ -243,6 +252,7 @@ import PithCore
             NSLog("Pith: kept the disk map through event \(through): \(bytes) bytes in \(ms) ms.")
         case .checked(let check):
             lastCheck = check
+            listedAt = Date()
             checkDone?(.finished)
             checkDone = nil
             NSLog("Pith: checked \(check.folders) folders in \(check.ms) ms; \(check.corrected) had changed without an event, by \(check.bytes) bytes.")
@@ -274,21 +284,31 @@ import PithCore
 
     /// Lists every folder again once a day, as Apple asks backup software to sweep in full now and then: FSEvents is
     /// a hint, and in research one deletion never arrived. Only on power, and not when macOS asks Pith to wait.
+    /// macOS keeps the schedule across launches, so a check that's overdue comes as Pith opens.
     private func scheduleChecks() {
         let scheduler = NSBackgroundActivityScheduler(identifier: "app.bruhs.pith.disk-check")
         scheduler.repeats = true
-        scheduler.interval = 24 * 60 * 60
-        scheduler.tolerance = 4 * 60 * 60
+        scheduler.interval = Self.checkInterval
+        scheduler.tolerance = Self.checkTolerance
         scheduler.qualityOfService = .background
         scheduler.schedule { [weak self] completion in
             Task { @MainActor in
-                guard let self, self.state.isMapped, Self.checkMayRun else { completion(.deferred); return }
+                // Not while the map is made or catches up, which list what changed anyway: macOS asks again later.
+                guard let self, case .live = self.state, Self.checkMayRun else { completion(.deferred); return }
+                // A walk or a check lists every folder; one within the day leaves a check nothing to find.
+                if let listedAt = self.listedAt, Date().timeIntervalSince(listedAt) < Self.checkInterval - Self.checkTolerance {
+                    completion(.finished)
+                    return
+                }
                 self.checkDone = completion
                 self.check()
             }
         }
         checker = scheduler
     }
+
+    private static let checkInterval: TimeInterval = 24 * 60 * 60
+    private static let checkTolerance: TimeInterval = 4 * 60 * 60
 
     /// On power, outside Low Power Mode, and not running hot.
     private static var checkMayRun: Bool {
