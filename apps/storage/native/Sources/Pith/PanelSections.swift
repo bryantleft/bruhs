@@ -397,6 +397,7 @@ struct PanelDiskSection: View {
 struct PanelFooter: View {
     let actions: PanelActions
     let model: ActivityModel
+    let updates: Updates
 
     var body: some View {
         // Both buttons open the main window. "Open" keeps the pair from reading as tabs with one selected.
@@ -414,6 +415,10 @@ struct PanelFooter: View {
             // where Settings and Quit live.
             Menu {
                 Button("Settings…", action: actions.openSettings).keyboardShortcut(",")
+                // A build for this Mac only has no updater, so it has nothing to check.
+                if updates.isAvailable {
+                    Button("Check for Updates…", action: actions.checkForUpdates).disabled(!updates.canCheck)
+                }
                 // Pausing stops sampling, and with it Pith's own cost, until Resume.
                 Button(model.paused ? "Resume Monitoring" : "Pause Monitoring") { if model.paused { model.start() } else { model.pause() } }
                 Divider()
@@ -434,9 +439,12 @@ struct PanelFooter: View {
     }
 }
 
-/// The panel's last line: what Pith itself costs, or why the process list is incomplete.
+/// The panel's last line: what Pith itself costs, a newer version a check Pith made by itself found, or why the process
+/// list is incomplete, which matters most.
 struct PanelStatusLine: View {
     let model: ActivityModel
+    let updates: Updates
+    let openUpdate: () -> Void
 
     var body: some View {
         if let error = model.snapshot?.error {
@@ -450,6 +458,21 @@ struct PanelStatusLine: View {
                 .help(error)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Warning: \(error)")
+        } else if let update = updates.flow.reminder {
+            // The update waits here, not in a window over other apps, until the person looks.
+            Button(action: openUpdate) {
+                Text("Pith \(update.version) is available")
+                    .font(BruhsType.note).foregroundStyle(BruhsColor.accent).lineLimit(1)
+                    .padding(.leading, 16)
+                    .overlay(alignment: .leading) {
+                        Image(systemName: "arrow.down.circle").font(BruhsType.note).foregroundStyle(BruhsColor.accent)
+                    }
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("See what’s new in Pith \(update.version) and install it")
+            .accessibilityLabel("Pith \(update.version) is available")
+            .accessibilityHint("Opens the update")
         } else {
             let own = PanelSummary.own(model.snapshot?.apps ?? [], pid: ProcessInfo.processInfo.processIdentifier)
             Text(ownUse(cpu: own?.cpu.map { percent($0) }, memory: own?.memory.map(memorySize)))

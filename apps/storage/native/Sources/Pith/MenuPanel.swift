@@ -5,6 +5,7 @@ import SwiftUI
 /// value, chart and parts for CPU and memory, the busiest apps, the startup disk, then actions.
 struct MenuPanel: View {
     let model: ActivityModel
+    let updates: Updates
     let size: CGSize
     let actions: PanelActions
     /// Reports the content's natural height, so the controller can tell when the panel has to scroll.
@@ -33,9 +34,9 @@ struct MenuPanel: View {
                         Text("Collecting activity…").font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
                     }
                 }
-                PanelFooter(actions: actions, model: model)
+                PanelFooter(actions: actions, model: model, updates: updates)
                     .padding(.top, 12)
-                PanelStatusLine(model: model)
+                PanelStatusLine(model: model, updates: updates, openUpdate: actions.openUpdate)
                     .padding(.top, 10)
                     .opacity(collecting ? 0 : 1)
                     .accessibilityHidden(collecting)

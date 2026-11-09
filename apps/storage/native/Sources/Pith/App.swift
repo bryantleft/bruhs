@@ -30,6 +30,9 @@ import PithCore
     let activity = ActivityModel()
     let disk = DiskModel()
     let alertSettings = AlertSettings()
+    let updates = Updates()
+    /// Sparkle, started unless the build has no feed or the run is automated.
+    private var updater: SparkleUpdater?
     private var alerts: AlertMonitor?
     private(set) var shortcut: PanelShortcut?
     private var diskCheckedAt = Date.distantPast
@@ -38,6 +41,7 @@ import PithCore
     private(set) var mainWindow: MainWindowController?
     private var settingsWindow: NSWindow?
     private var welcomeWindow: NSWindow?
+    private var updateWindow: NSWindow?
     private var observers: [NSObjectProtocol] = []
     weak var webView: WKWebView?
     /// What Quick Look shows; the panel asks for it through the responder chain, which ends at this delegate.
@@ -47,10 +51,15 @@ import PithCore
         NSApp.setActivationPolicy(.accessory)
         BruhsFonts.register()
         NSApp.mainMenu = makeMainMenu()
-        statusItem = StatusItemController(activity: activity, actions: PanelActions(
+        // The permission question is the one update window nobody asked for, at a launch, so it comes forward without
+        // taking focus from whatever the person is doing.
+        updates.present = { [weak self] in self?.showUpdates(activating: self?.updates.flow.phase != .askingPermission) }
+        statusItem = StatusItemController(activity: activity, updates: updates, actions: PanelActions(
             openActivity: { [weak self] id in self?.showActivity(selecting: id) },
             openDisk: { [weak self] in self?.showDisk() },
-            openSettings: { [weak self] in self?.showSettings() }))
+            openSettings: { [weak self] in self?.showSettings() },
+            checkForUpdates: { [weak self] in self?.checkForUpdates() },
+            openUpdate: { [weak self] in self?.showUpdates() }))
         alerts = AlertMonitor(settings: alertSettings, activity: activity, open: { [weak self] id in self?.showActivity(selecting: id) })
         shortcut = PanelShortcut { [weak self] in self?.statusItem?.togglePanel() }
         activity.onSample = { [weak self] in
@@ -73,6 +82,8 @@ import PithCore
             Task { @MainActor in self?.activity.start() }
         })
         let automated = CommandLine.arguments.contains { ["--activity", "--scan", "--smoke-test"].contains($0) }
+        // An automated run never goes online or asks the person anything, and leaves their update settings alone.
+        if !automated { startUpdates() }
         if CommandLine.arguments.contains("--activity") { showActivity() }
         if let index = CommandLine.arguments.firstIndex(of: "--scan"), CommandLine.arguments.indices.contains(index + 1) {
             showDisk(); disk.scan(URL(fileURLWithPath: CommandLine.arguments[index + 1]))
@@ -105,6 +116,7 @@ import PithCore
         }
         let app = submenu("Pith")
         add(app, "About Pith", #selector(showAbout), target: self)
+        add(app, "Check for Updates…", #selector(checkForUpdates), target: self)
         app.addItem(.separator())
         add(app, "Settings…", #selector(showSettings), ",", target: self)
         app.addItem(.separator())
@@ -181,7 +193,7 @@ import PithCore
         statusItem?.closePanel()
         if settingsWindow == nil {
             // Settings has one pane, so the HIG asks for "App Name Settings" and no minimize or zoom. It sizes to its form.
-            let host = NSHostingController(rootView: SettingsView(model: activity, alerts: alertSettings, disk: disk, shortcut: shortcut))
+            let host = NSHostingController(rootView: SettingsView(model: activity, alerts: alertSettings, disk: disk, shortcut: shortcut, updates: updates))
             host.sizingOptions = [.preferredContentSize]
             let window = NSWindow(contentViewController: host)
             window.styleMask = [.titled, .closable]
@@ -213,6 +225,43 @@ import PithCore
         UserDefaults.standard.set(true, forKey: WelcomeView.seenKey)
         NSApp.activate(ignoringOtherApps: true); welcomeWindow?.makeKeyAndOrderFront(nil)
     }
+
+    // MARK: Updates
+
+    /// Builds signed only for this Mac have no feed, so Sparkle declines to start and Pith never offers to update them.
+    private func startUpdates() {
+        let updater = SparkleUpdater(updates: updates)
+        do {
+            try updater.start()
+            self.updater = updater
+        } catch {
+            NSLog("Pith: updates are off in this build: %@", error.localizedDescription)
+        }
+    }
+
+    @objc func checkForUpdates() { updates.check() }
+
+    /// The update window, which Sparkle's steps bring forward and the panel's reminder opens.
+    func showUpdates(activating: Bool = true) {
+        statusItem?.closePanel()
+        if updateWindow == nil {
+            let host = NSHostingController(rootView: UpdateView(updates: updates, close: { [weak self] in self?.updateWindow?.performClose(nil) }))
+            host.sizingOptions = [.preferredContentSize]
+            let window = NSWindow(contentViewController: host)
+            window.styleMask = [.titled, .closable]
+            window.title = "Software Update"
+            window.backgroundColor = BruhsNSColor.canvas
+            window.titlebarAppearsTransparent = true
+            window.delegate = self; window.isReleasedWhenClosed = false; window.center()
+            updateWindow = window
+        }
+        if activating {
+            NSApp.activate(ignoringOtherApps: true); updateWindow?.makeKeyAndOrderFront(nil)
+        } else {
+            updateWindow?.orderFrontRegardless()
+        }
+    }
+
     private func openMainWindow(_ tab: WindowTab) {
         if mainWindow == nil {
             mainWindow = MainWindowController(activity: activity, disk: disk, tab: tab,
@@ -307,6 +356,9 @@ import PithCore
         case #selector(smallerText): return TextSize.shared.canShrink
         case #selector(actualTextSize): return TextSize.shared.scale != 1
         case #selector(exportActivity): return activity.snapshot != nil
+        case #selector(checkForUpdates):
+            menuItem.isHidden = !updates.isAvailable
+            return updates.canCheck
         case #selector(undoInFocus(_:)):
             if let search = focusedSearch { menuItem.title = "Undo Typing"; return search.canUndoSearch }
             menuItem.title = undoTarget?.undoMenuItemTitle ?? "Undo"
@@ -342,6 +394,7 @@ import PithCore
         guard let window = notification.object as? NSWindow else { return }
         if window === settingsWindow { window.contentViewController = nil; settingsWindow = nil }
         if window === welcomeWindow { window.contentViewController = nil; welcomeWindow = nil }
+        if window === updateWindow { updates.windowClosed(); window.contentViewController = nil; updateWindow = nil }
     }
     /// Opening Pith again from Finder while it runs shows where it lives, the fallback when macOS hides the menu bar item.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { showWelcome(); return false }

@@ -15,6 +15,12 @@ extension AppDelegate {
         // The fallback symbol is a template image too, so the SVG itself has to decode.
         let glyph = Bundle.main.url(forResource: "StatusGlyph", withExtension: "svg").flatMap(NSImage.init(contentsOf:))
         checks["status_glyph_bundled"] = glyph?.isValid == true && statusItem?.image?.isTemplate == true
+        // The smoke test never starts Sparkle, so it can't go online, ask the permission question or change the person's
+        // update settings. The bundle's setup is checked as it stands instead.
+        checks["updater_idle_in_smoke_test"] = !updates.isAvailable
+        let updateProblems = SparkleUpdater.configurationProblems()
+        for problem in updateProblems { print("update setup: \(problem)") }
+        checks["updates_configured"] = updateProblems.isEmpty
         do {
             showActivity()
             try await waitUntil("a first CPU reading") { self.activity.snapshot?.cpu != nil }

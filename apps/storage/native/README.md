@@ -13,21 +13,29 @@ pnpm open:pith
 
 The app is at `apps/storage/native/.build/Pith.app`. You can drag it to Applications. It is built for the current Mac's architecture, targets macOS 14+, and has been run locally on Apple Silicon/macOS 26.3. Older macOS versions and Intel need their own verification before release.
 
-`build:pith` signs the app and its bundled scanner ad hoc, with the hardened runtime, so it runs on the Mac that built it. Rebuilding an ad-hoc app can invalidate its privacy grants; grant Full Disk Access to the installed app when a partial scan needs it.
+`build:pith` signs the app, its bundled scanner and Sparkle ad hoc, with the hardened runtime, so it runs on the Mac that built it. Ad hoc code belongs to no team, so this build alone turns off the runtime's library validation, which would otherwise refuse to load Sparkle. It has no update feed and never updates. Rebuilding an ad-hoc app can invalidate its privacy grants; grant Full Disk Access to the installed app when a partial scan needs it.
 
 ### Release
 
+A version is a section of [`CHANGELOG.md`](CHANGELOG.md): the newest section's number is the version the build stamps (as both `CFBundleShortVersionString` and the `CFBundleVersion` Sparkle compares), and its notes are what Pith's update window shows. The build refuses notes with bullets or dashes, and versions out of order.
+
 ```sh
 pnpm --filter storage release:mac
+pnpm --filter storage publish:mac --dry-run
+pnpm --filter storage publish:mac
 ```
 
-This signs both with the keychain's Developer ID Application certificate and Apple's secure timestamp, sends the app to Apple's notary service, staples the ticket so it opens offline, checks that Gatekeeper accepts it, and leaves the download at `apps/storage/native/.build/Pith.zip`. It stops with Apple's log when notarization isn't accepted. It needs a notarytool keychain profile, stored once from an App Store Connect API key:
+`release:mac` signs the app, the scanner and Sparkle with the keychain's Developer ID Application certificate and Apple's secure timestamp, sends the app to Apple's notary service, staples the ticket so it opens offline, checks that Gatekeeper accepts it, and leaves the download at `apps/storage/native/.build/Pith-<version>.zip`. It stops with Apple's log when notarization isn't accepted. It records the commit it was built from in the app. It needs a notarytool keychain profile, stored once from an App Store Connect API key:
 
 ```sh
 xcrun notarytool store-credentials pith-notary --key AuthKey_<key ID>.p8 --key-id <key ID> --issuer <issuer ID>
 ```
 
-`PITH_SIGN_IDENTITY` picks the certificate when the keychain has several, and `PITH_NOTARY_PROFILE` names another profile. A release is still built for the building Mac's architecture only, and has no update feed: a new version is a new download.
+`PITH_SIGN_IDENTITY` picks the certificate when the keychain has several, and `PITH_NOTARY_PROFILE` names another profile. A release is built for the building Mac's architecture only.
+
+`publish:mac` checks that the download is the changelog's newest version, notarized, built from a commit on `origin/main` without uncommitted changes, and newer than the feed's newest. It then creates the GitHub release `pith-v<version>` with the download and puts the version on top of the update feed, `appcast.xml` in the `pith-updates` pre-release. A release of its own keeps the feed's address fixed whatever becomes the repository's latest release. Before uploading, it signs the download and the feed with the update key, and after, it checks GitHub serves both as signed. With `--dry-run` it uploads nothing.
+
+The update key is an EdDSA key pair. Its public half is `PUBLIC_KEY` in `scripts/pith-release.mjs`, which every release trusts; its private half is in the publisher's login keychain under the account `pith`, and macOS asks once to let Sparkle's `sign_update` use it. `generate_keys --account pith` (in `native/.build/artifacts/sparkle/Sparkle/bin`) makes the pair once, and prints the public half again any time. Keep a copy somewhere safe, such as a password manager: `generate_keys --account pith -x <file>` exports it and `-f <file>` imports it on another Mac. A lost key means installed copies accept the next update only through a Developer ID signed disk image, as Sparkle's key rotation allows.
 
 ## Use
 
@@ -38,6 +46,7 @@ xcrun notarytool store-credentials pith-notary --key AuthKey_<key ID>.p8 --key-i
 - Shortcuts and Siri have Get Busiest Apps, Get Memory Pressure, Show Activity and Scan Folder.
 - Move to Trash is a native, confirmed action on an entry from the current scan. Protected paths and paths escaping the scan root are rejected. Finder's Put Back restores trashed files. A successful move refreshes the scan.
 - Closing the window keeps monitoring. Quit ends monitoring and clears session history. Login startup and icon-only mode are opt-in in Settings. Reopen the app from Finder to recover Activity if macOS hides the menu bar item.
+- A release updates itself. At its second launch it asks whether it may check for updates once a day, and whether to install them by itself too; Settings changes both. Check for Updates… is in the panel's gear menu and the app menu. A newer version a daily check finds waits on the panel's last line rather than opening a window over other apps; the update window shows its notes and installs it, quitting and reopening Pith.
 - Pith follows the system appearance: light, dark and Increase Contrast.
 
 ## Logo
@@ -68,6 +77,8 @@ Pith samples every second while Activity is on screen or the panel is open, and 
 
 The Shortcuts actions are App Intents. Pith builds with SwiftPM, which doesn't extract their metadata as Xcode does, so `build-mac.mjs` has the compiler emit their constant values and runs Xcode's `appintentsmetadataprocessor` on them into `Metadata.appintents`, and fails the build when an action is missing from it.
 
+Updates are [Sparkle](https://sparkle-project.org) 2.10.1, pinned exactly in `Package.swift`. Checking for updates is the only time Pith goes online, and only once the person allows it: it fetches the feed from GitHub without Sparkle's system profile. Sparkle downloads the update, checks its EdDSA signature before unpacking it (`SUVerifyUpdateBeforeExtraction`), accepts only a feed signed with the same key (`SURequireSignedFeed`), checks the new app's Developer ID signature, and installs it when Pith quits. Pith shows all of this in its own window, through a custom user driver (`SparkleUpdater.swift`) that hands each step to `UpdateFlow`, rather than Sparkle's windows, which don't follow Pith's look or writing rules. A check Pith makes by itself never opens a window: what it finds waits as a reminder on the panel's last line, as Sparkle's gentle reminders suggest for apps without a Dock icon. Pith isn't sandboxed, so the build drops Sparkle's XPC services. Automated runs (`--smoke-test`, `--activity`, `--scan`) never start the updater.
+
 Temperature sensors, privileged process control, fan control and automatic cleanup are outside this build: they need a root helper or a private interface that breaks across releases.
 
 ## Verification
@@ -88,4 +99,6 @@ apps/storage/native/.build/Pith.app/Contents/MacOS/Pith \
   --smoke-test /absolute/path/to/fixture /tmp/pith-verification.json
 ```
 
-This opens real native windows and runs the bundled Rust scanner and WKWebView. It verifies metrics, the panel's size and fit, pause/resume, toolbar bridging, range ranking and Escape, tab switching, rendering, fonts, selection and what deleting it frees, Bigger Text in the map, FSEvents changes and Refresh, the saved map reopening as the next launch would, remote-navigation rejection, and web-view and window release, then quits. It keeps the fixture's scans in a temporary folder of its own, and does not trash files or change login/privacy settings. `--activity` opens Activity; `--scan /absolute/path` opens Disk and scans that path; `--probe` prints sampler timings and its own footprint without creating a UI.
+This opens real native windows and runs the bundled Rust scanner and WKWebView. It verifies metrics, the panel's size and fit, pause/resume, toolbar bridging, range ranking and Escape, tab switching, rendering, fonts, selection and what deleting it frees, Bigger Text in the map, FSEvents changes and Refresh, the saved map reopening as the next launch would, remote-navigation rejection, web-view and window release, and the bundle's update setup (feed, key, both of Sparkle's stricter checks, and Sparkle trimmed and signed by Pith's team), then quits. It keeps the fixture's scans in a temporary folder of its own, never starts the updater, and does not trash files or change login, privacy or update settings. `--activity` opens Activity; `--scan /absolute/path` opens Disk and scans that path; `--probe` prints sampler timings and its own footprint without creating a UI.
+
+To prove an installed copy updates itself, run `pnpm --filter storage test:mac-updates`. It builds a throwaway 0.0.1 and 0.0.2 under the bundle id `app.bruhs.pith.updatetest`, signed with the Developer ID but a test key, serves 0.0.2 in a signed feed at 127.0.0.1, opens 0.0.1 with automatic updates on, and checks that Sparkle replaced it with a valid 0.0.2 once it quit. A second Pith shows in the menu bar for about a minute; the real app, its settings and data, and the keychain's update key are left alone. Run it after changing how Pith is built or signed, and whenever Sparkle changes version.

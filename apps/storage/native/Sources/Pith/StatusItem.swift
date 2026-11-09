@@ -8,6 +8,9 @@ struct PanelActions {
     let openActivity: (_ appID: String?) -> Void
     let openDisk: () -> Void
     let openSettings: () -> Void
+    let checkForUpdates: () -> Void
+    /// Opens the update window on the version the panel's reminder names.
+    let openUpdate: () -> Void
 }
 
 /// The bruh-slice glyph generated into native/Brand. As a template image, AppKit tints it to
@@ -65,6 +68,7 @@ struct PanelActions {
 /// Owns the menu bar item and the panel it opens.
 @MainActor final class StatusItemController: NSObject, NSPopoverDelegate {
     private let activity: ActivityModel
+    private let updates: Updates
     private let actions: PanelActions
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
@@ -86,8 +90,9 @@ struct PanelActions {
     /// anywhere else it means idealSize has fallen behind the panel's content.
     var panelContentFits: Bool { panelContentHeight <= panelSize.height + 0.5 }
 
-    init(activity: ActivityModel, actions: PanelActions) {
+    init(activity: ActivityModel, updates: Updates, actions: PanelActions) {
         self.activity = activity
+        self.updates = updates
         self.actions = actions
         super.init()
         item.button?.image = statusGlyph()
@@ -152,10 +157,12 @@ struct PanelActions {
         let size = MenuPanelLayout.contentSize(anchor: anchor, visibleFrame: screen.visibleFrame)
         panelSize = size
         let close: (@escaping () -> Void) -> () -> Void = { [weak self] action in { self?.closePanel(); action() } }
-        let panel = MenuPanel(model: activity, size: size, actions: PanelActions(
+        let panel = MenuPanel(model: activity, updates: updates, size: size, actions: PanelActions(
             openActivity: { [actions, weak self] id in self?.closePanel(); actions.openActivity(id) },
             openDisk: close(actions.openDisk),
-            openSettings: close(actions.openSettings)),
+            openSettings: close(actions.openSettings),
+            checkForUpdates: close(actions.checkForUpdates),
+            openUpdate: close(actions.openUpdate)),
             contentHeight: { [weak self] in self?.panelContentHeight = $0 })
         let controller = NSHostingController(rootView: panel)
         controller.sizingOptions = []

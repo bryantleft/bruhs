@@ -55,4 +55,5 @@ jobs:
       - name: Package local Mac app
         run: pnpm build:pith
       - name: Verify app and bundled executable signatures
-        run: codesign --verify --strict --verbose=2 apps/storage/native/.build/Pith.app
+        # --deep reaches the code nested in the app: the scanner and Sparkle with its helpers.
+        run: codesign --verify --deep --strict --verbose=2 apps/storage/native/.build/Pith.app

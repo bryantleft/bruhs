@@ -7,6 +7,7 @@ struct SettingsView: View {
     let alerts: AlertSettings
     @Bindable var disk: DiskModel
     var shortcut: PanelShortcut?
+    let updates: Updates
 
     var body: some View {
         // Two panes, so each fits a 13-inch display without scrolling.
@@ -49,8 +50,25 @@ struct SettingsView: View {
             LaunchAtLoginToggle()
             Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
         }
+        // A build for this Mac only has no updater.
+        if updates.isAvailable {
+            Section {
+                Toggle("Check for updates automatically", isOn: Binding(get: { updates.checksAutomatically }, set: { updates.setChecksAutomatically($0) }))
+                Toggle("Download and install updates automatically",
+                       isOn: Binding(get: { updates.downloadsAutomatically }, set: { updates.setDownloadsAutomatically($0) }))
+                    .disabled(!updates.checksAutomatically)
+            } header: {
+                Text("Updates")
+            } footer: {
+                Text("Once a day, Pith asks GitHub, where its releases are published, whether a newer version is out. It sends nothing about this Mac. This is version \(updates.version).")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
         Section("Privacy") {
-            Text("Activity stays on this Mac, and Pith makes no network connections. Disk scans run only when you request them.")
+            Text(updates.isAvailable
+                 ? "Activity stays on this Mac. Pith goes online only to check for updates, when you allow it. Disk scans run only when you request them."
+                 : "Activity stays on this Mac, and Pith makes no network connections. Disk scans run only when you request them.")
                 .fixedSize(horizontal: false, vertical: true)
             Button("Full Disk Access…") { openDiskAccess() }
         }
