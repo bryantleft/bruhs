@@ -57,3 +57,44 @@ jobs:
       - name: Verify app and bundled executable signatures
         # --deep reaches the code nested in the app: the scanner and Sparkle with its helpers.
         run: codesign --verify --deep --strict --verbose=2 apps/storage/native/.build/Pith.app
+      - name: Keep the packaged app for the older macOS jobs
+        run: ditto -c -k --keepParent apps/storage/native/.build/Pith.app "$RUNNER_TEMP/Pith.zip"
+      - name: Upload the packaged app
+        uses: actions/upload-artifact@v7
+        with:
+          name: pith-app
+          path: ${{ runner.temp }}/Pith.zip
+          retention-days: 3
+
+  pith-older-macos:
+    # Pith runs on macOS 14 and later but is built with Xcode 26, which older macOS can't run. So the app packaged above
+    # runs here as people get it, with the scanner's tests built for each system.
+    needs: pith-macos
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-14, macos-15]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Download the packaged app
+        uses: actions/download-artifact@v8
+        with:
+          name: pith-app
+          path: ${{ runner.temp }}
+      - name: Unpack the app
+        run: ditto -x -k "$RUNNER_TEMP/Pith.zip" "$RUNNER_TEMP/app"
+      - name: Test the Rust scanner
+        run: cargo test --release --manifest-path apps/storage/scanner/Cargo.toml
+      - name: Smoke test the app
+        # The README's desktop smoke test: real windows, the bundled scanner and WKWebView, and a live map of a folder
+        # of its own, which needs a file of 1 MB or more.
+        timeout-minutes: 10
+        run: |
+          fixture="$RUNNER_TEMP/fixture"
+          mkdir -p "$fixture/sub/deeper" "$fixture/other"
+          echo hi > "$fixture/readme.txt"
+          head -c 2000000 /dev/zero > "$fixture/sub/video.mov"
+          head -c 300000 /dev/zero > "$fixture/sub/big.bin"
+          "$RUNNER_TEMP/app/Pith.app/Contents/MacOS/Pith" --smoke-test "$fixture" "$RUNNER_TEMP/smoke.json"
