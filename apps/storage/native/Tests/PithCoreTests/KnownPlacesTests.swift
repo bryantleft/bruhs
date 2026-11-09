@@ -13,6 +13,8 @@ final class KnownPlacesTests: XCTestCase {
         "com.apple.finder.Open-iCloudDrive": URL(fileURLWithPath: "/Test Apps/iCloud Drive.app"),
         "com.apple.Music": URL(fileURLWithPath: "/Test Apps/Music.app"),
         "com.apple.TV": URL(fileURLWithPath: "/Test Apps/TV.app"),
+        "com.apple.iBooksX": URL(fileURLWithPath: "/Test Apps/Books.app"),
+        "com.apple.podcasts": URL(fileURLWithPath: "/Test Apps/Podcasts.app"),
     ]
 
     private func path(_ relative: String) -> String { home.appendingPathComponent(relative).path }
@@ -48,6 +50,8 @@ final class KnownPlacesTests: XCTestCase {
             "backups": (path("Library/Application Support/MobileSync/Backup"), "iPhone and iPad backups"),
             "music": (path("Music/Music"), "Music"),
             "tv": (path("Movies/TV"), "TV"),
+            "books": (path("Library/Containers/com.apple.BKAgentService/Data/Documents/iBooks/Books"), "Books"),
+            "podcasts": (path("Library/Group Containers/243LU875E5.groups.com.apple.podcasts/Library/Cache"), "Podcasts"),
         ]
         XCTAssertEqual(Set(table.places.map(\.id)), Set(expected.keys))
         for place in table.places {
@@ -83,6 +87,8 @@ final class KnownPlacesTests: XCTestCase {
                        .app(bundleID: "com.apple.finder.Open-iCloudDrive", path: "/Test Apps/iCloud Drive.app"))
         XCTAssertEqual(table.place(id: "music")?.icon, .app(bundleID: "com.apple.Music", path: "/Test Apps/Music.app"))
         XCTAssertEqual(table.place(id: "tv")?.icon, .app(bundleID: "com.apple.TV", path: "/Test Apps/TV.app"))
+        XCTAssertEqual(table.place(id: "books")?.icon, .app(bundleID: "com.apple.iBooksX", path: "/Test Apps/Books.app"))
+        XCTAssertEqual(table.place(id: "podcasts")?.icon, .app(bundleID: "com.apple.podcasts", path: "/Test Apps/Podcasts.app"))
     }
 
     func testAMissingAppFallsBackAsTheSpecSays() {
@@ -90,7 +96,7 @@ final class KnownPlacesTests: XCTestCase {
         XCTAssertEqual(table.place(id: "developer")?.icon, .type("com.apple.developer-folder"), "Developer without Xcode")
         XCTAssertEqual(table.place(id: "icloud-drive")?.icon, .symbol("icloud"), "iCloud Drive without its app in Finder")
         XCTAssertEqual(table.place(id: "photos-library")?.icon, .type("com.apple.photos.library"), "the library's own package icon")
-        for id in ["mail", "messages", "music", "tv"] {
+        for id in ["mail", "messages", "music", "tv", "books", "podcasts"] {
             XCTAssertEqual(table.place(id: id)?.icon, .type("public.folder"), id)
         }
         // One app missing leaves the others alone.
@@ -125,7 +131,8 @@ final class KnownPlacesTests: XCTestCase {
         for guarded in ["Desktop", "Documents", "Documents/Taxes/2026", "Downloads/Pith.dmg", "Library/Mobile Documents/com~apple~CloudDocs",
                         "Library/Mail/V10", "Library/Messages", ".Trash", "Pictures/Photos Library.photoslibrary/originals",
                         "Library/Containers/com.apple.Notes/Data", "Library/Group Containers/group.com.apple.notes", "Library/CloudStorage/Dropbox",
-                        "Library/Application Support/MobileSync/Backup/0000"] {
+                        "Library/Application Support/MobileSync/Backup/0000", "Library/Containers/com.apple.BKAgentService/Data/Documents/iBooks/Books",
+                        "Library/Group Containers/243LU875E5.groups.com.apple.podcasts/Library/Cache"] {
             XCTAssertTrue(table.isProtected(path(guarded)), guarded)
         }
         XCTAssertTrue(table.isProtected("/Volumes/Archive/Old.photoslibrary/database"), "any Photos library, as Move to Trash treats one")
@@ -134,6 +141,25 @@ final class KnownPlacesTests: XCTestCase {
         }
         XCTAssertFalse(table.isProtected("/Applications/Xcode.app"))
         XCTAssertFalse(table.isProtected("/"))
+    }
+
+    /// The live map shows a folder it has found in its parent's listing, but not listed itself, with no size, files or
+    /// contents, whether or not macOS is holding its listing at that moment, as in the first half second of a listing
+    /// macOS blocks, or after a launch, when folders still waiting on macOS at the last save are listed again.
+    func testAFolderTheMapHasntListedIsntLookedUpByItsPathWhereMacOSGuards() {
+        let table = places()
+        func folder(_ relative: String, size: UInt64 = 0, files: UInt64 = 0, children: [DiskNode] = []) -> DiskNode {
+            DiskNode(kind: .dir, name: (relative as NSString).lastPathComponent, path: path(relative), size: size, files: files, children: children)
+        }
+        let file = DiskNode(kind: .file, name: "a.pdf", path: path("Documents/New/a.pdf"), size: 0, children: nil)
+        XCTAssertEqual(table.iconKey(for: folder("Documents/New"), asking: false), .folder, "not listed yet")
+        XCTAssertEqual(table.iconKey(for: folder("Library/Containers/com.apple.Notes/Data"), asking: false), .folder)
+        XCTAssertEqual(table.iconKey(for: folder("Documents/New", size: 4096), asking: false), .item(path("Documents/New")))
+        XCTAssertEqual(table.iconKey(for: folder("Documents/New", files: 2), asking: false), .item(path("Documents/New")), "empty files")
+        XCTAssertEqual(table.iconKey(for: folder("Documents/New", children: [file]), asking: false), .item(path("Documents/New")))
+        XCTAssertEqual(table.iconKey(for: folder("Documents/New", size: 4096), asking: true), .folder, "listed, but macOS is asking")
+        // Outside the locations macOS guards, a folder not listed yet is looked up by its path as any other.
+        XCTAssertEqual(table.iconKey(for: folder("Projects/New"), asking: false), .item(path("Projects/New")))
     }
 
     func testTheIconRuleForItemsOfTheMap() {

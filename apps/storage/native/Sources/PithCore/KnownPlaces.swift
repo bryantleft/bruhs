@@ -66,6 +66,12 @@ public struct KnownPlaces: Sendable {
             // The Music and TV apps keep their libraries and media in these folders unless the person moves them.
             ("music", "Music", folder(.musicDirectory, "Music"), [.app("com.apple.Music")], false),
             ("tv", "TV", folder(.moviesDirectory, "TV"), [.app("com.apple.TV")], false),
+            // Apple doesn't document where Books and Podcasts keep what they download. These are the folders known to
+            // hold the books added to Books and Podcasts' downloaded episodes, in other apps' data, which macOS guards.
+            ("books", "Books", library.appendingPathComponent("Containers/com.apple.BKAgentService/Data/Documents/iBooks/Books"),
+             [.app("com.apple.iBooksX")], true),
+            ("podcasts", "Podcasts", library.appendingPathComponent("Group Containers/243LU875E5.groups.com.apple.podcasts/Library/Cache"),
+             [.app("com.apple.podcasts")], true),
         ]
         places = table.compactMap { entry in
             entry.url.map { Place(id: entry.id, path: $0.path, name: entry.name, icon: Self.icon(choosing: entry.icons, application: application),
@@ -117,19 +123,28 @@ public struct KnownPlaces: Sendable {
             || path.split(separator: "/").contains { $0.hasSuffix(".photoslibrary") }
     }
 
-    /// The icon key for an item of the map, by Pith's icon rule. A known place shows its own icon, read or not. A file
-    /// shows its type's, so Pith never opens it. A folder, package, app or volume the map has read shows its own, by
-    /// its path, except inside a location macOS guards while macOS is still asking about some of the map's folders
-    /// (`asking`): it might be one of them, and looking it up could wait on the person's answer. Those, and folders
-    /// the map couldn't read, show a plain folder, and the map's smaller items show a group.
+    /// The icon key for an item of the map, by Pith's icon rule. A known place shows its own icon, read or not, and a
+    /// file its type's, so Pith never opens it. A volume shows its own icon, by its path, and so does a folder, package
+    /// or app outside the locations macOS guards. Inside one, Pith looks a folder up by its path only when the map
+    /// shows it has listed it, with a size, files or contents, and only while `asking` is false, when macOS can't be
+    /// holding any of the map's folders. The live map shows a folder it has found in its parent's listing, but not yet
+    /// listed itself, as empty, and macOS may be holding that listing, which a lookup by its path could wait on too.
+    /// Such a folder, an empty one, and a folder the map couldn't read show a plain folder, and the map's smaller items
+    /// show a group.
     public func iconKey(for item: DiskNode, asking: Bool) -> IconKey {
         if let place = place(at: item.path) { return .place(place.id) }
         switch item.kind {
         case .file: return .type((item.path as NSString).pathExtension.lowercased())
         case .unreadable: return .folder
-        case .dir where asking && isProtected(item.path): return .folder
+        case .dir where isProtected(item.path) && (asking || !Self.showsAListing(item)): return .folder
         case .dir, .volume: return .item(item.path)
         case .aggregate: return .group
         }
+    }
+
+    /// Whether the map has listed `folder`: it has a size, files or contents. A folder found in its parent's listing
+    /// and not listed itself yet has none of them.
+    private static func showsAListing(_ folder: DiskNode) -> Bool {
+        folder.size > 0 || (folder.files ?? 0) > 0 || !(folder.children ?? []).isEmpty
     }
 }

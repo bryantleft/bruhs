@@ -519,6 +519,19 @@ struct DiskVolumeChoice: Identifiable, Equatable {
         }
     }
 
+    /// The icon for an item of the map, by Pith's icon rule (`KnownPlaces.iconKey`).
+    func iconKey(for item: DiskNode) -> IconKey {
+        Icons.places.iconKey(for: item, asking: macOSMayHoldFolders)
+    }
+
+    /// Whether macOS may be holding some of the live map's folders: it's asking about some, or the map is catching up
+    /// after a launch, listing again what changed meanwhile and what was waiting on macOS when it was saved.
+    private var macOSMayHoldFolders: Bool {
+        guard let live, liveView != nil else { return false }
+        if case .catchingUp = live.state { return true }
+        return live.asking > 0
+    }
+
     /// What moving `path` to the Trash would do, or why it can't go.
     func trashPlan(_ path: String) -> Result<TrashPlan, DiskFailure> {
         guard let result else { return .failure(DiskFailure("Open the map first.")) }

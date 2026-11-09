@@ -452,14 +452,6 @@ private struct DiskVolumeList: View {
     }
 }
 
-extension DiskModel {
-    /// The icon for an item of the map, by Pith's icon rule. While macOS is still asking about folders of the live
-    /// map, no folder inside a location it guards is looked up by its path.
-    func iconKey(for item: DiskNode) -> IconKey {
-        Icons.places.iconKey(for: item, asking: liveView != nil && (live?.asking ?? 0) > 0)
-    }
-}
-
 /// The selected item, or the open folder while nothing is selected, led by its icon, and what can be done with it.
 private struct DiskSelectionBar: View {
     let model: DiskModel
