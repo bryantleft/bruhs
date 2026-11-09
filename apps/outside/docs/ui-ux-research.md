@@ -1924,3 +1924,26 @@ The map filled the screen, so tapping a place changed only the pinned button: wh
 - **On the map.** The selected place gets pixel corners with a dark outline and a gold name plate. A reachable place's road is drawn in solid white before you leave, so the "via" line now only reads out the towns the road passes through.
 - **Legend.** Colour swatches drawn like the markers (you, town with a bank, wilds, locked), with no bullet glyphs. The blurb moved to its own panel under the map.
 - Checked in the web dev build at 320×640, 390×844 and 1280×900: the home town, a reachable place, a locked place, and travelling and starting from a find (it went to pebble hills and mined). No console errors. Not checked: a trip in progress (the demo spends its steps at once), larger text, and a device. Metro stopped noticing edits three times during this pass; restart it with `--clear` after every change before trusting a screenshot.
+
+## Sprite redraw against a reference set (November 9, 2026)
+
+Compared all 180 sprites and 20 scenes with about 94,000 sprites from the CC0 Pixel Art Atlas (16×16, AI-generated, so used for craft rather than style). Ours were drawn small (162 of 180 on 12×12, filling about half), shaded flat (about 5 colours including ink), seen side-on, and weak at identity: every ore was a grey rock with coloured dots, cooked fish were recoloured raw fish, wicker was a checkerboard, linen looked like a bar and "coins" was one coin. 23 sprites had gaps in the outline.
+
+- `pixel/art.ts` now only assembles the drawings, which live by group in `pixel/sprites/` (resources, fish, nature, materials, gear, icons, scenery, bruh, plus `core.ts` for `art` and `tint`). The split was checked pixel for pixel before any redraw.
+- Every item, gear, icon and skill sprite is redrawn on 16×16 and fills its canvas. Each has a closed ink outline, light from the top left, four-step ramps with a glint only on metal, gems, glass and wet things, and three-quarter views for anything with a top. Tiers still share a drawing and differ by tint, and every tint now defines every key its drawing uses.
+- Identity fixes:
+  - ores are craggy chunks of the mineral itself, with veins;
+  - tools sit on a 45° diagonal with 2-pixel hafts and real axe and pickaxe heads;
+  - cooked fish get grill marks and a white eye;
+  - coins are a pile, linen a roll of cloth, wicker a woven mat;
+  - boots are a pair;
+  - rings and amulets are big, with the gem as the focus.
+- Gold is one ramp across coins, chests, jewellery, gold bars and gold ore. `jewel()` no longer recolours part of the ring band.
+- Scenes:
+  - round sun and crescent moon, clouds, two layers of hills, ground detail per biome, and a shore in the bay;
+  - a different tree per place;
+  - a cottage and a scene-sized anvil;
+  - the tool in hand is scaled to 10 pixels whatever its canvas.
+- Every bruh skin's accessories now sit inside a closed outline. The face is unchanged apart from a deeper shadow edge.
+- Checked: contact sheets of every sprite and every biome by day and night, the bag, world, report, skills and you tabs in the web build at 390 and 320, and a landing page build. Lint, typecheck and 209 tests pass. Not checked on a device.
+- Open: the spool, crown, chest, rings, cottage, pot and house use 10 to 13 colours, a little over the guide's 9. The robe's sleeves read loosely at 24 px. The landing hero crops scene props taller than 21 rows.
