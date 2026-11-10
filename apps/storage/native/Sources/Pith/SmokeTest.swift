@@ -151,7 +151,7 @@ extension AppDelegate {
             checks.merge(await checkIconsReachEveryPage(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkIconRoute(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkPathBar(fixture, in: main), uniquingKeysWith: { _, new in new })
-            checks.merge(await checkDiskMenuShowsFresherFigures(in: main), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkDiskMenuRetitlesWhileOpen(in: main), uniquingKeysWith: { _, new in new })
             checks.merge(await checkMapHoldsStill(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkOwnChangesShowAtOnce(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkCheckAgainShowsAtOnce(fixture), uniquingKeysWith: { _, new in new })
@@ -812,27 +812,71 @@ extension AppDelegate {
                 "go_back_and_forward": nowhere && focused && canGoBack && back && canGoForward && forward && end]
     }
 
-    /// The disk menu's free space is fresh when it opens: a listing of the volumes begins as the pointer reaches the
-    /// disk's part of the path bar, and figures that land once the menu is made, as while it's open, retitle its items in
-    /// place. Figures of the smoke test's own stand for a fresher listing, 7 GB more free on the first disk, and the real
-    /// listing comes back after.
-    private func checkDiskMenuShowsFresherFigures(in main: MainWindowController) async -> [String: Bool] {
-        let name = "disk_menu_shows_fresher_figures_in_place"
-        let appearance = IconAppearance(main.window.effectiveAppearance), scale = main.window.backingScaleFactor
-        guard let volume = disk.choices.first, let available = volume.available else { return [name: false] }
-        let menu = disk.diskMenu(appearance: appearance, scale: scale)
-        guard let item = menu.menu.items.first, item.title == volume.name + "\tFree " + bytes(available) else { return [name: false] }
-        // The menu lists the volumes again as it's made: that listing lands first.
-        try? await Task.sleep(for: .milliseconds(500))
+    /// The disk menu retitles its disks in place while it's open. The path bar's disk part is clicked as the person
+    /// clicks it, through the app's event queue, and while the menu tracks, a listing of the volumes lands with figures of
+    /// the smoke test's own, 7 GB more free on the first disk, as one begun as it opened does. A timer in the run loop's
+    /// common modes, which run while a menu tracks, though the main queue may not, reads the open menu's first item and
+    /// closes the menu once it shows them, or once the smoke test's patience runs out. The real listing comes back after.
+    private func checkDiskMenuRetitlesWhileOpen(in main: MainWindowController) async -> [String: Bool] {
+        let name = "disk_menu_retitles_while_open"
+        guard let volume = disk.choices.first, let available = volume.available, let content = main.window.contentView,
+              let anchor = firstView(DiskMenuAnchor.self, in: content) else { return [name: false] }
         let fresher = available + 7_000_000_000
         let fresh = DiskVolumeChoice(url: volume.url, name: volume.name, total: volume.total, available: fresher, isStartup: volume.isStartup)
-        disk.smokeTestListsVolumes([fresh] + disk.choices.dropFirst())
-        let shown = await eventually { item.title == volume.name + "\tFree " + bytes(fresher) }
-        let inPlace = menu.menu.items.first === item
+        let expected = volume.name + "\tFree " + bytes(fresher)
+        let watch = OpenMenuWatch(until: Date().addingTimeInterval(Self.patience))
+        let center = NotificationCenter.default
+        // Posted as the menu begins and ends tracking, on the main thread, while it tracks.
+        let began = center.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: nil) { [weak self] note in
+            let sender = (note.object as AnyObject?).map(ObjectIdentifier.init)
+            MainActor.assumeIsolated {
+                guard let self, let menu = anchor.opened?.menu, sender == ObjectIdentifier(menu), watch.menu == nil else { return }
+                watch.menu = menu
+                watch.item = menu.items.first
+                watch.opened = menu.items.first?.title
+                self.disk.smokeTestListsVolumes([fresh] + self.disk.choices.dropFirst())
+                self.disk.refreshChoices()
+            }
+        }
+        let ended = center.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: nil) { note in
+            let sender = (note.object as AnyObject?).map(ObjectIdentifier.init)
+            MainActor.assumeIsolated { if let menu = watch.menu, sender == ObjectIdentifier(menu) { watch.closed = true } }
+        }
+        let reader = Timer(timeInterval: 0.05, repeats: true) { _ in
+            MainActor.assumeIsolated {
+                guard let menu = watch.menu, !watch.closed else { return }
+                if let item = menu.items.first, item === watch.item, item.title == expected { watch.retitled = true }
+                if watch.retitled || Date() > watch.until { menu.cancelTracking() }
+            }
+        }
+        RunLoop.main.add(reader, forMode: .common)
+        defer {
+            reader.invalidate()
+            center.removeObserver(began)
+            center.removeObserver(ended)
+            disk.smokeTestListsVolumes(nil)
+        }
+        let key = await eventually { main.window.isKeyWindow }
+        Self.clickThroughTheQueue(at: anchor.convert(NSPoint(x: anchor.bounds.midX, y: anchor.bounds.midY), to: nil), in: main.window)
+        let closed = await eventually { watch.closed }
+        disk.smokeTestListsVolumes(nil)
         disk.refreshChoices()
         let back = await eventually { self.disk.choices.first?.available != fresher }
-        print("disk menu: \(item.title.replacingOccurrences(of: "\t", with: " ")) once fresher figures landed \(shown), the same item \(inPlace); the real listing back \(back)")
-        return [name: shown && inPlace && back]
+        let opened = watch.opened.map { $0.hasPrefix(volume.name + "\tFree ") && $0 != expected } == true
+        print("disk menu: the window key \(key); opened from the path bar \(watch.menu != nil), first saying \((watch.opened ?? "nothing").replacingOccurrences(of: "\t", with: " ")); "
+              + "retitled while open \(watch.retitled), then closed \(closed); the real listing back \(back)")
+        return [name: key && opened && watch.retitled && closed && back]
+    }
+
+    /// A click at `point` in `window` as the person's comes: its press and release wait in the app's event queue, so
+    /// AppKit hands them out from its run loop, as it does a click, not from the task that makes them.
+    private static func clickThroughTheQueue(at point: NSPoint, in window: NSWindow) {
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            guard let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                 windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+                                                 pressure: type == .leftMouseDown ? 1 : 0) else { return }
+            NSApp.postEvent(event, atStart: false)
+        }
     }
 
     /// The live map holds still. A double-click opens the folder its first click was aimed at, though a newer map
@@ -1446,4 +1490,19 @@ struct PersistedState {
         let paths = Set(changed.keys).union(earlier.changed.keys).filter { changed[$0] != earlier.changed[$0] }.map { "file \($0)" }
         return (settings + paths).sorted()
     }
+}
+
+/// What the smoke test sees of the disk menu it opens, from a notification and a timer that run while the menu tracks.
+@MainActor private final class OpenMenuWatch {
+    /// The menu, once it began tracking, and its first item then, with the title it had.
+    var menu: NSMenu?
+    var item: NSMenuItem?
+    var opened: String?
+    /// The first item showed the fresher figures while the menu tracked.
+    var retitled = false
+    var closed = false
+    /// When the timer closes the menu, retitled or not.
+    let until: Date
+
+    init(until: Date) { self.until = until }
 }

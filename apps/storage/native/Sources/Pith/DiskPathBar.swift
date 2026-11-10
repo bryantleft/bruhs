@@ -177,13 +177,14 @@ private struct FolderActions: View {
 /// Where the disk menu opens: an AppKit view behind the disk's button, since SwiftUI can't place an NSMenu. It holds
 /// the menu while it shows, so the chosen item's action still has it.
 @MainActor private final class MenuAnchor {
-    weak var view: NSView?
-    private var menu: DiskItemMenu?
+    weak var view: DiskMenuAnchor?
+    private var menu: DiskMenu?
 
     /// Opens `menu` under the button, as a pull-down menu opens.
-    func popUp(_ menu: DiskItemMenu) {
+    func popUp(_ menu: DiskMenu) {
         guard let view else { return }
         self.menu = menu
+        view.opened = menu
         menu.menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.bounds.height + 2), in: view)
     }
 }
@@ -191,13 +192,47 @@ private struct FolderActions: View {
 private struct MenuAnchorView: NSViewRepresentable {
     let anchor: MenuAnchor
 
-    func makeNSView(context: Context) -> NSView { Anchor() }
-    func updateNSView(_ view: NSView, context: Context) { anchor.view = view }
+    func makeNSView(context: Context) -> DiskMenuAnchor { DiskMenuAnchor() }
+    func updateNSView(_ view: DiskMenuAnchor, context: Context) { anchor.view = view }
+}
 
-    /// Flipped, so the menu's top meets the button's bottom edge, and never in the way of a click.
-    private final class Anchor: NSView {
-        override var isFlipped: Bool { true }
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+/// The view behind the path bar's disk part, as big as it is, where its menu opens: flipped, so the menu's top meets the
+/// button's bottom edge, and never in the way of a click. The smoke test finds the disk part by it, and the menu open
+/// there.
+final class DiskMenuAnchor: NSView {
+    /// The menu opened here last, while it's kept.
+    weak var opened: DiskMenu?
+
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// The disk menu (`DiskModel.diskMenu`): an item for each disk, with its icon and free space, then Choose Folder. It
+/// keeps its disks' items by the root of the disk each names, so each listing of the volumes that lands retitles them
+/// in place.
+@MainActor final class DiskMenu {
+    let items = DiskItemMenu()
+    var menu: NSMenu { items.menu }
+    private var disks: [String: NSMenuItem] = [:]
+
+    /// An item for `volume`, which `show` titles.
+    func add(_ volume: DiskVolumeChoice, enabled: Bool, action: @escaping () -> Void) -> NSMenuItem {
+        let item = items.add(volume.name, enabled: enabled, action: action)
+        disks[volume.url.path] = item
+        return item
+    }
+
+    /// Titles each disk with its name and free space as `volumes` lists them, the free space lined up in a column after
+    /// the longest name. NSMenu redraws an item whose title changes, open or not, so each is retitled in place. A disk
+    /// mounted since the menu was made isn't added to it, and one ejected keeps the figure it had.
+    func show(_ volumes: [DiskVolumeChoice]) {
+        let font = NSFont.menuFont(ofSize: 0)
+        let listed = volumes.filter { disks[$0.url.path] != nil }
+        let column = (listed.map { ($0.name as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0) + 24
+        for volume in listed {
+            guard let item = disks[volume.url.path], let available = volume.available else { continue }
+            item.attributedTitle = Self.title(volume.name, free: bytes(available), column: column, font: font)
+        }
     }
 }
 
@@ -211,13 +246,13 @@ extension DiskModel {
     /// The disk menu: each disk Disk lists, with its icon and free space, then Choose Folder. The startup disk shows
     /// from the live map; another disk is scanned, as Choose Folder scans a folder on one. The volumes are listed again
     /// as it opens, as when the pointer reached the disk's part of the path bar, and fresher figures that land while it's
-    /// open retitle its disks in place (`showFigures`).
-    func diskMenu(appearance: IconAppearance, scale: CGFloat) -> DiskItemMenu {
-        let menu = DiskItemMenu()
+    /// open retitle its disks in place (`DiskMenu.show`).
+    func diskMenu(appearance: IconAppearance, scale: CGFloat) -> DiskMenu {
+        let menu = DiskMenu()
         let busy = isScanning || isTrashing
         let shown = folderPath?.volume.path
         for volume in choices {
-            let item = menu.add(volume.name, enabled: !busy) { [weak self] in self?.show(volume.url.path) }
+            let item = menu.add(volume, enabled: !busy) { [weak self] in self?.show(volume.url.path) }
             let icon = Self.menuIconRequest(volume.url.path, appearance: appearance, scale: scale)
             if let drawn = Icons.store.cachedIcon(for: icon) {
                 item.image = drawn.nsImage
@@ -227,12 +262,11 @@ extension DiskModel {
                 Task { item.image = await Icons.store.icon(for: icon)?.nsImage }
             }
             item.state = volume.url.path == shown ? .on : .off
-            menu.disks[volume.url.path] = item
         }
-        showFigures(in: menu)
+        menu.show(choices)
         followFigures(in: menu)
-        menu.separator()
-        let choose = menu.add("Choose Folder…", enabled: !busy) { [weak self] in self?.chooseFolder() }
+        menu.items.separator()
+        let choose = menu.items.add("Choose Folder…", enabled: !busy) { [weak self] in self?.chooseFolder() }
         // ⌘O, as the File menu's Choose Folder.
         choose.keyEquivalent = "o"
         // The free space it shows is as of now, or as of the listing begun as the pointer reached the disk.
@@ -240,32 +274,21 @@ extension DiskModel {
         return menu
     }
 
-    /// Titles each of `menu`'s disks with its name and free space as the volumes are listed now, the free space lined up
-    /// in a column after the longest name. NSMenu redraws an item whose title changes, open or not, so each is retitled
-    /// in place. A disk mounted since the menu was made isn't added to it, and one ejected keeps the figure it had.
-    private func showFigures(in menu: DiskItemMenu) {
-        let font = NSFont.menuFont(ofSize: 0)
-        let listed = choices.filter { menu.disks[$0.url.path] != nil }
-        let column = (listed.map { ($0.name as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0) + 24
-        for volume in listed {
-            guard let item = menu.disks[volume.url.path], let available = volume.available else { continue }
-            item.attributedTitle = Self.menuTitle(volume.name, free: bytes(available), column: column, font: font)
-        }
-    }
-
     /// Retitles `menu`'s disks as each fresher listing lands, for as long as the menu is kept, as it is while it shows.
-    private func followFigures(in menu: DiskItemMenu) {
+    private func followFigures(in menu: DiskMenu) {
         withObservationTracking { _ = self.choices } onChange: { [weak self, weak menu] in
             Task { @MainActor in
                 guard let self, let menu else { return }
-                self.showFigures(in: menu)
+                menu.show(self.choices)
                 self.followFigures(in: menu)
             }
         }
     }
+}
 
+extension DiskMenu {
     /// "Macintosh HD", then its free space as a figure led by its name, "Free 245 GB", at `column`.
-    private static func menuTitle(_ name: String, free: String, column: CGFloat, font: NSFont) -> NSAttributedString {
+    private static func title(_ name: String, free: String, column: CGFloat, font: NSFont) -> NSAttributedString {
         let paragraph = NSMutableParagraphStyle()
         paragraph.tabStops = [NSTextTab(textAlignment: .left, location: column)]
         let small = NSFont.menuFont(ofSize: NSFont.smallSystemFontSize)

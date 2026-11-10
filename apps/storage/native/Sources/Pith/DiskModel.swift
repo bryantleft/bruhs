@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import os
 import PithCore
 
 /// Files, bytes and unreadable folders counted so far by a running scan.
@@ -174,21 +175,26 @@ enum MapCommand: Equatable {
         didSet { icons.volumes = Set(choices.map(\.url.path)) }
     }
 
-    /// The smoke test's listing of the volumes, landed as a listing does: figures of its own, fresher than the last.
-    func smokeTestListsVolumes(_ volumes: [DiskVolumeChoice]) {
-        choices = volumes
+    /// The smoke test's own listing of the volumes, with figures of its own, fresher than the Mac's: each listing gives
+    /// it, as it would give the Mac's, until it's set back to nil.
+    func smokeTestListsVolumes(_ volumes: [DiskVolumeChoice]?) {
+        smokeVolumes.withLock { $0 = volumes }
     }
+    @ObservationIgnored private let smokeVolumes = OSAllocatedUnfairLock<[DiskVolumeChoice]?>(initialState: nil)
 
     /// Lists the volumes on a queue of its own, one listing at a time, however often they're asked for meanwhile
     /// (`VolumeLister`): a network share that hangs holds that queue, and never Swift's shared pool.
-    @ObservationIgnored private lazy var volumeLister = VolumeLister(list: { DiskModel.mountedVolumes() }) { [weak self] found in
-        DispatchQueue.main.async {
-            MainActor.assumeIsolated {
-                guard let self, found != self.choices else { return }
-                self.choices = found
+    @ObservationIgnored private lazy var volumeLister: VolumeLister<[DiskVolumeChoice]> = {
+        let smoke = smokeVolumes
+        return VolumeLister(list: { smoke.withLock { $0 } ?? DiskModel.mountedVolumes() }) { [weak self] found in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self, found != self.choices else { return }
+                    self.choices = found
+                }
             }
         }
-    }
+    }()
     private let runner = ScannerRunner()
     private var operation: Task<Void, Never>?
     private var generation = UUID()
