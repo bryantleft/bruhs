@@ -53,6 +53,9 @@ import PithCore
     private var previewItems: [URL] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // The known places and the icon store are made off the main thread before any view needs them: Activity's app
+        // icons go by the places' rule, and finding the places asks LaunchServices for a few apps.
+        Icons.prepare()
         NSApp.setActivationPolicy(.accessory)
         BruhsFonts.register()
         NSApp.mainMenu = makeMainMenu()
