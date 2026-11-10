@@ -88,6 +88,9 @@ enum MapCommand: Equatable {
     /// What deleting the selected items frees now, from one measurement of them all, once the scanner has made it: clones,
     /// hard links and snapshots outside them can keep part of their size, and those shared among them count once.
     private(set) var selectedFrees: DiskFrees?
+    /// How old that figure is: what the items free now, or what they freed when Pith last measured them, before they
+    /// changed, while it waits to measure them again or measures them (`FreesAge`).
+    private(set) var freesAge: FreesAge?
     @ObservationIgnored private var frees = FreesSchedule()
     private var freesTask: Task<Void, Never>?
     /// A measurement of the same selection held back until the last one's rest ends (`FreesSchedule`), and when.
@@ -689,6 +692,16 @@ enum MapCommand: Equatable {
         setSelection(next)
     }
 
+    /// Shift and an arrow key: adds the item at `path` to the selection, and an item selected already stays, though a
+    /// held key asks for it again before the page shows it selected (`DiskSelection.add`). A path that's no item of the
+    /// map changes nothing.
+    func add(_ path: String) {
+        guard result?.item(at: path) != nil else { return }
+        var next = selection
+        next.add(path)
+        setSelection(next)
+    }
+
     /// Makes `next` the selection, with its items and plan. Other items than before are measured afresh, and a
     /// measurement of the last ones is dropped.
     private func setSelection(_ next: DiskSelection) {
@@ -697,7 +710,7 @@ enum MapCommand: Equatable {
         refreshSelected()
         guard changed else { return }
         freesTask?.cancel(); freesTask = nil
-        selectedFrees = nil
+        selectedFrees = nil; freesAge = nil
         follow(frees.selected(selectedSizes))
     }
 
@@ -746,9 +759,15 @@ enum MapCommand: Equatable {
         if case .wait(let until) = step, freesLater?.until == until { return }
         freesLater?.task.cancel(); freesLater = nil
         switch step {
-        case .keep: break
-        case .measure: measureFrees()
+        case .keep:
+            // Back within a megabyte of what was measured, the figure is what they free now again. While a measurement
+            // runs, the schedule keeps whatever comes, and the figure says what it said.
+            if freesTask == nil, case .changed(let measured, _)? = freesAge { freesAge = .current(measured: measured) }
+        case .measure:
+            if let measured = freesAge?.measured { freesAge = .changed(measured: measured, again: nil) }
+            measureFrees()
         case .wait(let until):
+            if let measured = freesAge?.measured { freesAge = .changed(measured: measured, again: until) }
             let task = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(max(0, until.timeIntervalSinceNow)))
                 guard let self, !Task.isCancelled else { return }
@@ -774,6 +793,7 @@ enum MapCommand: Equatable {
                 guard !Task.isCancelled, let self, self.selection.paths == paths else { return }
                 self.freesTask = nil
                 self.selectedFrees = measured
+                self.freesAge = .current(measured: Date())
                 // The items may have moved while they were measured.
                 self.follow(self.frees.landed(self.selectedSizes, at: Date(), took: Date().timeIntervalSince(began)))
             } catch {

@@ -1,7 +1,22 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import { learnedFrom } from "../native-web/hints.ts";
-import { NOTHING_LEARNED } from "../src/lib/map-hints.ts";
+import { HINT_STEPS, NOTHING_LEARNED } from "../src/lib/map-hints.ts";
+
+describe("the hints' names", () => {
+  test("are the ones Pith keeps in its settings, which tests/map-hints.json holds for both", () => {
+    const fixture = JSON.parse(
+      readFileSync(new URL("./map-hints.json", import.meta.url), "utf8"),
+    ) as { hints: string[] };
+    // Pith saves only the names it knows, so a hint the page adds alone would never stay learned.
+    assert.deepEqual([...HINT_STEPS].sort(), [...fixture.hints].sort());
+    assert.deepEqual(
+      Object.keys(NOTHING_LEARNED).sort(),
+      [...fixture.hints].sort(),
+    );
+  });
+});
 
 describe("learnedFrom", () => {
   test("reads the hints Pith keeps in its settings, by name", () => {

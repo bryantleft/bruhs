@@ -125,6 +125,9 @@ extension AppDelegate {
             // The fixture's map is a live one, as the startup disk's is: made once when Disk opens, then kept current.
             let fixture = root.resolvingSymlinksInPath().path
             disk.startLive(root: fixture, keep: true)
+            // macOS keeps the daily check's schedule for the app's bundle ID, the person's Pith's too, so an automated run
+            // registers none.
+            var dailyChecks = [disk.live?.schedulesDailyCheck]
             showDisk()
             checks["tab_switches"] = await eventually { main.window.title == "Pith" && main.state.tab == .disk }
             try await waitUntil("the first map") { self.disk.result?.root.path == fixture }
@@ -157,7 +160,9 @@ extension AppDelegate {
             checks.merge(await checkTrashHoldsThroughNewerMaps(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkOpenedFolderDetail(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(try await checkLiveFollows(disk, in: fixture, prefix: "live_map"), uniquingKeysWith: { _, new in new })
-            checks.merge(try await checkLiveReopens(fixture), uniquingKeysWith: { _, new in new })
+            checks.merge(try await checkLiveReopens(fixture, dailyChecks: &dailyChecks), uniquingKeysWith: { _, new in new })
+            print("daily check registered with macOS's scheduler by the run's live maps: \(dailyChecks)")
+            checks["left_the_daily_check_schedule_alone"] = dailyChecks.count == 2 && dailyChecks.allSatisfy { $0 == false }
             // Leaving the Disk tab keeps the map, so its open folder survives; closing the window frees WebKit.
             // An identity, not a reference: holding the view here would keep it alive past the window's close.
             let shown = webView.map(ObjectIdentifier.init)
@@ -232,8 +237,8 @@ extension AppDelegate {
         let after = try await web.callAsyncJavaScript(mapHeight, in: nil, contentWorld: .page) as? Double
         print("map height before selection=\(before ?? -1) after=\(after ?? -1)")
         let icon = await checkSelectionIcon()
-        // Bigger Text zooms the map's page too. The step is undone, since this runs with the user's settings, and the
-        // page is back at its usual zoom before anything after measures it.
+        // Bigger Text zooms the map's page too. The step is undone, so the page is back at its usual zoom before anything
+        // after measures it. The run keeps the step in memory, as it keeps every setting, never in the person's.
         let size = TextSize.shared, grow = size.canGrow, usual = size.scale
         size.step(grow ? 1 : -1)
         let zoomed = await eventually { web.pageZoom == size.scale } && size.scale != usual
@@ -1213,7 +1218,7 @@ extension AppDelegate {
 
     /// Quits the live map as Pith's quit does, which saves it, then opens it in a second model as the next launch
     /// would: it must open on the saved map, not walk again, and go on following changes.
-    private func checkLiveReopens(_ fixture: String) async throws -> [String: Bool] {
+    private func checkLiveReopens(_ fixture: String, dailyChecks: inout [Bool?]) async throws -> [String: Bool] {
         guard let live = disk.live, let size = disk.result?.root.size else { return ["live_map_reopens": false] }
         final class Flag { var on = false }
         let stopped = Flag()
@@ -1222,6 +1227,7 @@ extension AppDelegate {
         let reopened = DiskModel()
         reopened.scansFolder = disk.scansFolder
         reopened.startLive(root: fixture, keep: true)
+        dailyChecks.append(reopened.live?.schedulesDailyCheck)
         reopened.visibilityChanged(true)
         let opens = await eventually { reopened.result?.root.path == fixture }
         let restored = reopened.live?.restored == true && reopened.live?.rebuildReason == nil
@@ -1357,8 +1363,8 @@ extension AppDelegate {
           const ring = () => canvas.parentElement.querySelector("div.pointer-events-none.absolute");
           const button = [...document.querySelectorAll('[aria-label^="Items in"] button')].find((button) => button.textContent.startsWith(name + " "));
           button?.click();
-          // The selection's rings come before any other, once Pith's answer presses the item's row.
-          if (!button || !(await until(() => button.getAttribute("aria-pressed") === "true" && ring() !== null))) return null;
+          // The selection's rings come before any other, once Pith's answer shows the item's row selected.
+          if (!button || !(await until(() => button.hasAttribute("data-selected") && ring() !== null))) return null;
           return ring().getBoundingClientRect();
         };
         const blockOf = async (name) => {

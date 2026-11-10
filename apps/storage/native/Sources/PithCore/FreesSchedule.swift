@@ -88,3 +88,62 @@ public struct FreesSchedule: Sendable {
         restsUntil = time.addingTimeInterval(max(Self.leastRest, restFactor * max(0, took)))
     }
 }
+
+/// How old the figure of what deleting the selection frees is, which the bar's figure says of itself: what the items
+/// free now, as Pith measured them, or what they freed when it last did, before they changed, while the schedule waits
+/// out that measurement's rest (`FreesSchedule`) or measures them again. A large selection that keeps changing can
+/// show a figure from hours before, which mustn't read as now.
+public enum FreesAge: Equatable, Sendable {
+    /// What they free now: Pith measured them at `measured`, and they haven't moved by more than a megabyte since.
+    case current(measured: Date)
+    /// They've changed since Pith measured them at `measured`. It measures them again at `again`, or is measuring them
+    /// now when that's nil.
+    case changed(measured: Date, again: Date?)
+
+    public var measured: Date {
+        switch self {
+        case .current(let measured), .changed(let measured, _): measured
+        }
+    }
+
+    public var isCurrent: Bool {
+        if case .current = self { return true }
+        return false
+    }
+}
+
+extension DiskFrees {
+    /// Why deleting the items, or the item, frees less than their size, in sentences, with when Pith measured them: what
+    /// they free now, or, once they've changed since, what they'd have freed then and when Pith measures them again.
+    public func help(several: Bool, age: FreesAge, calendar: Calendar = .current) -> String {
+        let them = several ? "them" : "it", They = several ? "They’ve" : "It’s"
+        let measured = Self.when(age.measured, calendar: calendar)
+        var sentences: [String]
+        switch age {
+        case .current:
+            sentences = ["Deleting \(them) frees \(formatBytes(bytes)) now, as Pith measured \(them) \(measured)."]
+        case .changed(_, let again):
+            let next = again.map { "Pith measures \(them) again \(Self.when($0, calendar: calendar))" } ?? "Pith is measuring \(them) again now"
+            sentences = ["When Pith measured \(them) \(measured), deleting \(them) would have freed \(formatBytes(bytes)).", "\(They) changed since, and \(next)."]
+        }
+        sentences.append("Moving \(them) to the Trash frees that once you empty the Trash.")
+        if shared > 0 {
+            sentences.append(several ? "\(formatBytes(shared)) of their size is shared with clones or hard links outside them, which keep those blocks."
+                             : "\(formatBytes(shared)) of it is shared with clones or hard links outside it, which keep those blocks.")
+        }
+        if snapshots > 0 {
+            sentences.append("\(formatBytes(snapshots)) stays in local snapshots until macOS deletes them.")
+        }
+        if unreadable > 0 {
+            sentences.append("Pith couldn’t read \(unreadable.formatted()) \(unreadable == 1 ? "folder" : "folders") inside, so they aren’t counted.")
+        }
+        return sentences.joined(separator: " ")
+    }
+
+    /// When something happened, as a sentence says it: "at 10:42 AM" today, and "on Nov 9 at 10:42 PM" another day.
+    static func when(_ date: Date, calendar: Calendar) -> String {
+        let time = date.formatted(date: .omitted, time: .shortened)
+        guard !calendar.isDateInToday(date) else { return "at \(time)" }
+        return "on \(date.formatted(.dateTime.month(.abbreviated).day())) at \(time)"
+    }
+}

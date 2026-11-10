@@ -2,12 +2,12 @@ import { memo } from "react";
 import { formatBytes } from "~/lib/format";
 import { NOT_MEASURED } from "~/lib/treemap-layout";
 import type { DirNode, TreeNode } from "~/lib/types";
-import { selectionButton } from "./map-selection";
+import { SELECTED_SAID, selectedRow, selectionButton } from "./map-selection";
 
 interface TreemapItemsProps {
   /** The directory the map shows, whose items the list names. */
   root: DirNode;
-  /** The items selected, by path, each pressed in the list. */
+  /** The items selected, by path, each shown selected in the list. */
   selectedPaths: readonly string[];
   /** Selects an item, as a click on its block does. */
   onSelect: (node: TreeNode | null) => void;
@@ -38,9 +38,11 @@ function isOpenable(node: TreeNode, root: DirNode): node is DirNode {
  * buttons, including the ones too small to draw and the folders the scan couldn't read,
  * and then the Not measured block, which explains itself. The list stays out of the tab
  * order, since the map itself is the one tab stop; VoiceOver still reaches every button,
- * and the item it's on is outlined on the map. Where the host keeps several items selected,
- * each file and folder has a button beside it that adds it to the selection or takes it out,
- * as a ⌘-click on its block does, which VoiceOver's press can't; a press with ⌘ down does too.
+ * and the item it's on is outlined on the map. A row selects its item alone, as a click on
+ * its block does, so it says "selected" rather than acting as a toggle. Where the host keeps
+ * several items selected, each file and folder has a button beside it that adds it to the
+ * selection or takes it out, as a ⌘-click on its block does, which VoiceOver's press can't;
+ * a press with ⌘ down does too.
  */
 export const TreemapItems = memo(function TreemapItems({
   root,
@@ -59,14 +61,14 @@ export const TreemapItems = memo(function TreemapItems({
       onBlur={() => onFocusItem(null)}
     >
       {root.children.map((child) => {
-        const pressed = selectedPaths.includes(child.path);
-        const adds = onToggle ? selectionButton(child, pressed) : null;
+        const selected = selectedPaths.includes(child.path);
+        const adds = onToggle ? selectionButton(child, selected) : null;
         return (
           <li key={child.path} className="flex items-center gap-1">
             <button
               type="button"
               tabIndex={-1}
-              aria-pressed={pressed}
+              {...selectedRow(selected)}
               disabled={child.kind === "unreadable" || child.kind === "volume"}
               onClick={(event) => {
                 // Only an item joins the selection: the smaller items are no item.
@@ -81,7 +83,7 @@ export const TreemapItems = memo(function TreemapItems({
               onFocus={() =>
                 onFocusItem(child.kind === "aggregate" ? null : child.path)
               }
-              className="menu-item block min-w-0 flex-1 truncate px-2 py-1"
+              className="menu-item block min-w-0 flex-1 truncate px-2 py-1 data-selected:bg-(--role-selection,var(--color-persimmon-950))"
             >
               {child.name}{" "}
               <span className="text-code-sm text-(--role-text-secondary,var(--color-rambutan-400)) tabular-nums">
@@ -91,6 +93,7 @@ export const TreemapItems = memo(function TreemapItems({
                     ? `${formatBytes(child.size)}, another volume`
                     : formatBytes(child.size)}
               </span>
+              {selected && <span className="sr-only">{SELECTED_SAID}</span>}
             </button>
             {adds && (
               <button

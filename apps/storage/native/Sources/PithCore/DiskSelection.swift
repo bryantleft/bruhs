@@ -32,6 +32,10 @@ public struct DiskSelection: Equatable, Sendable {
         if paths.contains(path) { paths.removeAll { $0 == path } } else { paths = Self.normalized(paths + [path]) }
     }
 
+    /// Shift and an arrow key on `path`: it joins the selection, and an item selected already stays, since a held key
+    /// asks for it again before the page shows it selected. An item inside a folder already selected changes nothing.
+    public mutating func add(_ path: String) { paths = Self.normalized(paths + [path]) }
+
     /// Keeps the items `keeps` says, as a newer map still has them.
     public mutating func keep(where keeps: (String) -> Bool) { paths = paths.filter(keeps) }
 

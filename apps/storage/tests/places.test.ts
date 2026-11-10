@@ -9,6 +9,7 @@ import {
   placesIn,
   readPlaces,
   unreadableBesides,
+  WAITING_FOR_ANSWER,
 } from "../native-web/places.ts";
 import { PLACES_SHOWN } from "../native-web/side-lists.ts";
 import { formatBytes } from "../src/lib/format.ts";
@@ -24,8 +25,9 @@ function place(
   path: string,
   size: number | null,
   name = id,
+  asking = false,
 ): Place {
-  return { id, name, path, key: `place/${id}`, size };
+  return { id, name, path, key: `place/${id}`, size, asking };
 }
 
 /** The table native sends for the live map of the startup disk, in the table's order. */
@@ -235,6 +237,29 @@ describe("each place's figure", () => {
     assert.equal(NEEDS_ACCESS, "Needs Full Disk Access");
     assert.equal(placeFigure(mail), "Needs Full Disk Access");
   });
+
+  test("says it waits for the person's answer where macOS is still asking about the place", () => {
+    // The asking notice on the same screen says answering is enough.
+    const asked = place(
+      "icloud-drive",
+      icloud.path,
+      null,
+      "iCloud Drive",
+      true,
+    );
+    assert.equal(WAITING_FOR_ANSWER, "Waiting for your answer");
+    assert.equal(placeFigure(asked), "Waiting for your answer");
+    assert.deepEqual(
+      ids(placesIn(table([asked, mail]), home)),
+      ["icloud-drive", "mail"],
+      "both shown, in the table's order",
+    );
+    assert.equal(
+      placeFigure(mail),
+      "Needs Full Disk Access",
+      "a place Pith can't read for another reason",
+    );
+  });
 });
 
 describe("readPlaces", () => {
@@ -258,11 +283,27 @@ describe("readPlaces", () => {
             path: mail.path,
             key: "place/mail",
             size: null,
+            asking: false,
+          },
+          {
+            id: "icloud-drive",
+            name: "iCloud Drive",
+            path: icloud.path,
+            key: "place/icloud-drive",
+            size: null,
+            asking: true,
           },
         ],
       }),
     );
-    assert.deepEqual(read, table([developer, mail]));
+    assert.deepEqual(
+      read,
+      table([
+        developer,
+        mail,
+        place("icloud-drive", icloud.path, null, "iCloud Drive", true),
+      ]),
+    );
   });
 
   test("takes a place sent without a size for one Pith can't read", () => {
@@ -305,6 +346,7 @@ describe("readPlaces", () => {
       sent({ shownAt: ["/"], places: [{ ...good, size: "1 GB" }] }),
       sent({ shownAt: ["/"], places: [{ ...good, size: -1 }] }),
       sent({ shownAt: ["/"], places: [{ ...good, size: 1.5 }] }),
+      sent({ shownAt: ["/"], places: [{ ...good, asking: "yes" }] }),
     ]) {
       assert.equal(readPlaces(text), null, String(text));
     }
@@ -348,10 +390,24 @@ describe("Couldn't read beside Places", () => {
       ".Trash",
       "Locked",
     ]);
-    // A place Places leaves out, past its six, is still listed.
-    assert.deepEqual(names(unreadableBesides(children, [mail])), [
+  });
+
+  test("still lists a place Places leaves out, past its six", () => {
+    // Every place at home: four of 1 GB or more, largest first, then those Pith can't read, in the table's order, so
+    // Documents is the seventh and Places doesn't show it.
+    const shown = placesIn(table(every), home);
+    assert.equal(shown.length, PLACES_SHOWN);
+    assert.deepEqual(ids(shown), [
+      "photos-library",
+      "developer",
+      "icloud-drive",
+      "trash",
+      "mail",
+      "messages",
+    ]);
+    // Places names the Trash, so Couldn't read leaves it out; Documents it lists.
+    assert.deepEqual(names(unreadableBesides(children, shown)), [
       "Documents",
-      ".Trash",
       "Locked",
     ]);
   });

@@ -208,7 +208,7 @@ final class KnownPlacesTests: XCTestCase {
             // map's next tree catches up with.
             LivePlace(path: path("Library/Developer"), size: 6_100_000_000),
             LivePlace(path: path("Library/Mail"), size: nil),
-            LivePlace(path: path("Library/Mobile Documents"), size: nil),
+            LivePlace(path: path("Library/Mobile Documents"), size: nil, asking: true),
             LivePlace(path: path("Downloads"), size: 800_000_000),
             // Known places the section doesn't offer.
             LivePlace(path: path("Desktop"), size: 5_000_000_000),
@@ -221,22 +221,28 @@ final class KnownPlacesTests: XCTestCase {
         XCTAssertEqual(developer, PlacesTable.Place(id: "developer", name: "Developer", path: path("Library/Developer"), key: "place/developer", size: 6_000_000_000),
                        "the figure the map shows")
         XCTAssertEqual(sent.places.first { $0.id == "downloads" }?.size, 800_000_000, "the index's own figure for a place the map folds away")
-        XCTAssertEqual(sent.places.first { $0.id == "mail" }, PlacesTable.Place(id: "mail", name: "Mail", path: path("Library/Mail"), key: "place/mail", size: nil))
-        XCTAssertNil(try XCTUnwrap(sent.places.first { $0.id == "icloud-drive" }).size, "waiting on macOS's question")
+        XCTAssertEqual(sent.places.first { $0.id == "mail" }, PlacesTable.Place(id: "mail", name: "Mail", path: path("Library/Mail"), key: "place/mail", size: nil),
+                       "macOS keeps Pith out, until it has Full Disk Access")
+        let iCloud = try XCTUnwrap(sent.places.first { $0.id == "icloud-drive" })
+        XCTAssertNil(iCloud.size)
+        XCTAssertTrue(iCloud.asking, "waiting on the person's answer to macOS's question")
+        XCTAssertFalse(developer.asking)
         XCTAssertEqual(table.placesTable(for: homeMap, mapRoot: "/", live: []).places, [], "a map whose index names no place")
     }
 
     func testThePlacesTableTravelsAsThePageReadsIt() throws {
         let sent = PlacesTable(shownAt: ["/", "/Users/x"], places: [
-            PlacesTable.Place(id: "mail", name: "Mail", path: "/Users/x/Library/Mail", key: "place/mail", size: nil),
+            PlacesTable.Place(id: "mail", name: "Mail", path: "/Users/x/Library/Mail", key: "place/mail", size: nil, asking: true),
             PlacesTable.Place(id: "developer", name: "Developer", path: "/Users/x/Library/Developer", key: "place/developer", size: 6_000_000_000),
         ])
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(sent)) as? [String: Any])
         XCTAssertEqual(Set(json.keys), ["shownAt", "places"])
         let places = try XCTUnwrap(json["places"] as? [[String: Any]])
-        XCTAssertEqual(places.map { Set($0.keys) }, [["id", "name", "path", "key", "size"], ["id", "name", "path", "key", "size"]])
+        XCTAssertEqual(places.map { Set($0.keys) }, [["id", "name", "path", "key", "size", "asking"], ["id", "name", "path", "key", "size", "asking"]])
         XCTAssertTrue(places[0]["size"] is NSNull, "no size where Pith can't read it")
+        XCTAssertEqual(places[0]["asking"] as? Bool, true)
         XCTAssertEqual(places[1]["size"] as? UInt64, 6_000_000_000)
+        XCTAssertEqual(places[1]["asking"] as? Bool, false)
     }
 
     /// A folder the map couldn't read shows the icon of the app it belongs to when Pith can tell, without looking the

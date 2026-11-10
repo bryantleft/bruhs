@@ -16,7 +16,9 @@ extension AppDelegate {
     /// - ⌘-clicks the first file again, which leaves;
     /// - presses the first file's Add button in the list of items, with no ⌘ down, as VoiceOver's press is, which adds
     ///   it, then its Take Out button, which takes it out again;
-    /// - presses Shift and an arrow key on the map, which adds the nearest item in that direction not selected yet.
+    /// - presses Shift and an arrow key on the map twice, before Pith has answered the first, as a held key repeats, which
+    ///   adds the nearest item in that direction not selected yet, once, and keeps it.
+    /// Rows show the items selected without being toggles: each says "selected" after its name, and none is pressed.
     /// Pith then measures what deleting the three frees in one run over them, of as many files as they hold, and a picture
     /// of the window, with the bar under the map showing them, is saved at `picture`. Escape on the map clears the
     /// selection after.
@@ -59,11 +61,15 @@ extension AppDelegate {
         let name = (first as NSString).lastPathComponent
         let added = await press("Add \(name) to the selection", selecting: [second, sub, first])
         let takenOut = await press("Take \(name) out of the selection", selecting: [second, sub])
-        // Shift and the arrow key toward an item not selected yet: some directions meet the map's edge or its smaller items.
+        // Shift and the arrow key toward an item not selected yet, twice before Pith answers, as a held key repeats: some
+        // directions meet the map's edge or its smaller items. The second asks for the item the first added again, and
+        // it stays.
         var extended: [String] = []
         for key in ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"] where extended.isEmpty {
-            _ = try? await web.callAsyncJavaScript(Self.shiftArrow, arguments: ["key": key], in: nil, contentWorld: .page)
+            _ = try? await web.callAsyncJavaScript(Self.shiftArrow, arguments: ["key": key, "times": 2], in: nil, contentWorld: .page)
             for _ in 0..<10 where disk.selection.paths.count < 3 { try? await Task.sleep(for: .milliseconds(100)) }
+            // Long enough for a second answer that would take it out again.
+            try? await Task.sleep(for: .milliseconds(300))
             if disk.selection.paths.count == 3 { extended = disk.selection.paths }
         }
         let grown = extended.count == 3 && Array(extended.prefix(2)) == [second, sub] && disk.result?.item(at: extended[2]) != nil
@@ -266,16 +272,20 @@ extension AppDelegate {
     }
 
     /// Whether the page shows `selected` as Pith holds it: a block outlined for each, each on a block of its own here,
-    /// and in the map's list of items and in Largest files, the rows of the items selected pressed, and no others.
+    /// and in the map's list of items and in Largest files, the rows of the items selected shown selected, and saying so
+    /// after their names, and no others. No row is a toggle, since pressing one selects its item alone.
     private static func shows(_ page: [String: Any]?, _ selected: [String]) -> Bool {
         guard let page, let rings = page["rings"] as? Int, let items = page["items"] as? [[String: Any]],
               let largest = page["largest"] as? [[String: Any]] else { return false }
         let names = selected.map { ($0 as NSString).lastPathComponent }
+        func agrees(_ row: [String: Any], _ chosen: Bool) -> Bool {
+            row["toggle"] as? Bool == false && (row["shown"] as? Bool == true) == chosen && (row["says"] as? Bool == true) == chosen
+        }
         let itemRows = items.allSatisfy { row in
             let text = row["key"] as? String ?? ""
-            return (row["pressed"] as? Bool == true) == names.contains { text.hasPrefix($0 + " ") }
+            return agrees(row, names.contains { text.hasPrefix($0 + " ") })
         }
-        let largestRows = largest.allSatisfy { row in (row["pressed"] as? Bool == true) == selected.contains(row["key"] as? String ?? "") }
+        let largestRows = largest.allSatisfy { row in agrees(row, selected.contains(row["key"] as? String ?? "")) }
         return rings == selected.count && itemRows && largestRows
     }
 
@@ -295,12 +305,15 @@ extension AppDelegate {
         return row !== undefined;
         """
 
-    /// What the page shows selected: how many blocks the map outlines, and whether each row is pressed, of its list of
-    /// items by the row's text and of Largest files by the row's path.
+    /// What the page shows selected: how many blocks the map outlines, and, for each row of its list of items, by the
+    /// row's text, and of Largest files, by the row's path, whether it's shown selected, whether VoiceOver hears it's
+    /// selected after its name, from its label or its text, and whether it's a toggle.
     private static let shownSelected = """
         const canvas = document.querySelector("canvas");
+        const says = (button) => (button.getAttribute("aria-label") ?? button.textContent).endsWith(", selected");
         const rows = (selector, key) => [...document.querySelectorAll(selector)]
-          .map((button) => ({ key: key(button), pressed: button.getAttribute("aria-pressed") === "true" }));
+          .map((button) => ({ key: key(button), shown: button.hasAttribute("data-selected"), says: says(button),
+                              toggle: button.hasAttribute("aria-pressed") }));
         return {
           rings: canvas.parentElement.querySelectorAll("div.pointer-events-none.absolute").length,
           items: rows('[aria-label^="Items in"] li > button:first-child', (button) => button.textContent),
@@ -316,9 +329,12 @@ extension AppDelegate {
         return button !== undefined;
         """
 
-    /// Shift and the arrow key `key` on the map.
+    /// Shift and the arrow key `key` on the map, `times` times in a row, as a held key repeats, all before Pith answers.
     private static let shiftArrow = """
-        document.querySelector("canvas").parentElement.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey: true, bubbles: true, cancelable: true }));
+        const map = document.querySelector("canvas").parentElement;
+        for (let press = 0; press < times; press++) {
+          map.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey: true, repeat: press > 0, bubbles: true, cancelable: true }));
+        }
         """
 
     /// The texts of the rows of the map's list of items.

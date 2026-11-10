@@ -1137,21 +1137,21 @@ impl Index {
 
     /// What the index holds at each of `paths`, the known places Pith names beside the map, such as Mail or Developer:
     /// a folder's size, the figure its map shows, or none when the map can't read it. It can't when its listing failed,
-    /// when the folder waits on macOS's question about Pith (`asking`), or when a folder above it did either, so the map
-    /// can't tell whether it's there. A path its listed parent doesn't have isn't there, and gives nothing; so does a
-    /// path outside the index, or one found but waiting its turn to be listed.
+    /// when the folder waits on macOS's question about Pith (`asking`), which the place then says, or when a folder above
+    /// it did either, so the map can't tell whether it's there. A path its listed parent doesn't have isn't there, and
+    /// gives nothing; so does a path outside the index, or one found but waiting its turn to be listed.
     pub fn places(&self, paths: &[String], asking: &dyn Fn(u32) -> bool) -> Vec<Place> {
         paths
             .iter()
             .filter_map(|path| {
                 let (id, exact) = self.find(path)?;
-                let size = match self.folders[id as usize].status {
-                    Status::Listed | Status::Volume if exact => Some(self.folders[id as usize].size),
-                    Status::Unreadable => None,
-                    Status::Pending if asking(id) => None,
+                let (size, waits) = match self.folders[id as usize].status {
+                    Status::Listed | Status::Volume if exact => (Some(self.folders[id as usize].size), false),
+                    Status::Unreadable => (None, false),
+                    Status::Pending if asking(id) => (None, true),
                     _ => return None,
                 };
-                Some(Place { path: path.clone(), size })
+                Some(Place { path: path.clone(), size, asking: waits })
             })
             .collect()
     }
@@ -1586,6 +1586,10 @@ pub struct Place {
     pub path: String,
     /// The folder's size as its map shows it, or none when the map can't read it.
     pub size: Option<u64>,
+    /// It, or a folder above it, waits on macOS's question about Pith, which the person's answer settles: sent only
+    /// when it does.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub asking: bool,
 }
 
 /// How the map prunes: folders and files under `min` fold into a group, except on the way to the focus, and inside

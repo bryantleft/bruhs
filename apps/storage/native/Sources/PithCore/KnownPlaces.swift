@@ -221,7 +221,8 @@ public struct KnownPlaces: Sendable {
         let places = shortcuts.compactMap { place -> PlacesTable.Place? in
             guard let found = held[place.path] else { return nil }
             let size = found.size.map { tree.folder(at: place.path)?.size ?? $0 }
-            return PlacesTable.Place(id: place.id, name: place.name, path: place.path, key: IconKey.place(place.id).string, size: size)
+            return PlacesTable.Place(id: place.id, name: place.name, path: place.path, key: IconKey.place(place.id).string, size: size,
+                                     asking: size == nil && found.asking)
         }
         return PlacesTable(shownAt: [mapRoot, home], places: places)
     }
@@ -278,12 +279,15 @@ public struct PlacesTable: Encodable, Equatable, Sendable {
         public let key: String
         /// Its size as the map shows it, or nil where Pith can't read it, which travels as null.
         public let size: UInt64?
+        /// Pith can't read it yet because macOS is still asking the person about it, which answering settles, rather than
+        /// because only Full Disk Access would let it in.
+        public let asking: Bool
 
-        public init(id: String, name: String, path: String, key: String, size: UInt64?) {
-            self.id = id; self.name = name; self.path = path; self.key = key; self.size = size
+        public init(id: String, name: String, path: String, key: String, size: UInt64?, asking: Bool = false) {
+            self.id = id; self.name = name; self.path = path; self.key = key; self.size = size; self.asking = asking
         }
 
-        enum CodingKeys: String, CodingKey { case id, name, path, key, size }
+        enum CodingKeys: String, CodingKey { case id, name, path, key, size, asking }
 
         public func encode(to encoder: any Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
@@ -292,6 +296,7 @@ public struct PlacesTable: Encodable, Equatable, Sendable {
             try container.encode(path, forKey: .path)
             try container.encode(key, forKey: .key)
             try container.encode(size, forKey: .size)
+            try container.encode(asking, forKey: .asking)
         }
     }
 

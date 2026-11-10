@@ -96,3 +96,22 @@ export function selectionButton(
     ? { text: "Take Out", label: `Take ${node.name} out of the selection` }
     : { text: "Add", label: `Add ${node.name} to the selection` };
 }
+
+/**
+ * How a row of a list that selects its item says the item is selected. Pressing the row selects that item alone, so
+ * the row is no toggle: `aria-pressed` would have VoiceOver announce one, and a press take out an item that it
+ * doesn't. The row carries `data-selected`, which its style shows, and says "selected" after its name instead.
+ */
+export function selectedRow(selected: boolean): {
+  readonly "data-selected"?: "";
+} {
+  return selected ? { "data-selected": "" } : {};
+}
+
+/** What a selected row says after its name, as VoiceOver reads it: a row whose name is its content says it last. */
+export const SELECTED_SAID = ", selected";
+
+/** A row's label as VoiceOver reads it, saying "selected" after it when its item is selected. */
+export function rowLabel(label: string, selected: boolean): string {
+  return selected ? `${label}${SELECTED_SAID}` : label;
+}

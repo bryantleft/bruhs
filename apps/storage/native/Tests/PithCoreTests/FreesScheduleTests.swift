@@ -83,4 +83,36 @@ final class FreesScheduleTests: XCTestCase {
         XCTAssertEqual(schedule.selected([:]), .keep, "clearing the selection drops the measurement under way")
         XCTAssertEqual(schedule.landed([:], at: at(2), took: 1), .keep)
     }
+
+    /// The bar's figure says how old it is: what the items free now, as Pith measured them, or, once they've changed
+    /// since while the last measurement rests, what they'd have freed then, when Pith measures them again, and not that
+    /// it's what they free now. Sentences, with no separator glyphs.
+    func testTheFigureSaysWhenPithMeasuredIt() {
+        let frees = DiskFrees(bytes: 1_200_000_000, shared: 300_000_000, snapshots: 0, files: 10, unreadable: 0)
+        let measured = Date(), again = measured.addingTimeInterval(1_680)
+        let time = { (date: Date) in date.formatted(date: .omitted, time: .shortened) }
+        let current = frees.help(several: false, age: .current(measured: measured))
+        XCTAssertTrue(current.hasPrefix("Deleting it frees 1.20 GB now, as Pith measured it at \(time(measured)). "), current)
+        let waiting = frees.help(several: true, age: .changed(measured: measured, again: again))
+        XCTAssertTrue(waiting.hasPrefix("When Pith measured them at \(time(measured)), deleting them would have freed 1.20 GB. "
+                                        + "They’ve changed since, and Pith measures them again "), waiting)
+        XCTAssertFalse(waiting.contains("now."), "it isn't what they free now")
+        let measuring = frees.help(several: false, age: .changed(measured: measured, again: nil))
+        XCTAssertTrue(measuring.contains("It’s changed since, and Pith is measuring it again now."), measuring)
+        for text in [current, waiting, measuring] {
+            XCTAssertTrue(text.contains("300 MB of"), "what's shared still says why it frees less")
+            XCTAssertFalse(text.contains { "•·—–›»".contains($0) }, text)
+        }
+        // A figure from another day says which.
+        let old = measured.addingTimeInterval(-3 * 24 * 60 * 60)
+        let days = frees.help(several: false, age: .changed(measured: old, again: again))
+        XCTAssertTrue(days.contains("measured it on \(old.formatted(.dateTime.month(.abbreviated).day())) at \(time(old))"), days)
+    }
+
+    func testAFiguresAgeSaysWhetherItsCurrent() {
+        let measured = Date(timeIntervalSinceReferenceDate: 0)
+        XCTAssertTrue(FreesAge.current(measured: measured).isCurrent)
+        XCTAssertFalse(FreesAge.changed(measured: measured, again: nil).isCurrent)
+        XCTAssertEqual(FreesAge.changed(measured: measured, again: measured.addingTimeInterval(9)).measured, measured)
+    }
 }

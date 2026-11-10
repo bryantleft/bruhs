@@ -44,6 +44,20 @@ final class DiskSelectionTests: XCTestCase {
 
     // MARK: What stays
 
+    /// Shift and an arrow key add the next item, and a held key repeats before Pith has answered, asking for the item it
+    /// just added again: an add leaves an item selected already where it is, as a toggle wouldn't.
+    func testShiftArrowAddsAnItemAndAskingAgainKeepsIt() {
+        var selection = DiskSelection(["/r/a"])
+        selection.add("/r/b")
+        XCTAssertEqual(selection.paths, ["/r/a", "/r/b"])
+        selection.add("/r/b")
+        XCTAssertEqual(selection.paths, ["/r/a", "/r/b"], "the key's repeat keeps it")
+        selection.add("/r/a/inner")
+        XCTAssertEqual(selection.paths, ["/r/a", "/r/b"], "inside a folder selected, it's held already")
+        selection.add("/r")
+        XCTAssertEqual(selection.paths, ["/r"], "a folder holding them takes their place")
+    }
+
     func testTheSelectionKeepsOnlyWhatTheMapStillHas() {
         var selection = DiskSelection(["/r/a", "/r/b", "/r/c"])
         selection.keep { $0 != "/r/b" }

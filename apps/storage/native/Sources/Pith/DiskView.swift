@@ -357,10 +357,8 @@ private struct DiskVolumeList: View {
                 Text("Disks").font(BruhsType.sectionTitle).foregroundStyle(BruhsColor.textTertiary).accessibilityAddTraits(.isHeader)
                 ForEach(model.choices) { volume in
                     HStack(spacing: 14) {
-                        Image(nsImage: NSWorkspace.shared.icon(forFile: volume.url.path))
-                            .resizable()
-                            .frame(width: 32, height: 32)
-                            .accessibilityHidden(true)
+                        // Drawn off the main thread by the icon store, as every icon on Disk is.
+                        SystemIconView(key: .item(volume.url.path), size: 32)
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 Text(volume.name).font(BruhsType.label).foregroundStyle(BruhsColor.text).lineLimit(1)
@@ -437,30 +435,15 @@ private struct DiskSelectionBar: View {
                         .help("It also holds \(bytes(shared)) of APFS clones. Each shares its blocks with another copy, which the map counts instead, so the size leaves them out.")
                 }
             }
-            // Clones, hard links and snapshots outside them keep the blocks they share, so deleting them can free less.
-            if isSelection, let frees = model.selectedFrees, frees.bytes + 1_000_000 < size {
-                LabeledFigure(label: "Frees now", value: bytes(frees.bytes))
-                    .help(Self.freesHelp(frees, several: item == nil))
+            // Clones, hard links and snapshots outside them keep the blocks they share, so deleting them can free less. A
+            // figure from before the items changed says it's from then, not now, and its help says when Pith measured it
+            // and when it measures them again.
+            if isSelection, let frees = model.selectedFrees, let age = model.freesAge, frees.bytes + 1_000_000 < size {
+                LabeledFigure(label: age.isCurrent ? "Frees now" : "Frees", value: bytes(frees.bytes))
+                    .help(frees.help(several: item == nil, age: age))
             }
         }
         .fixedSize()
-    }
-
-    /// Why deleting it, or them, frees less than the size, in sentences.
-    static func freesHelp(_ frees: DiskFrees, several: Bool) -> String {
-        let them = several ? "them" : "it"
-        var sentences = ["Deleting \(them) frees \(bytes(frees.bytes)) now. Moving \(them) to the Trash frees that once you empty the Trash."]
-        if frees.shared > 0 {
-            sentences.append(several ? "\(bytes(frees.shared)) of their size is shared with clones or hard links outside them, which keep those blocks."
-                             : "\(bytes(frees.shared)) of it is shared with clones or hard links outside it, which keep those blocks.")
-        }
-        if frees.snapshots > 0 {
-            sentences.append("\(bytes(frees.snapshots)) stays in local snapshots until macOS deletes them.")
-        }
-        if frees.unreadable > 0 {
-            sentences.append("Pith couldn’t read \(frees.unreadable.formatted()) \(frees.unreadable == 1 ? "folder" : "folders") inside, so they aren’t counted.")
-        }
-        return sentences.joined(separator: " ")
     }
 
     var body: some View {
@@ -702,10 +685,15 @@ struct DiskWebView: NSViewRepresentable {
                 sentPlaces = nil; sentNotMeasured = nil; sentSelection = nil
                 send(revision: model.revision)
                 selection = model.selection.paths
-            // A click selects the item clicked, or none; a ⌘-click adds it or takes it out. Pith answers with the selection.
+            // A click selects the item clicked, or none; a ⌘-click adds it or takes it out; Shift and an arrow key add the
+            // next item, which stays when a held key asks for it again. Pith answers with the selection.
             case "select":
                 let paths = body["paths"] as? [String] ?? []
-                if body["toggle"] as? Bool == true { for path in paths { model.toggle(path) } } else { model.select(paths) }
+                switch body["how"] as? String {
+                case "toggle": for path in paths { model.toggle(path) }
+                case "add": for path in paths { model.add(path) }
+                default: model.select(paths)
+                }
             case "learnedHint": if let hint = body["hint"] as? String { model.mapHints.learn(hint) }
             case "whereTheSpaceIs": model.explainNotMeasured()
             case "fullDiskAccess": openDiskAccess()

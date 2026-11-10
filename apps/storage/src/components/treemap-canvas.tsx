@@ -83,6 +83,12 @@ interface Props {
    * Pith does. Without it a ⌘-click selects as a click does.
    */
   onToggle?: (node: TreeNode) => void;
+  /**
+   * Shift and an arrow key on the map: add the next item in that direction to the selection, for a host that keeps
+   * several. It never takes an item out, as a toggle would: a held key repeats before the host has answered, and asks
+   * for the item it just added again. Without it Shift and an arrow select as an arrow does.
+   */
+  onAdd?: (node: TreeNode) => void;
   /** The items selected, by path, each outlined; the last one picked is where the arrow keys move from. */
   selectedPaths: readonly string[];
   /** Follow the system's light or dark appearance. The browser app is dark-only. */
@@ -557,6 +563,7 @@ export function TreemapCanvas({
   onEnterDir,
   onSelect,
   onToggle,
+  onAdd,
   selectedPaths,
   followSystemAppearance = false,
   highlightKind = null,
@@ -832,12 +839,13 @@ export function TreemapCanvas({
       case "ArrowDown": {
         if (e.metaKey) return;
         e.preventDefault();
-        const extend = e.shiftKey && onToggle !== undefined;
+        const extend = e.shiftKey && onAdd !== undefined;
         const step = arrowStep(items, own, e.key, extend, selected);
         if (!step) return;
         const node = "add" in step ? step.add : step.select;
-        // Pith adds it as a ⌘-click would, through the same toggle: it isn't selected yet.
-        if ("add" in step) onToggle?.(node);
+        // Added, never toggled: a held key's repeat can come before Pith has answered, with the item still not shown
+        // selected here, and a toggle would take it out again.
+        if ("add" in step) onAdd?.(node);
         else onSelect(node);
         report(node.path);
         return;
@@ -888,7 +896,7 @@ export function TreemapCanvas({
     usedSpace !== undefined && usedSpace.unmeasured > 0
       ? ` ${formatBytes(usedSpace.unmeasured)} more is used space the scan couldn’t measure.`
       : "";
-  const keys = onToggle
+  const keys = onAdd
     ? "Arrow keys select items, Shift and an arrow key add one to the selection, Return opens a folder and Space previews."
     : "Arrow keys select items, Return opens a folder and Space previews.";
   const summary = `Treemap of ${root.path}, ${formatBytes(root.size)} in ${

@@ -13,6 +13,15 @@ final class MapHintsTests: XCTestCase {
         MapHints(read: { stored.value }, write: { stored.value = $0; stored.writes += 1 })
     }
 
+    /// The page learns hints by the same names Pith keeps (`HINT_STEPS` in src/lib/map-hints.ts): tests/map-hints.json
+    /// holds them, which hints.test.ts reads too, so a name added to one side alone fails both.
+    func testThePageAndPithNameTheSameHints() throws {
+        struct Fixture: Decodable { let hints: [String] }
+        let storage = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: storage.appendingPathComponent("tests/map-hints.json")))
+        XCTAssertEqual(MapHints.all, fixture.hints)
+    }
+
     func testAHintLearnedStaysLearnedForTheNextWindowAndLaunch() {
         let stored = Stored()
         XCTAssertEqual(hints(stored).learned, [])

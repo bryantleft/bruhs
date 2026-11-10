@@ -1,0 +1,4 @@
+{
+  "about": "The disk map's click hints, by the names Pith keeps them under in its settings (MapHints.all in native/Sources/PithCore/MapHints.swift) and the page learns them by (HINT_STEPS in src/lib/map-hints.ts). Pith saves only the names it knows, so a name the page adds alone would never stay learned. MapHintsTests.swift and hints.test.ts read this file.",
+  "hints": ["opened", "selected", "several"]
+}

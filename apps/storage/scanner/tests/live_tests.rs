@@ -1055,3 +1055,31 @@ fn serve_says_which_of_pith_s_own_changes_its_map_doesnt_show_yet() {
     remove(&away);
     remove(&root);
 }
+
+/// A place the map can't read says whether it waits on macOS's question about Pith, which the person's answer settles,
+/// or the map couldn't read it, which only Full Disk Access or its permissions change: Places words the two apart.
+#[test]
+fn a_place_says_whether_it_waits_on_macos() {
+    let root = fixture("a_place_says_whether_it_waits_on_macos");
+    seeded(&root);
+    let mut live = Live::build(&root);
+    fs::create_dir_all(root.join("asked")).unwrap();
+    // The root listed again finds the new folder, which isn't listed itself yet.
+    let request = live.sched.submit(ROOT, root.clone(), Purpose::Relist, false, None).unwrap();
+    let listing = list(&request.path, &live.cx);
+    live.sched.landed(&mut live.index, &request, listing, Duration::ZERO, Instant::now());
+    let at = |relative: &str| root.join(relative).to_string_lossy().into_owned();
+    let asked = live.index.find(&at("asked")).unwrap().0;
+    let paths = [at("asked"), at("asked/inside"), at("locked"), at("d")];
+    let waiting = live.index.places(&paths, &|folder| folder == asked);
+    let by_path: HashMap<&str, &storage_scanner::index::Place> = waiting.iter().map(|place| (place.path.as_str(), place)).collect();
+    assert_eq!((by_path[at("asked").as_str()].size, by_path[at("asked").as_str()].asking), (None, true), "macOS is asking");
+    assert_eq!(by_path[at("asked/inside").as_str()].asking, true, "inside a folder macOS is asking about");
+    assert_eq!((by_path[at("locked").as_str()].size, by_path[at("locked").as_str()].asking), (None, false), "unreadable");
+    assert!(!by_path[at("d").as_str()].asking && by_path[at("d").as_str()].size.is_some());
+    // Waiting its turn, not on macOS, it's no place yet; and only a place that waits says so.
+    assert!(live.index.places(&[at("asked")], &|_| false).is_empty());
+    let json = serde_json::to_value(&waiting).unwrap();
+    assert_eq!(json.as_array().unwrap().iter().filter(|place| place.get("asking").is_some()).count(), 2, "{json}");
+    remove(&root);
+}

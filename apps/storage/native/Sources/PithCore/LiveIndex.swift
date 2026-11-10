@@ -62,14 +62,26 @@ public struct LiveStatus: Sendable, Equatable {
 
 /// What the live map's index holds at a known place's path, from the same index as the map it comes with (`places` of
 /// a tree line, `Index::places` in scanner/src/index.rs): the folder's size as that map shows it, or none when the map
-/// can't read it, as when macOS keeps Pith out of it or a folder above it, or hasn't answered its question about it yet.
-/// The scanner names no place that isn't there.
+/// can't read it, as when macOS keeps Pith out of it or a folder above it, or hasn't had the person's answer to its
+/// question about it yet. The scanner names no place that isn't there.
 public struct LivePlace: Decodable, Sendable, Equatable {
     /// As Pith asked for it.
     public let path: String
     public let size: UInt64?
+    /// It, or a folder above it, waits on the person's answer to macOS's question about Pith, which is all it takes.
+    public let asking: Bool
 
-    public init(path: String, size: UInt64?) { self.path = path; self.size = size }
+    public init(path: String, size: UInt64?, asking: Bool = false) { self.path = path; self.size = size; self.asking = asking }
+
+    enum CodingKeys: String, CodingKey { case path, size, asking }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        path = try container.decode(String.self, forKey: .path)
+        size = try container.decodeIfPresent(UInt64.self, forKey: .size)
+        // The scanner says it only of a place that waits.
+        asking = try container.decodeIfPresent(Bool.self, forKey: .asking) ?? false
+    }
 }
 
 /// What a check of every folder found: how many folders FSEvents hadn't reported changes in, and how many bytes.

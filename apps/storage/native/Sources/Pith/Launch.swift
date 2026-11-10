@@ -8,8 +8,8 @@ enum Launch {
     static let isAutomated = CommandLine.arguments.contains { ["--activity", "--scan", "--smoke-test"].contains($0) }
 
     /// Gives an automated run its settings in memory, before anything reads one: each at the value `Setting` gives an
-    /// automated run, in the volatile argument domain. Reads look there before the person's own defaults, and it's never
-    /// saved.
+    /// automated run (`automatedValue`), Pith's default for all but two, in the volatile argument domain. Reads look
+    /// there before the person's own defaults, and it's never saved.
     static func keepSettingsInMemory() {
         guard isAutomated else { return }
         let defaults = UserDefaults.standard
@@ -25,8 +25,9 @@ enum Setting: String, CaseIterable {
     /// The disk map's click hints the person has learned, by name (`MapHints`).
     case learnedMapHints
 
-    /// Its value in an automated run, whatever the person chose: Pith's default, but for Activity's history, which an
-    /// automated run keeps, in memory only.
+    /// Its value in an automated run, whatever the person chose: Pith's default, but for two. Keep a week of history is
+    /// on, off by default, so the run keeps Activity's history, in memory only, and the welcome window counts as seen,
+    /// unseen by default, so the run never shows it.
     var automatedValue: Any {
         switch self {
         case .iconOnly, .panelShortcut: false

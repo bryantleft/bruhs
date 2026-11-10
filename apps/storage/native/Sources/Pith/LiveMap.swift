@@ -76,6 +76,10 @@ import PithCore
     private var askedEdits: Set<String> = []
     private var stopped: (@MainActor () -> Void)?
     private var checker: NSBackgroundActivityScheduler?
+    /// Whether this map registered the daily check with macOS's scheduler. An automated run's never does: macOS keeps
+    /// the schedule for the app's bundle ID, which the person's own Pith shares, so the smoke test's map would take its
+    /// turns and move when it next comes.
+    private(set) var schedulesDailyCheck = false
     /// Disk asked for the first map while the scanner was still opening.
     private var firstMapWanted = false
     /// When a walk or a check last listed every folder.
@@ -306,8 +310,11 @@ import PithCore
 
     /// Lists every folder again once a day, as Apple asks backup software to sweep in full now and then: FSEvents is
     /// a hint, and in research one deletion never arrived. Only on power, and not when macOS asks Pith to wait.
-    /// macOS keeps the schedule across launches, so a check that's overdue comes as Pith opens.
+    /// macOS keeps the schedule across launches, so a check that's overdue comes as Pith opens. It keeps it for the
+    /// app's bundle ID, the person's Pith's as much as an automated run's, so an automated run schedules none
+    /// (`Launch.isAutomated`).
     private func scheduleChecks() {
+        guard !Launch.isAutomated else { return }
         let scheduler = NSBackgroundActivityScheduler(identifier: "app.bruhs.pith.disk-check")
         scheduler.repeats = true
         scheduler.interval = Self.checkInterval
@@ -328,6 +335,7 @@ import PithCore
             }
         }
         checker = scheduler
+        schedulesDailyCheck = true
     }
 
     private static let checkInterval: TimeInterval = 24 * 60 * 60

@@ -94,6 +94,7 @@ export function shippedCrates(metadata) {
 /**
  * A package's notice: its name and version, where it comes from, and its licence text, from its own files, or from
  * `vendored` for a package published without one. Throws when there's none, which stops the build.
+ * @param {{ name: string, version: string, home?: string, folder: string, licence?: string, vendored?: string }} item
  */
 export function noticeOf({ name, version, home, folder, licence, vendored }) {
   const chosen = chooseLicence(licence, licenceFiles(folder));

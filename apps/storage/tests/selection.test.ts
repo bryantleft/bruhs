@@ -15,20 +15,29 @@ describe("the selection Pith keeps for the map", () => {
   });
 
   test("is asked for by what was clicked: an item, none, or an item to add or take out", () => {
-    assert.deepEqual(selectMessage("/r/a", false), {
+    assert.deepEqual(selectMessage("/r/a"), {
       action: "select",
       paths: ["/r/a"],
-      toggle: false,
+      how: "only",
     });
-    assert.deepEqual(selectMessage(null, false), {
+    assert.deepEqual(selectMessage(null), {
       action: "select",
       paths: [],
-      toggle: false,
+      how: "only",
     });
-    assert.deepEqual(selectMessage("/r/a", true), {
+    assert.deepEqual(selectMessage("/r/a", "toggle"), {
       action: "select",
       paths: ["/r/a"],
-      toggle: true,
+      how: "toggle",
+    });
+  });
+
+  test("Shift and an arrow key ask for the next item to be added, which a repeat of the key asks again", () => {
+    // A toggle would take out the item the last press added, when the key repeats before Pith has answered.
+    assert.deepEqual(selectMessage("/r/b", "add"), {
+      action: "select",
+      paths: ["/r/b"],
+      how: "add",
     });
   });
 });

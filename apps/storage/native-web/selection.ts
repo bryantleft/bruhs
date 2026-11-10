@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 
 /**
  * The map's selection as Pith keeps it (`DiskSelection` in DiskSelection.swift): the items selected, in the order they
- * were picked, none inside another. The page says what the person clicked, a click or a ⌘-click on an item, and
- * outlines what Pith answers with, never a selection of its own.
+ * were picked, none inside another. The page says what the person clicked or pressed, a click or a ⌘-click on an item,
+ * or Shift and an arrow key, and outlines what Pith answers with, never a selection of its own.
  */
 
 declare global {
@@ -13,19 +13,29 @@ declare global {
   }
 }
 
-/** What the page tells Pith of a click on the map or a list: the items clicked, and whether ⌘ was down. */
+/**
+ * How a click or key picks an item: alone, as a click does; in or out of the selection, as a ⌘-click toggles it; or
+ * added, as Shift and an arrow key add the next item, and an item selected already stays. A held key repeats before
+ * Pith has answered, so it can ask for the same item twice, which a toggle would take out again.
+ */
+export type SelectHow = "only" | "toggle" | "add";
+
+/** What the page tells Pith of a click on the map or a list, or a key: the items, and how they're picked. */
 export interface SelectMessage {
   action: "select";
   paths: string[];
-  toggle: boolean;
+  how: SelectHow;
 }
 
-/** A click on `path`, which selects just it, or on nothing, which selects nothing; or a ⌘-click, which adds it or takes it out. */
+/**
+ * A click on `path`, which selects just it, or on nothing, which selects nothing; a ⌘-click, which adds it or takes it
+ * out; or Shift and an arrow key, which adds it.
+ */
 export function selectMessage(
   path: string | null,
-  toggle: boolean,
+  how: SelectHow = "only",
 ): SelectMessage {
-  return { action: "select", paths: path === null ? [] : [path], toggle };
+  return { action: "select", paths: path === null ? [] : [path], how };
 }
 
 /** The selection Pith sent: its absolute paths, in its order, or none for anything but a list. */

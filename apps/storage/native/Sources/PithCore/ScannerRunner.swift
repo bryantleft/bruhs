@@ -107,29 +107,6 @@ public actor ScannerRunner {
         }
     }
 
-    public func trash(binary: URL, target: URL) async throws {
-        guard active == nil else { throw DiskFailure("Wait for the current scan to finish before moving an item to Trash.") }
-        let process = Process(), output = Pipe(), errors = Pipe()
-        process.executableURL = binary; process.arguments = ["trash", "--path", target.path]
-        process.standardOutput = output; process.standardError = errors
-        let (termination, exitStream) = Self.terminationWaiter(process)
-        do { try control.run(process) } catch { exitStream.finish(); throw error }
-        active = process
-        defer { active = nil; control.clear() }
-        let diagnostics = Task.detached { Self.errorTail(errors.fileHandleForReading) }
-        let data = await Task.detached {
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            return data
-        }.value
-        let status = await termination.value
-        let tail = await diagnostics.value
-        struct Reply: Decodable { let type: String; let ok: Bool; let path: String?; let reason: String? }
-        let reply = try JSONDecoder().decode(Reply.self, from: data)
-        guard status == 0, reply.type == "trash", reply.ok, reply.path == target.path else {
-            throw DiskFailure("Could not move the item to Trash: \(reply.reason ?? tail).")
-        }
-    }
-
     private nonisolated static func terminationWaiter(_ process: Process) -> (Task<Int32, Never>, AsyncStream<Int32>.Continuation) {
         // One exit event, registered before launch. waitUntilExit can strand a
         // run-loop notification when a Swift actor resumes on another thread.

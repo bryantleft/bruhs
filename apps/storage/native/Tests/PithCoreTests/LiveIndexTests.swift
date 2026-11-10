@@ -78,9 +78,10 @@ final class LiveIndexTests: XCTestCase {
     /// still gets exactly as the scanner wrote it.
     func testATreeSaysWhatItsIndexHoldsAtEachPlace() throws {
         let result = #"{"type":"result","version":4,"root":{"name":"x","path":"/x","size":10,"kind":"dir","files":1,"children":[]},"topFiles":[],"volumes":[],"unreadableFolders":[],"summary":{"dirs":1,"files":1,"bytes":10,"errors":0,"unreadable":{"protected":0,"denied":0,"other":0},"entryErrors":0,"cloudOnly":{"files":0,"bytes":0,"folders":0},"clones":{"files":0,"bytes":0},"elapsedMs":5,"engine":"bulk"}}"#
-        let line = #"{"type":"tree","request":3,"places":[{"path":"/x/Library/Mail","size":null},{"path":"/x/Library/Developer","size":4096}],"unlisted":["/x/a.bin"],"result":"# + result + "}"
+        let line = #"{"type":"tree","request":3,"places":[{"path":"/x/Library/Mail","size":null},{"path":"/x/Library/Developer","size":4096},{"path":"/x/Library/Mobile Documents","size":null,"asking":true}],"unlisted":["/x/a.bin"],"result":"# + result + "}"
         guard case .tree(_, _, let json, let places, let unlisted) = try LiveDecoder.decode(Data(line.utf8)) else { return XCTFail("not a tree") }
-        XCTAssertEqual(places, [LivePlace(path: "/x/Library/Mail", size: nil), LivePlace(path: "/x/Library/Developer", size: 4096)])
+        XCTAssertEqual(places, [LivePlace(path: "/x/Library/Mail", size: nil), LivePlace(path: "/x/Library/Developer", size: 4096),
+                                LivePlace(path: "/x/Library/Mobile Documents", size: nil, asking: true)], "a place waiting on macOS says so")
         XCTAssertEqual(unlisted, ["/x/a.bin"], "the person's changes its index doesn't show yet")
         XCTAssertEqual(json, result)
     }

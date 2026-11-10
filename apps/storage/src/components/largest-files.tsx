@@ -2,6 +2,7 @@ import { type ReactNode, useMemo } from "react";
 import { parentFolder, splitFolder, splitName } from "~/lib/display-names";
 import { CATEGORY_VAR, categoryForName, formatBytes } from "~/lib/format";
 import type { FileEntry } from "~/lib/types";
+import { rowLabel, selectedRow } from "./map-selection";
 
 interface Props {
   files: readonly FileEntry[];
@@ -91,15 +92,18 @@ export function LargestFiles({
                 onMouseLeave={() => onHoverPath?.(null)}
                 onFocus={() => onHoverPath?.(f.path)}
                 onBlur={() => onHoverPath?.(null)}
-                aria-label={`${f.name}, ${size}, in ${folderPath}`}
-                aria-pressed={selectedPaths.includes(f.path)}
+                aria-label={rowLabel(
+                  `${f.name}, ${size}, in ${folderPath}`,
+                  selectedPaths.includes(f.path),
+                )}
+                {...selectedRow(selectedPaths.includes(f.path))}
                 data-highlighted={
                   hoveredPath !== null && inside(f.path, hoveredPath)
                     ? ""
                     : undefined
                 }
                 title={f.path}
-                className="menu-item items-start gap-2 px-2 py-1 aria-pressed:bg-(--role-selection,var(--color-persimmon-950))"
+                className="menu-item items-start gap-2 px-2 py-1 data-selected:bg-(--role-selection,var(--color-persimmon-950))"
               >
                 {icon ? (
                   // The swatch, when it stands in, keeps the icon's room, so the names stay in line.

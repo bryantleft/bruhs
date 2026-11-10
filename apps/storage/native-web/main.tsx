@@ -8,6 +8,7 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 import { LargestFiles } from "../src/components/largest-files";
+import { SELECTED_SAID, selectedRow } from "../src/components/map-selection";
 import { TreemapCanvas } from "../src/components/treemap-canvas";
 import { formatBytes } from "../src/lib/format";
 import { LARGEST_FILES_SHOWN, largestFilesIn } from "../src/lib/largest-files";
@@ -290,15 +291,21 @@ function DiskMap() {
   }, []);
 
   // Stable handlers, so hovering the map doesn't re-render its long item list. A click selects just the item clicked,
-  // or nothing; a ⌘-click adds it or takes it out. Pith answers with the selection, which the page then shows.
+  // or nothing; a ⌘-click adds it or takes it out; Shift and an arrow add the next. Pith answers with the selection,
+  // which the page then shows.
   const select = useCallback(
-    (path: string | null) => post(selectMessage(path, false)),
+    (path: string | null) => post(selectMessage(path)),
     [],
   );
   const toggle = useCallback(
-    (path: string) => post(selectMessage(path, true)),
+    (path: string) => post(selectMessage(path, "toggle")),
     [],
   );
+  const addNode = useCallback((node: TreeNode) => {
+    if (node.kind === "dir" || node.kind === "file") {
+      post(selectMessage(node.path, "add"));
+    }
+  }, []);
   const selectNode = useCallback(
     (node: TreeNode | null) =>
       select(
@@ -487,6 +494,7 @@ function DiskMap() {
             selectedPaths={selected}
             onSelect={selectNode}
             onToggle={toggleNode}
+            onAdd={addNode}
             onEnterDir={openFolder}
             onMenu={showMenu}
             onPreview={preview}
@@ -556,8 +564,8 @@ function DiskMap() {
                       }
                       onMouseEnter={() => setHovered(path)}
                       onMouseLeave={() => setHovered(null)}
-                      aria-pressed={selected.includes(path)}
-                      className="menu-item gap-2 px-2 py-1 aria-pressed:bg-(--role-selection)"
+                      {...selectedRow(selected.includes(path))}
+                      className="menu-item gap-2 px-2 py-1 data-selected:bg-(--role-selection)"
                     >
                       {icons && (
                         <MapIcon
@@ -572,6 +580,9 @@ function DiskMap() {
                       <span className="text-code-sm shrink-0 text-(--role-text-secondary) tabular-nums">
                         +{formatBytes(delta)}
                       </span>
+                      {selected.includes(path) && (
+                        <span className="sr-only">{SELECTED_SAID}</span>
+                      )}
                     </button>
                   </li>
                 ))}

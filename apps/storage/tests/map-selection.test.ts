@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { arrowStep, selectionButton } from "../src/components/map-selection.ts";
+import {
+  arrowStep,
+  rowLabel,
+  SELECTED_SAID,
+  selectedRow,
+  selectionButton,
+} from "../src/components/map-selection.ts";
 import type { Tile } from "../src/lib/treemap-layout.ts";
 import type {
   AggregateNode,
@@ -145,5 +151,27 @@ describe("the add button in the map's list of items", () => {
   test("shows for nothing that's no item", () => {
     assert.equal(selectionButton(smaller, false), null);
     assert.equal(selectionButton(volume, false), null);
+  });
+});
+
+describe("a list row that selects its item", () => {
+  test("says its item is selected, and is no toggle, since pressing it selects that item alone", () => {
+    assert.deepEqual(selectedRow(true), { "data-selected": "" });
+    assert.deepEqual(selectedRow(false), {});
+    for (const row of [selectedRow(true), selectedRow(false)]) {
+      assert.ok(
+        !("aria-pressed" in row),
+        "a toggle's state would have VoiceOver announce one",
+      );
+    }
+    assert.equal(
+      rowLabel("video.mov, 2.00 MB, in sub", true),
+      "video.mov, 2.00 MB, in sub, selected",
+    );
+    assert.equal(
+      rowLabel("video.mov, 2.00 MB, in sub", false),
+      "video.mov, 2.00 MB, in sub",
+    );
+    assert.equal(SELECTED_SAID, ", selected");
   });
 });

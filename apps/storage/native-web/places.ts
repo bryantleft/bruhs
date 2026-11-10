@@ -20,6 +20,11 @@ export interface Place {
   readonly key: string;
   /** Its size as the map shows it, or null where Pith can't read it. */
   readonly size: number | null;
+  /**
+   * Pith can't read it yet because macOS is still asking the person about it, which answering settles, rather than
+   * because only Full Disk Access would let Pith in.
+   */
+  readonly asking: boolean;
 }
 
 export interface PlacesTable {
@@ -35,9 +40,19 @@ export const PLACE_MIN_BYTES = 1000 ** 3;
 /** What a place Pith can't read shows in place of its size. */
 export const NEEDS_ACCESS = "Needs Full Disk Access";
 
+/**
+ * What a place macOS is still asking the person about shows instead: the asking notice on the same screen says that
+ * answering is enough, and Full Disk Access isn't needed.
+ */
+export const WAITING_FOR_ANSWER = "Waiting for your answer";
+
 /** A place's size as the map writes the same folder's, or why Pith can't give one. */
 export const placeFigure = (place: Place) =>
-  place.size === null ? NEEDS_ACCESS : formatBytes(place.size);
+  place.size !== null
+    ? formatBytes(place.size)
+    : place.asking
+      ? WAITING_FOR_ANSWER
+      : NEEDS_ACCESS;
 
 /**
  * The places the section shows with `folder` open: none unless it's a folder the table shows at. Otherwise the places
@@ -98,24 +113,28 @@ export function readPlaces(text: unknown): PlacesTable | null {
   const read: Place[] = [];
   for (const item of places) {
     if (typeof item !== "object" || item === null) return null;
-    const { id, name, path, key, size } = item as Record<string, unknown>;
+    const { id, name, path, key, size, asking } = item as Record<
+      string,
+      unknown
+    >;
     if (
       typeof id !== "string" ||
       typeof name !== "string" ||
       typeof path !== "string" ||
-      typeof key !== "string"
+      typeof key !== "string" ||
+      (asking !== undefined && typeof asking !== "boolean")
     ) {
       return null;
     }
-    // Native leaves the size out, or sends null, for a place Pith can't read.
+    // Native leaves the size out, or sends null, for a place Pith can't read, and says when macOS is still asking.
     if (size === undefined || size === null) {
-      read.push({ id, name, path, key, size: null });
+      read.push({ id, name, path, key, size: null, asking: asking === true });
     } else if (
       typeof size === "number" &&
       Number.isSafeInteger(size) &&
       size >= 0
     ) {
-      read.push({ id, name, path, key, size });
+      read.push({ id, name, path, key, size, asking: false });
     } else {
       return null;
     }

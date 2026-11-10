@@ -33,7 +33,8 @@ export function usePlaces(): PlacesTable | null {
  * Places, which opens the side column at the startup disk's root and the home folder (`placesIn`): each place with its
  * own icon, and its size or why Pith can't read it. A click opens the place's folder, as a folder's row opens it in the
  * map's list of items. A place Pith can't read opens Full Disk Access in System Settings instead (`onNeedsAccess`),
- * which would let Pith read it, as the notices' Full Disk Access… buttons do.
+ * which would let Pith read it, as the notices' Full Disk Access… buttons do. A place macOS is still asking the person
+ * about waits for their answer, which is enough, as the asking notice says: its row only says so, and isn't a button.
  */
 export function Places({
   places,
@@ -58,16 +59,9 @@ export function Places({
         Places
       </h2>
       <ul className="-mx-2 space-y-px">
-        {places.map((place) => (
-          <li key={place.id}>
-            <button
-              type="button"
-              title={place.path}
-              onClick={() =>
-                place.size === null ? onNeedsAccess() : onOpen(place.path)
-              }
-              className="menu-item gap-2 px-2 py-1"
-            >
+        {places.map((place) => {
+          const row = (
+            <>
               {icons && <MapIcon url={icons.key(place.key)} />}
               <span className="text-body-sm min-w-0 flex-1 truncate text-(--role-text)">
                 {place.name}
@@ -81,9 +75,32 @@ export function Places({
                   {placeFigure(place)}
                 </span>
               )}
-            </button>
-          </li>
-        ))}
+            </>
+          );
+          return (
+            <li key={place.id}>
+              {place.asking ? (
+                <div
+                  title={place.path}
+                  className="flex items-center gap-2 px-2 py-1"
+                >
+                  {row}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  title={place.path}
+                  onClick={() =>
+                    place.size === null ? onNeedsAccess() : onOpen(place.path)
+                  }
+                  className="menu-item gap-2 px-2 py-1"
+                >
+                  {row}
+                </button>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
