@@ -55,14 +55,15 @@ import PithCore
     /// Folders the map lacks until the person answers macOS's question about Pith, as for iCloud Drive: opening one
     /// waits on that answer, and the map goes on without them meanwhile.
     private(set) var asking = 0
-    /// A tree arrived: the map for `path`, as asked for, with its JSON for the page, what its index holds at the places
-    /// asked about, which of the person's changes asked about its index doesn't show yet, and how many folders wait to be
-    /// listed for a change, or nil when the scanner didn't say.
-    var received: ((DiskResult, String, [LivePlace], LiveEdits.Answer, Int?) -> Void)?
+    /// A tree arrived, for the request that asked for it (`request(path:focus:places:gone:back:)`): the map for `path`,
+    /// with its JSON for the page, what its index holds at the places asked about, which of the person's changes asked
+    /// about its index doesn't show yet, and how many folders wait to be listed for a change, or nil when the scanner
+    /// didn't say.
+    var received: ((Int, DiskResult, String, [LivePlace], LiveEdits.Answer, Int?) -> Void)?
     /// The map changed, so a view on screen should ask for its tree again.
     var changed: (() -> Void)?
-    /// The tree asked for last couldn't be made, as for a folder the map lacks.
-    var treeFailed: ((String) -> Void)?
+    /// The tree asked for last, by the request given, couldn't be made, as for a folder the map lacks.
+    var treeFailed: ((Int, String) -> Void)?
     /// The person's Check Again has landed: the folder, and everything in it, listed again (`checkAgain`).
     var checkedAgain: (() -> Void)?
 
@@ -150,14 +151,16 @@ import PithCore
 
     /// Asks for the map of `path`, with `focus` in finer detail, what it holds at each of `places`, and which of the
     /// person's changes, the items moved to the Trash (`gone`) and put back (`back`), it doesn't show yet, from the same
-    /// index. The answer goes to `received`; asking again first drops it.
-    func request(path: String, focus: String?, places: [String], gone: [String] = [], back: [String] = []) {
-        guard let process, state.isMapped else { return }
+    /// index. The answer goes to `received`, with the request this returns; asking again first drops it. Nil when the map
+    /// isn't there to ask.
+    @discardableResult func request(path: String, focus: String?, places: [String], gone: [String] = [], back: [String] = []) -> Int? {
+        guard let process, state.isMapped else { return nil }
         nextRequest += 1
         wanted = nextRequest
         askedEdits = Set(gone + back)
         changedSinceTree = false
         process.tree(path: path, focus: focus, request: nextRequest, places: places, gone: gone, back: back)
+        return nextRequest
     }
 
     /// The person changed the map, as Move to Trash and Undo do: the tree asked for before is dropped when it comes, as
@@ -289,7 +292,7 @@ import PithCore
             walk(reason: reason)
         case .tree(let request, let result, let json, let places, let unlisted, let pending):
             guard request == wanted else { return }
-            received?(result, json, places, LiveEdits.Answer(asked: askedEdits, unlisted: Set(unlisted)), pending)
+            received?(request, result, json, places, LiveEdits.Answer(asked: askedEdits, unlisted: Set(unlisted)), pending)
         case .relisted(let request):
             if checksAsked.remove(request) != nil { checkedAgain?() }
         case .saved(let through, let bytes, let ms):
@@ -303,7 +306,7 @@ import PithCore
             NSLog("Pith: disk map \(line)")
         case .failed(let request, let reason):
             NSLog("Pith: the disk map reported: \(reason)")
-            if let request, request == wanted { treeFailed?(reason) }
+            if let request, request == wanted { treeFailed?(request, reason) }
         case .fatal(let reason):
             state = .failed(reason)
         }

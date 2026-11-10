@@ -173,6 +173,7 @@ enum MapCommand: Equatable {
     func smokeTestListsVolumes(_ volumes: [DiskVolumeChoice]) {
         choices = volumes
     }
+
     /// Lists the volumes on a queue of its own, one listing at a time, however often they're asked for meanwhile
     /// (`VolumeLister`): a network share that hangs holds that queue, and never Swift's shared pool.
     @ObservationIgnored private lazy var volumeLister = VolumeLister(list: { DiskModel.mountedVolumes() }) { [weak self] found in
@@ -315,10 +316,10 @@ enum MapCommand: Equatable {
     func startLive(root: String = "/", keep: Bool? = nil) {
         guard live == nil else { return }
         let live = LiveMap(root: root)
-        live.received = { [weak self] value, json, places, answer, pending in
-            self?.liveTreeArrived(value, json: json, places: places, answer: answer, pending: pending)
+        live.received = { [weak self] request, value, json, places, answer, pending in
+            self?.liveTreeArrived(value, json: json, places: places, answer: answer, pending: pending, request: request)
         }
-        live.treeFailed = { [weak self] reason in self?.liveTreeFailed(reason) }
+        live.treeFailed = { [weak self] request, reason in self?.liveTreeFailed(reason, request: request) }
         live.changed = { [weak self] in self?.refreshLive() }
         // Check Again's map comes at once, past the wait between refreshes, and shows at once, as Refresh's does.
         live.checkedAgain = { [weak self] in self?.refreshLive(now: true, checkedAgain: true) }
@@ -381,8 +382,10 @@ enum MapCommand: Equatable {
         }
         treeLater?.cancel(); treeLater = nil
         lastTree = Date()
-        treeAsks.asked(checkedAgain ? .checkAgain : now || opening ? .opening : .refresh)
-        live.request(path: path, focus: detailFolder, places: sideColumn.places.shortcuts.map(\.path), gone: liveEdits.gone, back: liveEdits.back)
+        if let request = live.request(path: path, focus: detailFolder, places: sideColumn.places.shortcuts.map(\.path), gone: liveEdits.gone,
+                                      back: liveEdits.back) {
+            treeAsks.asked(checkedAgain ? .checkAgain : now || opening ? .opening : .refresh, request: request)
+        }
         detailAsked = detailFolder
     }
 
@@ -416,7 +419,7 @@ enum MapCommand: Equatable {
     /// A live map came, from an index with `pending` folders waiting to be listed. Its volume's figures are measured off
     /// the main thread first, unless the last ones stand for it (`SpaceHold`), and whether the items the person changed
     /// are on the disk, and then the map goes out with its figures, as the person's changes have it.
-    private func liveTreeArrived(_ value: DiskResult, json: String, places: [LivePlace], answer: LiveEdits.Answer, pending: Int?) {
+    private func liveTreeArrived(_ value: DiskResult, json: String, places: [LivePlace], answer: LiveEdits.Answer, pending: Int?, request: Int) {
         guard value.root.path == liveView else { return }
         liveMaps += 1
         let number = liveMaps
@@ -437,7 +440,7 @@ enum MapCommand: Equatable {
             guard number == liveMaps else { return }
             if measures, measured != nil { spaceHold.measured(root: root, at: Date()) }
             liveEdits.keep(onDisk: onDisk, of: changed)
-            showLive(value, json: json, places: places, answer: answer, figures: measured)
+            showLive(value, json: json, places: places, answer: answer, figures: measured, request: request)
         }
     }
 
@@ -450,7 +453,7 @@ enum MapCommand: Equatable {
         return lstat(path, &info) == 0
     }
 
-    private func showLive(_ value: DiskResult, json: String, places: [LivePlace], answer: LiveEdits.Answer, figures: VolumeFigures?) {
+    private func showLive(_ value: DiskResult, json: String, places: [LivePlace], answer: LiveEdits.Answer, figures: VolumeFigures?, request: Int) {
         guard value.root.path == liveView else { return }
         // A map from an index that doesn't show the person's changes yet shows them anyway, and is then no longer the
         // scanner's own JSON.
@@ -467,7 +470,7 @@ enum MapCommand: Equatable {
         compareWithBaseline(edited.map)
         keepSelection()
         // The map after the person's Check Again shows at once, as Refresh's does.
-        if treeAsks.arrived() { mapAnswersPerson = true }
+        if treeAsks.arrived(request: request) { mapAnswersPerson = true }
         revision = UUID()
     }
 
@@ -599,9 +602,9 @@ enum MapCommand: Equatable {
     /// The live map couldn't show the folder asked for: one it lacks, such as a folder inside one it couldn't read,
     /// is scanned instead. The scan's map answers the person, and shows at once, only when the tree it replaces was the
     /// person's own ask, a folder they opened or Check Again; a refresh's waits for the hold like any refresh.
-    private func liveTreeFailed(_ reason: String) {
+    private func liveTreeFailed(_ reason: String, request: Int) {
         guard let live, let path = liveView else { return }
-        let persons = treeAsks.failed()
+        let persons = treeAsks.failed(request: request)
         if path == live.root {
             problem = DiskProblem(message: reason)
         } else {

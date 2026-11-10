@@ -7,7 +7,9 @@ import Foundation
 /// falls back on a scan that waits too.
 ///
 /// The live map keeps only its latest tree, so a tree it asks for after the person's takes the place of theirs, and
-/// answers them in its stead: the person's ask holds until a tree comes or fails.
+/// answers them in its stead: the person's ask holds until a tree comes or fails. A tree asked for before theirs, which
+/// came and was still being measured when they asked, goes out after it and says nothing of it: each tree is known by the
+/// request that asked for it.
 public struct LiveTreeAsks: Sendable, Equatable {
     /// Why a tree was asked for.
     public enum Ask: Sendable, Equatable {
@@ -19,31 +21,40 @@ public struct LiveTreeAsks: Sendable, Equatable {
         case checkAgain
     }
 
-    /// A tree on its way answers the person's own action.
-    private var persons = false
-    /// The map on its way answers the person's Check Again, so it shows at once.
-    private var atOnce = false
+    /// The first tree asked for by the person's own action, and the first asked for by their Check Again, while neither
+    /// has been answered. A tree asked for after either answers it too, as the live map keeps only its latest tree; one
+    /// asked for before, still on its way when they asked, says nothing of it.
+    private var persons: Int?
+    private var atOnce: Int?
 
     public init() {}
 
-    /// A tree was asked for, for `ask`.
-    public mutating func asked(_ ask: Ask) {
+    /// The tree asked for by `request`, numbered in order, is for `ask`.
+    public mutating func asked(_ ask: Ask, request: Int) {
         switch ask {
         case .refresh: break
-        case .opening: persons = true
-        case .checkAgain: persons = true; atOnce = true
+        case .opening: persons = persons ?? request
+        case .checkAgain: persons = persons ?? request; atOnce = atOnce ?? request
         }
     }
 
-    /// The tree asked for came, and its map goes out: whether it shows at once.
-    public mutating func arrived() -> Bool {
-        defer { persons = false; atOnce = false }
-        return atOnce
+    /// The tree asked for by `request` came, and its map goes out: whether it shows at once.
+    public mutating func arrived(request: Int) -> Bool {
+        let shows = answers(atOnce, request)
+        if shows { atOnce = nil }
+        if answers(persons, request) { persons = nil }
+        return shows
     }
 
-    /// The tree asked for couldn't be made: whether the scan it falls back on answers the person's own action.
-    public mutating func failed() -> Bool {
-        defer { persons = false; atOnce = false }
-        return persons
+    /// The tree asked for by `request` couldn't be made: whether the scan it falls back on answers the person's own
+    /// action.
+    public mutating func failed(request: Int) -> Bool {
+        let theirs = answers(persons, request)
+        if theirs { persons = nil }
+        if answers(atOnce, request) { atOnce = nil }
+        return theirs
     }
+
+    /// Whether the tree asked for by `request` answers the ask its first tree was asked for by, `first`.
+    private func answers(_ first: Int?, _ request: Int) -> Bool { first.map { request >= $0 } ?? false }
 }
