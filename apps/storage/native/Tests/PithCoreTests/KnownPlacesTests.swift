@@ -329,10 +329,10 @@ final class KnownPlacesTests: XCTestCase {
         XCTAssertEqual(table.iconKey(for: folder("Projects/New"), asking: false), .item(path("Projects/New")))
     }
 
-    /// A folder the map listed while Pith had access keeps its own icon, by its path, until the scanner lists it again:
-    /// once the person has answered, macOS doesn't ask again. When the scanner's listing of a folder above it fails, as
-    /// after the person withdraws access, the map shows that folder as one it couldn't read, and an item kept from the
-    /// earlier map, as one still selected is, shows a plain folder: Pith no longer looks it up by its path.
+    /// A folder the map listed while Pith had access keeps its own icon, by its path, until the scanner lists it again.
+    /// When the scanner's listing of a folder above it fails, as after the person withdraws access, the map shows that
+    /// folder as one it couldn't read, drawn or only in its list of them where it folds the folder away, and an item kept
+    /// from the earlier map, as one still selected is, shows a plain folder: Pith no longer looks it up by its path.
     func testAnItemBelowAFolderTheMapCanNoLongerReadShowsAPlainFolder() {
         let table = places()
         func dir(_ relative: String, _ children: [DiskNode] = []) -> DiskNode {
@@ -341,23 +341,29 @@ final class KnownPlacesTests: XCTestCase {
         func locked(_ relative: String, _ reason: DiskNode.Reason) -> DiskNode {
             DiskNode(kind: .unreadable, name: (relative as NSString).lastPathComponent, path: path(relative), size: 0, reason: reason, children: nil)
         }
-        let taxes = dir("Documents/Taxes"), app = dir("Projects/Old/App.app")
+        func map(_ children: [DiskNode], unreadable: [DiskUnreadableFolder] = []) -> DiskResult {
+            let summary = DiskSummary(dirs: 1, files: 1, bytes: 1, errors: UInt64(unreadable.count), unreadable: .init(protected: UInt64(unreadable.count), denied: 0, other: 0),
+                                      entryErrors: 0, cloudOnly: .init(files: 0, bytes: 0, folders: 0), elapsedMs: 1, engine: "bulk")
+            return DiskResult(root: DiskNode(kind: .dir, name: home.lastPathComponent, path: home.path, size: 1, files: 1, children: children), topFiles: [],
+                              unreadableFolders: unreadable, summary: summary)
+        }
+        let taxes = dir("Documents/Taxes"), app = dir("Projects/Old/App.app"), old = dir("Documents/Archive/2026/Old")
         let file = DiskNode(kind: .file, name: "a.pdf", path: path("Documents/Taxes/a.pdf"), size: 1, children: nil)
-        let earlier = DiskNode(kind: .dir, name: home.lastPathComponent, path: home.path, size: 1, files: 1, children: [
-            dir("Documents", [taxes]), dir("Projects", [dir("Projects/Old", [app])]),
-        ])
+        let earlier = map([dir("Documents", [taxes]), dir("Projects", [dir("Projects/Old", [app])])])
         XCTAssertEqual(table.iconKey(for: taxes, in: earlier, asking: false), .item(taxes.path), "listed while Pith had access")
         XCTAssertEqual(table.iconKey(for: app, in: earlier, asking: false), .item(app.path))
         // The scanner listed Documents again and macOS kept it out, and Old's permissions changed.
-        let later = DiskNode(kind: .dir, name: home.lastPathComponent, path: home.path, size: 1, files: 1, children: [
-            locked("Documents", .protected), dir("Projects", [locked("Projects/Old", .denied)]),
-        ])
+        let later = map([locked("Documents", .protected), dir("Projects", [locked("Projects/Old", .denied)])])
         XCTAssertEqual(table.iconKey(for: taxes, in: later, asking: false), .folder, "inside a folder the map can no longer read")
         XCTAssertEqual(table.iconKey(for: app, in: later, asking: false), .folder, "outside the locations macOS guards too")
         XCTAssertEqual(table.iconKey(for: file, in: later, asking: false), .type("pdf"), "a file keeps its type's icon")
         XCTAssertEqual(table.iconKey(for: dir("Documents"), in: later, asking: false), .place("documents"), "a known place keeps its own")
-        XCTAssertEqual(table.iconKey(for: taxes, in: earlier.with(size: 1, files: 1, children: [dir("Documents", [locked("Documents/Taxes", .protected)])]),
-                                     asking: false), .folder, "the map can't read the folder itself now")
+        XCTAssertEqual(table.iconKey(for: taxes, in: map([dir("Documents", [locked("Documents/Taxes", .protected)])]), asking: false), .folder,
+                       "the map can't read the folder itself now")
+        // Archive is folded into Documents' smaller items, and a folder in it the map couldn't read is in its list alone.
+        let folded = map([dir("Documents")], unreadable: [DiskUnreadableFolder(path: path("Documents/Archive/2026"), reason: .protected)])
+        XCTAssertEqual(table.iconKey(for: old, in: folded, asking: false), .folder, "below a folder the map lists but doesn't draw")
+        XCTAssertEqual(table.iconKey(for: taxes, in: folded, asking: false), .item(taxes.path), "beside it")
         XCTAssertEqual(table.iconKey(for: taxes, in: nil, asking: false), .item(taxes.path), "no map says otherwise")
         XCTAssertEqual(table.iconKey(for: taxes, in: earlier, asking: true), .folder, "the rule's own answer otherwise")
     }

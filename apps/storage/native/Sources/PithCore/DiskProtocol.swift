@@ -238,6 +238,15 @@ public struct DiskResult: Codable, Sendable {
             ?? topFiles.first { $0.path == path }.map { DiskNode(kind: .file, name: $0.name, path: $0.path, size: $0.size, children: nil) }
     }
 
+    /// Whether the map can't read at `path`: its tree draws a folder it couldn't read on the way down to it, or at it
+    /// (`DiskNode.couldntRead(toward:)`), or its list of the folders it couldn't read holds one there or above it, as it
+    /// does for a folder inside a part of the map folded into smaller items, which the tree doesn't draw. The list ran to
+    /// 488 folders on the development Mac's whole-disk map; one that doesn't start the path is passed over with a prefix
+    /// comparison, building nothing.
+    public func couldntRead(toward path: String) -> Bool {
+        root.couldntRead(toward: path) || unreadableFolders.contains { $0.path == path || (path.hasPrefix($0.path) && DiskChanges.isInside(path, $0.path)) }
+    }
+
     /// The scan with the item at `path` gone, as after moving it to the Trash: every folder above it shrinks by its size
     /// and files. An item the tree folds into its folder's smaller items, `folded`, as the map had it, comes out of them,
     /// for a tree known to count it there. Nil when the tree doesn't hold the item.

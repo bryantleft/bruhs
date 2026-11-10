@@ -120,8 +120,13 @@ final class DiskSelectionTests: XCTestCase {
         ])
         let summary = DiskSummary(dirs: 2, files: 2, bytes: 20, errors: 1, unreadable: .init(protected: 1, denied: 0, other: 0), entryErrors: 0,
                                   cloudOnly: .init(files: 0, bytes: 0, folders: 0), elapsedMs: 1, engine: "bulk")
-        let map = DiskResult(root: DiskNode(kind: .dir, name: "r", path: "/r", size: 20, files: 2, children: [open, locked]), topFiles: [], summary: summary)
+        // b's smaller items hold a folder the map couldn't read, which the map lists but doesn't draw.
+        let map = DiskResult(root: DiskNode(kind: .dir, name: "r", path: "/r", size: 20, files: 2, children: [open, locked]), topFiles: [],
+                             unreadableFolders: [DiskUnreadableFolder(path: "/r/locked", reason: .protected), DiskUnreadableFolder(path: "/r/b/folded", reason: .protected)],
+                             summary: summary)
         let guarded = { (path: String) in path.hasPrefix("/r/b/") }
+        XCTAssertFalse(DiskSelection.mayLook(for: "/r/b/folded/x.bin", in: map, asking: false, isGuarded: guarded), "below one the map lists but folds away")
+        XCTAssertTrue(DiskSelection.mayLook(for: "/r/b/folded 2/x.bin", in: map, asking: false, isGuarded: guarded), "beside it")
         XCTAssertFalse(DiskSelection.mayLook(for: "/r/locked/x.bin", in: map, asking: false, isGuarded: guarded), "below a folder the map couldn't read")
         XCTAssertFalse(DiskSelection.mayLook(for: "/r/locked", in: map, asking: false, isGuarded: guarded), "one the map can't read itself now")
         XCTAssertTrue(DiskSelection.mayLook(for: "/r/b/x.bin", in: map, asking: false, isGuarded: guarded), "folded into readable smaller items")

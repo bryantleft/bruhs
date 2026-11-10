@@ -875,7 +875,7 @@ enum MapCommand: Equatable {
     /// The icon for an item of the map, or one kept from an earlier map, by Pith's icon rule as the map shown has it now
     /// (`KnownPlaces.iconKey(for:in:asking:trashIsEmpty:)`).
     func iconKey(for item: DiskNode) -> IconKey {
-        Icons.places.iconKey(for: item, in: result?.root, asking: macOSMayHoldFolders, trashIsEmpty: trashIsEmpty)
+        Icons.places.iconKey(for: item, in: result, asking: macOSMayHoldFolders, trashIsEmpty: trashIsEmpty)
     }
 
     /// Whether the Trash holds nothing, by what the scanner says of it with the map shown (`KnownPlaces.trashHoldsNothing`):

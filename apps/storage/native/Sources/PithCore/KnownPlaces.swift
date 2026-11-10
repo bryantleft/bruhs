@@ -243,9 +243,10 @@ public struct KnownPlaces: Sendable {
     /// looks nothing up there.
     ///
     /// So the rule keeps a folder's own icon until the scanner's listing says otherwise, and that listing error is the
-    /// signal Pith has: a folder, package, app or volume `map` shows inside a folder it couldn't read, or couldn't read
-    /// itself, shows a plain folder, never looked up by its path. A file keeps its type's icon and a known place its own.
-    public func iconKey(for item: DiskNode, in map: DiskNode?, asking: Bool, trashIsEmpty: Bool = false) -> IconKey {
+    /// signal Pith has: a folder, package, app or volume `map` shows inside a folder it couldn't read, drawn or only in its
+    /// list of them (`DiskResult.couldntRead(toward:)`), or couldn't read itself, shows a plain folder, never looked up by
+    /// its path. A file keeps its type's icon and a known place its own.
+    public func iconKey(for item: DiskNode, in map: DiskResult?, asking: Bool, trashIsEmpty: Bool = false) -> IconKey {
         let key = iconKey(for: item, asking: asking, trashIsEmpty: trashIsEmpty)
         if case .item = key, map?.couldntRead(toward: item.path) == true { return .folder }
         return key
