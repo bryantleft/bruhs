@@ -399,8 +399,9 @@ function keepPlaces(
  * Whether `next` draws just what `shown` does, so the page can keep `shown` and draw nothing: the same folder at the
  * same size, and every tile, header strip and label in the same box, of the same kind and colour, with the same name
  * and the same size to print. Boxes are whole CSS pixels and the two draw at the same pixel ratio, so the same box
- * covers the same device pixels. Sizes count as they print whether or not a label has room for one, so the hover card
- * of a layout kept never shows a size the map has moved past.
+ * covers the same device pixels. Sizes count as they print whether or not a label has room for one, and so does a
+ * folder's count of folders inside it that couldn't be read, so the hover card of a layout kept never shows a size or
+ * a count the map has moved past.
  */
 export function drawsTheSame(
   shown: TreemapLayout,
@@ -426,6 +427,19 @@ const printSame = (a: number, b: number) =>
 const fillOf = (tile: Tile) =>
   tile.kind === "file" || tile.kind === "collapsed" ? tile.category : null;
 
+/** How many folders inside `folder` the scan couldn't read, which its hover card counts. */
+export const unreadableCount = (folder: DirNode) =>
+  folder.children.reduce(
+    (count, child) => count + (child.kind === "unreadable" ? 1 : 0),
+    0,
+  );
+
+/** The folders a folder's card counts as unreadable; null for other tiles, whose cards count none. */
+const unreadableOf = (tile: Tile) =>
+  tile.kind === "folder" || tile.kind === "collapsed"
+    ? unreadableCount(tile.node)
+    : null;
+
 function sameTile(a: Tile, b: Tile): boolean {
   const named =
     a.kind === "group"
@@ -440,6 +454,7 @@ function sameTile(a: Tile, b: Tile): boolean {
     named &&
     fillOf(a) === fillOf(b) &&
     printSame(tileSize(a), tileSize(b)) &&
+    unreadableOf(a) === unreadableOf(b) &&
     (a.kind !== "folder" ||
       (b.kind === "folder" && sameTiles(a.children, b.children)))
   );

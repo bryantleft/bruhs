@@ -116,6 +116,9 @@ enum MapCommand: Equatable {
     var isScanning = false
     var isTrashing = false
     var revision = UUID()
+    /// Set when the person's own action changed the map, moving an item to the Trash or putting it back, until the
+    /// page has that map: the page shows it at once, though the pointer or a click would hold a newer map still.
+    @ObservationIgnored var mapAnswersPerson = false
     /// The folder being scanned, or the one the map shows.
     private(set) var scope: String?
     /// A folder inside the map being scanned again, while that runs.
@@ -701,6 +704,7 @@ enum MapCommand: Equatable {
             }
             trashed = (trashedURL as URL?).map { TrashedItem(name: plan.name, size: plan.size, original: plan.target, trashed: $0, previous: result) }
             if liveView == nil { edited = true }
+            mapAnswersPerson = true
             revision = UUID()
             if trashed != nil {
                 undoManager?.registerUndo(withTarget: self) { model in MainActor.assumeIsolated { model.undoTrash() } }
@@ -716,7 +720,7 @@ enum MapCommand: Equatable {
         guard let item = trashed, !isScanning else { return }
         do {
             try FileManager.default.moveItem(at: item.trashed, to: item.original)
-            result = item.previous; trashed = nil; revision = UUID()
+            result = item.previous; trashed = nil; mapAnswersPerson = true; revision = UUID()
             select(item.original.path)
         } catch {
             problem = DiskProblem(message: "Pith couldn’t put \(item.name) back. Open the Trash in Finder and drag it out instead.")

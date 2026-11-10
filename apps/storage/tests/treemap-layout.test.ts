@@ -24,6 +24,7 @@ import type {
   DirNode,
   FileNode,
   TreeNode,
+  UnreadableNode,
 } from "../src/lib/types.ts";
 
 const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1);
@@ -628,6 +629,46 @@ describe("drawsTheSame", () => {
     const videos = layout(holding(2999, 3001), 300, 200);
     assert.equal(only(videos, "collapsed", "/r/mixed").category, "video");
     assert.equal(drawsTheSame(images, videos), false);
+  });
+
+  test("fails for a folder whose card counts another folder inside it that couldn't be read", () => {
+    // The scan lists such folders at 0 bytes, so no block moves: only the card's "2 folders inside couldn't be read".
+    const locked = (parent: string, count: number): UnreadableNode[] =>
+      Array.from({ length: count }, (_, i) => ({
+        kind: "unreadable",
+        name: `locked-${i}`,
+        path: `${parent}/locked-${i}`,
+        size: 0,
+        reason: "denied",
+      }));
+    const holding = (inShots: number, inMixed: number) =>
+      dir("/r", [
+        file("/r/big.bin", 500_000),
+        dir("/r/shots", [
+          file("/r/shots/a.png", 400_000),
+          file("/r/shots/b.png", 100_000),
+          ...locked("/r/shots", inShots),
+        ]),
+        dir("/r/mixed", [
+          file("/r/mixed/a.png", 3000),
+          file("/r/mixed/b.mov", 3000),
+          ...locked("/r/mixed", inMixed),
+        ]),
+      ]);
+    const shown = layout(holding(1, 1), 400, 300);
+    assert.equal(only(shown, "folder", "/r/shots").kind, "folder");
+    assert.equal(only(shown, "collapsed", "/r/mixed").kind, "collapsed");
+    assert.equal(drawsTheSame(shown, layout(holding(1, 1), 400, 300)), true);
+    assert.equal(
+      drawsTheSame(shown, layout(holding(2, 1), 400, 300)),
+      false,
+      "a folder drawn around its contents",
+    );
+    assert.equal(
+      drawsTheSame(shown, layout(holding(1, 2), 400, 300)),
+      false,
+      "a folder drawn as one block",
+    );
   });
 
   test("fails for a group that counts another item", () => {

@@ -97,7 +97,8 @@ function parseWriters(value: unknown): Writer[] {
 
 declare global {
   interface Window {
-    pithReceive: (payload: string | null) => void;
+    /** A map, true for `atOnce` when it answers the person's own action, as moving an item to the Trash does. */
+    pithReceive: (payload: string | null, atOnce?: boolean) => void;
     pithReceiveGrowth: (growth: GrowthMessage | null) => void;
     /** How long macOS waits for a second click to make a double-click, in seconds. */
     pithReceiveDoubleClickInterval: (seconds: number) => void;
@@ -144,6 +145,8 @@ function useDoubleClickInterval(): number {
 
 function DiskMap() {
   const [result, setResult] = useState<ResultEvent | null>(null);
+  // Whether the map answers the person's own action, which the map shows at once, however still it holds.
+  const [atOnce, setAtOnce] = useState(false);
   // The open folders and where Back and Forward go, which Pith's path bar and Go menu move.
   const [nav, dispatch] = useReducer(navigate, NO_MAP);
   const [selected, setSelected] = useState<string | null>(null);
@@ -159,7 +162,7 @@ function DiskMap() {
   const mapRoot = useRef<string | null>(null);
 
   useEffect(() => {
-    window.pithReceive = (payload) => {
+    window.pithReceive = (payload, answers) => {
       try {
         const value: unknown = payload === null ? null : JSON.parse(payload);
         const parsed = value === null ? null : parseResultEvent(value);
@@ -171,6 +174,7 @@ function DiskMap() {
         }
         setError(null);
         setResult(parsed);
+        setAtOnce(answers === true);
         // The live map sends a newer map as the disk changes: what's selected or under the pointer stays while it's
         // still there.
         const stillThere = (path: string | null) =>
@@ -364,6 +368,7 @@ function DiskMap() {
             // The live map comes again every two seconds while the disk changes.
             steady
             doubleClickInterval={doubleClickInterval}
+            atOnce={atOnce}
             followSystemAppearance
             highlightKind={shownKind}
             linkedPath={hovered}

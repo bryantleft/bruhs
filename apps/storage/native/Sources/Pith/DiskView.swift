@@ -726,10 +726,13 @@ struct DiskWebView: NSViewRepresentable {
                 }
                 // Before the page can ask: it may load the icons of the apps it names now, and of no others.
                 model.pageWriters = writers
+                // A map the person's own action made shows at once; any other waits while they click or read a card.
+                let atOnce = model.mapAnswersPerson
+                model.mapAnswersPerson = false
                 // The icons' base and rule aren't in it: the page has them since it was ready, and gets them again when
                 // they change.
-                web.callAsyncJavaScript("window.pithReceive(payload); window.pithReceiveGrowth?.(growth)",
-                                        arguments: ["payload": payload as Any? ?? NSNull(), "growth": growth as Any? ?? NSNull()],
+                web.callAsyncJavaScript("window.pithReceive(payload, atOnce); window.pithReceiveGrowth?.(growth)",
+                                        arguments: ["payload": payload as Any? ?? NSNull(), "atOnce": atOnce, "growth": growth as Any? ?? NSNull()],
                                         in: nil, in: .page) { [weak self] result in
                     if case .failure(let error) = result { self?.model.problem = DiskProblem(message: "Pith couldn’t draw the disk map: \(error.localizedDescription)") }
                 }

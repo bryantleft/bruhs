@@ -40,6 +40,7 @@ import {
   tileLabel,
   tileName,
   tileSize,
+  unreadableCount,
 } from "~/lib/treemap-layout";
 import type { DirNode, TreeNode } from "~/lib/types";
 
@@ -88,6 +89,11 @@ interface Props {
   steady?: boolean;
   /** How long the system waits for a second click to make a double-click, in milliseconds, which a steady map holds for. */
   doubleClickInterval?: number;
+  /**
+   * `root` answers the person's own action, such as moving an item to the Trash or putting it back, so a steady map
+   * shows it at once, whatever would hold it still.
+   */
+  atOnce?: boolean;
 }
 
 /** Labels are Monaspace Neon at 11 px, the size of the native data captions. */
@@ -439,9 +445,7 @@ interface Card {
 
 /** "2 folders inside couldn't be read", or null when the scan read them all. */
 function unreadableInside(node: DirNode): string | null {
-  const count = node.children.filter(
-    (child) => child.kind === "unreadable",
-  ).length;
+  const count = unreadableCount(node);
   if (count === 0) return null;
   return `${count} ${count === 1 ? "folder" : "folders"} inside couldn’t be read`;
 }
@@ -624,6 +628,7 @@ export function TreemapCanvas({
   icon,
   steady = false,
   doubleClickInterval = 500,
+  atOnce = false,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -666,15 +671,18 @@ export function TreemapCanvas({
     size.h,
     steady,
     doubleClickInterval,
+    atOnce,
   );
-  const { layout } = shownLayout;
+  const { layout, drew } = shownLayout;
 
   // Paint when the layout, colours, label font or highlight change.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !layout || !("palette" in colors)) return;
     drawMap(canvas, layout, colors.palette, highlightKind, ratio, fontSettled);
-  }, [layout, colors, highlightKind, ratio, fontSettled]);
+    // On screen now, so a click that begins acts on it.
+    drew(layout);
+  }, [layout, colors, highlightKind, ratio, fontSettled, drew]);
 
   // Tell the host what's under the pointer or keyboard focus, once per change.
   const report = useCallback(
@@ -859,12 +867,13 @@ export function TreemapCanvas({
     delta !== undefined && growthSince
       ? `${delta > 0 ? "+" : "\u2212"}${formatBytes(Math.abs(delta))} since ${growthSince}`
       : null;
+  // A share of the folder the block was laid out in: a steady map can show an older map than `root` for a moment.
   const card =
     pointed && layout && pointer
       ? describe(
           pointed,
           folderToOpenAt(layout, pointer.x, pointer.y),
-          root,
+          layout.root,
           !(learned.selected && learned.opened),
           change,
         )

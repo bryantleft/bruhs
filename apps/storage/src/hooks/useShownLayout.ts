@@ -3,17 +3,9 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
-import {
-  clicking,
-  type HoldEvent,
-  heldUntil,
-  holdAfter,
-  NO_HOLD,
-  nextStep,
-} from "~/lib/steady-map";
+import { type Clock, steadyMap } from "~/lib/steady-map";
 import {
   kindBytesByFolder,
   layoutTreemap,
@@ -25,6 +17,8 @@ import type { DirNode } from "~/lib/types";
 export interface ShownLayout {
   /** What the map draws, and finds the blocks under the pointer in. */
   readonly layout: TreemapLayout | null;
+  /** The map drew `layout`, which is now on screen. */
+  drew(layout: TreemapLayout): void;
   /** A button went down over the map, as the `clicks`th click in a row (`MouseEvent.detail`). */
   press(clicks: number): void;
   /** The button came up, wherever the pointer is. */
@@ -37,11 +31,20 @@ export interface ShownLayout {
   clicked(): TreemapLayout | null;
 }
 
+const browserClock: Clock = {
+  now: () => performance.now(),
+  after: (ms, run) => {
+    const timer = setTimeout(run, ms);
+    return () => clearTimeout(timer);
+  },
+};
+
 /**
  * The layout a disk map shows: `root` laid out at `width` × `height` CSS pixels, once for each. A `steady` map's newer
  * layouts of the same folder keep its siblings' places within a margin, leave the layout shown as it is when they'd
  * draw the same, and wait while the person clicks or reads the hover card, a double-click lasting `doubleClick` ms
- * (steady-map.ts). Any other map shows each layout as it comes.
+ * (steady-map.ts). A root `atOnce` answers the person's own action, and shows as it comes, as every layout of any
+ * other map does.
  */
 export function useShownLayout(
   root: DirNode,
@@ -49,97 +52,40 @@ export function useShownLayout(
   height: number,
   steady: boolean,
   doubleClick: number,
+  atOnce: boolean,
 ): ShownLayout {
   const kinds = useMemo(() => kindBytesByFolder(root), [root]);
   const [layout, setLayout] = useState<TreemapLayout | null>(null);
-  // As of now rather than the last render, since the pointer and the timer act between renders: the layout shown,
-  // the newest one waiting for the hold to let go, the hold, and the layout the click under way began on.
-  const shown = useRef<TreemapLayout | null>(null);
-  const waiting = useRef<TreemapLayout | null>(null);
-  const hold = useRef(NO_HOLD);
-  const pressedOn = useRef<TreemapLayout | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  const show = useCallback((next: TreemapLayout | null) => {
-    waiting.current = null;
-    shown.current = next;
-    setLayout(next);
-  }, []);
-
-  // Shows the layout waiting once the hold lets go, or comes back when it will.
-  const settle = useCallback(() => {
-    clearTimeout(timer.current);
-    const next = waiting.current;
-    if (!next) return;
-    const now = performance.now();
-    const until = heldUntil(hold.current, now);
-    if (until === null) show(next);
-    else timer.current = setTimeout(settle, until - now);
-  }, [show]);
-  useEffect(() => () => clearTimeout(timer.current), []);
+  const [map] = useState(() => steadyMap(browserClock, setLayout));
+  useEffect(() => () => map.stop(), [map]);
 
   // Before the browser paints, so the map never shows a folder with another's blocks.
   useLayoutEffect(() => {
     if (width < 2 || height < 2) {
-      show(null);
+      map.show(null);
       return;
     }
-    const before = shown.current;
+    const before = map.shown();
     const order =
       steady && before?.root.path === root.path
         ? siblingOrder(before)
         : undefined;
     const next = layoutTreemap(root, width, height, kinds, order);
-    const holding = heldUntil(hold.current, performance.now()) !== null;
-    const step = steady ? nextStep(before, next, holding) : "show";
-    if (step === "show") {
-      show(next);
-    } else if (step === "wait") {
-      waiting.current = next;
-      settle();
-    } else {
-      // The newest map draws what's shown, so whatever waited is out of date.
-      waiting.current = null;
-    }
-  }, [root, width, height, kinds, steady, show, settle]);
+    if (steady && !atOnce) map.newer(next);
+    else map.show(next);
+  }, [root, width, height, kinds, steady, atOnce, map]);
 
-  const report = useCallback(
-    (event: HoldEvent) => {
-      hold.current = holdAfter(hold.current, event, performance.now());
-      settle();
-    },
-    [settle],
+  const release = useCallback(
+    () => map.release(doubleClick),
+    [map, doubleClick],
   );
-
   return {
     layout,
-    press: useCallback(
-      (clicks: number) => {
-        // A double-click's second press keeps what its first was aimed at.
-        if (clicks < 2 || !clicking(hold.current, performance.now())) {
-          pressedOn.current = shown.current;
-        }
-        report({ type: "press" });
-      },
-      [report],
-    ),
-    release: useCallback(
-      () => report({ type: "release", doubleClick }),
-      [report, doubleClick],
-    ),
-    menu: useCallback(() => report({ type: "menu" }), [report]),
-    cardShown: useCallback(
-      (open: boolean) => report({ type: "card", open }),
-      [report],
-    ),
-    clicked: useCallback(() => {
-      const pressed = pressedOn.current;
-      const onScreen = shown.current;
-      return pressed &&
-        pressed.root.path === onScreen?.root.path &&
-        clicking(hold.current, performance.now())
-        ? pressed
-        : onScreen;
-    }, []),
+    drew: map.drew,
+    press: map.press,
+    release,
+    menu: map.menu,
+    cardShown: map.card,
+    clicked: map.clicked,
   };
 }
