@@ -16,20 +16,6 @@ struct DiskProblem: Equatable {
     var offersDiskAccess = false
 }
 
-/// The items the last move to the Trash moved, while Pith can still put them back with one Undo.
-struct TrashedItems: Equatable {
-    /// Each item that moved, where it was and where it went.
-    let moves: [TrashMove]
-    /// What the notice says of them (`TrashOutcome.note`).
-    let note: String
-    /// The map before the move, which Undo restores exactly.
-    let previous: DiskResult
-    /// The places the move took out of Places, by the path of the item that held them, which Undo puts back with it.
-    let places: [String: [LivePlace]]
-
-    static func == (lhs: TrashedItems, rhs: TrashedItems) -> Bool { lhs.moves == rhs.moves }
-}
-
 /// The apps that wrote the most to disk over a stretch, shown beside what grew. macOS doesn't say which app wrote to
 /// which folder without administrator access, so this says who was writing then, not who grew a folder.
 enum DiskWriters: Equatable {
@@ -158,7 +144,15 @@ enum MapCommand: Equatable {
     private(set) var progress: DiskProgress?
     /// How the last scan ended when it didn't produce a map.
     private(set) var note: String?
-    private(set) var trashed: TrashedItems?
+    /// The latest move to the Trash, while its notice shows: its Undo button undoes it.
+    private(set) var trashed: TrashRecord?
+    /// Every move to the Trash Undo can still put back, each registered with the window's undo manager on its own, so
+    /// each ⌘Z undoes its own move, the latest first, wherever the map is by then.
+    @ObservationIgnored private lazy var undos = TrashUndoStack { [weak self] record in self?.undoTrash(record) }
+    /// The move to the Trash or Undo under way, which the next waits for, so ⌘Z pressed meanwhile undoes its move once
+    /// that one ends rather than being lost. `trashWork` counts the moves, plans and Undos begun and not ended.
+    @ObservationIgnored private var trashing: Task<Void, Never>?
+    @ObservationIgnored private var trashWork = 0
     /// The folder the map is showing, as the page reports it. Nil until the page reports a new map's folder.
     private(set) var openFolder: String?
     /// A folder the page went back or forward to that the map's tree leaves out: the live map shows it in detail, so
@@ -466,17 +460,31 @@ enum MapCommand: Equatable {
         }
     }
 
-    /// The selection as a newer map has it: an item the map no longer holds leaves it. What deleting the rest frees is
-    /// measured again only once an item's size has moved by more than a megabyte since it was last measured, one
-    /// measurement at a time and each after the last one's rest (`FreesSchedule`): a busy folder changes with every map,
-    /// and measuring it each time would never stop.
+    /// The selection as a newer map has it: an item the map no longer shows, folded into its folder's smaller items, stays
+    /// with the size it last showed while it's on the disk (`DiskSelection.follow`), and only one gone from the disk
+    /// leaves. What deleting them frees is measured again only once an item's size has moved by more than a megabyte
+    /// since it was last measured, one measurement at a time and each after the last one's rest (`FreesSchedule`): a busy
+    /// folder changes with every map, and measuring it each time would never stop.
     private func keepSelection() {
         guard !selection.isEmpty else { return }
-        var kept = selection
-        kept.keep { self.result?.item(at: $0) != nil }
-        if kept != selection { setSelection(kept); return }
+        let unshown = selection.follow(result)
         refreshSelected()
         follow(frees.mapChanged(selectedSizes, at: Date()))
+        dropGone(unshown)
+    }
+
+    /// Looks off the main thread for the selected items at `paths`, which the map no longer shows, and drops those no
+    /// longer on the disk, once the selection is as it was. `lstat` never opens an item, and the map has read each.
+    private func dropGone(_ paths: [String]) {
+        guard !paths.isEmpty else { return }
+        let picked = selection.paths
+        Task {
+            let gone = await Task.detached(priority: .utility) { Set(paths.filter { !Self.exists($0) }) }.value
+            guard !gone.isEmpty, selection.paths == picked else { return }
+            var kept = selection
+            kept.drop(gone)
+            setSelection(kept)
+        }
     }
 
     /// The live map's folder sizes against a baseline kept from up to a day before, so the map shows what grew. A day
@@ -715,25 +723,29 @@ enum MapCommand: Equatable {
         setSelection(next)
     }
 
-    /// Makes `next` the selection, with its items and plan. Other items than before are measured afresh, and a
-    /// measurement of the last ones is dropped.
+    /// Makes `next` the selection, with its items, as the map shows them, and plan. Other items than before are measured
+    /// afresh, and a measurement of the last ones is dropped.
     private func setSelection(_ next: DiskSelection) {
         let changed = next != selection
+        var next = next
+        let unshown = next.follow(result)
         selection = next
         refreshSelected()
+        dropGone(unshown)
         guard changed else { return }
         freesTask?.cancel(); freesTask = nil
         selectedFrees = nil; freesAge = nil
         follow(frees.selected(selectedSizes))
     }
 
-    /// The selected items, from the map shown, and their plan. The plan is made off the main thread when the selection
-    /// changes, or a newer map changes what a selected path holds, as when a file becomes a folder or leaves the map; a
-    /// map that only moves their sizes keeps it, since what can go to the Trash, and what Pith asks first, doesn't
-    /// change with them. Moving them plans them again (`requestTrash`).
+    /// The selected items, as the map shows them or last showed them, and their plan. The plan is made off the main
+    /// thread when the selection changes, or a newer map changes what a selected path holds, as when a file becomes a
+    /// folder; a map that only moves their sizes, or folds an item into its folder's smaller items, keeps it, since what
+    /// can go to the Trash, and what Pith asks first, doesn't change with them. Moving them plans them again
+    /// (`requestTrash`).
     private func refreshSelected() {
-        selectedItems = selection.paths.compactMap { result?.item(at: $0) }
-        let planned = PlannedSelection(root: result?.root.path, items: selection.paths.map { path in (path, result?.item(at: path)?.kind) })
+        selectedItems = selection.items
+        let planned = PlannedSelection(root: result?.root.path, items: selection.paths.map { path in (path, selection.shown[path]?.kind) })
         guard planned != plannedFor else { return }
         if planned.paths != plannedFor?.paths { selectedPlan = nil }
         plannedFor = planned
@@ -877,8 +889,9 @@ enum MapCommand: Equatable {
     /// main thread: it looks each item and the folders Pith protects up on the disk.
     func trashPlan(for paths: [String]) async -> Result<TrashBatch, DiskFailure> {
         guard let result else { return .failure(DiskFailure("Open the map first.")) }
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        return await Task.detached(priority: .userInitiated) { TrashBatch.plan(paths, result: result, home: home) }.value
+        // A selected item the map folds into its folder's smaller items since is planned from what it last showed.
+        let home = FileManager.default.homeDirectoryForCurrentUser, kept = selection.shown
+        return await Task.detached(priority: .userInitiated) { TrashBatch.plan(paths, result: result, home: home, kept: kept) }.value
     }
 
     /// The selection's plan when `paths` is the selection and its plan is in hand, waited for while it's being made, or a
@@ -897,14 +910,15 @@ enum MapCommand: Equatable {
     /// the disk can have changed since they were selected.
     func requestTrash(_ paths: [String], undoManager: UndoManager?) {
         guard result != nil, !isScanning, !isTrashing else { return }
-        isTrashing = true
+        beganTrashWork()
         Task {
             let plan = await trashPlan(for: paths)
-            isTrashing = false
+            endedTrashWork()
             switch plan {
             case .failure(let failure): problem = DiskProblem(message: failure.message)
             case .success(let batch) where batch.asks: confirming = batch
-            case .success(let batch): trash(batch, undoManager: undoManager)
+            // After an Undo ⌘Z began while the items were planned, rather than not at all.
+            case .success(let batch): if result != nil, !isScanning { move(batch, undoManager: undoManager) }
             }
         }
     }
@@ -915,31 +929,54 @@ enum MapCommand: Equatable {
     /// the ones that moved.
     func trash(_ batch: TrashBatch, undoManager: UndoManager?) {
         guard result != nil, !isScanning, !isTrashing else { return }
-        isTrashing = true; problem = nil
-        let move = Self.mover(into: trashFolder)
-        Task {
-            let outcome = await Task.detached(priority: .userInitiated) { batch.move(with: move) }.value
-            isTrashing = false
-            moved(outcome, undoManager: undoManager)
+        move(batch, undoManager: undoManager)
+    }
+
+    private func move(_ batch: TrashBatch, undoManager: UndoManager?) {
+        problem = nil
+        let mover = Self.mover(into: trashFolder)
+        afterTrashWork {
+            let outcome = await Task.detached(priority: .userInitiated) { batch.move(with: mover) }.value
+            self.moved(outcome, undoManager: undoManager)
         }
     }
 
+    /// Runs `work` once the move to the Trash or Undo under way has ended, as trash work.
+    private func afterTrashWork(_ work: @escaping @MainActor () async -> Void) {
+        let earlier = trashing
+        beganTrashWork()
+        trashing = Task {
+            await earlier?.value
+            await work()
+            endedTrashWork()
+        }
+    }
+
+    private func beganTrashWork() { trashWork += 1; isTrashing = true }
+    private func endedTrashWork() { trashWork -= 1; isTrashing = trashWork > 0 }
+
     /// Takes what `outcome` moved off the map shown: off its tree, its largest files and Places, out of the selection,
-    /// and, on the live map, off the maps after it. The map before goes with the record of the move, for Undo.
+    /// and, on the live map, off the maps after it. What the map had of each item goes with the move's own record, which
+    /// its own Undo puts back (`TrashUndoStack`).
     private func moved(_ outcome: TrashOutcome, undoManager: UndoManager?) {
         if let message = outcome.problem { problem = DiskProblem(message: message) }
         guard let note = outcome.note, let result else { return }
-        var updated = result, places: [String: [LivePlace]] = [:], items: [DiskNode] = []
+        var updated = result, items: [String: LiveEdits.Restored] = [:], nodes: [DiskNode] = []
         for move in outcome.moved {
             let path = move.plan.target.path
-            items.append(result.item(at: path) ?? Self.node(of: move.plan))
-            // A place it held leaves Places with it, until Undo puts it back.
-            places[path] = sideColumn.tookOff(path)
-            // An item the tree doesn't hold, inside a group of smaller ones, leaves the map with its next scan or listing.
-            updated = updated.removing(path) ?? updated
+            // As the map shows it, or as it last showed it, for a selected item it folds into its folder's smaller items.
+            let node = result.item(at: path) ?? selection.shown[path] ?? Self.node(of: move.plan)
+            nodes.append(node)
+            // A place it held leaves Places with it, its largest files leave Largest files, and the folders in it the map
+            // couldn't read leave their list, until Undo puts them back.
+            let inside = { (other: String) in DiskChanges.isInside(other, path) }
+            items[path] = LiveEdits.Restored(node: node, topFiles: result.topFiles.filter { inside($0.path) }, places: sideColumn.tookOff(path),
+                                             folded: result.root.node(at: path) == nil, unreadable: result.unreadableFolders.filter { inside($0.path) })
+            // One the tree folds away takes its size out of the smaller items that count it.
+            updated = updated.removing(path, folded: node) ?? updated
         }
         if liveView != nil {
-            liveEdits.trashed(items)
+            liveEdits.trashed(nodes)
             followChange(outcome.moved)
         }
         self.result = updated
@@ -949,11 +986,11 @@ enum MapCommand: Equatable {
         var kept = selection
         kept.keep { !gone.contains($0) }
         setSelection(kept)
-        trashed = TrashedItems(moves: outcome.moved, note: note, previous: result, places: places)
+        let record = TrashRecord(moves: outcome.moved, note: note, items: items)
+        trashed = record
+        undos.moved(record, undoManager: undoManager)
         mapAnswersPerson = true
         revision = UUID()
-        undoManager?.registerUndo(withTarget: self) { model in MainActor.assumeIsolated { model.undoTrash() } }
-        undoManager?.setActionName("Move to Trash")
     }
 
     /// An item the map didn't hold by itself when it moved, as its plan says it was.
@@ -982,43 +1019,57 @@ enum MapCommand: Equatable {
         }
     }
 
-    /// Moves every item of the last move to the Trash back where it was, off the main thread, restores the map from before
-    /// and selects them again. On the live map, the maps after it keep them, until its index has listed them again. One
-    /// that can't go back stays in the Trash, and off the map, and Pith says which.
+    /// The notice's Undo: puts back the latest move, which ⌘Z then no longer undoes, so ⌘Z next undoes the one before.
     func undoTrash() {
-        guard let record = trashed, !isScanning, !isTrashing else { return }
-        trashed = nil
-        isTrashing = true
+        guard let trashed else { return }
+        undos.undo(trashed)
+    }
+
+    /// Moves every item of `record`'s move back where it was, off the main thread, once the move or Undo under way has
+    /// ended, and puts each back on the map open now, where it was, selecting them again. On the live map, the maps after
+    /// it keep them, until its index has listed them again. Moving back never overwrites anything: one that can't go back
+    /// stays in the Trash, and off the map, and Pith says which (`TrashUndo.putBack`).
+    private func undoTrash(_ record: TrashRecord) {
+        if trashed === record { trashed = nil }
         let moves = record.moves
-        Task {
+        afterTrashWork {
             let (restored, stuck) = await Task.detached(priority: .userInitiated) {
                 TrashUndo.putBack(moves) { try FileManager.default.moveItem(at: $0, to: $1) }
             }.value
-            isTrashing = false
-            if let message = TrashUndo.problem(stuck: stuck) { problem = DiskProblem(message: message) }
-            guard !restored.isEmpty else { return }
-            if liveView != nil {
-                liveEdits.putBack(restored.map { move in
-                    let path = move.plan.target.path
-                    return LiveEdits.Restored(node: record.previous.item(at: path) ?? Self.node(of: move.plan),
-                                              topFiles: record.previous.topFiles.filter { DiskChanges.isInside($0.path, path) },
-                                              places: record.places[path] ?? [])
-                })
-                followChange(restored)
-            }
-            result = stuck.reduce(record.previous) { $0.removing($1.plan.target.path) ?? $0 }
-            mapAnswersPerson = true
-            for move in restored { sideColumn.putBack(record.places[move.plan.target.path] ?? []) }
-            revision = UUID()
-            select(restored.reversed().map(\.plan.target.path))
+            if let message = TrashUndo.problem(stuck: stuck) { self.problem = DiskProblem(message: message) }
+            let items = restored.compactMap { record.items[$0.plan.target.path] }
+            guard !items.isEmpty else { return }
+            self.putBack(items, moved: restored)
         }
+    }
+
+    /// Puts `items`, which Undo moved back on the disk, on the map open now, where each was: in its folder, or in the
+    /// smaller items of the deepest folder the map shows on its way, as the map had it or as the map is now. Places, the
+    /// selection and the live map's maps after it follow.
+    private func putBack(_ items: [LiveEdits.Restored], moved: [TrashMove]) {
+        if liveView != nil {
+            liveEdits.putBack(items)
+            followChange(moved)
+        }
+        if let current = result {
+            result = items.reduce(current) { map, item in
+                let back = { (folding: Bool) in map.restoring(item.node, topFiles: item.topFiles, unreadable: item.unreadable, folding: folding) }
+                return back(item.folded) ?? back(true) ?? map
+            }
+        }
+        for item in items { sideColumn.putBack(item.places) }
+        mapAnswersPerson = true
+        revision = UUID()
+        let root = result?.root.path
+        setSelection(DiskSelection(items: items.reversed().map(\.node).filter { item in root.map { item.path != $0 && DiskChanges.isInside(item.path, $0) } ?? false }))
     }
 
     func dismissTrashNote() { trashed = nil }
 
-    /// Shows the items at `paths` in Quick Look, or the selection's, as many as the map has: the panel goes through them.
+    /// Shows the items at `paths` in Quick Look, or the selection's, as many as the map has, or last showed of those it
+    /// folds away since they were selected: the panel goes through them.
     func quickLook(_ paths: [String]? = nil) {
-        let urls = (paths ?? selection.paths).filter { result?.item(at: $0) != nil }.map { URL(fileURLWithPath: $0) }
+        let urls = (paths ?? selection.paths).filter { result?.item(at: $0) != nil || selection.shown[$0] != nil }.map { URL(fileURLWithPath: $0) }
         guard !urls.isEmpty else { return }
         showQuickLook?(urls)
     }

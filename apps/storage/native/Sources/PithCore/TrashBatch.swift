@@ -13,16 +13,17 @@ public struct TrashBatch: Sendable, Equatable {
     public var size: UInt64 { plans.reduce(0) { $0 + $1.size } }
 
     /// The move of `paths` to the Trash, or why it can't go: an item alone says what it always said, and for several,
-    /// one sentence names each that can't go, with why, and how to move the rest.
-    public static func plan(_ paths: [String], result: DiskResult, home: URL) -> Result<TrashBatch, DiskFailure> {
+    /// one sentence names each that can't go, with why, and how to move the rest. `kept` holds what the map last showed of
+    /// items it folds into their folders' smaller items since, as the selection keeps them (`DiskSelection.shown`).
+    public static func plan(_ paths: [String], result: DiskResult, home: URL, kept: [String: DiskNode] = [:]) -> Result<TrashBatch, DiskFailure> {
         let paths = DiskSelection.normalized(paths)
         guard !paths.isEmpty else { return .failure(DiskFailure("Select an item to move to the Trash.")) }
         let protected = TrashPolicy.protectedIdentities(home: home)
         var plans: [TrashPlan] = [], refused: [(name: String, refusal: TrashRefusal)] = []
         for path in paths {
-            switch TrashPolicy.check(path, result: result, home: home, protected: protected) {
+            switch TrashPolicy.check(path, result: result, home: home, protected: protected, kept: kept) {
             case .success(let plan): plans.append(plan)
-            case .failure(let refusal): refused.append((result.item(at: path)?.name ?? URL(fileURLWithPath: path).lastPathComponent, refusal))
+            case .failure(let refusal): refused.append(((result.item(at: path) ?? kept[path])?.name ?? URL(fileURLWithPath: path).lastPathComponent, refusal))
             }
         }
         if paths.count == 1, let only = refused.first { return .failure(DiskFailure(only.refusal.message)) }

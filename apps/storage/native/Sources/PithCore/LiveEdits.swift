@@ -28,9 +28,13 @@ public struct LiveEdits: Sendable, Equatable {
         public let topFiles: [DiskFile]
         /// What the live map's index held at the places inside it, which go back in Places.
         public let places: [LivePlace]
+        /// The map folded it into its folder's smaller items, so it goes back into them (`DiskResult.restoring`).
+        public let folded: Bool
+        /// The folders inside it the map couldn't read, which go back in the map's list of them.
+        public let unreadable: [DiskUnreadableFolder]
 
-        public init(node: DiskNode, topFiles: [DiskFile], places: [LivePlace]) {
-            self.node = node; self.topFiles = topFiles; self.places = places
+        public init(node: DiskNode, topFiles: [DiskFile], places: [LivePlace], folded: Bool = false, unreadable: [DiskUnreadableFolder] = []) {
+            self.node = node; self.topFiles = topFiles; self.places = places; self.folded = folded; self.unreadable = unreadable
         }
     }
 
@@ -119,7 +123,9 @@ public struct LiveEdits: Sendable, Equatable {
                 let kept = places.filter { !DiskChanges.isInside($0.path, node.path) }
                 if kept != places { places = kept; changed = true }
             case .back(let restored) where unlisted:
-                if let with = map.restoring(restored.node, topFiles: restored.topFiles) { map = with; changed = true }
+                if let with = map.restoring(restored.node, topFiles: restored.topFiles, unreadable: restored.unreadable, folding: restored.folded) {
+                    map = with; changed = true
+                }
                 let missing = restored.places.filter { place in !places.contains { $0.path == place.path } }
                 if !missing.isEmpty { places += missing; changed = true }
             case .back:

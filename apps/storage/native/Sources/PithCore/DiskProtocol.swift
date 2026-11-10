@@ -44,8 +44,9 @@ public struct DiskNode: Codable, Sendable, Equatable {
 
     public var entries: [DiskNode] { [self] + (children ?? []).flatMap(\.entries) }
 
-    /// The node at `path`: this one, or one inside it, found down the children whose paths hold `path`.
-    func node(at path: String) -> DiskNode? {
+    /// The node at `path`: this one, or one inside it, found down the children whose paths hold `path`. Nil for one the
+    /// tree folds into its folder's smaller items.
+    public func node(at path: String) -> DiskNode? {
         if self.path == path { return self }
         guard let children, DiskChanges.isInside(path, self.path) else { return nil }
         for child in children where DiskChanges.isInside(path, child.path) {
@@ -205,15 +206,22 @@ public struct DiskResult: Codable, Sendable {
     /// The map with `item` back where it was, as after Undo put it back, for a tree whose index hasn't listed it again:
     /// in place of what the tree shows at its path, as the empty folder an index shows once it has found a folder in its
     /// parent's listing and not listed it yet, or beside what's in its folder. Every folder above it grows by the
-    /// difference, and its largest files, `topFiles`, go back in the largest-files list. Nil when the tree doesn't show
-    /// the folder it goes in.
-    public func restoring(_ item: DiskNode, topFiles restored: [DiskFile]) -> DiskResult? {
-        guard item.path != root.path, item.isItem else { return nil }
+    /// difference, and its largest files, `topFiles`, go back in the largest-files list. An item the map had folded into
+    /// its folder's smaller items, `folding`, goes back into the smaller items of the deepest folder the tree shows on its
+    /// way, as `removing(_:folded:)` and a file shown only in Largest files take one out of them, unless the tree shows
+    /// the item itself now. The folders inside it the map couldn't read, `unreadable`, go back in their list. Nil when the
+    /// tree doesn't show the folder it goes in, nor smaller items to fold it into.
+    public func restoring(_ item: DiskNode, topFiles restored: [DiskFile], unreadable: [DiskUnreadableFolder] = [], folding: Bool = false) -> DiskResult? {
+        guard item.path != root.path, item.isItem, DiskChanges.isInside(item.path, root.path) else { return nil }
         let old = root.node(at: item.path)
-        guard let tree = old?.isItem == true ? Self.replace(item.path, in: root, with: item) : Self.insert(item, into: root) else { return nil }
+        let folded = folding && old?.isItem != true ? Self.grow(root, toward: item.path, size: item.size, files: item.fileCount) : nil
+        guard let tree = folded ?? (old?.isItem == true ? Self.replace(item.path, in: root, with: item) : Self.insert(item, into: root)) else { return nil }
         let shown = Set(topFiles.map(\.path))
         let top = (topFiles + restored.filter { !shown.contains($0.path) }).sorted { $0.size > $1.size }
         let files = summary.files.saturatingSubtract(old?.fileCount ?? 0) + item.fileCount
+        // The folders inside it the map couldn't read go back in their list, as its move took them out of it.
+        let listed = Set(unreadableFolders.map(\.path))
+        let unreadableFolders = unreadableFolders + unreadable.filter { !listed.contains($0.path) && DiskChanges.isInside($0.path, item.path) }
         return DiskResult(root: tree, topFiles: top, volumes: volumes, unreadableFolders: unreadableFolders, summary: summary.with(bytes: tree.size, files: files))
     }
 
@@ -267,6 +275,22 @@ public struct DiskResult: Codable, Sendable {
         var updated = children; updated[index] = child
         return (node.with(size: node.size.saturatingSubtract(removed.size), files: node.files.map { $0.saturatingSubtract(removed.fileCount) },
                           clones: without(removed), children: updated), removed)
+    }
+
+    /// Grows the folders above `path` and the aggregate of the deepest one the tree shows, for an item put back that the
+    /// tree folds away: `shrink` the other way.
+    private static func grow(_ node: DiskNode, toward path: String, size: UInt64, files: UInt64) -> DiskNode? {
+        let children = node.children ?? []
+        var updated = children
+        if let index = children.firstIndex(where: { path.hasPrefix($0.path + "/") && $0.kind == .dir }), let child = grow(children[index], toward: path, size: size, files: files) {
+            updated[index] = child
+        } else if let index = children.firstIndex(where: { $0.kind == .aggregate }) {
+            let aggregate = children[index]
+            updated[index] = aggregate.with(size: aggregate.size + size, files: aggregate.files.map { $0 + files }, children: nil)
+        } else {
+            return nil
+        }
+        return node.with(size: node.size + size, files: node.files.map { $0 + files }, children: updated)
     }
 
     /// Shrinks the folders above `path` and the aggregate holding it, for an item the tree folded away.
@@ -449,10 +473,13 @@ public enum TrashPolicy {
     public static let systemRoots = ["/", "/System/Volumes/Data"]
 
     /// What moving `input` to the Trash would do, or why it can't go (`TrashRefusal`). `protected` is
-    /// `protectedIdentities(home:)`, which several items checked together share (`TrashBatch.plan`).
-    public static func check(_ input: String, result: DiskResult, home: URL, protected: Set<Identity>) -> Result<TrashPlan, TrashRefusal> {
+    /// `protectedIdentities(home:)`, which several items checked together share (`TrashBatch.plan`). An item the map folds
+    /// into its folder's smaller items since it showed it is planned from what it showed, in `kept`.
+    public static func check(_ input: String, result: DiskResult, home: URL, protected: Set<Identity>,
+                             kept: [String: DiskNode] = [:]) -> Result<TrashPlan, TrashRefusal> {
         guard input.hasPrefix("/"), !input.utf8.contains(0) else { return .failure(.notAPath) }
-        guard let node = result.item(at: input), !input.split(separator: "/").contains("__other__") else { return .failure(.notInMap) }
+        guard let node = result.item(at: input) ?? kept[input].flatMap({ $0.path == input && $0.isItem ? $0 : nil }),
+              !input.split(separator: "/").contains("__other__") else { return .failure(.notInMap) }
         let normalized = URL(fileURLWithPath: input).standardizedFileURL
         let target = normalized.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(normalized.lastPathComponent)
         let root = URL(fileURLWithPath: result.root.path).resolvingSymlinksInPath().standardizedFileURL

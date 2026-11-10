@@ -271,6 +271,61 @@ extension AppDelegate {
                 && back.page && cleared && settled]
     }
 
+    /// Every ⌘Z undoes its own Move to Trash. Three files of the check's own go to the run's own folder, a move each, and
+    /// Edit > Undo, through the window's undo manager, puts back the last, then the one before it, each back on the map and
+    /// selected. Then the middle one moves again, the note's Undo puts it back, and the ⌘Z after that puts back the first
+    /// move's file rather than the middle one again. Undo moves nothing back to the Trash, so nothing is left to Redo.
+    func checkEachUndoUndoesItsOwnMove(_ fixture: String) async -> [String: Bool] {
+        let name = "each_undo_undoes_its_own_move"
+        let files = FileManager.default, mark = UUID().uuidString.prefix(8).lowercased()
+        let items = (1...3).map { (fixture as NSString).appendingPathComponent("pith-undo-\(mark)-\($0).bin") }
+        var inTrash: [URL] = []
+        defer {
+            for path in items { try? files.removeItem(atPath: path) }
+            for url in inTrash { try? files.removeItem(at: url) }
+            disk.dismissTrashNote()
+        }
+        // 1 MiB each, the least the live map lists by name.
+        guard let undo = webView?.window?.undoManager, items.allSatisfy({ files.createFile(atPath: $0, contents: Data(count: 1 << 20)) }),
+              await eventually({ items.allSatisfy { self.disk.result?.item(at: $0) != nil } }), await mapSettles() else {
+            print("each undo: the check's files never reached the map")
+            return [name: false]
+        }
+        func on(_ path: String) -> Bool { files.fileExists(atPath: path) && disk.result?.item(at: path) != nil }
+        func off(_ path: String) -> Bool { !files.fileExists(atPath: path) && disk.result?.item(at: path) == nil }
+        /// Moves `path` to the Trash as the person does, in a move of its own: whether it left the disk and the map.
+        func move(_ path: String) async -> Bool {
+            disk.requestTrash([path], undoManager: undo)
+            let moved = await eventually { off(path) && self.disk.trashed?.moves.map(\.plan.target.path) == [path] && !self.disk.isTrashing }
+            inTrash += disk.trashed?.moves.compactMap(\.trashed) ?? []
+            return moved
+        }
+        /// Whether `path` came back, on the map and selected, while each of `away` stayed in the Trash.
+        func back(_ path: String, leaving away: [String]) async -> Bool {
+            await eventually { on(path) && self.disk.selection.paths == [path] && !self.disk.isTrashing } && away.allSatisfy(off)
+        }
+        var moved = true
+        for path in items { moved = await move(path) && moved }
+        let action = undo.undoActionName
+        undo.undo()
+        let last = await back(items[2], leaving: [items[0], items[1]])
+        undo.undo()
+        let before = await back(items[1], leaving: [items[0]])
+        let again = await move(items[1])
+        disk.undoTrash()
+        let noted = await back(items[1], leaving: [items[0]]) && disk.trashed == nil
+        undo.undo()
+        let first = await back(items[0], leaving: [])
+        let redo = undo.canRedo
+        if first { inTrash = [] }
+        print("each undo: three moves \(moved) (\(action)); ⌘Z put back the last \(last), ⌘Z again the one before \(before); moved again \(again), "
+              + "the note's Undo put it back \(noted), then ⌘Z the first move's file \(first); Redo offered \(redo)")
+        for path in items { try? files.removeItem(atPath: path) }
+        let cleared = await eventually { items.allSatisfy { self.disk.result?.item(at: $0) == nil } }
+        let settled = await mapSettles()
+        return [name: moved && action == "Move to Trash" && last && before && again && noted && first && !redo && cleared && settled]
+    }
+
     /// Whether the page shows `selected` as Pith holds it: a block outlined for each, each on a block of its own here,
     /// and in the map's list of items and in Largest files, the rows of the items selected shown selected, and saying so
     /// after their names, and no others. No row is a toggle, since pressing one selects its item alone.

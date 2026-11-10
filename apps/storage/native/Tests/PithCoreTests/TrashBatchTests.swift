@@ -62,6 +62,23 @@ final class TrashBatchTests: XCTestCase {
                        "Library can’t go to the Trash because macOS or your account needs it, and gone.bin because it no longer exists or can’t be read.")
     }
 
+    /// An item the selection keeps after a newer map folds it into its folder's smaller items is planned from what the map
+    /// last showed of it (`DiskSelection.shown`), so Move to Trash takes it with the rest. A path neither on the map nor
+    /// kept is still no item of the map.
+    func testAnItemTheSelectionKeepsAfterTheMapFoldsItCanGo() throws {
+        let a = try file("a.bin"), folded = try file("small/folded.bin")
+        let result = map([a])
+        let kept = [folded.path: DiskNode(kind: .file, name: "folded.bin", path: folded.path, size: 4, children: nil)]
+        XCTAssertEqual(refusal([a, folded], in: result),
+                       "folded.bin can’t go to the Trash because it isn’t a real entry in the current scan, so take it out of the selection and move the rest.")
+        let batch = try TrashBatch.plan([a.path, folded.path], result: result, home: folder.appendingPathComponent("home"), kept: kept).get()
+        XCTAssertEqual(batch.plans.map(\.name), ["a.bin", "folded.bin"])
+        XCTAssertEqual(batch.size, 8, "its size as the map last showed it")
+        let outside = [folder.deletingLastPathComponent().path + "/elsewhere.bin": DiskNode(kind: .file, name: "elsewhere.bin",
+                                                                                              path: folder.deletingLastPathComponent().path + "/elsewhere.bin", size: 4, children: nil)]
+        XCTAssertThrowsError(try TrashBatch.plan(Array(outside.keys), result: result, home: folder, kept: outside).get(), "outside the map, kept or not")
+    }
+
     func testANamesListStaysShort() {
         XCTAssertEqual(TrashBatch.names(["a"]), "a")
         XCTAssertEqual(TrashBatch.names(["a", "b"]), "a and b")

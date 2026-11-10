@@ -97,6 +97,43 @@ final class DiskTests: XCTestCase {
         XCTAssertEqual(group?.files, 1)
     }
 
+    /// Undo puts an item back on whatever map is open, as Move to Trash took it off: one in a folder the map folds into
+    /// its smaller items goes back into them, as a file shown only in Largest files does, and the map is as it was.
+    func testAnItemPutBackWhereTheMapFoldsItGoesBackIntoTheSmallerItems() throws {
+        let original = sample()
+        let hidden = try XCTUnwrap(original.item(at: "/r/b/hidden.log"))
+        let without = try XCTUnwrap(original.removing("/r/b/hidden.log"))
+        let block = try XCTUnwrap(without.restoring(hidden, topFiles: [DiskFile(name: "hidden.log", path: "/r/b/hidden.log", size: 5)]))
+        XCTAssertEqual(block.item(at: "/r/b")?.children?.map(\.size), [10, 5, 5], "not folded, it has a block of its own beside the smaller items")
+        let back = try XCTUnwrap(without.restoring(hidden, topFiles: [DiskFile(name: "hidden.log", path: "/r/b/hidden.log", size: 5)], folding: true))
+        XCTAssertEqual(back.root, original.root)
+        XCTAssertEqual(back.topFiles, original.topFiles)
+        XCTAssertEqual(back.summary, original.summary)
+        // A folder the map folds away, which Move to Trash took out of the smaller items it was in.
+        let tiny = DiskNode(kind: .dir, name: "tiny", path: "/r/b/tiny", size: 6, files: 2, children: [])
+        let gone = try XCTUnwrap(original.removing(tiny.path, folded: tiny))
+        XCTAssertEqual(gone.root.size, 54)
+        let returned = try XCTUnwrap(gone.restoring(tiny, topFiles: [], folding: true))
+        XCTAssertEqual(returned.root, original.root)
+        XCTAssertEqual(returned.summary, original.summary)
+        XCTAssertNil(original.restoring(DiskNode(kind: .dir, name: "x", path: "/elsewhere/x", size: 6, files: 2, children: []), topFiles: [], folding: true),
+                     "an item outside the map")
+    }
+
+    /// A folder put back brings the folders inside it that the map couldn't read back to the map's list of them, as its
+    /// move took them off it.
+    func testAFolderPutBackBringsItsUnreadableFoldersBack() throws {
+        let original = sample()
+        let a = try XCTUnwrap(original.item(at: "/r/a"))
+        let without = try XCTUnwrap(original.removing("/r/a"))
+        XCTAssertTrue(without.unreadableFolders.isEmpty)
+        let back = try XCTUnwrap(without.restoring(a, topFiles: [DiskFile(name: "big.bin", path: "/r/a/big.bin", size: 30)],
+                                                   unreadable: original.unreadableFolders))
+        XCTAssertEqual(back.unreadableFolders, original.unreadableFolders)
+        XCTAssertEqual(back.root, original.root)
+        XCTAssertEqual(back.summary, original.summary)
+    }
+
     func testReplacingAFolderWithANewerScanAdjustsTheTotals() throws {
         let fresh = DiskResult(root: DiskNode(kind: .dir, name: "a", path: "/r/a", size: 30, files: 1, children: [
             DiskNode(kind: .file, name: "new.bin", path: "/r/a/new.bin", size: 30, children: nil),

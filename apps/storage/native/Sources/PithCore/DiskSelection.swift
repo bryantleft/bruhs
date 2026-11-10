@@ -4,13 +4,36 @@ import Foundation
 /// already selected, takes it out, as in Finder. An item inside a folder that's also picked is dropped, since the folder
 /// holds it: the selection never counts, measures or moves anything twice. Pith keeps it, and the map's page outlines
 /// what Pith says is selected.
+///
+/// It keeps what the map last showed of each item, its node and so its size: an item a newer map folds into its
+/// folder's smaller items stays selected, with that size, for as long as it's on the disk, so the bar's count and Size
+/// hold and Move to Trash takes it too. The map draws no outline for it.
 public struct DiskSelection: Equatable, Sendable {
     /// The items picked, by path, each outside every other.
-    public private(set) var paths: [String]
+    public private(set) var paths: [String] {
+        didSet {
+            let picked = Set(paths)
+            shown = shown.filter { picked.contains($0.key) }
+        }
+    }
+    /// What the map last showed of each item, by its path: the node of the newest map that had it.
+    public private(set) var shown: [String: DiskNode] = [:]
 
     public init(_ paths: [String] = []) { self.paths = Self.normalized(paths) }
 
+    /// The items of `items`, as Undo puts them back, each with what the map had of it.
+    public init(items: [DiskNode]) {
+        self.init(items.map(\.path))
+        for item in items where paths.contains(item.path) { shown[item.path] = item }
+    }
+
+    /// The same items picked, in the same order: their nodes move with each map, and the selection stays the same.
+    public static func == (lhs: DiskSelection, rhs: DiskSelection) -> Bool { lhs.paths == rhs.paths }
+
     public var isEmpty: Bool { paths.isEmpty }
+
+    /// The items as the map last showed each, in the order they were picked.
+    public var items: [DiskNode] { paths.compactMap { shown[$0] } }
 
     /// `paths` without an item inside another of them, nor one picked twice, in the order they were picked: a folder
     /// picked after what it holds takes their place at the end.
@@ -43,5 +66,21 @@ public struct DiskSelection: Equatable, Sendable {
     /// item on it.
     public mutating func keep(inside folder: String) {
         keep { $0 != folder && DiskChanges.isInside($0, folder) }
+    }
+
+    /// A newer map, `map`: each item it shows takes its node from it. The items it doesn't show, folded into their
+    /// folders' smaller items or gone from the disk, keep the nodes they had, and their paths come back, for Pith to look
+    /// at the disk for them (`drop`).
+    public mutating func follow(_ map: DiskResult?) -> [String] {
+        var unshown: [String] = []
+        for path in paths {
+            if let node = map?.item(at: path) { shown[path] = node } else { unshown.append(path) }
+        }
+        return unshown
+    }
+
+    /// The items of `gone` are no longer on the disk: they leave the selection.
+    public mutating func drop(_ gone: Set<String>) {
+        keep { !gone.contains($0) }
     }
 }

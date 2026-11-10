@@ -158,6 +158,7 @@ extension AppDelegate {
             checks["selection_bridge"] = checks["selection_bridge"] == true && several
             checks.merge(await checkSeveralTrashed(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkTrashHoldsThroughNewerMaps(fixture), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkEachUndoUndoesItsOwnMove(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkOpenedFolderDetail(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(try await checkLiveFollows(disk, in: fixture, prefix: "live_map"), uniquingKeysWith: { _, new in new })
             checks.merge(try await checkLiveReopens(fixture, dailyChecks: &dailyChecks), uniquingKeysWith: { _, new in new })

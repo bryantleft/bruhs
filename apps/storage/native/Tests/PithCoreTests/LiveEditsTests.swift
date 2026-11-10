@@ -102,6 +102,20 @@ final class LiveEditsTests: XCTestCase {
         XCTAssertFalse(edits.apply(to: map(), places: places, answer: .init(asked: ["/r/b/tiny"], unlisted: [])).changed)
     }
 
+    /// An item the map folded into its folder's smaller items, moved to the Trash and put back, goes back into them on the
+    /// maps that come before the index has it, as it came out of them, rather than taking a block of its own.
+    func testAnItemPutBackThatTheMapFoldedGoesBackIntoTheSmallerItems() throws {
+        let folded = DiskNode(kind: .dir, name: "tiny", path: "/r/b/tiny", size: 6, files: 2, children: [])
+        var edits = LiveEdits()
+        edits.putBack([.init(node: folded, topFiles: [], places: [], folded: true)])
+        // The index listed b after the move, without tiny, and not again since.
+        let stale = try XCTUnwrap(map().removing(folded.path, folded: folded))
+        let shown = edits.apply(to: stale, places: places, answer: .init(asked: ["/r/b/tiny"], unlisted: ["/r/b/tiny"]))
+        XCTAssertTrue(shown.changed)
+        XCTAssertEqual(shown.map.root, map().root, "back in b's smaller items")
+        XCTAssertNil(shown.map.root.node(at: folded.path))
+    }
+
     func testAPlaceInsideAnItemMovedToTheTrashLeavesPlacesUntilTheIndexHasIt() throws {
         let a = try XCTUnwrap(map().item(at: "/r/a"))
         var edits = LiveEdits()
