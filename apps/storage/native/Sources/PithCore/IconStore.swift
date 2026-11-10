@@ -129,9 +129,12 @@ public struct IconRequest: Hashable, Sendable {
 public final class RenderedIcon: @unchecked Sendable {
     public let image: CGImage
     public let size: IconSize
-    private let lock = NSLock()
+    /// Guards `encoded` and `encoding`, never held while an encoding runs.
+    private let condition = NSCondition()
     /// The PNG once it's been encoded, or nil inside when it couldn't be; nil until then.
     private var encoded: Data??
+    /// An encoding is under way, which a second caller waits for.
+    private var encoding = false
 
     init(image: CGImage, size: IconSize) {
         self.image = image
@@ -141,19 +144,30 @@ public final class RenderedIcon: @unchecked Sendable {
     /// The icon at its point size, for AppKit.
     public var nsImage: NSImage { NSImage(cgImage: image, size: NSSize(width: size.points, height: size.points)) }
 
-    /// The PNG, if it's been encoded.
+    /// The PNG, if it's been encoded. Never waits for an encoding under way, as the main thread asks.
     var png: Data? {
-        lock.lock(); defer { lock.unlock() }
+        condition.lock(); defer { condition.unlock() }
         return encoded ?? nil
     }
 
-    /// The PNG, encoded with `encode` the first time and kept, and whether this call is the one that encoded it. A call
-    /// made while another encodes waits for that encoding.
+    /// The PNG, encoded with `encode` the first time and kept, and whether this call is the one that encoded it. It
+    /// encodes outside the lock, so asking for `png` meanwhile doesn't wait; a call made while another encodes waits for
+    /// that encoding, on the store's queue.
     func encodePNG(with encode: (CGImage) -> Data?) -> (png: Data?, isNew: Bool) {
-        lock.lock(); defer { lock.unlock() }
-        if let encoded { return (encoded, false) }
+        condition.lock()
+        while encoding { condition.wait() }
+        if let encoded {
+            condition.unlock()
+            return (encoded, false)
+        }
+        encoding = true
+        condition.unlock()
         let png = encode(image)
+        condition.lock()
         encoded = .some(png)
+        encoding = false
+        condition.broadcast()
+        condition.unlock()
         return (png, true)
     }
 

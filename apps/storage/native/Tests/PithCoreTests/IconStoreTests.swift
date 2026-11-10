@@ -316,6 +316,42 @@ final class IconStoreTests: XCTestCase {
         XCTAssertEqual(encoder.count, 1, "kept with the drawing")
     }
 
+    /// Encodes as the store does by default, after saying it has begun and waiting `delay`, as a slow encoding would.
+    private final class SlowEncoder: @unchecked Sendable {
+        private let lock = NSLock()
+        private let delay: TimeInterval
+        private var began = false
+
+        init(delay: TimeInterval) { self.delay = delay }
+
+        var hasBegun: Bool { lock.lock(); defer { lock.unlock() }; return began }
+
+        func encode(_ image: CGImage) -> Data? {
+            lock.lock(); began = true; lock.unlock()
+            Thread.sleep(forTimeInterval: delay)
+            return RenderedIcon.png(of: image)
+        }
+    }
+
+    /// The main thread asks whether an icon has its PNG for every icon the page loads (`cachedPNG`), so asking never waits
+    /// for an encoding under way, however long it takes: it answers nil until the encoding is done.
+    @MainActor func testAskingForAPNGNeverWaitsForAnEncodingUnderWay() async throws {
+        let encoder = SlowEncoder(delay: 0.5)
+        let store = IconStore(renderer: RecordingRenderer(), encoder: encoder.encode)
+        let request = IconRequest(.folder, size: small, appearance: .dark)
+        _ = await store.icon(for: request)
+        let encoding = Task.detached { await store.png(for: request) }
+        while !encoder.hasBegun { try await Task.sleep(for: .milliseconds(5)) }
+        let start = DispatchTime.now().uptimeNanoseconds
+        let read = store.cachedPNG(for: request)
+        let waited = TimeInterval(DispatchTime.now().uptimeNanoseconds - start) / 1e9
+        XCTAssertNil(read, "not encoded yet")
+        XCTAssertLessThan(waited, 0.1, "asking waited \(waited * 1000) ms for the encoding")
+        let png = await encoding.value
+        XCTAssertNotNil(png)
+        XCTAssertEqual(store.cachedPNG(for: request), png)
+    }
+
     /// The store counts a drawing's PNG in its budget once it's encoded, and not before.
     func testAPNGCountsInTheBudgetOnceItsEncoded() async throws {
         let request = { (n: Int) in IconRequest(.type("ext\(n)"), size: IconSize(pixels: 64, scale: 2), appearance: .light) }
