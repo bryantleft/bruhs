@@ -1,5 +1,5 @@
 {
-  "about": "Pith's icon rule, KnownPlaces.iconKey(for:asking:) in native/Sources/PithCore/KnownPlaces.swift, and the disk map page's copy of it, iconKey in native-web/icon-rule.ts, both give each of these items its key. The rule is the table native sends the page for a test home, /Users/zo\u00eb, with the places' paths as URL spells them, decomposed. IconRuleTests.swift and icon-rule.test.ts read this file.",
+  "about": "Pith's icon rule, KnownPlaces.iconKey(for:asking:trashIsEmpty:) in native/Sources/PithCore/KnownPlaces.swift, and the disk map page's copy of it, iconKey in native-web/icon-rule.ts, both give each of these items its key, with asking, and emptyTrash where a case gives it, in the rule. The rule is the table native sends the page for a test home, /Users/zo\u00eb, with the places' paths as URL spells them, decomposed. IconRuleTests.swift and icon-rule.test.ts read this file.",
   "home": "/Users/zo\u00eb",
   "rule": {
     "places": [
@@ -50,7 +50,8 @@
       "/Users/zoe\u0308/Library/Group Containers",
       "/Users/zoe\u0308/Library/CloudStorage"
     ],
-    "asking": false
+    "asking": false,
+    "emptyTrash": false
   },
   "cases": [
     {
@@ -556,7 +557,7 @@
       "key": "place/trash"
     },
     {
-      "why": "A Trash the map can read and shows holding nothing, no size and no children, shows macOS's empty Trash.",
+      "why": "A Trash the scanner has listed and counts no bytes in, which the map draws holding nothing, shows macOS's empty Trash.",
       "node": {
         "kind": "dir",
         "name": ".Trash",
@@ -566,7 +567,21 @@
         "children": []
       },
       "asking": false,
+      "emptyTrash": true,
       "key": "place/trash-empty"
+    },
+    {
+      "why": "A Trash found and not listed yet looks empty, but the scanner hasn't said it holds nothing, so it shows full.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 0,
+        "files": 0,
+        "children": []
+      },
+      "asking": false,
+      "key": "place/trash"
     },
     {
       "why": "The empty Trash is a place's icon too, asking or not, and its path matches in either normalization.",
@@ -579,10 +594,11 @@
         "children": []
       },
       "asking": true,
+      "emptyTrash": true,
       "key": "place/trash-empty"
     },
     {
-      "why": "A Trash with no size that holds something, as empty files in its smaller items, shows full.",
+      "why": "A Trash with no bytes that holds something, as empty files in its smaller items, shows full.",
       "node": {
         "kind": "dir",
         "name": ".Trash",
@@ -600,10 +616,11 @@
         ]
       },
       "asking": false,
+      "emptyTrash": true,
       "key": "place/trash"
     },
     {
-      "why": "A Trash with a size shows full, though the map lists nothing in it on its own.",
+      "why": "A Trash the map draws with a size shows full, though the map lists nothing in it on its own.",
       "node": {
         "kind": "dir",
         "name": ".Trash",
@@ -613,6 +630,7 @@
         "children": []
       },
       "asking": false,
+      "emptyTrash": true,
       "key": "place/trash"
     },
     {
@@ -625,10 +643,11 @@
         "reason": "protected"
       },
       "asking": false,
+      "emptyTrash": true,
       "key": "place/trash"
     },
     {
-      "why": "A Trash the map has no listing of, with no count of its files, as above a map's root, shows full.",
+      "why": "A Trash the map doesn't draw, as above a map's root, shows the state the scanner gives it.",
       "node": {
         "kind": "dir",
         "name": ".Trash",
@@ -637,7 +656,8 @@
         "children": []
       },
       "asking": false,
-      "key": "place/trash"
+      "emptyTrash": true,
+      "key": "place/trash-empty"
     },
     {
       "why": "Only the Trash has an empty state: another place holding nothing keeps its own icon.",
@@ -650,6 +670,7 @@
         "children": []
       },
       "asking": false,
+      "emptyTrash": true,
       "key": "place/downloads"
     },
     {

@@ -11,6 +11,8 @@ final class IconRuleTests: XCTestCase {
             /// An item of the map, as the scanner writes one.
             let node: DiskNode
             let asking: Bool
+            /// Whether the Trash holds nothing, by the scanner's word, which the rule carries (`KnownPlaces.trashHoldsNothing`).
+            let emptyTrash: Bool?
             let key: String
         }
 
@@ -44,15 +46,18 @@ final class IconRuleTests: XCTestCase {
         let fixture = try fixture()
         let places = places(home: fixture.home)
         XCTAssertEqual(places.iconRule(asking: false), fixture.rule)
-        XCTAssertEqual(places.iconRule(asking: true), IconRule(places: fixture.rule.places, guarded: fixture.rule.guarded, asking: true))
+        XCTAssertEqual(places.iconRule(asking: true), IconRule(places: fixture.rule.places, guarded: fixture.rule.guarded, asking: true, emptyTrash: false))
+        XCTAssertEqual(places.iconRule(asking: false, trashIsEmpty: true),
+                       IconRule(places: fixture.rule.places, guarded: fixture.rule.guarded, asking: false, emptyTrash: true))
     }
 
     func testTheTableTravelsAsTheFixtureSpellsIt() throws {
         let rule = places(home: try fixture().home).iconRule(asking: true)
         XCTAssertEqual(try JSONDecoder().decode(IconRule.self, from: JSONEncoder().encode(rule)), rule)
         let sent = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(rule)) as? [String: Any])
-        XCTAssertEqual(Set(sent.keys), ["places", "guarded", "asking"])
+        XCTAssertEqual(Set(sent.keys), ["places", "guarded", "asking", "emptyTrash"])
         XCTAssertEqual(sent["asking"] as? Bool, true)
+        XCTAssertEqual(sent["emptyTrash"] as? Bool, false)
     }
 
     func testEachItemGetsTheFixturesKey() throws {
@@ -60,7 +65,7 @@ final class IconRuleTests: XCTestCase {
         let places = places(home: fixture.home)
         XCTAssertGreaterThan(fixture.cases.count, 30)
         for item in fixture.cases {
-            XCTAssertEqual(places.iconKey(for: item.node, asking: item.asking).string, item.key, item.why)
+            XCTAssertEqual(places.iconKey(for: item.node, asking: item.asking, trashIsEmpty: item.emptyTrash ?? false).string, item.key, item.why)
         }
     }
 

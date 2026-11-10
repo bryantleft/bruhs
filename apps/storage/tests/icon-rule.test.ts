@@ -18,7 +18,13 @@ const fixture = JSON.parse(
   readFileSync(new URL("./icon-keys.json", import.meta.url), "utf8"),
 ) as {
   rule: Record<string, unknown>;
-  cases: { why: string; node: IconItem; asking: boolean; key: string }[];
+  cases: {
+    why: string;
+    node: IconItem;
+    asking: boolean;
+    emptyTrash?: boolean;
+    key: string;
+  }[];
 };
 
 /** The fixture's table as native sends it: JSON. */
@@ -46,8 +52,12 @@ describe("iconKey", () => {
     const rule = readIconRule(sent());
     assert.ok(rule, "the table native sends");
     assert.ok(fixture.cases.length > 40);
-    for (const { why, node, asking, key } of fixture.cases) {
-      assert.equal(iconKey(node, { ...rule, asking }), key, why);
+    for (const { why, node, asking, emptyTrash, key } of fixture.cases) {
+      assert.equal(
+        iconKey(node, { ...rule, asking, emptyTrash: emptyTrash ?? false }),
+        key,
+        why,
+      );
     }
   });
 
@@ -97,6 +107,8 @@ describe("readIconRule", () => {
       sent({ ...fixture.rule, guarded: "/Users/x/Documents" }),
       sent({ ...fixture.rule, asking: "yes" }),
       sent({ ...fixture.rule, asking: undefined }),
+      sent({ ...fixture.rule, emptyTrash: "yes" }),
+      sent({ ...fixture.rule, emptyTrash: undefined }),
     ]) {
       assert.equal(readIconRule(text), null, String(text));
     }
@@ -153,20 +165,19 @@ describe("itemAt", () => {
     );
   });
 
-  test("never takes a Trash the map doesn't show for one it shows holding nothing", () => {
-    assert.equal(
-      iconKey(itemAt(map, `${home}/.Trash`, []), rule),
-      "place/trash",
-    );
-    const empty = dir(`${home}/.Trash`);
-    const shown = {
+  test("gives the Trash the state the scanner says it's in, drawn or not", () => {
+    const trash = `${home}/.Trash`;
+    const empty = { ...rule, emptyTrash: true };
+    // Not drawn on the map, as a Grew since row names it: the scanner's word decides.
+    assert.equal(iconKey(itemAt(map, trash, []), rule), "place/trash");
+    assert.equal(iconKey(itemAt(map, trash, []), empty), "place/trash-empty");
+    // Drawn holding nothing: empty once the scanner has listed it, and full while it's only been found.
+    const drawn = {
       ...map,
-      children: [...map.children, { ...empty, size: 0 }],
+      children: [...map.children, { ...dir(trash), size: 0 }],
     };
-    assert.equal(
-      iconKey(itemAt(shown, empty.path, []), rule),
-      "place/trash-empty",
-    );
+    assert.equal(iconKey(itemAt(drawn, trash, []), empty), "place/trash-empty");
+    assert.equal(iconKey(itemAt(drawn, trash, []), rule), "place/trash");
   });
 });
 

@@ -61,6 +61,10 @@ import Observation
         live = (root, places)
     }
 
+    /// What the live map's index held at each place with the tree the page shows, or nil while the map shown isn't the
+    /// live one.
+    public var livePlaces: [LivePlace]? { live?.places }
+
     /// The map shown isn't the live one now, as while a scan runs and after it, or the live map shows another folder
     /// whose first tree hasn't come: no Places until a tree of the live map comes.
     public func mapIsntLive() {

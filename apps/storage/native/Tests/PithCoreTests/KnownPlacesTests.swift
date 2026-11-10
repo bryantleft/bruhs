@@ -141,39 +141,74 @@ final class KnownPlacesTests: XCTestCase {
         XCTAssertNil(KnownPlaces(home: home, searchPaths: [:]) { _ in nil }.place(id: "trash-empty"), "no Trash, no empty Trash")
     }
 
-    /// The Trash shows macOS's empty Trash while the map can read it and shows it holding nothing, no size and no
-    /// children, and the full Trash otherwise, as when the map couldn't read it or has no listing of it.
-    func testTheTrashsIconSaysWhetherTheMapShowsItHoldingAnything() {
+    /// The Trash holds nothing, by what the scanner says of it: the live map's index has listed it and counts no bytes in
+    /// it (its place in the tree line; a Trash found and not listed yet isn't named), and the tree, where it draws the
+    /// Trash, draws nothing in it. A scanned map, which lists every folder it can read, says so by its tree alone, and a
+    /// live map's tree never does: before its first tree's places come, nothing says so.
+    func testTheTrashHoldsNothingOnlyOnceTheScannerSaysSo() {
+        let table = places(), trash = path(".Trash")
+        func inHome(_ children: [DiskNode]) -> DiskNode {
+            DiskNode(kind: .dir, name: home.lastPathComponent, path: home.path, size: 1, files: 1, children: children)
+        }
+        let folded = inHome([DiskNode(kind: .aggregate, name: "(smaller items)", path: home.path + "/__other__", size: 1, files: 1, children: nil)])
+        let drawn = inHome([DiskNode(kind: .dir, name: ".Trash", path: trash, size: 0, files: 0, children: nil)])
+        let emptyFiles = inHome([DiskNode(kind: .dir, name: ".Trash", path: trash, size: 0, files: 2, children: [
+            DiskNode(kind: .aggregate, name: "(smaller items)", path: trash + "/__other__", size: 0, files: 2, children: nil),
+        ])])
+        XCTAssertTrue(table.trashHoldsNothing(in: folded, scanned: false, live: [LivePlace(path: trash, size: 0)]), "listed, no bytes, folded away")
+        XCTAssertTrue(table.trashHoldsNothing(in: drawn, scanned: false, live: [LivePlace(path: trash, size: 0)]), "listed, drawn holding nothing")
+        XCTAssertFalse(table.trashHoldsNothing(in: drawn, scanned: false, live: []), "found and not listed yet: the scanner names no such place")
+        XCTAssertFalse(table.trashHoldsNothing(in: folded, scanned: false, live: [LivePlace(path: trash, size: nil)]), "the map can't read it")
+        XCTAssertFalse(table.trashHoldsNothing(in: folded, scanned: false, live: [LivePlace(path: trash, size: 2_000_000_000)]))
+        XCTAssertFalse(table.trashHoldsNothing(in: emptyFiles, scanned: false, live: [LivePlace(path: trash, size: 0)]), "it draws empty files in it")
+        XCTAssertTrue(table.trashHoldsNothing(in: drawn, scanned: true, live: []), "a scan's own folder, listed")
+        XCTAssertFalse(table.trashHoldsNothing(in: nil, scanned: false, live: []), "no map")
+        XCTAssertFalse(table.trashHoldsNothing(in: folded, scanned: true, live: []), "a scan that doesn't draw it says nothing of it")
+        XCTAssertFalse(table.trashHoldsNothing(in: inHome([DiskNode(kind: .unreadable, name: ".Trash", path: trash, size: 0, reason: .protected, files: nil, children: nil)]),
+                                               scanned: true, live: []), "a scan that couldn't read it")
+        XCTAssertFalse(KnownPlaces(home: home, searchPaths: [:]) { _ in nil }.trashHoldsNothing(in: drawn, scanned: false, live: [LivePlace(path: trash, size: 0)]),
+                       "no Trash")
+    }
+
+    /// The Trash shows macOS's empty Trash while it holds nothing, by the scanner's word (`trashHoldsNothing`), and the
+    /// map's own block of it, if it draws one, draws nothing in it; otherwise the full Trash, as when the map couldn't
+    /// read it or hasn't listed it yet.
+    func testTheTrashsIconSaysWhetherItHoldsAnything() {
         let table = places()
         func trash(_ kind: DiskNode.Kind = .dir, size: UInt64 = 0, files: UInt64? = 0, children: [DiskNode]? = nil) -> DiskNode {
             DiskNode(kind: kind, name: ".Trash", path: path(".Trash"), size: size, reason: kind == .unreadable ? .protected : nil, files: files, children: children)
         }
         let emptyFiles = DiskNode(kind: .aggregate, name: "(smaller items)", path: path(".Trash/__other__"), size: 0, files: 2, children: nil)
-        XCTAssertEqual(table.iconKey(for: trash(), asking: false), .place("trash-empty"), "the scanner leaves an empty folder's children out")
-        XCTAssertEqual(table.iconKey(for: trash(children: []), asking: true), .place("trash-empty"))
-        XCTAssertEqual(table.iconKey(for: trash(size: 4096, files: 1), asking: false), .place("trash"))
-        XCTAssertEqual(table.iconKey(for: trash(files: 2, children: [emptyFiles]), asking: false), .place("trash"), "empty files are something")
-        XCTAssertEqual(table.iconKey(for: trash(.unreadable, files: nil), asking: false), .place("trash"), "the map can't read it")
-        XCTAssertEqual(table.iconKey(for: trash(files: nil), asking: false), .place("trash"), "a folder the map has no listing of")
+        XCTAssertEqual(table.iconKey(for: trash(), asking: false, trashIsEmpty: true), .place("trash-empty"), "the scanner leaves an empty folder's children out")
+        XCTAssertEqual(table.iconKey(for: trash(children: []), asking: true, trashIsEmpty: true), .place("trash-empty"))
+        XCTAssertEqual(table.iconKey(for: trash(files: nil), asking: false, trashIsEmpty: true), .place("trash-empty"), "as the path bar has it above a map's root")
+        XCTAssertEqual(table.iconKey(for: trash(), asking: false, trashIsEmpty: false), .place("trash"), "found and not listed yet, it looks empty")
+        XCTAssertEqual(table.iconKey(for: trash(size: 4096, files: 1), asking: false, trashIsEmpty: true), .place("trash"))
+        XCTAssertEqual(table.iconKey(for: trash(files: 2, children: [emptyFiles]), asking: false, trashIsEmpty: true), .place("trash"), "empty files are something")
+        XCTAssertEqual(table.iconKey(for: trash(.unreadable, files: nil), asking: false, trashIsEmpty: true), .place("trash"), "the map can't read it")
         XCTAssertEqual(table.ownerKey(for: path(".Trash")) { _ in nil }, .place("trash"), "a Trash the map couldn't read, in the unreadable list")
         let downloads = DiskNode(kind: .dir, name: "Downloads", path: path("Downloads"), size: 0, files: 0, children: nil)
-        XCTAssertEqual(table.iconKey(for: downloads, asking: false), .place("downloads"), "only the Trash has an empty state")
+        XCTAssertEqual(table.iconKey(for: downloads, asking: false, trashIsEmpty: true), .place("downloads"), "only the Trash has an empty state")
     }
 
-    /// Places shows the Trash with the icon the map's own block of it has, by the same rule, or the full Trash when the
-    /// map folds it into the home folder's smaller items.
-    func testPlacesShowsTheTrashInTheStateTheMapShows() {
-        let table = places()
-        let live = [LivePlace(path: path(".Trash"), size: 0)]
-        func key(_ tree: DiskNode) -> String? { table.placesTable(for: tree, mapRoot: "/", live: live).places.first { $0.id == "trash" }?.key }
-        let empty = DiskNode(kind: .dir, name: ".Trash", path: path(".Trash"), size: 0, files: 0, children: nil)
-        let full = DiskNode(kind: .dir, name: ".Trash", path: path(".Trash"), size: 2_000_000_000, files: 3, children: [])
-        func inHome(_ trash: DiskNode) -> DiskNode {
-            DiskNode(kind: .dir, name: home.lastPathComponent, path: home.path, size: trash.size, files: trash.files, children: [trash])
+    /// Places gives the Trash the state it has everywhere else: empty once the scanner has listed it and counts no bytes in
+    /// it, whether the map folds it into the home folder's smaller items, as it does an empty Trash, or draws it, as when
+    /// it's the folder open. A Trash found and not listed yet has no row.
+    func testPlacesGivesTheTrashTheStateItHasEverywhere() {
+        let table = places(), trash = path(".Trash")
+        func key(_ tree: DiskNode, _ live: [LivePlace]) -> String? {
+            table.placesTable(for: tree, mapRoot: "/", live: live).places.first { $0.id == "trash" }?.key
         }
-        XCTAssertEqual(key(inHome(empty)), "place/trash-empty")
-        XCTAssertEqual(key(inHome(full)), "place/trash")
-        XCTAssertEqual(key(homeMap), "place/trash", "folded into the smaller items")
+        let open = DiskNode(kind: .dir, name: home.lastPathComponent, path: home.path, size: 1, files: 1, children: [
+            DiskNode(kind: .dir, name: ".Trash", path: trash, size: 0, files: 0, children: nil),
+        ])
+        XCTAssertEqual(key(homeMap, [LivePlace(path: trash, size: 0)]), "place/trash-empty", "folded into the smaller items")
+        XCTAssertEqual(key(open, [LivePlace(path: trash, size: 0)]), "place/trash-empty", "the folder open, holding nothing")
+        XCTAssertEqual(key(homeMap, [LivePlace(path: trash, size: 2_000_000_000)]), "place/trash")
+        XCTAssertEqual(key(homeMap, [LivePlace(path: trash, size: nil)]), "place/trash", "the map can't read it")
+        XCTAssertNil(key(homeMap, []), "found and not listed yet")
+        XCTAssertEqual(key(homeMap, [LivePlace(path: path("Library/Developer"), size: 0), LivePlace(path: trash, size: 0)]), "place/trash-empty",
+                       "among the other places")
     }
 
     func testPlacesAreFoundByIDAndByPath() {

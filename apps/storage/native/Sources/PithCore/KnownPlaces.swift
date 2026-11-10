@@ -44,9 +44,9 @@ public struct KnownPlaces: Sendable {
     }
 
     public let places: [Place]
-    /// The Trash as its icon shows it while the map shows it holding nothing: macOS's empty Trash, under a key of its own,
-    /// `place/trash-empty`, so each key always draws the same art (`iconKey(for:asking:)`). It's the Trash's state, not
-    /// a place: `place(id:)` finds it, and no list of places names it. Nil without a Trash.
+    /// The Trash as its icon shows it while it holds nothing (`trashHoldsNothing`): macOS's empty Trash, under a key of its
+    /// own, `place/trash-empty`, so each key always draws the same art (`iconKey(for:asking:trashIsEmpty:)`). It's the
+    /// Trash's state, not a place: `place(id:)` finds it, and no list of places names it. Nil without a Trash.
     public let emptyTrash: Place?
     /// The locations macOS guards: the protected places, then other apps' containers and the cloud storage folders. A
     /// Photos library is guarded wherever it is, which `isProtected` knows by its extension.
@@ -163,7 +163,7 @@ public struct KnownPlaces: Sendable {
     /// The place whose icon key has `id`: a place of the table, or the empty Trash.
     public func place(id: String) -> Place? { places.first { $0.id == id } ?? emptyTrash.flatMap { $0.id == id ? $0 : nil } }
 
-    /// The Trash's id, and the one its key has while the map shows it holding nothing (`emptyTrash`).
+    /// The Trash's id, and the one its key has while it holds nothing (`emptyTrash`).
     static let trashID = "trash", emptyTrashID = "trash-empty"
 
     public func place(at path: String) -> Place? { places.first { $0.path == path } }
@@ -191,9 +191,10 @@ public struct KnownPlaces: Sendable {
         !isProtected(path, guarded: guarded) && mounts().isOnStartupDisk(path)
     }
 
-    /// The rule as the disk map's page applies it, with `asking` as `iconKey(for:asking:)` takes it.
-    public func iconRule(asking: Bool) -> IconRule {
-        IconRule(places: places.map { IconRule.Place(id: $0.id, path: $0.path) }, guarded: guarded, asking: asking)
+    /// The rule as the disk map's page applies it, with `asking` and `trashIsEmpty` as `iconKey(for:asking:trashIsEmpty:)`
+    /// takes them.
+    public func iconRule(asking: Bool, trashIsEmpty: Bool = false) -> IconRule {
+        IconRule(places: places.map { IconRule.Place(id: $0.id, path: $0.path) }, guarded: guarded, asking: asking, emptyTrash: trashIsEmpty)
     }
 
     /// The icon key for an item of the map, by Pith's icon rule. A known place shows its own icon, read or not, and a
@@ -203,11 +204,12 @@ public struct KnownPlaces: Sendable {
     /// holding any of the map's folders. The live map shows a folder it has found in its parent's listing, but not yet
     /// listed itself, as empty, and macOS may be holding that listing, which a lookup by its path could wait on too.
     /// Such a folder, an empty one, and a folder the map couldn't read show a plain folder, and the map's smaller items
-    /// show a group. The Trash shows macOS's empty Trash while the map can read it and shows it holding nothing, and the
-    /// full Trash otherwise, as when the map couldn't read it or has no listing of it.
-    public func iconKey(for item: DiskNode, asking: Bool) -> IconKey {
+    /// show a group. The Trash shows macOS's empty Trash while it holds nothing, by the scanner's word (`trashIsEmpty`,
+    /// from `trashHoldsNothing`), and `item` draws nothing in it; otherwise the full Trash, as when the map couldn't read
+    /// it or hasn't listed it yet, which leaves it looking empty.
+    public func iconKey(for item: DiskNode, asking: Bool, trashIsEmpty: Bool = false) -> IconKey {
         if let place = place(at: item.path) {
-            return .place(place.id == Self.trashID && Self.holdsNothing(item) ? emptyTrash?.id ?? place.id : place.id)
+            return .place(place.id == Self.trashID && trashIsEmpty && Self.drawsNothing(item) ? emptyTrash?.id ?? place.id : place.id)
         }
         switch item.kind {
         case .file: return .type((item.path as NSString).pathExtension.lowercased())
@@ -224,11 +226,25 @@ public struct KnownPlaces: Sendable {
         folder.size > 0 || (folder.files ?? 0) > 0 || !(folder.children ?? []).isEmpty
     }
 
-    /// Whether the map can read `folder` and shows it holding nothing: no size, no files and no children, as the scanner
-    /// writes an empty folder. One with no count of its files at all is a folder the map has no listing of, as above a
-    /// map's root (`FolderPath.nodes`), which says nothing of what it holds.
-    private static func holdsNothing(_ folder: DiskNode) -> Bool {
-        folder.kind == .dir && folder.size == 0 && folder.files == 0 && (folder.children ?? []).isEmpty
+    /// Whether `folder` is a folder drawn with nothing in it: no size and no children, as the scanner writes an empty
+    /// folder, and as one it hasn't listed yet looks.
+    private static func drawsNothing(_ folder: DiskNode) -> Bool {
+        folder.kind == .dir && folder.size == 0 && (folder.children ?? []).isEmpty
+    }
+
+    /// Whether the Trash holds nothing, by what the scanner says of it with the map `tree`. A `scanned` map lists every
+    /// folder it can read, so it says so by drawing the Trash with nothing in it. A live map's tree draws a Trash found
+    /// and not listed yet the same way, so for any other map its index says: it has listed the Trash and counts no bytes
+    /// in it (its place in `live`, the places that came with the tree, which name no Trash found and not listed yet),
+    /// and the tree, where it draws the Trash, draws nothing in it. With no places, as before a live map's first tree,
+    /// nothing says so. The Trash's icon shows this state wherever it shows (`iconKey(for:asking:trashIsEmpty:)`,
+    /// `placesTable`, and the page's rule, which gets it with `iconRule`).
+    public func trashHoldsNothing(in tree: DiskNode?, scanned: Bool, live: [LivePlace]) -> Bool {
+        guard let trash = place(id: Self.trashID) else { return false }
+        let node = tree?.node(at: trash.path)
+        if let node, !Self.drawsNothing(node) { return false }
+        if scanned { return node != nil }
+        return live.first { $0.path == trash.path }?.size == 0
     }
 
     /// The disk map's Places section's table for a live map, whose tree the page shows (`tree`), from what its index
@@ -237,16 +253,15 @@ public struct KnownPlaces: Sendable {
     /// the tree's figure, the one its block shows, which is newer than the index's when the map changed since, as when
     /// Move to Trash took an item out of the place. One the tree folds into smaller items has the index's, the figure its
     /// own map shows once it's opened. A place Move to Trash took off the map leaves `live` with it (`SideColumnFeed`).
-    /// Each place's icon is the one the icon rule gives the tree's own block of it, so the Trash shows the state the map
-    /// shows it in, and the place's own where the tree folds it away. The section shows at the live map's root, the
-    /// startup disk's, and at the home folder.
+    /// The Trash's icon shows its state as it shows everywhere (`trashHoldsNothing`). The section shows at the live map's
+    /// root, the startup disk's, and at the home folder.
     public func placesTable(for tree: DiskNode, mapRoot: String, live: [LivePlace]) -> PlacesTable {
         let held = Dictionary(live.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
+        let empty = trashHoldsNothing(in: tree, scanned: false, live: live)
         let places = shortcuts.compactMap { place -> PlacesTable.Place? in
             guard let found = held[place.path] else { return nil }
-            let shown = tree.folder(at: place.path)
-            let size = found.size.map { shown?.size ?? $0 }
-            let key = shown.map { iconKey(for: $0, asking: false) } ?? .place(place.id)
+            let size = found.size.map { tree.folder(at: place.path)?.size ?? $0 }
+            let key = IconKey.place(place.id == Self.trashID && empty ? Self.emptyTrashID : place.id)
             return PlacesTable.Place(id: place.id, name: place.name, path: place.path, key: key.string, size: size, asking: size == nil && found.asking)
         }
         return PlacesTable(shownAt: [mapRoot, home], places: places)
@@ -334,9 +349,10 @@ public struct PlacesTable: Encodable, Equatable, Sendable {
 }
 
 /// Pith's icon rule as the disk map's page applies it (`iconKey` in native-web/icon-rule.ts), which native sends with the
-/// icons' base: the known places by path, the locations macOS guards, and whether macOS may be holding some of the
-/// map's folders. With it the page gives each item the key `KnownPlaces.iconKey(for:asking:)` gives it, so it asks the
-/// icon route for no icon the route would refuse. tests/icon-keys.json holds both to the same cases.
+/// icons' base: the known places by path, the locations macOS guards, whether macOS may be holding some of the map's
+/// folders, and whether the Trash holds nothing, by the scanner's word (`KnownPlaces.trashHoldsNothing`). With it the
+/// page gives each item the key `KnownPlaces.iconKey(for:asking:trashIsEmpty:)` gives it, so it asks the icon route for
+/// no icon the route would refuse. tests/icon-keys.json holds both to the same cases.
 public struct IconRule: Codable, Equatable, Sendable {
     public struct Place: Codable, Equatable, Sendable {
         public let id: String
@@ -346,4 +362,5 @@ public struct IconRule: Codable, Equatable, Sendable {
     public let places: [Place]
     public let guarded: [String]
     public let asking: Bool
+    public let emptyTrash: Bool
 }

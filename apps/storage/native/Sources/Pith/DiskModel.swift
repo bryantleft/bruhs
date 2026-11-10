@@ -858,7 +858,14 @@ enum MapCommand: Equatable {
 
     /// The icon for an item of the map, by Pith's icon rule (`KnownPlaces.iconKey`).
     func iconKey(for item: DiskNode) -> IconKey {
-        Icons.places.iconKey(for: item, asking: macOSMayHoldFolders)
+        Icons.places.iconKey(for: item, asking: macOSMayHoldFolders, trashIsEmpty: trashIsEmpty)
+    }
+
+    /// Whether the Trash holds nothing, by what the scanner says of it with the map shown (`KnownPlaces.trashHoldsNothing`):
+    /// its icon shows macOS's empty Trash then, everywhere it shows. A map a scan made says so by its tree, and a live
+    /// map's by the places that came with it.
+    private var trashIsEmpty: Bool {
+        Icons.places.trashHoldsNothing(in: result?.root, scanned: scannedAt != nil, live: sideColumn.livePlaces ?? [])
     }
 
     /// What the map's page may load from Pith's icon route, by the same rule: an item's own icon only for what the map
@@ -873,7 +880,7 @@ enum MapCommand: Equatable {
 
     /// Pith's icon rule as the map's page applies it, which goes to the page with the icons' base, so the page gives
     /// each item the key `iconKey(for:)` gives it.
-    var iconRule: IconRule { Icons.places.iconRule(asking: macOSMayHoldFolders) }
+    var iconRule: IconRule { Icons.places.iconRule(asking: macOSMayHoldFolders, trashIsEmpty: trashIsEmpty) }
 
     /// The disk map's click hints the person has learned, kept in Pith's settings, which an automated run keeps in
     /// memory (`Setting`), so they stay learned in the next window and at the next launch.
