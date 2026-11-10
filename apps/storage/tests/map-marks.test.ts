@@ -11,7 +11,7 @@ import {
   paintArrived,
 } from "../src/components/map-marks.ts";
 import { KIND_GLYPHS } from "../src/lib/kind-glyphs.ts";
-import type { Tile } from "../src/lib/treemap-layout.ts";
+import { nodeOf, type Tile } from "../src/lib/treemap-layout.ts";
 
 /** Icons a test hands out: loaded ones, failed ones, and the requests and listeners the map makes. */
 function testIcons(
@@ -23,10 +23,12 @@ function testIcons(
   const requested: string[] = [];
   const listeners = new Set<() => void>();
   const icons: MapIcons = {
-    url: (tile, points, ratio) =>
-      tile.kind === "group" || tile.kind === "unmeasured"
+    url: (tile, points, ratio) => {
+      const node = nodeOf(tile);
+      return node === null
         ? null
-        : `pith://app/icon/1/dark/${points}@${ratio}x/item/${tile.node.name}.png`,
+        : `pith://app/icon/1/dark/${points}@${ratio}x/item/${node.name}.png`;
+    },
     image: (url) =>
       (images.get(url) as unknown as CanvasImageSource | undefined) ?? null,
     failed: (url) => failed.has(url),

@@ -10,7 +10,10 @@ final class DiskCaptionTests: XCTestCase {
         return calendar
     }
 
-    private func live(_ state: DiskCaption.Live) -> DiskCaption? { DiskCaption.live(state, now: now, calendar: calendar) }
+    /// The caption for the live map doing `activity` while macOS asks about `asking` of its folders.
+    private func live(_ activity: DiskCaption.Live, asking: Int = 0) -> DiskCaption? {
+        DiskCaption.live(LiveMapStatus(activity, asking: asking), now: now, calendar: calendar)
+    }
     private func scan(_ state: DiskCaption.Scan) -> DiskCaption? { DiskCaption.scan(state, now: now, calendar: calendar) }
     private func figure(_ label: String, _ value: String) -> DiskCaption.Figure { DiskCaption.Figure(label: label, value: value) }
 
@@ -67,11 +70,46 @@ final class DiskCaptionTests: XCTestCase {
         XCTAssertNil(scan(.nothing))
     }
 
-    func testMacOSAskingLeavesTheCaptionToItsStatus() {
-        // The live map has no state for macOS's question: the asking notice says it, and the caption goes on.
-        let up = live(.live(waiting: 3, check: nil, updatedAt: now))
-        guard case .figures(let figures)? = up else { return XCTFail("expected the map to be up to date") }
+    /// What the live map can be doing, each status the caption gives.
+    private var activities: [DiskCaption.Live] {
+        [.quiet, .mapping(found: nil), .mapping(found: DiskCaption.Found(bytes: 1, files: 1)), .catchingUp(waiting: 4), .catchingUp(waiting: 0),
+         .live(waiting: 0, check: .daily, updatedAt: now), .live(waiting: 0, check: .lostTrack, updatedAt: now),
+         .live(waiting: 500, check: nil, updatedAt: now), .live(waiting: 3, check: nil, updatedAt: now), .live(waiting: 0, check: nil, updatedAt: nil),
+         .failed("Pith’s disk map stopped.")]
+    }
+
+    func testTheCaptionKeepsItsStatusWhileMacOSAsks() {
+        // macOS asking about some folders is the asking notice's to say: the caption gives what it would without it.
+        for activity in activities {
+            XCTAssertEqual(live(activity, asking: 12), live(activity, asking: 0), "\(activity)")
+        }
+        guard case .figures(let figures)? = live(.live(waiting: 3, check: nil, updatedAt: now), asking: 12) else {
+            return XCTFail("expected the map to be up to date while macOS asks")
+        }
         XCTAssertEqual(figures.map(\.label), ["Up to date"])
+    }
+
+    func testTheAskingNoticeNamesTheFoldersOnceTheMapIsMade() {
+        func notice(_ activity: DiskCaption.Live, asking: Int) -> Int? { AskingNotice.folders(for: LiveMapStatus(activity, asking: asking)) }
+        XCTAssertEqual(notice(.live(waiting: 0, check: nil, updatedAt: now), asking: 12), 12)
+        XCTAssertEqual(notice(.live(waiting: 0, check: .daily, updatedAt: now), asking: 2), 2)
+        XCTAssertEqual(notice(.catchingUp(waiting: 3), asking: 1), 1)
+        // Before the map is made, the map's own waiting view says macOS is asking, so the notice would say it twice.
+        XCTAssertNil(notice(.mapping(found: nil), asking: 12))
+        XCTAssertNil(notice(.mapping(found: DiskCaption.Found(bytes: 1, files: 1)), asking: 12))
+        XCTAssertNil(notice(.quiet, asking: 12))
+        XCTAssertNil(notice(.failed("Pith’s disk map stopped."), asking: 12))
+        for activity in activities { XCTAssertNil(notice(activity, asking: 0), "\(activity)") }
+    }
+
+    func testTheAskingNoticeSaysWhatAnsweringDoes() {
+        XCTAssertEqual(AskingNotice.sentence(folders: 12),
+                       "macOS is asking whether Pith may read 12 folders. Answer it, or give Pith Full Disk Access once, and they join the map.")
+        XCTAssertEqual(AskingNotice.sentence(folders: 1),
+                       "macOS is asking whether Pith may read 1 folder. Answer it, or give Pith Full Disk Access once, and it joins the map.")
+        XCTAssertEqual(AskingNotice.sentence(folders: 2_400), "macOS is asking whether Pith may read \(2_400.formatted()) folders. "
+                       + "Answer it, or give Pith Full Disk Access once, and they join the map.")
+        XCTAssertNil(AskingNotice.sentence(folders: 12).rangeOfCharacter(from: CharacterSet(charactersIn: "•·—–‒―‧∙›»")))
     }
 
     func testTheCaptionsWordsUseNoSeparatorGlyphs() {

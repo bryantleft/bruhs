@@ -224,6 +224,7 @@ describe("nextStep", () => {
   test("holds back the Not measured block coming, or a padlock, as any change it can see", () => {
     const root = map(1_000_000);
     const kinds = kindBytesByFolder(root);
+    const usedSpace = { unmeasured: 2_000_000, used: 3_500_000 };
     const blocked = layoutTreemap(
       root,
       400,
@@ -231,14 +232,14 @@ describe("nextStep", () => {
       kinds,
       undefined,
       undefined,
-      2_000_000,
+      usedSpace,
     );
     assert.equal(nextStep(shown, blocked, true), "wait");
     assert.equal(nextStep(shown, blocked, false), "show");
     assert.equal(
       nextStep(
         blocked,
-        layoutTreemap(root, 400, 300, kinds, undefined, undefined, 2_000_000),
+        layoutTreemap(root, 400, 300, kinds, undefined, undefined, usedSpace),
         true,
       ),
       "keep",

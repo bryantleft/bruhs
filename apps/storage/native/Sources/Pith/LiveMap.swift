@@ -47,9 +47,9 @@ import PithCore
     private(set) var updatedAt: Date?
     /// The last check of every folder, for the verification notes and Settings.
     private(set) var lastCheck: LiveCheck?
-    /// A check of every folder under way, as the scanner reports it: the daily one Pith asked for, or one the scanner
-    /// began itself when FSEvents lost track of changes. Nil while none runs.
-    private(set) var runningCheck: DiskCaption.Check?
+    /// The checks of every folder: the daily one Pith asked for and hasn't heard end, and the one under way, as the
+    /// scanner reports it.
+    private(set) var checks = LiveChecks()
     /// Something the map shows changed since the last tree was asked for.
     private(set) var changedSinceTree = true
     /// Folders the map lacks until the person answers macOS's question about Pith, as for iCloud Drive: opening one
@@ -122,7 +122,8 @@ import PithCore
         // Watching from before the walk begins catches what changes while it runs.
         let since = FSEventsGetCurrentEventId()
         historyDone = true
-        runningCheck = nil
+        // A walk lists every folder, so a daily check it cuts short is done with.
+        if checks.walkBegan() { endDailyCheck(.finished) }
         state = .mapping(nil)
         startStream(since: since, replay: false)
         process.walk(since: since)
@@ -172,6 +173,7 @@ import PithCore
         stream?.stop()
         stream = nil
         checker?.invalidate()
+        if checks.stopped() { endDailyCheck(.deferred) }
         guard let process, process.isRunning else { return }
         process.close()
         if !process.waitUntilExit(timeout: timeout) {
@@ -185,6 +187,7 @@ import PithCore
         stream?.stop()
         stream = nil
         checker?.invalidate()
+        if checks.stopped() { endDailyCheck(.deferred) }
         guard let process, process.isRunning else { Task { @MainActor in done() }; return }
         stopped = done
         process.close()
@@ -198,7 +201,8 @@ import PithCore
         }
     }
 
-    private func handle(_ report: LiveReport) {
+    /// Takes one of the scanner's reports. The smoke test hands it reports of its own too, as when macOS would be asking.
+    func handle(_ report: LiveReport) {
         switch report {
         case .opened(let opened):
             if opened.locked { NSLog("Pith: another copy of Pith keeps the disk map, so this one won’t save it.") }
@@ -238,7 +242,7 @@ import PithCore
             pending = status.pending
             asking = status.asking
             // Pith's daily check runs until the scanner says it's done; any other comes from the scanner itself.
-            runningCheck = status.checking ? (checkDone == nil ? .lostTrack : .daily) : nil
+            checks.status(checking: status.checking)
             historyDone = historyDone || status.historyDone
             if status.changed {
                 updatedAt = Date()
@@ -259,10 +263,8 @@ import PithCore
             NSLog("Pith: kept the disk map through event \(through): \(bytes) bytes in \(ms) ms.")
         case .checked(let check):
             lastCheck = check
-            runningCheck = nil
             listedAt = Date()
-            checkDone?(.finished)
-            checkDone = nil
+            if checks.checked() { endDailyCheck(.finished) }
             NSLog("Pith: checked \(check.folders) folders in \(check.ms) ms; \(check.corrected) had changed without an event, by \(check.bytes) bytes.")
         case .stats(let line):
             NSLog("Pith: disk map \(line)")
@@ -275,6 +277,7 @@ import PithCore
     }
 
     private func exited(_ status: Int32) {
+        if checks.stopped() { endDailyCheck(.deferred) }
         stream?.stop()
         stream = nil
         process = nil
@@ -309,6 +312,7 @@ import PithCore
                     return
                 }
                 self.checkDone = completion
+                self.checks.askedForDaily()
                 self.check()
             }
         }
@@ -325,13 +329,22 @@ import PithCore
         return PowerSource.onPower
     }
 
+    /// Tells macOS's scheduler how the daily check it started ended, once: `.finished`, or `.deferred` to ask again later.
+    private func endDailyCheck(_ result: NSBackgroundActivityScheduler.Result) {
+        checkDone?(result)
+        checkDone = nil
+    }
+
+    /// The map as Disk shows it: what it's doing, and how many folders macOS is asking about (`LiveMapStatus`).
+    var status: LiveMapStatus { LiveMapStatus(activity, asking: asking) }
+
     /// What the map is doing, as Disk's caption tells it (`DiskCaption.live`).
-    var caption: DiskCaption.Live {
+    private var activity: DiskCaption.Live {
         switch state {
         case .off, .opening, .unmapped: .quiet
         case .mapping(let progress): .mapping(found: progress.map { DiskCaption.Found(bytes: $0.bytes, files: $0.files) })
         case .catchingUp(let waiting): .catchingUp(waiting: waiting)
-        case .live(let waiting): .live(waiting: waiting, check: runningCheck, updatedAt: updatedAt)
+        case .live(let waiting): .live(waiting: waiting, check: checks.running, updatedAt: updatedAt)
         case .failed(let message): .failed(message)
         }
     }

@@ -127,7 +127,8 @@ private struct DiskControlBar: View {
                                   ? "macOS lost track of some changes, so this scans the whole folder again."
                                   : "Scan the folders that changed again, and put them in their places on the map.")
                     }
-                    if let rows = model.spaceRows, !model.isScanning {
+                    // While a scan runs the map it accounts for stays on screen, dimmed, and so does this.
+                    if let rows = model.spaceRows {
                         Button("Where the space is") { model.showsWhereTheSpaceIs.toggle() }
                             .buttonStyle(.link)
                             .font(BruhsType.note)
@@ -154,8 +155,8 @@ private struct DiskControlBar: View {
 }
 
 /// Problems, the last move to the Trash, folders macOS is asking about, and folders the scan couldn't read, each with
-/// its one action.
-private struct DiskNotices: View {
+/// its one action. The smoke test draws them too, so they aren't private.
+struct DiskNotices: View {
     let model: DiskModel
     @State private var showsUnreadable = false
 
@@ -186,7 +187,7 @@ private struct DiskNotices: View {
             }
         }
         if let folders = model.askingFolders {
-            AskingNotice(folders: folders)
+            AskingNoticeView(folders: folders)
         }
         if let result = model.result, result.summary.errors > 0 {
             DiskNotice(symbol: "lock.fill", tint: BruhsColor.statusWarning, message: unreadableMessage(result.summary)) {
@@ -218,23 +219,17 @@ private struct DiskNotices: View {
 }
 
 /// macOS asking the person whether Pith may read some of the live map's folders, which the map goes on without until
-/// they answer: what answering does, or Full Disk Access, which the button opens in System Settings. The caption keeps
-/// its own status meanwhile. The smoke test draws it too, so it isn't private.
-struct AskingNotice: View {
+/// they answer (`AskingNotice`): what answering does, or Full Disk Access, which the button opens in System Settings. The
+/// caption keeps its own status meanwhile.
+private struct AskingNoticeView: View {
     let folders: Int
 
     var body: some View {
-        DiskNotice(symbol: "hand.raised.fill", tint: BruhsColor.statusWarning, message: Self.sentence(folders)) {
+        DiskNotice(symbol: AskingNotice.symbol, tint: BruhsColor.statusWarning, message: AskingNotice.sentence(folders: folders)) {
             Button("Full Disk Access…") { openDiskAccess() }
                 .buttonStyle(.bruhsGhost)
                 .help("Give Pith Full Disk Access in System Settings, so it can read these folders without asking.")
         }
-    }
-
-    /// What macOS asking about `folders` folders means for the map.
-    static func sentence(_ folders: Int) -> String {
-        let named = "\(folders.formatted()) \(folders == 1 ? "folder" : "folders")"
-        return "macOS is asking whether Pith may read \(named). Answer it, or give Pith Full Disk Access once, and \(folders == 1 ? "it joins" : "they join") the map."
     }
 }
 
@@ -557,7 +552,8 @@ struct DiskWebView: NSViewRepresentable {
         context.coordinator.doubleClickInterval = NSEvent.doubleClickInterval
         context.coordinator.differentiatesWithoutColor = Coordinator.differentiateWithoutColor()
         context.coordinator.send(revision: model.revision)
-        // After its map: the accounting comes a moment after a map of a whole volume, and the page matches it by root.
+        // After its map, which carries it when the two changed together; the volume's own figures come a moment after a
+        // new root's first map, and go on their own. The page matches it to its map by root.
         context.coordinator.notMeasured = model.notMeasured
     }
     static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) {
@@ -621,12 +617,14 @@ struct DiskWebView: NSViewRepresentable {
         var differentiatesWithoutColor: Bool? {
             didSet { if differentiatesWithoutColor != oldValue { sendDifferentiateWithoutColor() } }
         }
-        /// The used space the scan couldn't measure on the volume a map of a whole volume shows, which the page draws as
-        /// its Not measured block at the map's root. It goes to the page once it's ready and whenever it changes, as when
-        /// the accounting comes after its map.
+        /// The used space of the volume a map of a whole volume shows, which the page draws as its Not measured block at
+        /// the map's root and gives the root's shares of. It travels with the map when the two change together, as with
+        /// every live map, so the page draws them at once, and on its own when the volume's figures come after their map.
         var notMeasured: DiskModel.NotMeasured? {
-            didSet { if notMeasured != oldValue { sendNotMeasured() } }
+            didSet { sendNotMeasured() }
         }
+        /// The used space as the page last got it, nil for none.
+        private var sentNotMeasured: DiskModel.NotMeasured?
         /// Reads Differentiate Without Color as macOS has it, for every update of the view and every notice of a change. The
         /// smoke test reads a value of its own here instead, turning the setting for Pith alone, so no system setting
         /// changes.
@@ -662,12 +660,11 @@ struct DiskWebView: NSViewRepresentable {
             switch action {
             case "ready":
                 // Every page load starts empty, a reload, a new window and a restart after a crash included, so it gets
-                // the icons' base and rule, the owners, the click hints learned and what the scan couldn't measure, which
-                // the page holds for the map of its root, and then the scan again with its places, and the native
-                // selection and history it no longer has are dropped.
+                // the icons' base and rule, the owners and the click hints learned, and then the scan again with its places
+                // and its volume's used space, and the native selection and history it no longer has are dropped.
                 ready = true; revision = nil; model.select(nil); model.mapStartsOver(); sendIcons(); sendDoubleClickInterval()
-                sendDifferentiateWithoutColor(); sendOwners(); sendLearnedHints(); sendNotMeasured()
-                sentPlaces = nil
+                sendDifferentiateWithoutColor(); sendOwners(); sendLearnedHints()
+                sentPlaces = nil; sentNotMeasured = nil
                 send(revision: model.revision)
             case "select": model.select(path)
             case "learnedHint": if let hint = body["hint"] as? String { model.mapHints.learn(hint) }
@@ -771,6 +768,13 @@ struct DiskWebView: NSViewRepresentable {
                     script = "window.pithReceivePlaces?.(places); " + script
                     arguments["places"] = places.flatMap(Self.json) ?? NSNull()
                 }
+                // So is the volume's used space, which moves with every map it's set against.
+                let usedSpace = model.notMeasured
+                if usedSpace != sentNotMeasured {
+                    sentNotMeasured = usedSpace
+                    script = "window.pithReceiveNotMeasured?.(root, bytes, used); " + script
+                    arguments.merge(Self.arguments(usedSpace)) { _, new in new }
+                }
                 web.callAsyncJavaScript(script, arguments: arguments, in: nil, in: .page) { [weak self] result in
                     if case .failure(let error) = result { self?.model.problem = DiskProblem(message: "Pith couldn’t draw the disk map: \(error.localizedDescription)") }
                 }
@@ -824,13 +828,18 @@ struct DiskWebView: NSViewRepresentable {
                 if case .failure(let error) = result { NSLog("Pith: the disk map didn’t take the hints it has learned: \(error.localizedDescription)") }
             }
         }
-        /// Gives the page what the scan couldn't measure, or nothing, once it's ready for it and whenever it changes.
+        /// Gives the page the volume's used space when it changed without a map, as when the volume's figures come after
+        /// their map, or nothing for a map of a folder.
         private func sendNotMeasured() {
-            guard ready, let web else { return }
-            let arguments: [String: Any] = ["root": notMeasured?.root as Any? ?? NSNull(), "bytes": notMeasured?.bytes as Any? ?? NSNull()]
-            web.callAsyncJavaScript("window.pithReceiveNotMeasured?.(root, bytes)", arguments: arguments, in: nil, in: .page) { result in
-                if case .failure(let error) = result { NSLog("Pith: the disk map didn’t take what the scan couldn’t measure: \(error.localizedDescription)") }
+            guard ready, let web, notMeasured != sentNotMeasured else { return }
+            sentNotMeasured = notMeasured
+            web.callAsyncJavaScript("window.pithReceiveNotMeasured?.(root, bytes, used)", arguments: Self.arguments(notMeasured), in: nil, in: .page) { result in
+                if case .failure(let error) = result { NSLog("Pith: the disk map didn’t take its volume’s used space: \(error.localizedDescription)") }
             }
+        }
+        /// The volume's used space as the page's `pithReceiveNotMeasured` takes it: nulls for none.
+        private static func arguments(_ usedSpace: DiskModel.NotMeasured?) -> [String: Any] {
+            ["root": usedSpace?.root as Any? ?? NSNull(), "bytes": usedSpace?.bytes as Any? ?? NSNull(), "used": usedSpace?.used as Any? ?? NSNull()]
         }
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
             decisionHandler(BridgePolicy.allows(url: navigationAction.request.url, mainFrame: navigationAction.targetFrame?.isMainFrame == true) ? .allow : .cancel)

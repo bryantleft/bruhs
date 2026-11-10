@@ -471,7 +471,7 @@ extension AppDelegate {
         let atRoot = await pageAnswer(web, Self.placeRows) { showsTheUnreadable($0) }
         let askedBefore = panes.asked.count
         let clicked = try? await web.callAsyncJavaScript(Self.clickPlace, arguments: ["path": downloads], in: nil, contentWorld: .page) as? Bool
-        let askedForAccess = await eventually { panes.asked.count > askedBefore } && panes.asked.last == fullDiskAccessPane
+        let askedForAccess = await eventually { panes.asked.count > askedBefore } && panes.asked.last == .fullDiskAccess
         // Long enough for a folder it opened to have reached the native side.
         try? await Task.sleep(for: .milliseconds(300))
         let stayed = disk.openFolder == fixture
@@ -502,7 +502,7 @@ extension AppDelegate {
               + "\(showsTheUnreadable(atHome)), Downloads named once \(namedOnce), gone further down \(gone); Developer "
               + "\(sized.developer.map(String.init) ?? "none") against the map's \(developerShown.map(String.init) ?? "none"), Mail "
               + "\(sized.mail.map(String.init) ?? "none") against \(mailShown.map(String.init) ?? "none"); V10's Couldn't read icon \(ownerIcon ?? "none"); "
-              + "Downloads clicked \(clicked == true), asked for \(panes.asked.last?.absoluteString ?? "no pane") \(askedForAccess), the map stayed \(stayed)")
+              + "Downloads clicked \(clicked == true), asked for \(panes.asked.last?.url?.absoluteString ?? "no pane") \(askedForAccess), the map stayed \(stayed)")
         return [names[0]: unreadable && showsTheUnreadable(atRoot) && showsTheUnreadable(atHome) && namedOnce && inDeveloper && gone && back
                     && cleared && settled,
                 names[1]: (sized.developer ?? 0) >= 1 << 20 && sized.developer == developerShown && inMailFolder && sized.mail != nil

@@ -48,7 +48,7 @@ struct SettingsView: View {
         }
         Section("Startup") {
             LaunchAtLoginToggle()
-            Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
+            Button("Open Login Items") { openSystemSettings(.loginItems) }
         }
         if updates.isAvailable {
             Section {
@@ -101,9 +101,7 @@ struct SettingsView: View {
             }
             if alerts.authorization == .denied, !alerts.enabled.isEmpty {
                 Text("Notifications are off for Pith, so these alerts can't show.").foregroundStyle(.secondary)
-                Button("Open Notifications Settings") {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") { NSWorkspace.shared.open(url) }
-                }
+                Button("Open Notifications Settings") { openSystemSettings(.notifications) }
             }
         } header: {
             Text("Alerts")
@@ -149,22 +147,4 @@ struct LaunchAtLoginToggle: View {
             }
         })
     }
-}
-
-/// System Settings at Privacy & Security, Full Disk Access, where the person can let Pith read every folder.
-let fullDiskAccessPane = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
-
-/// Opens a pane of System Settings. The smoke test records each pane asked for instead, since no smoke check may open
-/// System Settings.
-@MainActor var openSystemSettings: (URL) -> Void = { NSWorkspace.shared.open($0) }
-
-/// Opens Full Disk Access in System Settings: Settings' and Disk's notices' Full Disk Access… buttons, and a click on a
-/// place the disk map's Places can't read.
-@MainActor func openDiskAccess() {
-    if let fullDiskAccessPane { openSystemSettings(fullDiskAccessPane) }
-}
-
-/// System Settings' Menu Bar pane, where macOS 26 lets each app's menu bar item be turned off.
-func openMenuBarSettings() {
-    if let url = URL(string: "x-apple.systempreferences:com.apple.ControlCenter-Settings.extension") { NSWorkspace.shared.open(url) }
 }

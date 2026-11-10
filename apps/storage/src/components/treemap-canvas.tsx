@@ -47,7 +47,9 @@ import {
   labelMiddle,
   markRoom,
   NOT_MEASURED,
+  nodeOf,
   type PackageTile,
+  shareOf,
   type Tile,
   type TreemapLayout,
   tileAt,
@@ -55,6 +57,7 @@ import {
   tileLabel,
   tileName,
   tileSize,
+  type UsedSpace,
   unreadableCount,
 } from "~/lib/treemap-layout";
 import type { DirNode, TreeNode } from "~/lib/types";
@@ -133,11 +136,11 @@ interface Props {
    */
   atOnce?: boolean;
   /**
-   * Used space on `root`'s volume that the scan couldn't measure, from a host that accounts for a whole volume's space,
-   * as Pith's page does at its map's root: it takes a hatched "Not measured" block among `root`'s items, and `root`'s
-   * shares become shares of used space. Without it the map shows the scan alone.
+   * `root`'s volume's used space, from a host that accounts for a whole volume's space, as Pith's page does at its map's
+   * root: what the scan couldn't measure takes a hatched "Not measured" block among `root`'s items, and `root`'s shares
+   * become shares of the volume's used space. Without it the map shows the scan alone.
    */
-  unmeasured?: number;
+  usedSpace?: UsedSpace;
   /** The Not measured block was clicked: show what it holds and why. Nothing selects or opens it. */
   onUnmeasured?: () => void;
   /** Draw a padlock after the name of each header strip whose folder holds folders the scan couldn't read, as Pith does. */
@@ -519,11 +522,6 @@ function drawMap(
   return paint?.done() ?? [];
 }
 
-const percentOf = (part: number, whole: number) => {
-  const share = whole > 0 ? (part / whole) * 100 : 0;
-  return share > 0 && share < 1 ? "<1%" : `${Math.round(share)}%`;
-};
-
 /** What the hover card says about a block, each part shown as its own line or figure. */
 interface Card {
   readonly title: string;
@@ -581,12 +579,8 @@ function describe(
   hints: boolean,
   change: string | null,
 ): Card {
-  const { root, unmeasured } = layout;
   const size = formatBytes(tileSize(tile));
-  const share =
-    unmeasured === undefined
-      ? `${percentOf(tileSize(tile), root.size)} of ${root.name || "/"}`
-      : `${percentOf(tileSize(tile), root.size + unmeasured)} of used space`;
+  const share = shareOf(tile, layout);
   const openFolder = open ? ` Double-click to open ${open.name}/.` : "";
   const title = middleTruncate(tileName(tile), 34);
   const fill = (category: Category) => `var(${CATEGORY_VAR[category]})`;
@@ -721,22 +715,14 @@ const filled = (tile: Tile) =>
   tile.kind !== "folder" && tile.kind !== "group" && tile.kind !== "unmeasured";
 
 /** The item a tile shows, by path, for linking other views: none for the group or the Not measured block. */
-const pathOf = (tile: Tile | null) =>
-  tile && tile.kind !== "group" && tile.kind !== "unmeasured"
-    ? tile.node.path
-    : null;
+const pathOf = (tile: Tile | null) => (tile && nodeOf(tile)?.path) ?? null;
 
 /**
  * A selectable item: a file or folder. Groups and volumes can't be moved to the Trash or revealed, and the Not measured
  * block is no item at all.
  */
 const selectable = (tile: Tile | null): TreeNode | null =>
-  tile &&
-  tile.kind !== "group" &&
-  tile.kind !== "volume" &&
-  tile.kind !== "unmeasured"
-    ? tile.node
-    : null;
+  tile && tile.kind !== "volume" ? nodeOf(tile) : null;
 
 export function TreemapCanvas({
   root,
@@ -758,7 +744,7 @@ export function TreemapCanvas({
   steady = false,
   doubleClickInterval = 500,
   atOnce = false,
-  unmeasured,
+  usedSpace,
   onUnmeasured,
   padlocks = false,
   hints,
@@ -819,7 +805,7 @@ export function TreemapCanvas({
     doubleClickInterval,
     atOnce,
     marks,
-    unmeasured,
+    usedSpace,
   );
   const { layout, drew } = shownLayout;
 
@@ -1037,17 +1023,15 @@ export function TreemapCanvas({
       ? ""
       : ` Highlighting ${kindLabel(highlightKind).toLowerCase()}.`;
   const notMeasured =
-    unmeasured !== undefined && unmeasured > 0
-      ? ` ${formatBytes(unmeasured)} more is used space the scan couldn’t measure.`
+    usedSpace !== undefined && usedSpace.unmeasured > 0
+      ? ` ${formatBytes(usedSpace.unmeasured)} more is used space the scan couldn’t measure.`
       : "";
   const summary = `Treemap of ${root.path}, ${formatBytes(root.size)} in ${
     root.children.length
   } items.${notMeasured}${highlightLabel} Arrow keys select items, Return opens a folder and Space previews. The list after it names every item.`;
 
-  const delta =
-    pointed && pointed.kind !== "group" && pointed.kind !== "unmeasured"
-      ? growth?.get(pointed.node.path)
-      : undefined;
+  const pointedNode = pointed && nodeOf(pointed);
+  const delta = pointedNode ? growth?.get(pointedNode.path) : undefined;
   const change =
     delta !== undefined && growthSince
       ? `${delta > 0 ? "+" : "\u2212"}${formatBytes(Math.abs(delta))} since ${growthSince}`
@@ -1068,10 +1052,7 @@ export function TreemapCanvas({
       ? colors.palette.ink[tile.category]
       : colors.palette.role.text;
 
-  const selectedNode =
-    selected && selected.kind !== "group" && selected.kind !== "unmeasured"
-      ? selected.node
-      : null;
+  const selectedNode = selected && nodeOf(selected);
   return (
     // One tab stop that handles its own keys, so it's an application to assistive technology.
     <div
@@ -1196,7 +1177,7 @@ export function TreemapCanvas({
         onSelect={onSelect}
         onEnterDir={onEnterDir}
         onFocusItem={focusItem}
-        unmeasured={unmeasured}
+        unmeasured={usedSpace?.unmeasured}
         onUnmeasured={onUnmeasured}
       />
     </div>
@@ -1241,14 +1222,11 @@ const TreemapItems = memo(function TreemapItems({
   onUnmeasured,
 }: Pick<
   Props,
-  | "root"
-  | "selectedPath"
-  | "onSelect"
-  | "onEnterDir"
-  | "unmeasured"
-  | "onUnmeasured"
+  "root" | "selectedPath" | "onSelect" | "onEnterDir" | "onUnmeasured"
 > & {
   onFocusItem: (path: string | null) => void;
+  /** The bytes of the map's Not measured block, which the list names last, or nothing without one. */
+  unmeasured?: number;
 }) {
   return (
     <ul

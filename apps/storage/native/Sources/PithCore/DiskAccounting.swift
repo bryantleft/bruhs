@@ -16,6 +16,24 @@ public enum VolumeSpace {
     }
 }
 
+/// A whole volume's own figures, which a map of it is accounted with (`DiskAccounting.init(_:result:)`). They come from
+/// the file system and `tmutil`, so they're measured now and then, off the main thread, while the map they're set
+/// against changes every few seconds. A move within the volume, as to its Trash and back, changes none of them.
+public struct VolumeUse: Equatable, Sendable {
+    /// The container's used space: its total less what's available.
+    public let used: UInt64
+    /// The used space of each volume a walk of the root enters (`DiskAccounting.walkedVolumes`).
+    public let walkedVolumes: [UInt64]
+    /// Local Time Machine snapshots on the disk; nil when Pith couldn't list them.
+    public let snapshots: Int?
+    /// Space macOS can free when it needs room; nil when macOS didn't say.
+    public let purgeable: UInt64?
+
+    public init(used: UInt64, walkedVolumes: [UInt64], snapshots: Int?, purgeable: UInt64?) {
+        self.used = used; self.walkedVolumes = walkedVolumes; self.snapshots = snapshots; self.purgeable = purgeable
+    }
+}
+
 /// Where a volume's used space went, for a scan of a whole volume: what the map shows, what lies on volumes it
 /// can't show, and what the walk couldn't measure, with the reasons. It never guesses a number for the last part.
 public struct DiskAccounting: Equatable, Sendable {
@@ -57,6 +75,12 @@ public struct DiskAccounting: Equatable, Sendable {
         unreadableFolders = result.summary.errors
         self.snapshots = snapshots
         self.purgeable = purgeable
+    }
+
+    /// Where `use`'s space went for `result`, the map of its volume as it is now: what the map loses, as to Move to Trash
+    /// when the map can't read the Trash, joins Not measured at once, and comes back with Undo.
+    public init(_ use: VolumeUse, result: DiskResult) {
+        self.init(used: use.used, walkedVolumes: use.walkedVolumes, result: result, snapshots: use.snapshots, purgeable: use.purgeable)
     }
 
     /// The volumes a scan of `root` walks, when `root` is a volume's root: the startup disk walks its data volume

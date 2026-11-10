@@ -195,15 +195,35 @@ export type Tile =
   | GroupTile
   | UnmeasuredTile;
 
+/** A tile that shows an item of the map: anything but the group of smaller items and the Not measured block. */
+export type ItemTile = Exclude<Tile, GroupTile | UnmeasuredTile>;
+
+/** Whether `tile` shows an item of the map, as `nodeOf` finds it. */
+export const isItemTile = (tile: Tile): tile is ItemTile =>
+  tile.kind !== "group" && tile.kind !== "unmeasured";
+
+/** The item `tile` shows, or null for the group of smaller items and the Not measured block, which show none. */
+export const nodeOf = (tile: Tile): TreeNode | null =>
+  isItemTile(tile) ? tile.node : null;
+
+/**
+ * A whole volume's used space as a host accounts for it, as "Where the space is" does in Pith: `unmeasured`, what the
+ * scan couldn't measure, and `used`, all the volume's used space, its "Used on this disk".
+ */
+export interface UsedSpace {
+  readonly unmeasured: number;
+  readonly used: number;
+}
+
 export interface TreemapLayout {
   readonly root: DirNode;
   readonly width: number;
   readonly height: number;
   /**
-   * The used space the scan couldn't measure, which the root's Not measured block stands for, when the host gave it:
-   * the root's shares are then shares of used space, the root's size and this.
+   * The volume's used space, when the host gave it with some not measured: the root's Not measured block stands for
+   * `unmeasured`, and the root's shares are shares of `used`.
    */
-  readonly unmeasured?: number;
+  readonly usedSpace?: UsedSpace;
   /** The current folder's own items; folders hold theirs in `children`. */
   readonly tiles: readonly Tile[];
 }
@@ -596,9 +616,10 @@ function tileFor(
  * Lay out `root`'s contents to fill `width` × `height` CSS pixels. Given `order`, the places the shown layout of the
  * same folder gave its items, a newer map keeps them there unless the change in size is visible (`keepPlaces`), so
  * squarify's rows don't flip over a few bytes. Without it, items go largest first. Tiles keep room at the start of
- * their labels for the `marks` the host draws. `unmeasured`, from a host that accounts for a whole volume's used
- * space, is what the scan couldn't measure: it takes a Not measured block of its share among the root's items, and the
- * root's shares become shares of used space. Without it the map is the scan's alone.
+ * their labels for the `marks` the host draws. `usedSpace`, from a host that accounts for a whole volume's used space,
+ * says what the scan couldn't measure, which takes a Not measured block of its share among the root's items, and the
+ * volume's used space, which the root's shares become shares of. Without it, or with nothing not measured, the map is
+ * the scan's alone.
  */
 export function layoutTreemap(
   root: DirNode,
@@ -607,16 +628,25 @@ export function layoutTreemap(
   kinds: ReadonlyMap<DirNode, KindBytes>,
   order?: SiblingOrder,
   marks?: LabelMarks,
-  unmeasured?: number,
+  usedSpace?: UsedSpace,
 ): TreemapLayout {
   const box = { x0: 0, y0: 0, x1: Math.floor(width), y1: Math.floor(height) };
-  const block = unmeasured !== undefined && unmeasured > 0 ? unmeasured : 0;
+  const accounted =
+    usedSpace !== undefined && usedSpace.unmeasured > 0 ? usedSpace : undefined;
   return {
     root,
     width,
     height,
-    ...(block > 0 ? { unmeasured: block } : {}),
-    tiles: layoutItems(root, box, 1, kinds, order, marks, block),
+    ...(accounted ? { usedSpace: accounted } : {}),
+    tiles: layoutItems(
+      root,
+      box,
+      1,
+      kinds,
+      order,
+      marks,
+      accounted?.unmeasured,
+    ),
   };
 }
 
@@ -633,10 +663,7 @@ export function siblingOrder(layout: TreemapLayout): SiblingOrder {
     const places = new Map<string, number>();
     for (const tile of tiles) {
       if (tile.kind === "group") continue;
-      places.set(
-        tile.kind === "unmeasured" ? UNMEASURED_PLACE : tile.node.path,
-        places.size,
-      );
+      places.set(nodeOf(tile)?.path ?? UNMEASURED_PLACE, places.size);
       if (tile.kind === "folder") visit(tile.node.path, tile.children);
     }
     order.set(folder, places);
@@ -700,7 +727,11 @@ export function drawsTheSame(
     shown.root.path === next.root.path &&
     shown.width === next.width &&
     shown.height === next.height &&
-    printSame(shown.unmeasured ?? 0, next.unmeasured ?? 0) &&
+    printSame(
+      shown.usedSpace?.unmeasured ?? 0,
+      next.usedSpace?.unmeasured ?? 0,
+    ) &&
+    printSame(shown.usedSpace?.used ?? 0, next.usedSpace?.used ?? 0) &&
     sameTiles(shown.tiles, next.tiles)
   );
 }
@@ -742,14 +773,11 @@ const unreadableOf = (tile: Tile) =>
   isFolderLike(tile) ? unreadableCount(tile.node) : null;
 
 function sameTile(a: Tile, b: Tile): boolean {
+  // The group by what it counts; the Not measured block has the one name, and no item.
   const named =
     a.kind === "group"
       ? b.kind === "group" && a.count === b.count && a.partial === b.partial
-      : a.kind === "unmeasured"
-        ? b.kind === "unmeasured"
-        : b.kind !== "group" &&
-          b.kind !== "unmeasured" &&
-          a.node.name === b.node.name;
+      : nodeOf(a)?.name === nodeOf(b)?.name;
   return (
     a.kind === b.kind &&
     a.x0 === b.x0 &&
@@ -816,12 +844,13 @@ export function tileForPath(layout: TreemapLayout, path: string): Tile | null {
   let tiles = layout.tiles;
   let container: FolderTile | null = null;
   for (;;) {
-    const match = tiles.find(
-      (tile) =>
-        tile.kind !== "group" &&
-        tile.kind !== "unmeasured" &&
-        (tile.node.path === path || path.startsWith(`${tile.node.path}/`)),
-    );
+    const match = tiles.find((tile) => {
+      const node = nodeOf(tile);
+      return (
+        node !== null &&
+        (node.path === path || path.startsWith(`${node.path}/`))
+      );
+    });
     if (!match) {
       // Not drawn on its own here, so it's one of the small items merged at this level.
       return tiles.find((tile) => tile.kind === "group") ?? container;
@@ -834,9 +863,25 @@ export function tileForPath(layout: TreemapLayout, path: string): Tile | null {
 
 /** Bytes a tile stands for. */
 export function tileSize(tile: Tile): number {
-  return tile.kind === "group" || tile.kind === "unmeasured"
-    ? tile.size
-    : tile.node.size;
+  return isItemTile(tile) ? tile.node.size : tile.size;
+}
+
+/** A share as the hover card gives it: "12%", or "<1%" for one under a percent. */
+const percentOf = (part: number, whole: number) => {
+  const share = whole > 0 ? (part / whole) * 100 : 0;
+  return share > 0 && share < 1 ? "<1%" : `${Math.round(share)}%`;
+};
+
+/**
+ * `tile`'s share of what `layout`'s root stands for, as the hover card gives it: of the root folder, "12% of Users", or,
+ * where the host accounted for the whole volume's used space, of that used space, "12% of used space", the figure
+ * "Where the space is" gives as Used on this disk.
+ */
+export function shareOf(tile: Tile, layout: TreemapLayout): string {
+  const { root, usedSpace } = layout;
+  return usedSpace === undefined
+    ? `${percentOf(tileSize(tile), root.size)} of ${root.name || "/"}`
+    : `${percentOf(tileSize(tile), usedSpace.used)} of used space`;
 }
 
 /** "253", or "253+" when the group also holds the scanner's uncounted items. */

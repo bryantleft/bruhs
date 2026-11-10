@@ -36,6 +36,28 @@ final class WhereTheSpaceIsTests: XCTestCase {
         }
     }
 
+    func testNotMeasuredFollowsTheMapItsSetAgainst() throws {
+        // The volume measured once: a move within it, to the Trash or back, changes none of its own figures.
+        let use = VolumeUse(used: 904 * gb, walkedVolumes: [12 * gb, 879 * gb], snapshots: 2, purgeable: 12 * gb)
+        let movie = DiskNode(kind: .file, name: "a.mov", path: "/Movies/a.mov", size: 5 * gb, children: nil)
+        let root = DiskNode(kind: .dir, name: "/", path: "/", size: 870 * gb, files: 2, children: [
+            DiskNode(kind: .dir, name: "Movies", path: "/Movies", size: 5 * gb, files: 1, children: [movie]),
+            DiskNode(kind: .file, name: "rest.bin", path: "/rest.bin", size: 865 * gb, children: nil),
+        ])
+        let before = DiskResult(root: root, topFiles: [], volumes: map().volumes, summary: map().summary)
+        let trashed = try XCTUnwrap(before.removing("/Movies"))
+        XCTAssertEqual(DiskAccounting(use, result: before), accounting(before))
+        XCTAssertEqual(DiskAccounting(use, result: before).notMeasuredBlock, 31 * gb)
+        // Move to Trash takes the folder off the map at once. With the Trash unreadable, its 5 GB are still on the volume,
+        // so they join Not measured at once, and leave On the map.
+        let after = DiskAccounting(use, result: trashed)
+        XCTAssertEqual(after.notMeasuredBlock, 36 * gb)
+        XCTAssertEqual(row("On the map", in: after.rows(result: trashed, trash: nil))?.figure, .bytes(865 * gb))
+        XCTAssertEqual(after.used, 904 * gb, "the volume's used space doesn't move")
+        // Undo puts the map from before back, and Not measured with it.
+        XCTAssertEqual(DiskAccounting(use, result: before).notMeasuredBlock, 31 * gb)
+    }
+
     func testTheRowsAccountForTheDiskInOrder() {
         let rows = accounting().rows(result: map(), trash: 5 * gb)
         XCTAssertEqual(rows.map(\.label), ["Used on this disk", "On the map", "In the Trash", "Hidden volumes", "Not measured", "Local snapshots",
@@ -104,8 +126,10 @@ final class WhereTheSpaceIsTests: XCTestCase {
         XCTAssertFalse(row("Local snapshots", in: rest)?.note?.contains("Not measured") ?? true)
     }
 
-    func testTheSymbolsExistFromMacOS14() throws {
-        for symbol in SpaceRow.symbols {
+    func testEverySymbolThisStepDrawsCameWithMacOS14OrEarlier() throws {
+        // The popover's rows, and the notice while macOS asks.
+        let drawn = SpaceRow.symbols + [AskingNotice.symbol]
+        for symbol in drawn {
             XCTAssertNotNil(NSImage(systemSymbolName: symbol, accessibilityDescription: nil), symbol)
         }
         // SF Symbols' own record of the release each symbol came in, which this Mac's system keeps.
@@ -115,10 +139,13 @@ final class WhereTheSpaceIsTests: XCTestCase {
               let symbols = plist["symbols"] as? [String: String], let releases = plist["year_to_release"] as? [String: [String: String]] else {
             throw XCTSkip("This Mac has no record of when each SF Symbol came")
         }
-        for symbol in SpaceRow.symbols {
-            let macOS = symbols[symbol].flatMap { releases[$0]?["macOS"] }
-            let version = macOS.map { $0.split(separator: ".").compactMap { Int($0) } } ?? []
-            XCTAssertTrue(version.lexicographicallyPrecedes([14, 0, 1]), "\(symbol) came in macOS \(macOS ?? "unknown")")
+        for symbol in drawn {
+            // A symbol the record doesn't name, or a release it doesn't date, fails rather than passing as no version.
+            let release = try XCTUnwrap(symbols[symbol], "\(symbol) isn't in SF Symbols' record")
+            let macOS = try XCTUnwrap(releases[release]?["macOS"], "\(symbol)'s release \(release) has no macOS version")
+            let version = macOS.split(separator: ".").compactMap { Int($0) }
+            XCTAssertFalse(version.isEmpty, "\(symbol) came in macOS \(macOS)")
+            XCTAssertTrue(version.lexicographicallyPrecedes([14, 0, 1]), "\(symbol) came in macOS \(macOS)")
         }
     }
 }

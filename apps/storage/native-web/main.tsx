@@ -14,7 +14,11 @@ import { LARGEST_FILES_SHOWN, largestFilesIn } from "../src/lib/largest-files";
 import type { HintStep } from "../src/lib/map-hints";
 import { parseResultEvent } from "../src/lib/protocol";
 import { findByPath } from "../src/lib/tree-utils";
-import { type Kind, kindBytesByFolder } from "../src/lib/treemap-layout";
+import {
+  type Kind,
+  kindBytesByFolder,
+  nodeOf,
+} from "../src/lib/treemap-layout";
 import type {
   DirNode,
   FileEntry,
@@ -29,6 +33,7 @@ import { type NavigationAction, NO_MAP, navigate } from "./navigation";
 import { placesIn, unreadableBesides } from "./places";
 import { Places, usePlaces } from "./places-section";
 import { GREW_SHOWN, UNREADABLE_SHOWN, WRITERS_SHOWN } from "./side-lists";
+import { useUsedSpace } from "./used-space";
 import "./styles.css";
 
 /**
@@ -115,11 +120,6 @@ declare global {
     /** Whether macOS's Differentiate Without Color is on. */
     pithReceiveDifferentiateWithoutColor: (on: boolean) => void;
     /**
-     * The used space the scan couldn't measure, in bytes, on the volume a map of a whole volume shows with `root` its
-     * root, or nulls for any other map: the figure "Where the space is" gives as Not measured.
-     */
-    pithReceiveNotMeasured: (root: unknown, bytes: unknown) => void;
-    /**
      * Pith's path bar and Go menu: open a folder of the map, go back or forward through the folders opened, or up
      * to the open folder's enclosing folder.
      */
@@ -177,35 +177,6 @@ function useDifferentiateWithoutColor(): boolean {
   return on;
 }
 
-/**
- * The used space the scan couldn't measure on the volume a map of a whole volume shows, and that map's root, which
- * the map draws as its Not measured block there: what "Where the space is" says is Not measured. Pith sends it once
- * the page is ready and whenever it changes, after the map it goes with; until then, and for any other map, none.
- */
-function useNotMeasured(): {
-  readonly root: string;
-  readonly bytes: number;
-} | null {
-  const [sent, setSent] = useState<{ root: string; bytes: number } | null>(
-    null,
-  );
-  useEffect(() => {
-    window.pithReceiveNotMeasured = (root, bytes) =>
-      setSent(
-        typeof root === "string" &&
-          typeof bytes === "number" &&
-          Number.isSafeInteger(bytes) &&
-          bytes > 0
-          ? { root, bytes }
-          : null,
-      );
-    return () => {
-      window.pithReceiveNotMeasured = () => {};
-    };
-  }, []);
-  return sent;
-}
-
 function DiskMap() {
   const [result, setResult] = useState<ResultEvent | null>(null);
   // Whether the map answers the person's own action, which the map shows at once, however still it holds.
@@ -226,7 +197,7 @@ function DiskMap() {
   // Taken before the page says it's ready, as the icons are.
   const doubleClickInterval = useDoubleClickInterval();
   const glyphs = useDifferentiateWithoutColor();
-  const notMeasured = useNotMeasured();
+  const accounted = useUsedSpace();
   // The click hints the map has learned, which Pith keeps in its settings so they stay learned in every window.
   const tellHint = useCallback(
     (hint: HintStep) => post({ action: "learnedHint", hint }),
@@ -434,12 +405,13 @@ function DiskMap() {
   // Before a map the page stays empty: Pith's bar above says there's no map yet and holds the disk menu.
   if (!result || !current) return null;
 
-  // At the root of a map of a whole volume, the used space the scan couldn't measure takes a block of its own.
-  const unmeasured =
-    notMeasured !== null &&
-    notMeasured.root === result.root.path &&
+  // At the root of a map of a whole volume, the used space the scan couldn't measure takes a block of its own, and the
+  // root's shares are of the volume's used space.
+  const usedSpace =
+    accounted !== null &&
+    accounted.root === result.root.path &&
     current.path === result.root.path
-      ? notMeasured.bytes
+      ? accounted.usedSpace
       : undefined;
   // The well-known places in the open folder, at the startup disk's root and the home folder of its live map.
   const shownPlaces = placesIn(places, current.path);
@@ -481,22 +453,19 @@ function DiskMap() {
             kindGlyphs={glyphs}
             padlocks
             hints={hints}
-            unmeasured={unmeasured}
+            usedSpace={usedSpace}
             onUnmeasured={explainNotMeasured}
             icon={
               icons
-                ? (tile) =>
-                    // The Not measured block is no item, so it has no icon.
-                    tile.kind === "unmeasured" ? null : (
-                      <MapIcon
-                        url={
-                          tile.kind === "group"
-                            ? icons.key(GROUP_KEY)
-                            : icons.item(tile.node)
-                        }
-                        fallback={null}
-                      />
-                    )
+                ? (tile) => {
+                    // The smaller items show the group's icon; the Not measured block is no item, so it has none.
+                    const node = nodeOf(tile);
+                    const url =
+                      tile.kind === "group"
+                        ? icons.key(GROUP_KEY)
+                        : node && icons.item(node);
+                    return url ? <MapIcon url={url} fallback={null} /> : null;
+                  }
                 : undefined
             }
           />

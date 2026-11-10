@@ -12,6 +12,7 @@ import {
   layoutTreemap,
   siblingOrder,
   type TreemapLayout,
+  type UsedSpace,
 } from "~/lib/treemap-layout";
 import type { DirNode } from "~/lib/types";
 
@@ -42,7 +43,7 @@ const browserClock: Clock = {
 
 /**
  * The layout a disk map shows: `root` laid out at `width` × `height` CSS pixels, once for each, with room for the
- * `marks` the host draws on labels, if any, and the Not measured block of `unmeasured` bytes, if the host gives them.
+ * `marks` the host draws on labels, if any, and the Not measured block of the volume's `usedSpace`, if the host gives it.
  * A `steady` map's newer layouts of the same folder keep its siblings' places within a margin, leave the layout shown
  * as it is when they'd draw the same, and wait while the person clicks or reads the hover card, a double-click
  * lasting `doubleClick` ms (steady-map.ts). A root `atOnce` answers the person's own action, and shows as it comes, as
@@ -56,9 +57,19 @@ export function useShownLayout(
   doubleClick: number,
   atOnce: boolean,
   marks: LabelMarks | undefined,
-  unmeasured?: number,
+  usedSpace?: UsedSpace,
 ): ShownLayout {
   const kinds = useMemo(() => kindBytesByFolder(root), [root]);
+  // By its figures, so a host that makes it anew with each render lays the map out only when they change.
+  const unmeasured = usedSpace?.unmeasured;
+  const used = usedSpace?.used;
+  const accounted = useMemo(
+    () =>
+      unmeasured === undefined || used === undefined
+        ? undefined
+        : { unmeasured, used },
+    [unmeasured, used],
+  );
   const [layout, setLayout] = useState<TreemapLayout | null>(null);
   const [map] = useState(() => steadyMap(browserClock, setLayout));
   useEffect(() => () => map.stop(), [map]);
@@ -81,11 +92,11 @@ export function useShownLayout(
       kinds,
       order,
       marks,
-      unmeasured,
+      accounted,
     );
     if (steady && !atOnce) map.newer(next);
     else map.show(next);
-  }, [root, width, height, kinds, steady, atOnce, marks, unmeasured, map]);
+  }, [root, width, height, kinds, steady, atOnce, marks, accounted, map]);
 
   const release = useCallback(
     () => map.release(doubleClick),

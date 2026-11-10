@@ -67,6 +67,8 @@ enum MapCommand: Equatable {
             if !settingLive { resultJSON = nil }
             icons.map = result?.root
             sideColumn.map = result
+            // Every map, the person's own edits among them, is accounted against the volume's own figures at once.
+            account()
         }
     }
     /// The live map's own JSON of `result`, while `result` is just as the live map sent it.
@@ -87,8 +89,14 @@ enum MapCommand: Equatable {
     private var freesTask: Task<Void, Never>?
     /// A move to the Trash waiting for the user to confirm what it does to a synced item.
     var confirming: TrashPlan?
-    /// Where the volume's space went, for a map of a whole volume.
+    /// Where the volume's space went, for a map of a whole volume: the volume's own figures set against the map as it is
+    /// now (`account`), so what the map gains or loses, as by Move to Trash and Undo, moves Not measured at once.
     private(set) var accounting: DiskAccounting?
+    /// The volume's own figures, and the map's root they're of (`VolumeUse`), measured off the main thread when the
+    /// map's root changes and every five minutes on the live map.
+    @ObservationIgnored private var volumeUse: (root: String, use: VolumeUse)? {
+        didSet { account() }
+    }
     private var accountedAt = Date.distantPast
     /// Whether "Where the space is" is open: its link opens it, and so does a click on the map's Not measured block.
     var showsWhereTheSpaceIs = false
@@ -169,7 +177,7 @@ enum MapCommand: Equatable {
     /// The caption under the path bar, one status at a time (`DiskCaption`): the live map's while the view shows it, and
     /// otherwise a scan's.
     var caption: DiskCaption? {
-        if let live, liveView != nil { return DiskCaption.live(live.caption) }
+        if let live, liveView != nil { return DiskCaption.live(live.status) }
         return DiskCaption.scan(scanCaption)
     }
 
@@ -183,12 +191,11 @@ enum MapCommand: Equatable {
     /// Folders the map couldn't read, so it leaves them out.
     var unreadableFolders: UInt64 { result?.summary.errors ?? 0 }
 
-    /// How many folders macOS is asking the person whether Pith may read, while the view shows the live map it has
-    /// made: the map goes on without them until they answer, or give Pith Full Disk Access. Nil while macOS asks about
-    /// none of them.
+    /// How many folders the asking notice names (`AskingNotice.folders`), while the view shows the live map: the map goes
+    /// on without them until the person answers macOS, or gives Pith Full Disk Access. Nil while it doesn't show.
     var askingFolders: Int? {
-        guard let live, liveView != nil, live.state.isMapped, live.asking > 0 else { return nil }
-        return live.asking
+        guard let live, liveView != nil else { return nil }
+        return AskingNotice.folders(for: live.status)
     }
 
     // MARK: The path bar
@@ -309,7 +316,7 @@ enum MapCommand: Equatable {
             select(nil)
             result = nil
             mapStartsOver()
-            accounting = nil
+            volumeUse = nil
             revision = UUID()
         }
         sideColumn.mapIsntLive()
@@ -800,29 +807,24 @@ enum MapCommand: Equatable {
     // MARK: Where the space is
 
     /// The used space the scan couldn't measure on the volume the map shows, which the map's page draws as its Not
-    /// measured block at `root`: the figure "Where the space is" gives as Not measured.
+    /// measured block at `root`, and all the volume's used space, which the root's shares are then of: the figures
+    /// "Where the space is" gives as Not measured and Used on this disk.
     struct NotMeasured: Equatable {
         let root: String
         let bytes: UInt64
-    }
-
-    /// The accounting of the map shown: none for a map of a folder, which nothing can account for, nor while the
-    /// accounting there is is still the last map's.
-    private var shownAccounting: DiskAccounting? {
-        guard let accounting, accounting.root == result?.root.path else { return nil }
-        return accounting
+        let used: UInt64
     }
 
     /// What the map's page draws as Not measured, only for a map of a whole volume: the live map of the startup disk, or
     /// a scan of a volume's root.
     var notMeasured: NotMeasured? {
-        guard let accounting = shownAccounting, let bytes = accounting.notMeasuredBlock else { return nil }
-        return NotMeasured(root: accounting.root, bytes: bytes)
+        guard let accounting, let bytes = accounting.notMeasuredBlock else { return nil }
+        return NotMeasured(root: accounting.root, bytes: bytes, used: accounting.used)
     }
 
     /// "Where the space is" for a map of a whole volume, row by row, the Trash's from the map when the map can read it.
     var spaceRows: [SpaceRow]? {
-        shownAccounting?.rows(result: result, trash: trashOnMap)
+        accounting?.rows(result: result, trash: trashOnMap)
     }
 
     /// The Trash's size as the map shows it, when the map can read the Trash: on the live map, the figure Places gives
@@ -835,33 +837,44 @@ enum MapCommand: Equatable {
         return result?.root.folder(at: trash.path)?.size
     }
 
-    /// The map's Not measured block was clicked: "Where the space is" says what it holds and why, while its link shows.
+    /// The map's Not measured block was clicked: "Where the space is" says what it holds and why. A scan under way leaves
+    /// the map it was drawn from on screen, and the link with it, so it shows that map's accounting.
     func explainNotMeasured() {
-        guard spaceRows != nil, !isScanning else { return }
+        guard spaceRows != nil else { return }
         showsWhereTheSpaceIs = true
     }
 
-    /// Works out where a whole volume's space went for a map, off the main thread, or nil for a map of a folder. The
-    /// smoke test gives figures of its own, so its fixture stands in for a volume.
-    @ObservationIgnored var accounts: @Sendable (DiskResult) -> DiskAccounting? = DiskModel.account
+    /// Measures a whole volume's own figures for a map of `root`, off the main thread, or nil for a map of a folder, which
+    /// nothing can account for. The smoke test gives figures of its own, so its fixture stands in for a volume.
+    @ObservationIgnored var measures: @Sendable (String) -> VolumeUse? = DiskModel.measure
 
-    /// Works out where the space went for a map of a whole volume: what's on hidden volumes, what the map couldn't
-    /// measure, local snapshots and purgeable space. Off the main thread: `tmutil` takes a moment.
+    /// Measures the volume's own figures for the map shown: what's used, on the volumes the map walks and in local
+    /// snapshots, and what's purgeable. Off the main thread: `tmutil` takes a moment.
     func refreshAccounting() {
-        guard let result else { accounting = nil; return }
+        guard let result else { volumeUse = nil; return }
         accountedAt = Date()
-        let root = result.root.path, accounts = accounts
+        let root = result.root.path, measures = measures
         Task {
-            let value = await Task.detached(priority: .utility) { accounts(result) }.value
+            let use = await Task.detached(priority: .utility) { measures(root) }.value
             guard self.result?.root.path == root else { return }
-            accounting = value
+            volumeUse = use.map { (root, $0) }
         }
     }
 
-    /// Where the space went for `result` when its root is a volume's: the volume's own figures, and `tmutil`'s count of
-    /// its local snapshots.
-    nonisolated private static func account(_ result: DiskResult) -> DiskAccounting? {
-        let root = result.root.path
+    /// Sets the volume's own figures against the map shown, whenever either changes. Pure arithmetic, so it follows
+    /// every map: a live one every few seconds, or one Move to Trash or Undo edited.
+    private func account() {
+        guard let result, let volumeUse, volumeUse.root == result.root.path else {
+            if accounting != nil { accounting = nil }
+            return
+        }
+        let fresh = DiskAccounting(volumeUse.use, result: result)
+        if fresh != accounting { accounting = fresh }
+    }
+
+    /// The figures of the volume at `root` when `root` is a volume's root: its used space and that of the volumes a walk
+    /// enters, what's purgeable, and `tmutil`'s count of its local snapshots.
+    nonisolated private static func measure(_ root: String) -> VolumeUse? {
         let url = URL(fileURLWithPath: root)
         let keys: Set<URLResourceKey> = [.volumeURLKey, .volumeTotalCapacityKey, .volumeAvailableCapacityKey, .volumeAvailableCapacityForImportantUsageKey]
         guard let values = try? url.resourceValues(forKeys: keys),
@@ -871,8 +884,7 @@ enum MapCommand: Equatable {
         guard volumes.count == walked.count else { return nil }
         let important = values.volumeAvailableCapacityForImportantUsage.map { UInt64(max(0, $0)) }
         let purgeable = important.map { $0.saturatingSubtract(UInt64(max(0, available))) }
-        return DiskAccounting(used: UInt64(max(0, total - available)), walkedVolumes: volumes, result: result,
-                              snapshots: localSnapshots(root), purgeable: purgeable)
+        return VolumeUse(used: UInt64(max(0, total - available)), walkedVolumes: volumes, snapshots: localSnapshots(root), purgeable: purgeable)
     }
 
     /// Local Time Machine snapshots on a volume, from `tmutil`, which lists them without administrator access.

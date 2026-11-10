@@ -17,8 +17,10 @@ import {
   MIN_TILE,
   markPlace,
   markRoom,
+  nodeOf,
   type PackageTile,
   padlockRoom,
+  shareOf,
   siblingOrder,
   type Tile,
   type TreemapLayout,
@@ -101,11 +103,7 @@ function only<T extends Tile["kind"]>(
   path: string,
 ): Extract<Tile, { kind: T }> {
   const found = allTiles(map.tiles).find(
-    (t) =>
-      t.kind === kind &&
-      t.kind !== "group" &&
-      t.kind !== "unmeasured" &&
-      t.node.path === path,
+    (t) => t.kind === kind && nodeOf(t)?.path === path,
   );
   assert.ok(found, `expected a ${kind} tile for ${path}`);
   return found as Extract<Tile, { kind: T }>;
@@ -463,9 +461,7 @@ function relayout(
 /** The names of a folder's items as the layout places them, the group of smaller items left out. */
 const names = (tiles: readonly Tile[]) =>
   tiles.flatMap((tile) =>
-    tile.kind === "group"
-      ? []
-      : [tile.kind === "unmeasured" ? tileName(tile) : tile.node.name],
+    tile.kind === "group" ? [] : [nodeOf(tile)?.name ?? tileName(tile)],
   );
 
 describe("layoutTreemap with the shown layout's order", () => {
@@ -1159,15 +1155,21 @@ describe("the Not measured block", () => {
     file("/big.dmg", 3000),
     file("/small.bin", 1000),
   ]);
-  const measured = (unmeasured?: number, width = 400, height = 300) =>
+  /**
+   * The map with `unmeasured` bytes not measured, as "Where the space is" accounts for it: the volume's used space is
+   * the map's, what it couldn't measure, and `hidden` bytes more on volumes the map can't show.
+   */
+  const measured = (unmeasured?: number, hidden = 0) =>
     layoutTreemap(
       root,
-      width,
-      height,
+      400,
+      300,
       kindBytesByFolder(root),
       undefined,
       undefined,
-      unmeasured,
+      unmeasured === undefined
+        ? undefined
+        : { unmeasured, used: root.size + unmeasured + hidden },
     );
   const blocks = (map: TreemapLayout) =>
     allTiles(map.tiles).filter((tile) => tile.kind === "unmeasured");
@@ -1191,7 +1193,7 @@ describe("the Not measured block", () => {
       "a block of the map's own folder",
     );
     assert.equal(block(map).size, 10_000);
-    assert.equal(map.unmeasured, 10_000);
+    assert.deepEqual(map.usedSpace, { unmeasured: 10_000, used: 20_000 });
     assert.ok(Math.abs(area(block(map)) / (400 * 300) - 0.5) < 0.02);
     // The rest share the other half by bytes, as before.
     const users = only(map, "folder", "/Users");
@@ -1248,7 +1250,7 @@ describe("the Not measured block", () => {
       kindBytesByFolder(root),
       siblingOrder(before),
       undefined,
-      2990,
+      { unmeasured: 2990, used: 12_990 },
     );
     assert.deepEqual(names(after.tiles), names(before.tiles));
   });
@@ -1260,13 +1262,33 @@ describe("the Not measured block", () => {
     assert.equal(drawsTheSame(shown, measured(undefined)), false);
     assert.equal(drawsTheSame(measured(undefined), shown), false);
     assert.equal(drawsTheSame(shown, measured(14_000)), false);
+    // The same block of a volume with more on hidden volumes: the root's shares are of more used space.
+    assert.equal(drawsTheSame(shown, measured(10_000, 2000)), false);
+  });
+
+  test("gives the root's shares of the volume's used space, the figure Where the space is gives as Used on this disk", () => {
+    // 10,000 bytes on the map, 3,000 not measured and 2,000 on hidden volumes: 15,000 bytes used.
+    const map = measured(3000, 2000);
+    assert.equal(map.usedSpace?.used, 15_000);
+    assert.equal(
+      shareOf(only(map, "folder", "/Users"), map),
+      "40% of used space",
+    );
+    assert.equal(shareOf(block(map), map), "20% of used space");
+    assert.equal(
+      shareOf(only(map, "file", "/small.bin"), map),
+      "7% of used space",
+    );
+    // Without the volume's accounting, a share is of the map's folder.
+    const plain = layout(root, 400, 300);
+    assert.equal(shareOf(only(plain, "folder", "/Users"), plain), "60% of /");
   });
 
   test("leaves out a block too small to draw, and the map's items fill the map", () => {
     const map = measured(1);
     assert.equal(blocks(map).length, 0);
-    // Its bytes still count in the used space the root's shares are of.
-    assert.equal(map.unmeasured, 1);
+    // The root's shares are still of the volume's used space.
+    assert.equal(map.usedSpace?.used, 10_001);
     assert.equal(
       map.tiles.reduce((sum, tile) => sum + area(tile), 0),
       400 * 300,
@@ -1281,7 +1303,7 @@ describe("the Not measured block", () => {
       kindBytesByFolder(root),
       undefined,
       { icons: true, glyphs: true, metrics: METRICS },
-      10_000,
+      { unmeasured: 10_000, used: 20_000 },
     );
     assert.equal(block(map).slot, undefined);
   });

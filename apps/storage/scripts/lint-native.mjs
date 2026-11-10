@@ -23,6 +23,8 @@ const RULES = [
   { pattern: /NSColor\.system(Red|Orange|Yellow|Green|Blue|Purple|Pink|Teal|Indigo|Brown|Gray|Mint|Cyan)\b/, fix: "use BruhsPalette or a BruhsColor role" },
   { pattern: /\.font\(\.largeTitle/, fix: "Mac windows show their title in the toolbar; drop the in-content large title" },
   { pattern: /\.font\(\.(system\(size|title|title2|title3|headline|subheadline|body|callout|footnote|caption|caption2)\b/, fix: "use a BruhsType style, adding one in Theme/Theme.swift if the scale lacks it", skip: "Theme.swift" },
+  // The smoke test records the panes it would open, through the one opener, so it never opens System Settings.
+  { pattern: /x-apple\.systempreferences|openSystemSettingsLoginItems/, fix: "open System Settings with openSystemSettings(.<pane>), adding the pane to SystemSettingsPane.swift", skip: "SystemSettingsPane.swift", codeOnly: true },
 ];
 
 /**

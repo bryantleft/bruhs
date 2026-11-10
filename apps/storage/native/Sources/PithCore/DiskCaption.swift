@@ -63,9 +63,9 @@ public enum DiskCaption: Equatable, Sendable {
     /// Mac's whole disk, 0 to 30 were waiting at any moment, each listed within seconds.
     public static let catchingUpCount = 100
 
-    /// The caption for the live map, at `now` in `calendar`.
-    public static func live(_ state: Live, now: Date = Date(), calendar: Calendar = .current) -> DiskCaption? {
-        switch state {
+    /// The caption for the live map, at `now` in `calendar`: what it's doing, whatever macOS is asking about.
+    public static func live(_ map: LiveMapStatus, now: Date = Date(), calendar: Calendar = .current) -> DiskCaption? {
+        switch map.activity {
         case .mapping(let found?):
             return .figures([Figure(label: "Mapped", value: formatBytes(found.bytes)), Figure(label: "Files", value: monaspaced(found.files.formatted()))])
         case .mapping(nil):
@@ -117,6 +117,41 @@ public enum DiskCaption: Equatable, Sendable {
         if calendar.isDate(date, inSameDayAs: now) { return "Today \(time)" }
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(date, inSameDayAs: yesterday) { return "Yesterday \(time)" }
         return date.formatted(style.month(.abbreviated).day().hour().minute())
+    }
+}
+
+/// The live map as Disk shows it: what it's doing, which the caption tells, and how many of its folders macOS is asking
+/// the person whether Pith may read, which the map goes on without and the asking notice names.
+public struct LiveMapStatus: Equatable, Sendable {
+    public let activity: DiskCaption.Live
+    public let asking: Int
+
+    public init(_ activity: DiskCaption.Live, asking: Int = 0) {
+        self.activity = activity
+        self.asking = asking
+    }
+}
+
+/// The notice Disk shows while macOS asks the person whether Pith may read some of the live map's folders: what
+/// answering does, or Full Disk Access, which its button opens.
+public enum AskingNotice {
+    /// What it leads with: a raised hand, as macOS's Privacy & Security does.
+    public static let symbol = "hand.raised.fill"
+
+    /// How many folders it names, while macOS asks about some once the map is made, as it catches up or keeps current.
+    /// Nil otherwise: before the map is made, the map's own waiting view says macOS is asking.
+    public static func folders(for map: LiveMapStatus) -> Int? {
+        guard map.asking > 0 else { return nil }
+        switch map.activity {
+        case .catchingUp, .live: return map.asking
+        case .quiet, .mapping, .failed: return nil
+        }
+    }
+
+    /// What macOS asking about `folders` folders means for the map.
+    public static func sentence(folders: Int) -> String {
+        let named = "\(folders.formatted()) \(folders == 1 ? "folder" : "folders")"
+        return "macOS is asking whether Pith may read \(named). Answer it, or give Pith Full Disk Access once, and \(folders == 1 ? "it joins" : "they join") the map."
     }
 }
 

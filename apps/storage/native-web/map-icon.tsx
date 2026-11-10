@@ -7,6 +7,7 @@ import {
 } from "react";
 import type { MapIcons } from "../src/components/map-marks";
 import { useDevicePixelRatio } from "../src/components/treemap-canvas";
+import { nodeOf } from "../src/lib/treemap-layout";
 import {
   type IconItem,
   type IconRule,
@@ -175,15 +176,17 @@ export function usePageIcons(): PageIcons | null {
           ),
         map: {
           // The smaller items have no icon on the map, and the Not measured block is no item to look up.
-          url: (tile, points, ratio) =>
-            tile.kind === "group" || tile.kind === "unmeasured"
+          url: (tile, points, ratio) => {
+            const node = nodeOf(tile);
+            return node === null
               ? null
               : iconURL(
                   sent.base,
                   points,
                   iconScale(ratio),
-                  iconKey(tile.node, sent.rule),
-                ),
+                  iconKey(node, sent.rule),
+                );
+          },
           image: (url) => pageIcons.image(url),
           failed: (url) => pageIcons.state(url) === "failed",
           request: (url) => pageIcons.request(url),
