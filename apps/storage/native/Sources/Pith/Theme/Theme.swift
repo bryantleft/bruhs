@@ -364,21 +364,29 @@ enum Icons {
     }
 }
 
-/// App icons by executable path. `.app` bundles get their own icon, the icon store's `item` key for the bundle;
-/// anything else gets the generic executable icon, so command-line tools and daemons still have a consistent mark.
-/// Activity shows NSWorkspace's image as it is: it draws itself in each row's appearance, at once.
+/// App icons by executable path, by the rule the Disk tab's app icons follow (`KnownPlaces.appIconSource`). An app on
+/// the startup disk, outside the locations macOS guards, gets its own icon, the icon store's `item` key for the bundle;
+/// any other app the generic application icon, running or not; anything else the generic executable icon, so
+/// command-line tools and daemons still have a consistent mark. Activity shows NSWorkspace's image as it is: it draws
+/// itself in each row's appearance, at once. The rule is checked at every use, as the disks can change, and a kept image
+/// is shown only while it holds.
 @MainActor final class AppIconCache {
     static let shared = AppIconCache()
     private var icons: [IconKey: NSImage] = [:]
     private lazy var executable = NSWorkspace.shared.icon(for: .unixExecutable)
+    private lazy var application = NSWorkspace.shared.icon(for: .applicationBundle)
 
     func icon(for path: String) -> NSImage {
-        guard let bundle = SystemSampler.bundlePath(path) ?? (path.hasSuffix(".app") ? path : nil) else { return executable }
-        let key = IconKey.item(bundle)
-        if let cached = icons[key] { return cached }
-        let icon = SystemIconRenderer.image(for: key) ?? executable
-        icons[key] = icon
-        return icon
+        switch Icons.places.appIconSource(for: path) {
+        case .executable: return executable
+        case .application: return application
+        case .bundle(let bundle):
+            let key = IconKey.item(bundle)
+            if let cached = icons[key] { return cached }
+            let icon = SystemIconRenderer.image(for: key) ?? executable
+            icons[key] = icon
+            return icon
+        }
     }
 }
 

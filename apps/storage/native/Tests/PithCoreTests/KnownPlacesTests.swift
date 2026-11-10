@@ -369,6 +369,25 @@ final class KnownPlacesTests: XCTestCase {
         XCTAssertTrue(table.mayShowApp("/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app"))
     }
 
+    /// Activity's app icons follow the Disk tab's rule: an app Pith may look up by its bundle's path (`mayShowApp`) shows
+    /// its own icon, any other app the generic application icon, running or not, since macOS's icon for a running app
+    /// is drawn from its bundle's path too, and anything else the generic executable's.
+    func testActivitysAppIconsFollowThePrivacyRule() {
+        let table = KnownPlaces(home: home, searchPaths: [.downloadsDirectory: home.appendingPathComponent("Downloads")], mounts: { MountTableTests.table }) { _ in nil }
+        XCTAssertEqual(table.appIconSource(for: "/Applications/Safari.app"), .bundle("/Applications/Safari.app"))
+        XCTAssertEqual(table.appIconSource(for: "/Applications/Xcode.app/Contents/MacOS/Xcode"), .bundle("/Applications/Xcode.app"), "an app's executable, by its bundle")
+        XCTAssertEqual(table.appIconSource(for: "/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app"),
+                       .bundle("/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app"))
+        for elsewhere in [path("Downloads/Tool.app"), path("Downloads/Tool.app/Contents/MacOS/Tool"), "/Volumes/Archive/Tool.app",
+                          "/Volumes/share/Apps/Tool.app/Contents/MacOS/Tool", "/System/Volumes/Data/home/tester/Tool.app",
+                          path("Library/Containers/com.example.x/Data/Helper.app")] {
+            XCTAssertEqual(table.appIconSource(for: elsewhere), .application, elsewhere)
+        }
+        for tool in ["/usr/bin/swift", "/opt/homebrew/bin/node", "", path("Downloads/tool")] {
+            XCTAssertEqual(table.appIconSource(for: tool), .executable, tool)
+        }
+    }
+
     /// A known place's app is looked up by its bundle's path only where Pith may look an app up (`mayShowApp`): Xcode in
     /// Downloads, which macOS guards, gives Developer its special folder's icon instead, and Mail on another disk a plain
     /// folder, as each would have without its app. An app on the startup disk, outside them, still gives its place its
