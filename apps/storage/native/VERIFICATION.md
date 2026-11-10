@@ -2,7 +2,7 @@
 
 Verified on 2026-11-05 on Apple Silicon, macOS 26.3, with Xcode 26.6 / Swift 6.3.3.
 
-Each dated entry below gives the tests and smoke checks of its own run, oldest first. The last entry, 2026-11-10, is the current one: 323 Swift tests, 54 scanner tests, 277 node tests and 85 smoke checks.
+Each dated entry below gives the tests and smoke checks of its own run, oldest first. The last entry, 2026-11-10's privacy, icons and cost, is the current one: 362 Swift tests, 58 scanner tests, 278 node tests and 90 smoke checks.
 
 ## Passed
 
@@ -194,3 +194,17 @@ Nine steps redesigned Disk on this Mac (macOS 26.3, Xcode 26.6, Swift 6.3.3), ea
   - Lists say an item is selected rather than acting as toggles, a held Shift-arrow keeps the item it added, Frees now says how old its figure is, a place macOS is asking about says Waiting for your answer, an empty or unreadable folder leaves the live map with its parent's listing, and automated runs register no daily check with macOS's scheduler, which keeps it for the bundle ID the person's Pith shares.
 - **Tests:** 323 Swift tests, 54 scanner tests and 277 node tests, from 305, 49 and 267 before the fixes. All 85 smoke checks pass in the packaged app, `left_the_persons_state_alone` among them.
 - **Known limits:** what the person changes shows on a map from an index that hasn't listed it, but a folder's other contents still come from that index, and the side lists' sizes inside a place can trail the map by a listing. A large, busy selection's Frees figure can be from minutes or hours before, which it now says.
+
+## 2026-11-10: privacy, icons and cost
+
+Follow-ups to the redesign on the same Mac (macOS 26.3), built ad hoc and smoke-tested against the fixture folder. Nothing was built for release or pushed.
+
+- **Activity's app icons:** Activity looked every app's icon up by its bundle's path, wherever the bundle was. It now follows the Disk tab's rule (`KnownPlaces.appIconSource`): an app on the startup disk, outside the locations macOS guards, shows its own icon, and any other the generic application icon, running or not. `NSRunningApplication.icon` is no way round the rule: AppKit's code for it, disassembled here, draws the icon with `NSWorkspace.icon(forFile:)` on the app's own bundle path.
+- **The icon route's lookups:** indexing every folder of the map at the first icon request after each map cost the main thread 2.8 ms for the whole disk's map of 14,019 nodes (median, 3.2 ms at the 90th percentile, in a release build) and 77 ms for a disk-shaped one of 177,001, against 2 ms for a map every two seconds. Each request now follows its path down the map: 3 µs median and 66 µs at most there, 4 µs and 0.14 ms in the larger map, and a request after a new map costs 0.014 ms in all, the URL's parsing included.
+- **PNG only for the page:** encoding a drawing as PNG took 0.08 to 0.15 ms an icon (median, 16 to 64 px, 0.5 ms at most), and the PNG, 0.8 to 6.7 KB, can outweigh a small bitmap. The store now encodes an icon the first time the page's route asks for it, once, off the main thread, and counts it in its 16 MiB from then on; an icon only native views show is never encoded.
+- **Increase Contrast:** a plain folder, the Documents folder's type, Finder, the pdf, png and zip types, Safari, the full Trash and the Applications folder's type drew the same pixels in the high-contrast appearances as in the plain ones, at 16 pt at 1x and 2x and 32 and 128 pt at 2x, while light and dark differed. So the contrast stays out of the icon key; a test draws the sample again in each appearance. This Mac's own Increase Contrast setting was off.
+- **Books and Podcasts:** both places were where the table had them, confirmed from the apps' signatures and code, never their data. Books' library agent, `com.apple.BKAgentService`, registers its Documents folder's `iBooks` as the default library and keeps the books in its `Books`; Podcasts' downloads are its one app group's `Library/Cache`, which its Storage extension measures.
+- **Access withdrawn:** once the person has answered, macOS doesn't ask again, so a folder the map listed keeps its own icon until the scanner lists it again, and a lookup by its path brings no question. An item a native view keeps from an earlier map now shows a plain folder once the scanner's listing of a folder above it fails.
+- **The Trash's state:** each listed place says how many files it holds and whether it holds folders, so a Trash holding only a Finder copy, empty files or empty folders shows full, in Places and wherever it shows, and a scan of the Trash itself shows it empty only when it listed no folder in it.
+- **Undo:** a move with no undo manager keeps the stack within its budget at once, and an item put back from its folder's smaller items goes back into its own folder, never a folder above it.
+- **Tests:** 362 Swift tests, 58 scanner tests and 278 node tests, from 349, 56 and 278. All 90 smoke checks pass in the packaged app, `left_the_persons_state_alone` among them, in 180 s. A first run on a Mac busy with another build and a game failed the five checks that wait on the live map to follow the fixture's new files, and one waiting on it to follow their deletion, each after its 20 s; the run after passed every check.
