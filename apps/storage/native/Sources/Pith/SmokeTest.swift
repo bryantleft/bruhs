@@ -123,6 +123,7 @@ extension AppDelegate {
             checks.merge(await checkIconsReachEveryPage(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkIconRoute(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkPathBar(fixture, in: main), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkMapHoldsStill(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(try await checkLiveFollows(disk, in: fixture, prefix: "live_map"), uniquingKeysWith: { _, new in new })
             checks.merge(try await checkLiveReopens(fixture), uniquingKeysWith: { _, new in new })
             // Leaving the Disk tab keeps the map, so its open folder survives; closing the window frees WebKit.
@@ -524,6 +525,199 @@ extension AppDelegate {
                 "path_bar_opens_a_folder": opened && enclosing == fixture && up,
                 "go_back_and_forward": nowhere && focused && canGoBack && back && canGoForward && forward && end]
     }
+
+    /// The live map holds still. A double-click opens the folder its first click was aimed at, though a newer map
+    /// arrives between its clicks and puts another folder there. The check makes two folders of its own in the
+    /// fixture, so it needs nothing else of it, and both maps from the live one: in the first, the aimed-at folder is
+    /// as big as everything else, so it has a large block; in the newer one it's a byte and the other folder a
+    /// thousand times everything else, so that one covers the map. The page holds what it showed while a second click
+    /// can still come and the hover card is open, and draws nothing meanwhile. As a control, the newer map shown before
+    /// the clicks sends the same double-click into the other folder. Then, with the folders gone, a map sent again, or
+    /// with a file a byte bigger, draws nothing either, while one that changes visibly draws.
+    private func checkMapHoldsStill(_ fixture: String) async -> [String: Bool] {
+        let names = ["double_click_opens_the_folder_clicked", "map_draws_nothing_when_nothing_shows"]
+        let files = FileManager.default, mark = UUID().uuidString
+        let aimed = (fixture as NSString).appendingPathComponent("pith-smoke-aimed-\(mark)")
+        let covering = (fixture as NSString).appendingPathComponent("pith-smoke-covering-\(mark)")
+        let folders = [aimed, covering]
+        func listed(_ path: String) -> Bool { disk.result?.root.children?.contains { $0.path == path } == true }
+        defer { for folder in folders { try? files.removeItem(atPath: folder) } }
+        // A folder needs something in it for the map to list it.
+        let made = folders.allSatisfy { folder in
+            (try? files.createDirectory(atPath: folder, withIntermediateDirectories: false)) != nil
+                && files.createFile(atPath: (folder as NSString).appendingPathComponent("item.bin"), contents: Data(count: 4096))
+        }
+        guard let web = webView, made, await eventually({ folders.allSatisfy(listed) }), disk.openFolder == fixture, await mapSettles(),
+              let payload = disk.resultJSON else {
+            return Dictionary(uniqueKeysWithValues: names.map { ($0, false) })
+        }
+        // Each run starts once the live map has answered for the folder opened last, whose map would replace the ones
+        // the run sends.
+        func doubleClick(between: Bool, at point: Any = NSNull()) async -> [String: Any]? {
+            guard await mapSettles() else { return nil }
+            return try? await web.callAsyncJavaScript(Self.doubleClickAcross, arguments: ["payload": payload, "aimed": aimed, "covering": covering,
+                                                                                    "between": between, "point": point], in: nil, contentWorld: .page) as? [String: Any]
+        }
+        let held = await doubleClick(between: true)
+        let openedAimed = await eventually { self.disk.openFolder == aimed }
+        disk.pageCommand?(.open(fixture))
+        let backFromAimed = await eventually { self.disk.openFolder == fixture }
+        let point = held?["point"] as? [String: Double]
+        var control: [String: Any]?
+        if let point { control = await doubleClick(between: false, at: point) }
+        let openedCovering = await eventually { self.disk.openFolder == covering }
+        let landed = disk.openFolder ?? "nowhere"
+        disk.pageCommand?(.open(fixture))
+        let backFromCovering = await eventually { self.disk.openFolder == fixture }
+        let heldDraws = held?["drawnBetween"] as? Int, controlDraws = control?["drawnBefore"] as? Int
+        print("double-click at \(point.map { "\($0)" } ?? "no point") across a newer map: drew \(heldDraws ?? -1) times between the clicks, "
+              + "opened the folder aimed at \(openedAimed); with that map shown before the clicks it drew \(controlDraws ?? -1) times and opened "
+              + "\((landed as NSString).lastPathComponent)")
+
+        for folder in folders { try? files.removeItem(atPath: folder) }
+        let gone = await eventually { !folders.contains(where: listed) }
+        var draws: [String: Int]?
+        if gone, await mapSettles(), let pristine = disk.resultJSON {
+            draws = try? await web.callAsyncJavaScript(Self.unchangedMaps, arguments: ["payload": pristine], in: nil, contentWorld: .page) as? [String: Int]
+        }
+        // The live map's own map again, for whatever comes next.
+        disk.revision = UUID()
+        print("draws for the same map \(draws?["same"] ?? -1), a file a byte bigger \(draws?["byte"] ?? -1), visibly changed \(draws?["visible"] ?? -1)")
+        return [names[0]: heldDraws == 0 && openedAimed && backFromAimed && (controlDraws ?? 0) > 0 && openedCovering && backFromCovering,
+                names[1]: gone && draws?["same"] == 0 && draws?["byte"] == 0 && (draws?["visible"] ?? 0) > 0]
+    }
+
+    /// Waits until no map has reached the page for `quiet` seconds, as once the live map has answered every request:
+    /// the fixture doesn't change meanwhile, and the live map answers it within milliseconds.
+    private func mapSettles(quiet: TimeInterval = 0.6) async -> Bool {
+        var last = disk.revision, since = Date()
+        return await eventually {
+            if self.disk.revision != last { last = self.disk.revision; since = Date() }
+            return Date().timeIntervalSince(since) >= quiet
+        }
+    }
+
+    /// Double-clicks the map with the newer map, in which `aimed` is a byte and `covering` a thousand times everything
+    /// else, arriving between the clicks, or shown before them. Between the clicks, the first map, with `aimed` as big
+    /// as everything else, shows first, and the click is at the middle of `aimed`'s block, found by selecting it in the
+    /// map's list of items and reading the ring that outlines it; before them, the click is at `point`. Returns that
+    /// point, and how often the map drew once the map before the clicks showed and between the clicks, or null when
+    /// the page didn't take a map.
+    private static let doubleClickAcross = """
+        const canvas = document.querySelector("canvas");
+        const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        const until = async (done) => { for (let i = 0; i < 150 && !done(); i++) await pause(20); return done(); };
+        let draws = 0;
+        const clearRect = CanvasRenderingContext2D.prototype.clearRect;
+        CanvasRenderingContext2D.prototype.clearRect = function (...rect) {
+          if (this.canvas === canvas) draws += 1;
+          return clearRect.apply(this, rect);
+        };
+        try {
+          // The live map with the given folders at the given sizes, everything in each alike.
+          const mapWith = (sizes) => {
+            const map = JSON.parse(payload);
+            for (const child of map.root.children) {
+              const bytes = sizes[child.path];
+              if (bytes === undefined) continue;
+              const factor = child.size > 0 ? bytes / child.size : 0;
+              const scale = (node) => {
+                node.size = Math.max(1, Math.round(node.size * factor));
+                for (const inner of node.children ?? []) scale(inner);
+              };
+              scale(child);
+              child.size = bytes;
+            }
+            map.root.size = map.root.children.reduce((sum, child) => sum + child.size, 0);
+            return JSON.stringify(map);
+          };
+          const rest = JSON.parse(payload).root.size;
+          const first = mapWith({ [aimed]: rest, [covering]: Math.round(rest / 2) });
+          const newer = mapWith({ [aimed]: 1, [covering]: rest * 1000 });
+          // Shows `map` once the page has it, and has drawn it when `drawn` is true.
+          const show = async (map, drawn) => {
+            const label = canvas.getAttribute("aria-label"), before = draws;
+            window.pithReceive(map);
+            const taken = await until(() => canvas.getAttribute("aria-label") !== label && (!drawn || draws > before));
+            await pause(250);
+            return taken;
+          };
+          const leave = () => canvas.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body }));
+          leave();
+          await pause(100);
+          let at = point;
+          if (between) {
+            if (!(await show(first, true))) return null;
+            const name = aimed.slice(aimed.lastIndexOf("/") + 1);
+            [...document.querySelectorAll('[aria-label^="Items in"] button')].find((button) => button.textContent.startsWith(name + " "))?.click();
+            const ring = () => canvas.parentElement.querySelector("div.pointer-events-none.absolute");
+            if (!(await until(() => ring() !== null))) return null;
+            const box = ring().getBoundingClientRect();
+            at = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+          } else if (!(await show(newer, true))) {
+            return null;
+          }
+          const drawnBefore = draws;
+          const mouse = (type, detail) => canvas.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window,
+            clientX: at.x, clientY: at.y, button: 0, buttons: type === "mousedown" ? 1 : 0, detail }));
+          mouse("mousemove", 0);
+          await pause(100);
+          mouse("mousedown", 1); mouse("mouseup", 1); mouse("click", 1);
+          if (between && !(await show(newer, false))) return null;
+          const drawnBetween = draws - drawnBefore;
+          mouse("mousedown", 2); mouse("mouseup", 2); mouse("click", 2); mouse("dblclick", 2);
+          leave();
+          return { point: at, drawnBefore, drawnBetween };
+        } finally {
+          CanvasRenderingContext2D.prototype.clearRect = clearRect;
+        }
+        """
+
+    /// How often the map draws, with nothing holding it, for the live map sent again, with its first file a byte bigger,
+    /// and with that file four times the size, each folder holding it growing with it.
+    private static let unchangedMaps = """
+        const canvas = document.querySelector("canvas");
+        const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        let draws = 0;
+        const clearRect = CanvasRenderingContext2D.prototype.clearRect;
+        CanvasRenderingContext2D.prototype.clearRect = function (...rect) {
+          if (this.canvas === canvas) draws += 1;
+          return clearRect.apply(this, rect);
+        };
+        try {
+          canvas.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body }));
+          await pause(100);
+          const send = async (map) => {
+            const before = draws;
+            window.pithReceive(JSON.stringify(map));
+            await pause(300);
+            return draws - before;
+          };
+          // The first file the map lists, and the folders down to it.
+          const fileIn = (node) => {
+            if (node.kind === "file") return [node];
+            for (const child of node.children ?? []) {
+              const found = fileIn(child);
+              if (found) return [node, ...found];
+            }
+            return null;
+          };
+          const grown = (bytes) => {
+            const map = JSON.parse(payload);
+            const chain = fileIn(map.root) ?? [];
+            const by = bytes(chain.at(-1).size);
+            for (const node of chain) node.size += by;
+            return map;
+          };
+          if (fileIn(JSON.parse(payload).root) === null) return null;
+          const same = await send(JSON.parse(payload));
+          const byte = await send(grown(() => 1));
+          const visible = await send(grown((size) => 3 * size));
+          return { same, byte, visible };
+        } finally {
+          CanvasRenderingContext2D.prototype.clearRect = clearRect;
+        }
+        """
 
     /// The names of the disks mounted now that Finder's sidebar shows, as macOS gives them to this check.
     private static func mountedDiskNames() -> Set<String> {

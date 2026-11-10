@@ -580,6 +580,7 @@ struct DiskWebView: NSViewRepresentable {
         if nsView.pageZoom != textScale { nsView.pageZoom = textScale }
         context.coordinator.iconAppearance = IconAppearance(colorScheme)
         context.coordinator.iconRule = model.iconRule
+        context.coordinator.doubleClickInterval = NSEvent.doubleClickInterval
         context.coordinator.send(revision: model.revision)
     }
     static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) {
@@ -625,6 +626,11 @@ struct DiskWebView: NSViewRepresentable {
         /// The rule as JSON, encoded once for each rule and in one spelling for it: the page tries the icons it was
         /// refused again when the text changes.
         private var iconRuleJSON: String?
+        /// How long macOS waits for a second click to make a double-click, which the page holds its map still for
+        /// after a click: a web page can't read it. It goes to the page once it's ready and when the setting changes.
+        var doubleClickInterval: TimeInterval? {
+            didSet { if doubleClickInterval != oldValue { sendDoubleClickInterval() } }
+        }
         init(model: DiskModel) { self.model = model }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard BridgePolicy.allows(url: message.frameInfo.request.url, mainFrame: message.frameInfo.isMainFrame),
@@ -634,7 +640,8 @@ struct DiskWebView: NSViewRepresentable {
             case "ready":
                 // Every page load starts empty, a reload or a restart after a crash included, so it gets the icons' base
                 // and rule and then the scan again, and the native selection and history it no longer has are dropped.
-                ready = true; revision = nil; model.select(nil); model.mapStartsOver(); sendIcons(); send(revision: model.revision)
+                ready = true; revision = nil; model.select(nil); model.mapStartsOver(); sendIcons(); sendDoubleClickInterval()
+                send(revision: model.revision)
             case "select": model.select(path)
             case "location":
                 if let path {
@@ -736,6 +743,13 @@ struct DiskWebView: NSViewRepresentable {
             web.callAsyncJavaScript("window.pithReceiveIconBase?.(iconBase, iconRule)",
                                     arguments: ["iconBase": iconBase as Any? ?? NSNull(), "iconRule": iconRuleJSON as Any? ?? NSNull()], in: nil, in: .page) { result in
                 if case .failure(let error) = result { NSLog("Pith: the disk map didn’t take its icons’ new base: \(error.localizedDescription)") }
+            }
+        }
+        /// Gives the page macOS's double-click interval once it's ready for it, and again when it changes.
+        private func sendDoubleClickInterval() {
+            guard ready, let web, let doubleClickInterval else { return }
+            web.callAsyncJavaScript("window.pithReceiveDoubleClickInterval?.(seconds)", arguments: ["seconds": doubleClickInterval], in: nil, in: .page) { result in
+                if case .failure(let error) = result { NSLog("Pith: the disk map didn’t take macOS’s double-click interval: \(error.localizedDescription)") }
             }
         }
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {

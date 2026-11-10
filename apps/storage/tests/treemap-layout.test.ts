@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import {
   type CollapsedTile,
   dominantCategory,
+  drawsTheSame,
   type FileTile,
   folderToOpenAt,
   GAP,
@@ -11,6 +12,7 @@ import {
   kindBytesByFolder,
   layoutTreemap,
   MIN_TILE,
+  siblingOrder,
   type Tile,
   type TreemapLayout,
   tileAt,
@@ -424,5 +426,222 @@ describe("labels", () => {
       name: "apps",
       size: "1.50 KB",
     });
+  });
+});
+
+/** A newer layout of the same folder, given the order the shown one placed its siblings in. */
+function relayout(
+  previous: TreemapLayout,
+  root: DirNode,
+  width = previous.width,
+  height = previous.height,
+) {
+  return layoutTreemap(
+    root,
+    width,
+    height,
+    kindBytesByFolder(root),
+    siblingOrder(previous),
+  );
+}
+
+/** The names of a folder's items as the layout places them, the group of smaller items left out. */
+const names = (tiles: readonly Tile[]) =>
+  tiles.flatMap((tile) => (tile.kind === "group" ? [] : [tile.node.name]));
+
+describe("layoutTreemap with the shown layout's order", () => {
+  // Two files fill a 100 × 100 map, 10,000 px², so a file of n bytes gets n px², a square n px² on a side.
+  const pair = (a: number, b: number) =>
+    dir("/r", [file("/r/a.bin", a), file("/r/b.bin", b)]);
+  const before = layout(pair(5100, 4900), 100, 100);
+
+  test("keeps a sibling's place while the change in size that would move it can't be seen", () => {
+    assert.deepEqual(names(before.tiles), ["a.bin", "b.bin"]);
+    // b passes a by 140 bytes: their squares' sides, 70.21 and 71.20 px, differ by less than a pixel.
+    const root = pair(4930, 5070);
+    assert.deepEqual(names(layout(root, 100, 100).tiles), ["b.bin", "a.bin"]);
+    assert.deepEqual(names(relayout(before, root).tiles), ["a.bin", "b.bin"]);
+  });
+
+  test("moves a sibling ahead once its square would be a whole pixel wider", () => {
+    // 70.21 and 71.21 px.
+    assert.deepEqual(names(relayout(before, pair(4929, 5071)).tiles), [
+      "b.bin",
+      "a.bin",
+    ]);
+  });
+
+  test("moves a sibling that clearly outgrows another ahead of it", () => {
+    assert.deepEqual(names(relayout(before, pair(3000, 7000)).tiles), [
+      "b.bin",
+      "a.bin",
+    ]);
+  });
+
+  test("measures the margin at the map's own size", () => {
+    // At 1,000 × 1,000 px the same 140 bytes are 9.9 px of side, so b moves ahead.
+    const large = layout(pair(5100, 4900), 1000, 1000);
+    assert.deepEqual(names(relayout(large, pair(4930, 5070)).tiles), [
+      "b.bin",
+      "a.bin",
+    ]);
+  });
+
+  test("places an item it didn't draw before by its size", () => {
+    const root = (d: number) =>
+      dir("/r", [
+        file("/r/a.bin", 5000),
+        file("/r/b.bin", 3000),
+        file("/r/c.bin", 2000),
+        ...(d > 0 ? [file("/r/d.bin", d)] : []),
+      ]);
+    const shown = layout(root(0), 100, 100);
+    assert.deepEqual(names(shown.tiles), ["a.bin", "b.bin", "c.bin"]);
+    assert.deepEqual(names(relayout(shown, root(2500)).tiles), [
+      "a.bin",
+      "b.bin",
+      "d.bin",
+      "c.bin",
+    ]);
+  });
+
+  test("keeps the places inside each folder it shows", () => {
+    const root = (x: number, y: number) =>
+      dir("/r", [
+        dir("/r/big", [file("/r/big/x.bin", x), file("/r/big/y.bin", y)]),
+        file("/r/other.bin", 4000),
+      ]);
+    const shown = layout(root(3100, 2900), 400, 300);
+    assert.deepEqual(names(only(shown, "folder", "/r/big").children), [
+      "x.bin",
+      "y.bin",
+    ]);
+    // y passes x by 2 bytes of the folder's 6,000, a fraction of a pixel of side.
+    const next = relayout(shown, root(2999, 3001));
+    assert.deepEqual(names(only(next, "folder", "/r/big").children), [
+      "x.bin",
+      "y.bin",
+    ]);
+    const fresh = layout(root(2999, 3001), 400, 300);
+    assert.deepEqual(names(only(fresh, "folder", "/r/big").children), [
+      "y.bin",
+      "x.bin",
+    ]);
+  });
+
+  test("never leaves an item behind one it visibly outgrows", () => {
+    // A fixed pseudo-random run: sizes drift from map to map, each laid out with the order of the one before.
+    let seed = 7;
+    const random = () => {
+      seed = (seed * 48271) % 2147483647;
+      return seed / 2147483647;
+    };
+    const sizes = Array.from({ length: 12 }, () => 1000 + random() * 9000);
+    const root = () =>
+      dir(
+        "/r",
+        sizes.map((size, i) => file(`/r/f-${i}.bin`, Math.round(size))),
+      );
+    let shown = layout(root(), 300, 200);
+    let moved = 0;
+    for (let map = 0; map < 200; map++) {
+      for (let i = 0; i < sizes.length; i++) sizes[i] *= 0.97 + random() * 0.06;
+      const next = relayout(shown, root());
+      if (names(next.tiles).join() !== names(shown.tiles).join()) moved += 1;
+      const pxPerByte = (300 * 200) / next.root.size;
+      const side = (tile: Tile) =>
+        Math.sqrt((tile.kind === "file" ? tile.node.size : 0) * pxPerByte);
+      const files = next.tiles.filter((tile) => tile.kind === "file");
+      files.forEach((later, i) => {
+        for (const earlier of files.slice(0, i)) {
+          assert.ok(
+            side(later) < side(earlier) + 1,
+            `${names([later])} is behind ${names([earlier])} by ${side(later) - side(earlier)} px`,
+          );
+        }
+      });
+      shown = next;
+    }
+    // The sizes drift enough that some maps do reorder.
+    assert.ok(moved > 0);
+  });
+});
+
+describe("drawsTheSame", () => {
+  const root = (video = 1_288_490_189, extra: TreeNode[] = []) =>
+    dir("/r", [
+      file("/r/clip.mov", video),
+      dir("/r/shots", [
+        file("/r/shots/a.png", 300_000_000),
+        file("/r/shots/b.png", 200_000_000),
+      ]),
+      ...extra,
+    ]);
+  const shown = layout(root(), 400, 300);
+
+  test("holds for a newer map that draws every tile the same", () => {
+    assert.equal(drawsTheSame(shown, layout(root(), 400, 300)), true);
+    // A byte more moves no edge and prints the same size.
+    assert.equal(
+      drawsTheSame(shown, layout(root(1_288_490_190), 400, 300)),
+      true,
+    );
+  });
+
+  test("fails for a moved edge, a new size to print, a new name or another map size", () => {
+    assert.equal(
+      drawsTheSame(shown, layout(root(2_000_000_000), 400, 300)),
+      false,
+    );
+    assert.equal(drawsTheSame(shown, layout(root(), 401, 300)), false);
+    const renamed = dir("/r", [
+      file("/r/clip.mp4", 1_288_490_189),
+      ...root().children.slice(1),
+    ]);
+    assert.equal(drawsTheSame(shown, layout(renamed, 400, 300)), false);
+  });
+
+  test("fails for the same box with another size to print", () => {
+    // One file fills the map whatever its size, so only its label changes: 1.29 GB, then 1.30 GB.
+    const alone = (size: number) => dir("/r", [file("/r/clip.mov", size)]);
+    assert.equal(
+      drawsTheSame(
+        layout(alone(1_288_490_189), 400, 300),
+        layout(alone(1_300_000_000), 400, 300),
+      ),
+      false,
+    );
+  });
+
+  test("fails for a folder block that changes colour", () => {
+    // A folder too small for its contents is one block, coloured by what it holds most of.
+    const holding = (png: number, mov: number) =>
+      dir("/r", [
+        file("/r/big.bin", 1_000_000),
+        dir("/r/mixed", [
+          file("/r/mixed/a.png", png),
+          file("/r/mixed/b.mov", mov),
+        ]),
+      ]);
+    const images = layout(holding(3001, 2999), 300, 200);
+    assert.equal(only(images, "collapsed", "/r/mixed").category, "image");
+    const videos = layout(holding(2999, 3001), 300, 200);
+    assert.equal(only(videos, "collapsed", "/r/mixed").category, "video");
+    assert.equal(drawsTheSame(images, videos), false);
+  });
+
+  test("fails for a group that counts another item", () => {
+    const tiny = Array.from({ length: 50 }, (_, i) =>
+      file(`/r/note-${i}.txt`, 100),
+    );
+    const big = file("/r/big.mov", 1_000_000);
+    // A byte more in the group prints the same size, 5.00 KB, but "51 smaller items".
+    assert.equal(
+      drawsTheSame(
+        layout(dir("/r", [big, ...tiny]), 400, 300),
+        layout(dir("/r", [big, ...tiny, file("/r/dot.txt", 1)]), 400, 300),
+      ),
+      false,
+    );
   });
 });

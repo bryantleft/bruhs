@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useShownLayout } from "~/hooks/useShownLayout";
 import { middleTruncate } from "~/lib/display-names";
 import { foldersBetween } from "~/lib/folder-trail";
 import {
@@ -31,9 +32,7 @@ import {
   GAP,
   headerLabel,
   type Kind,
-  kindBytesByFolder,
   type LabelMetrics,
-  layoutTreemap,
   type Tile,
   type TreemapLayout,
   tileAt,
@@ -81,6 +80,14 @@ interface Props {
    * shows macOS's own. Nothing when there's no icon for the block.
    */
   icon?: (tile: Tile) => ReactNode;
+  /**
+   * The host replaces `root` with a newer map of the same folder as the disk changes, as Pith's live map does, so the
+   * map holds still (useShownLayout.ts): its blocks keep their places unless a change in size shows, it draws nothing
+   * when no block would change, and it waits while the person clicks or reads the hover card.
+   */
+  steady?: boolean;
+  /** How long the system waits for a second click to make a double-click, in milliseconds, which a steady map holds for. */
+  doubleClickInterval?: number;
 }
 
 /** Labels are Monaspace Neon at 11 px, the size of the native data captions. */
@@ -615,6 +622,8 @@ export function TreemapCanvas({
   growth,
   growthSince,
   icon,
+  steady = false,
+  doubleClickInterval = 500,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -651,14 +660,14 @@ export function TreemapCanvas({
   );
 
   // Layout once per folder and size; hovering never lays out again.
-  const kinds = useMemo(() => kindBytesByFolder(root), [root]);
-  const layout = useMemo(
-    () =>
-      size.w < 2 || size.h < 2
-        ? null
-        : layoutTreemap(root, size.w, size.h, kinds),
-    [root, size, kinds],
+  const shownLayout = useShownLayout(
+    root,
+    size.w,
+    size.h,
+    steady,
+    doubleClickInterval,
   );
+  const { layout } = shownLayout;
 
   // Paint when the layout, colours, label font or highlight change.
   useEffect(() => {
@@ -694,6 +703,19 @@ export function TreemapCanvas({
   const selected =
     layout && selectedPath ? tileForPath(layout, selectedPath) : null;
 
+  // The hover card is open while a block is under the pointer, and a steady map holds still meanwhile.
+  const cardOpen = pointed !== null;
+  const { cardShown, release } = shownLayout;
+  useEffect(() => cardShown(cardOpen), [cardShown, cardOpen]);
+  // A button that went down on the map can come up anywhere on the page.
+  useEffect(() => {
+    const up = (event: MouseEvent) => {
+      if (event.button === 0) release();
+    };
+    window.addEventListener("mouseup", up);
+    return () => window.removeEventListener("mouseup", up);
+  }, [release]);
+
   const onMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const point = { x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY };
     setPointer(point);
@@ -711,30 +733,41 @@ export function TreemapCanvas({
     setLearned((current) => ({ ...current, [step]: true }));
   };
 
+  const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.button === 0) shownLayout.press(e.detail);
+  };
+
   // Single click selects (for inspect/delete). Double click opens a folder.
   // Keeping these separate means nothing is ever left "selected" just by navigating.
+  // Both act on the blocks on screen when the click began, whatever came since.
   const onClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!layout) return;
+    const clicked = shownLayout.clicked();
+    if (!clicked) return;
     const node = selectable(
-      tileAt(layout, e.nativeEvent.offsetX, e.nativeEvent.offsetY),
+      tileAt(clicked, e.nativeEvent.offsetX, e.nativeEvent.offsetY),
     );
     if (node) learn("selected");
     onSelect(node);
   };
 
-  const open = (folder: DirNode | null) => {
+  /** Opens `folder`, a step for each level from the folder of `from`, the layout it was found in. */
+  const open = (from: TreemapLayout, folder: DirNode | null) => {
     if (!folder) return;
     learn("opened");
-    for (const step of foldersBetween(root, folder)) onEnterDir(step);
+    for (const step of foldersBetween(from.root, folder)) onEnterDir(step);
   };
 
   const onDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!layout) return;
-    open(folderToOpenAt(layout, e.nativeEvent.offsetX, e.nativeEvent.offsetY));
+    const clicked = shownLayout.clicked();
+    if (!clicked) return;
+    const { offsetX, offsetY } = e.nativeEvent;
+    open(clicked, folderToOpenAt(clicked, offsetX, offsetY));
   };
 
   const onContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
     e.preventDefault();
+    // The menu takes the rest of the click, its button's release included.
+    shownLayout.menu();
     if (!layout || !onMenu) return;
     const node = selectable(
       tileAt(layout, e.nativeEvent.offsetX, e.nativeEvent.offsetY),
@@ -774,7 +807,7 @@ export function TreemapCanvas({
       case "Enter": {
         e.preventDefault();
         if (own && (own.kind === "folder" || own.kind === "collapsed"))
-          open(own.node);
+          open(layout, own.node);
         return;
       }
       case " ": {
@@ -868,6 +901,7 @@ export function TreemapCanvas({
         }}
         onMouseMove={onMove}
         onMouseLeave={onLeave}
+        onMouseDown={onMouseDown}
         onClick={onClick}
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}

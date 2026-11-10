@@ -125,9 +125,7 @@ enum MapCommand: Equatable {
     private(set) var note: String?
     private(set) var trashed: TrashedItem?
     /// The folder the map is showing, as the page reports it. Nil until the page reports a new map's folder.
-    private(set) var openFolder: String? {
-        didSet { if openFolder != oldValue, openFolder != nil, liveView != nil { refreshLive() } }
-    }
+    private(set) var openFolder: String?
     /// A folder the page went back or forward to that the map's tree leaves out: the live map shows it in detail, so
     /// the next tree holds it.
     @ObservationIgnored private var wantedFolder: String?
@@ -255,13 +253,33 @@ enum MapCommand: Equatable {
     /// The page moved the map: the folder it shows now, one it went back or forward to that the tree leaves out, and
     /// whether its Back and Forward can go anywhere.
     func pageMoved(to folder: String, wanting wanted: String?, canGoBack: Bool, canGoForward: Bool) {
-        let refocus = wanted != wantedFolder
+        let opened = folder != openFolder || (wanted != wantedFolder && wanted != nil)
         wantedFolder = wanted
-        // A new open folder asks for its tree in detail, the wanted folder's when there is one.
         openFolder = folder
-        if refocus, wanted != nil, liveView != nil { refreshLive() }
+        // A new open folder asks for its tree in detail, the wanted folder's when there is one.
+        if opened, liveView != nil { folderOpened() }
         self.canGoBack = canGoBack
         self.canGoForward = canGoForward
+    }
+
+    @ObservationIgnored private var opens = OpenPacing()
+    @ObservationIgnored private var openLater: Task<Void, Never>?
+
+    /// A folder opened, from the map, the path bar, Back, Forward, Enclosing Folder or the Go menu: its tree comes at
+    /// once, not through the two-second wait between refreshes. Within a burst of opens, as a held ⌘[ makes, the last
+    /// asks once the burst is over (OpenPacing), its length from macOS's key repeat interval.
+    private func folderOpened() {
+        openLater?.cancel(); openLater = nil
+        guard let wait = opens.opened(at: Date(), burst: OpenPacing.burst(keyRepeat: NSEvent.keyRepeatInterval)) else {
+            refreshLive(opening: true)
+            return
+        }
+        openLater = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(wait))
+            guard let self, !Task.isCancelled else { return }
+            self.openLater = nil
+            self.refreshLive(opening: true)
+        }
     }
 
     /// The page opens a map at its root, with nowhere to go back or forward: the page loaded again, or the map is of
@@ -326,13 +344,14 @@ enum MapCommand: Equatable {
         refreshLive(now: true)
     }
 
-    /// Asks the live map for the view's tree, at most every two seconds. A map of the whole startup disk is a few
-    /// megabytes of JSON for Pith to decode and the page to lay out, so it doesn't follow every listing.
-    private func refreshLive(now: Bool = false) {
+    /// Asks the live map for the view's tree, at most every two seconds, unless a folder just opened whose detail the
+    /// tree lacks. A map of the whole startup disk is a few megabytes of JSON for Pith to decode and the page to lay
+    /// out, so it doesn't follow every listing.
+    private func refreshLive(now: Bool = false, opening: Bool = false) {
         guard let live, let path = liveView, live.state.isMapped, isVisible || result == nil || now else { return }
         guard live.changedSinceTree || result?.root.path != path || openFolderNeedsDetail else { return }
         let wait = 2.0 - Date().timeIntervalSince(lastTree)
-        if wait > 0 && !now {
+        if wait > 0 && !now && !(opening && openFolderNeedsDetail) {
             guard treeLater == nil else { return }
             treeLater = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(wait))

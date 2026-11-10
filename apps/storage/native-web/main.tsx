@@ -99,6 +99,8 @@ declare global {
   interface Window {
     pithReceive: (payload: string | null) => void;
     pithReceiveGrowth: (growth: GrowthMessage | null) => void;
+    /** How long macOS waits for a second click to make a double-click, in seconds. */
+    pithReceiveDoubleClickInterval: (seconds: number) => void;
     /**
      * Pith's path bar and Go menu: open a folder of the map, go back or forward through the folders opened, or up
      * to the open folder's enclosing folder.
@@ -121,6 +123,25 @@ function post(message: Message): void {
   window.webkit?.messageHandlers?.pith?.postMessage(message);
 }
 
+/**
+ * How long macOS waits for a second click to make a double-click, in milliseconds, which the map holds still for
+ * after a click. Pith sends it once the page is ready and again when the setting changes; until then, macOS's default.
+ */
+function useDoubleClickInterval(): number {
+  const [doubleClick, setDoubleClick] = useState(500);
+  useEffect(() => {
+    window.pithReceiveDoubleClickInterval = (seconds) => {
+      if (Number.isFinite(seconds) && seconds > 0) {
+        setDoubleClick(seconds * 1000);
+      }
+    };
+    return () => {
+      window.pithReceiveDoubleClickInterval = () => {};
+    };
+  }, []);
+  return doubleClick;
+}
+
 function DiskMap() {
   const [result, setResult] = useState<ResultEvent | null>(null);
   // The open folders and where Back and Forward go, which Pith's path bar and Go menu move.
@@ -132,6 +153,8 @@ function DiskMap() {
   const [growth, setGrowth] = useState<Growth | null>(null);
   // macOS's icons, once Pith has sent where they are and its rule for each item's key.
   const icons = usePageIcons();
+  // Taken before the page says it's ready, as the icons are.
+  const doubleClickInterval = useDoubleClickInterval();
   // The folder of the last map, kept across an empty payload: a map of another folder stops highlighting.
   const mapRoot = useRef<string | null>(null);
 
@@ -338,6 +361,9 @@ function DiskMap() {
         <section aria-label="Disk space treemap" className="min-h-0">
           <TreemapCanvas
             root={current}
+            // The live map comes again every two seconds while the disk changes.
+            steady
+            doubleClickInterval={doubleClickInterval}
             followSystemAppearance
             highlightKind={shownKind}
             linkedPath={hovered}

@@ -216,6 +216,7 @@ function layoutItems(
   box: Box,
   depth: number,
   kinds: ReadonlyMap<DirNode, KindBytes>,
+  order: SiblingOrder | undefined,
 ): Tile[] {
   const items = folder.children
     .filter((child) => child.size > 0)
@@ -227,6 +228,8 @@ function layoutItems(
   // An item needs the area of a minimum block (with its gap) to be drawn on its own.
   const minBytes = ((MIN_TILE + GAP) ** 2 / area) * total;
   let shown = items.filter(isItem).filter((item) => item.size >= minBytes);
+  const places = order?.get(folder.path);
+  if (places) shown = keepPlaces(shown, places, area / total);
   let boxes: Box[];
   // Squarify can still squeeze an item into a sliver; merge those too and lay out again.
   // Each pass shows fewer items, so this ends.
@@ -240,7 +243,7 @@ function layoutItems(
   }
 
   const tiles: Tile[] = shown.map((item, i) =>
-    tileFor(item, boxes[i], depth, kinds),
+    tileFor(item, boxes[i], depth, kinds, order),
   );
   const drawn = new Set<TreeNode>(shown);
   const rest = items.filter((item) => !drawn.has(item));
@@ -249,7 +252,7 @@ function layoutItems(
     const real = rest.filter(isItem);
     tiles.push(
       rest.length === 1 && real.length === 1
-        ? tileFor(real[0], restBox, depth, kinds)
+        ? tileFor(real[0], restBox, depth, kinds, order)
         : {
             kind: "group",
             parent: folder,
@@ -269,6 +272,7 @@ function tileFor(
   box: Box,
   depth: number,
   kinds: ReadonlyMap<DirNode, KindBytes>,
+  order: SiblingOrder | undefined,
 ): Tile {
   if (item.kind === "file") {
     return {
@@ -294,7 +298,7 @@ function tileFor(
     content.x1 - content.x0 >= 2 * MIN_TILE &&
     content.y1 - content.y0 >= 2 * MIN_TILE;
   if (header > 0 && roomy) {
-    const children = layoutItems(item, content, depth + 1, kinds);
+    const children = layoutItems(item, content, depth + 1, kinds, order);
     if (children.length > 0) {
       return { kind: "folder", node: item, header, children, depth, ...box };
     }
@@ -314,15 +318,131 @@ function tileFor(
   };
 }
 
-/** Lay out `root`'s contents to fill `width` × `height` CSS pixels. */
+/**
+ * Lay out `root`'s contents to fill `width` × `height` CSS pixels. Given `order`, the places the shown layout of the
+ * same folder gave its items, a newer map keeps them there unless the change in size is visible (`keepPlaces`), so
+ * squarify's rows don't flip over a few bytes. Without it, items go largest first.
+ */
 export function layoutTreemap(
   root: DirNode,
   width: number,
   height: number,
   kinds: ReadonlyMap<DirNode, KindBytes>,
+  order?: SiblingOrder,
 ): TreemapLayout {
   const box = { x0: 0, y0: 0, x1: Math.floor(width), y1: Math.floor(height) };
-  return { root, width, height, tiles: layoutItems(root, box, 1, kinds) };
+  return {
+    root,
+    width,
+    height,
+    tiles: layoutItems(root, box, 1, kinds, order),
+  };
+}
+
+/** Where a layout placed each folder's items, by the folder's path, then each item's: 0 for the first. */
+export type SiblingOrder = ReadonlyMap<string, ReadonlyMap<string, number>>;
+
+/** The places `layout` gave the items of each folder it shows, the group of smaller items aside. */
+export function siblingOrder(layout: TreemapLayout): SiblingOrder {
+  const order = new Map<string, ReadonlyMap<string, number>>();
+  const visit = (folder: string, tiles: readonly Tile[]) => {
+    const places = new Map<string, number>();
+    for (const tile of tiles) {
+      if (tile.kind === "group") continue;
+      places.set(tile.node.path, places.size);
+      if (tile.kind === "folder") visit(tile.node.path, tile.children);
+    }
+    order.set(folder, places);
+  };
+  visit(layout.root.path, layout.tiles);
+  return order;
+}
+
+/**
+ * `items`, largest first, put back in the places they had, as long as the map can't show that their sizes changed
+ * order. Edges snap to whole pixels, so blocks whose sides differ by less than a pixel can come out the same size,
+ * and a pixel more of side is the smallest difference the map can draw. Squarify keeps blocks near square, so an item
+ * gets about √(bytes × `pxPerByte`) px on a side, and it goes ahead of an item placed before it once its side is a
+ * pixel longer. In a 100 × 100 px box of 10,000 bytes, 5,071 bytes overtake 4,929 (71.21 px of side against 70.21),
+ * while 5,070 don't overtake 4,930 (71.20 against 70.21). Items without a place, new on the map, start after the
+ * rest, largest first, and move ahead the same way. Each item goes before the first item it's visibly bigger than,
+ * so none stays behind one it's visibly bigger than.
+ */
+function keepPlaces(
+  items: readonly Item[],
+  places: ReadonlyMap<string, number>,
+  pxPerByte: number,
+): Item[] {
+  const placed = items
+    .map((item) => ({
+      item,
+      side: Math.sqrt(item.size * pxPerByte),
+      place: places.get(item.path) ?? places.size,
+    }))
+    .sort((a, b) => a.place - b.place);
+  const kept: typeof placed = [];
+  // The shortest side so far: an item not a pixel longer than it is visibly bigger than nothing before it.
+  let shortest = Number.POSITIVE_INFINITY;
+  for (const entry of placed) {
+    if (entry.side < shortest + 1) {
+      kept.push(entry);
+      shortest = Math.min(shortest, entry.side);
+    } else {
+      const ahead = kept.findIndex((other) => entry.side >= other.side + 1);
+      kept.splice(ahead, 0, entry);
+    }
+  }
+  return kept.map((entry) => entry.item);
+}
+
+/**
+ * Whether `next` draws just what `shown` does, so the page can keep `shown` and draw nothing: the same folder at the
+ * same size, and every tile, header strip and label in the same box, of the same kind and colour, with the same name
+ * and the same size to print. Boxes are whole CSS pixels and the two draw at the same pixel ratio, so the same box
+ * covers the same device pixels. Sizes count as they print whether or not a label has room for one, so the hover card
+ * of a layout kept never shows a size the map has moved past.
+ */
+export function drawsTheSame(
+  shown: TreemapLayout,
+  next: TreemapLayout,
+): boolean {
+  return (
+    shown.root.path === next.root.path &&
+    shown.width === next.width &&
+    shown.height === next.height &&
+    sameTiles(shown.tiles, next.tiles)
+  );
+}
+
+function sameTiles(a: readonly Tile[], b: readonly Tile[]): boolean {
+  return a.length === b.length && a.every((tile, i) => sameTile(tile, b[i]));
+}
+
+/** Most sizes don't change from one map to the next, so most need no printing. */
+const printSame = (a: number, b: number) =>
+  a === b || formatBytes(a) === formatBytes(b);
+
+/** A file's colour comes from its name, a folder block's from what it holds; other kinds have one colour each. */
+const fillOf = (tile: Tile) =>
+  tile.kind === "file" || tile.kind === "collapsed" ? tile.category : null;
+
+function sameTile(a: Tile, b: Tile): boolean {
+  const named =
+    a.kind === "group"
+      ? b.kind === "group" && a.count === b.count && a.partial === b.partial
+      : b.kind !== "group" && a.node.name === b.node.name;
+  return (
+    a.kind === b.kind &&
+    a.x0 === b.x0 &&
+    a.y0 === b.y0 &&
+    a.x1 === b.x1 &&
+    a.y1 === b.y1 &&
+    named &&
+    fillOf(a) === fillOf(b) &&
+    printSame(tileSize(a), tileSize(b)) &&
+    (a.kind !== "folder" ||
+      (b.kind === "folder" && sameTiles(a.children, b.children)))
+  );
 }
 
 const contains = (tile: Box, x: number, y: number) =>
