@@ -19,9 +19,19 @@ public struct MountTable: Sendable, Equatable {
 
     public init(_ mounts: [Mount]) { self.mounts = mounts }
 
-    /// The table as it is now. It's read again only when the number of file systems mounted changes, which counting
-    /// them tells in under a microsecond.
-    public static func current() -> MountTable { kept.current() }
+    /// The table as it is now, read from the kernel again at every call. Asking no file system, a read takes a few
+    /// microseconds. A table kept until the number of file systems changed went stale when one disk was ejected and
+    /// another mounted between two calls, and an app on the new disk counted as on the startup disk.
+    public static func current() -> MountTable { kernel.current() }
+
+    /// Reads the kernel's table through `fsstat`, which is `getfsstat` but in a test, every time it's asked.
+    struct Reader: Sendable {
+        let fsstat: @Sendable (UnsafeMutablePointer<statfs>?, Int32, Int32) -> Int32
+
+        func current() -> MountTable { MountTable.read(fsstat) }
+    }
+
+    private static let kernel = Reader { getfsstat($0, $1, $2) }
 
     /// Whether `path` lies on the startup disk: the file system mounted deepest above it is in the APFS container that
     /// `/` is mounted from, as the startup disk's system and data volumes, Preboot and VM are. Another disk, a disk image,
@@ -40,12 +50,12 @@ public struct MountTable: Sendable, Equatable {
     }
 
     /// The kernel's table, with room for a few more file systems in case some mount meanwhile.
-    fileprivate static func read() -> MountTable {
-        let count = getfsstat(nil, 0, MNT_NOWAIT)
+    fileprivate static func read(_ fsstat: (UnsafeMutablePointer<statfs>?, Int32, Int32) -> Int32) -> MountTable {
+        let count = fsstat(nil, 0, MNT_NOWAIT)
         guard count > 0 else { return MountTable([]) }
         var table: [statfs] = Array(repeating: statfs(), count: Int(count) + 4)
         let read = table.withUnsafeMutableBufferPointer { buffer in
-            getfsstat(buffer.baseAddress, Int32(MemoryLayout<statfs>.stride * buffer.count), MNT_NOWAIT)
+            fsstat(buffer.baseAddress, Int32(MemoryLayout<statfs>.stride * buffer.count), MNT_NOWAIT)
         }
         return MountTable(table.prefix(Int(max(0, read))).map { system in
             Mount(path: Self.string(system.f_mntonname), from: Self.string(system.f_mntfromname))
@@ -55,23 +65,4 @@ public struct MountTable: Sendable, Equatable {
     private static func string<T>(_ characters: T) -> String {
         withUnsafeBytes(of: characters) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
     }
-
-    /// The table last read, and how many file systems were mounted then.
-    private final class Kept: @unchecked Sendable {
-        private let lock = NSLock()
-        private var count: Int32 = -1
-        private var table = MountTable([])
-
-        func current() -> MountTable {
-            let mounted = getfsstat(nil, 0, MNT_NOWAIT)
-            lock.lock(); defer { lock.unlock() }
-            if mounted != count {
-                table = MountTable.read()
-                count = mounted
-            }
-            return table
-        }
-    }
-
-    private static let kept = Kept()
 }

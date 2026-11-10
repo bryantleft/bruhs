@@ -1,6 +1,19 @@
 import XCTest
 @testable import PithCore
 
+/// The disks a test mounts, which it can change between looks, as an eject and a mount do.
+final class Disks: @unchecked Sendable {
+    private let lock = NSLock()
+    private var mounted: MountTable
+
+    init(_ table: MountTable) { mounted = table }
+
+    var table: MountTable {
+        get { lock.lock(); defer { lock.unlock() }; return mounted }
+        set { lock.lock(); mounted = newValue; lock.unlock() }
+    }
+}
+
 final class KnownPlacesTests: XCTestCase {
     /// A home folder of the test's own. Nothing in it exists: making the table must not touch a folder.
     private let home = FileManager.default.temporaryDirectory.appendingPathComponent("pith-test-home-\(UUID().uuidString)")
@@ -266,6 +279,43 @@ final class KnownPlacesTests: XCTestCase {
         }
         XCTAssertTrue(table.mayShowApp("/Applications/Tool.app"))
         XCTAssertTrue(table.mayShowApp("/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app"))
+    }
+
+    /// A known place's app is looked up by its bundle's path only where Pith may look an app up (`mayShowApp`): Xcode in
+    /// Downloads, which macOS guards, gives Developer its special folder's icon instead, and Mail on another disk a plain
+    /// folder, as each would have without its app. An app on the startup disk, outside them, still gives its place its
+    /// icon.
+    func testAPlacesAppWhereMacOSGuardsOrOnAnotherDiskIsntLookedUp() {
+        let found = ["com.apple.dt.Xcode": home.appendingPathComponent("Downloads/Xcode.app"), "com.apple.mail": URL(fileURLWithPath: "/Volumes/Archive/Mail.app"),
+                     "com.apple.Photos": URL(fileURLWithPath: "/System/Applications/Photos.app")]
+        let table = KnownPlaces(home: home, searchPaths: [.downloadsDirectory: home.appendingPathComponent("Downloads"),
+                                                          .picturesDirectory: home.appendingPathComponent("Pictures")],
+                                mounts: { MountTableTests.table }) { found[$0] }
+        XCTAssertEqual(table.place(id: "developer")?.icon, .type("com.apple.developer-folder"), "Xcode where macOS guards")
+        XCTAssertEqual(table.place(id: "mail")?.icon, .type("public.folder"), "Mail on another disk")
+        XCTAssertEqual(table.place(id: "photos-library")?.icon, .app(bundleID: "com.apple.Photos", path: "/System/Applications/Photos.app"))
+        for id in ["developer", "mail", "photos-library"] {
+            let place = table.place(id: id)
+            XCTAssertEqual(place.map(table.drawnIcon), place?.icon, id)
+        }
+    }
+
+    /// The table is made once, at launch, but the disks can change after it: a place's app on a disk that was ejected
+    /// since, with another mounted where it was, isn't drawn by its path. The place draws the icon it would have without
+    /// the app.
+    func testAPlacesAppOnADiskEjectedSinceIsDrawnAsWithoutIt() throws {
+        let disks = Disks(MountTable([.init(path: "/", from: "/dev/disk3s1s1"), .init(path: "/Volumes/Fast", from: "/dev/disk3s7")]))
+        let table = KnownPlaces(home: home, searchPaths: [:], mounts: { disks.table }) {
+            ["com.apple.dt.Xcode": URL(fileURLWithPath: "/Volumes/Fast/Xcode.app"), "com.apple.mail": URL(fileURLWithPath: "/Volumes/Fast/Mail.app")][$0]
+        }
+        let developer = try XCTUnwrap(table.place(id: "developer")), mail = try XCTUnwrap(table.place(id: "mail"))
+        XCTAssertEqual(developer.icon, .app(bundleID: "com.apple.dt.Xcode", path: "/Volumes/Fast/Xcode.app"), "a volume of the startup disk's container")
+        XCTAssertEqual(table.drawnIcon(of: developer), developer.icon)
+        disks.table = MountTable([.init(path: "/", from: "/dev/disk3s1s1"), .init(path: "/Volumes/Fast", from: "/dev/disk5s1")])
+        XCTAssertEqual(table.drawnIcon(of: developer), .type("com.apple.developer-folder"))
+        XCTAssertEqual(table.drawnIcon(of: mail), .type("public.folder"))
+        let iCloud = try XCTUnwrap(table.place(id: "icloud-drive"))
+        XCTAssertEqual(table.drawnIcon(of: iCloud), .symbol("icloud"), "an icon that's no app draws as it is")
     }
 
     func testTheMapsUnreadableFoldersNameTheAppsThatOwnThem() {

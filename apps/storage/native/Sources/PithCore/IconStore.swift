@@ -292,8 +292,9 @@ public struct SystemIconRenderer: IconRenderer {
             // A copy: the named image is shared, and drawings run on several threads at once.
             return NSImage(named: NSImage.multipleDocumentsName)?.copy() as? NSImage
         case .place(let id):
-            guard let place = places?.place(id: id) else { return nil }
-            switch place.icon {
+            // A place's app is drawn by its bundle's path only while Pith may look it up there (`KnownPlaces.mayShowApp`).
+            guard let places, let place = places.place(id: id) else { return nil }
+            switch places.drawnIcon(of: place) {
             case .type(let identifier): return workspace.icon(for: UTType(identifier) ?? .folder)
             case .app(_, let path): return workspace.icon(forFile: path)
             case .symbol(let name): return NSImage(systemSymbolName: name, accessibilityDescription: nil) ?? workspace.icon(for: .folder)

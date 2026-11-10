@@ -44,6 +44,52 @@ final class MountTableTests: XCTestCase {
         XCTAssertTrue(table.mounts.contains { $0.path == "/" })
         XCTAssertTrue(table.isOnStartupDisk("/System/Applications"))
         XCTAssertTrue(table.isOnStartupDisk(NSTemporaryDirectory()))
-        XCTAssertEqual(MountTable.current(), table, "read again only once the number of file systems changes")
+    }
+
+    /// One disk ejected and another mounted where it was, between two looks, leave as many file systems mounted as
+    /// before: the table is read again at every look, so an app on the new disk never counts as on the startup disk.
+    func testAnEjectAndAMountBetweenTwoLooksAreBothSeen() {
+        let startup: [MountTable.Mount] = [.init(path: "/", from: "/dev/disk3s1s1"), .init(path: "/System/Volumes/Data", from: "/dev/disk3s5")]
+        let kernel = Kernel(startup + [.init(path: "/Volumes/Fast", from: "/dev/disk3s7")])
+        let reader = MountTable.Reader { kernel.fsstat($0, $1, $2) }
+        XCTAssertTrue(reader.current().isOnStartupDisk("/Volumes/Fast/Xcode.app"), "a volume of the startup disk's own container")
+        kernel.mounts = startup + [.init(path: "/Volumes/Fast", from: "/dev/disk5s1")]
+        XCTAssertFalse(reader.current().isOnStartupDisk("/Volumes/Fast/Xcode.app"), "another disk, mounted where it was")
+        kernel.mounts = startup
+        XCTAssertEqual(reader.current(), MountTable(startup), "and ejected")
+    }
+
+    /// The kernel's `getfsstat` as a test stands in for it: the mounts it holds now, written as the kernel writes them.
+    private final class Kernel: @unchecked Sendable {
+        private let lock = NSLock()
+        private var mounted: [MountTable.Mount]
+
+        init(_ mounts: [MountTable.Mount]) { mounted = mounts }
+
+        var mounts: [MountTable.Mount] {
+            get { lock.lock(); defer { lock.unlock() }; return mounted }
+            set { lock.lock(); mounted = newValue; lock.unlock() }
+        }
+
+        func fsstat(_ buffer: UnsafeMutablePointer<statfs>?, _ size: Int32, _ flags: Int32) -> Int32 {
+            let mounts = self.mounts
+            guard let buffer else { return Int32(mounts.count) }
+            let room = Int(size) / MemoryLayout<statfs>.stride
+            for (index, mount) in mounts.prefix(room).enumerated() {
+                var entry = statfs()
+                Self.write(mount.path, into: &entry.f_mntonname)
+                Self.write(mount.from, into: &entry.f_mntfromname)
+                buffer[index] = entry
+            }
+            return Int32(min(room, mounts.count))
+        }
+
+        private static func write<Field>(_ text: String, into field: inout Field) {
+            withUnsafeMutableBytes(of: &field) { raw in
+                let bytes = Array(text.utf8.prefix(raw.count - 1))
+                raw.copyBytes(from: bytes)
+                raw[bytes.count] = 0
+            }
+        }
     }
 }

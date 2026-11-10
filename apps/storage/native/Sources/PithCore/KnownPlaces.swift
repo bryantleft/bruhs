@@ -15,6 +15,9 @@ public struct KnownPlaces: Sendable {
         public let icon: Icon
         /// macOS guards it: only Full Disk Access, or the person's answer to macOS's question, lets Pith read it.
         public let isProtected: Bool
+        /// What it draws when its icon is an app Pith may no longer look up by its path, as once the disk the app was on
+        /// is ejected and another mounted where it was (`drawnIcon(of:)`): the icon it would have without the app.
+        public let fallback: Icon
     }
 
     /// Where a place's icon comes from.
@@ -33,6 +36,11 @@ public struct KnownPlaces: Sendable {
         case app(String)
         case type(String)
         case symbol(String)
+
+        var isntApp: Bool {
+            if case .app = self { return false }
+            return true
+        }
     }
 
     public let places: [Place]
@@ -88,11 +96,17 @@ public struct KnownPlaces: Sendable {
             ("podcasts", "Podcasts", library.appendingPathComponent("Group Containers/243LU875E5.groups.com.apple.podcasts/Library/Cache"),
              [.app("com.apple.podcasts")], true),
         ]
-        places = table.compactMap { entry in
-            entry.url.map { Place(id: entry.id, path: $0.path, name: entry.name, icon: Self.icon(choosing: entry.icons, application: application),
-                                  isProtected: entry.isProtected) }
+        let located = table.compactMap { entry in entry.url.map { (entry, $0.path) } }
+        // Where macOS guards comes from the places' paths alone, so it's known before any app is chosen.
+        let guarded = located.filter { $0.0.isProtected }.map(\.1) + ["Containers", "Group Containers", "CloudStorage"].map { library.appendingPathComponent($0).path }
+        // A place's app is one Pith may look up by its bundle's path: on the startup disk, outside the locations macOS
+        // guards. Xcode in Downloads, or Mail on another disk, leaves its place the icon it has without the app.
+        let mayShow = { (app: String) in Self.mayShowApp(app, guarded: guarded, mounts: mounts) }
+        places = located.map { entry, path in
+            Place(id: entry.id, path: path, name: entry.name, icon: Self.icon(choosing: entry.icons, application: application, mayShow: mayShow),
+                  isProtected: entry.isProtected, fallback: Self.icon(choosing: entry.icons.filter(\.isntApp), application: application))
         }
-        guarded = places.filter(\.isProtected).map(\.path) + ["Containers", "Group Containers", "CloudStorage"].map { library.appendingPathComponent($0).path }
+        self.guarded = guarded
         self.home = home.path
         containers = library.appendingPathComponent("Containers").path
         self.mounts = mounts
@@ -113,12 +127,13 @@ public struct KnownPlaces: Sendable {
         }
     }
 
-    /// The first of `choices` this Mac has, or a plain folder: a type macOS declares, or an app it finds.
-    static func icon(choosing choices: [Choice], application: (String) -> URL?) -> Icon {
+    /// The first of `choices` this Mac has, or a plain folder: a type macOS declares, or an app it finds that `mayShow`
+    /// lets Pith look up by its path.
+    static func icon(choosing choices: [Choice], application: (String) -> URL?, mayShow: (String) -> Bool = { _ in true }) -> Icon {
         for choice in choices {
             switch choice {
             case .app(let bundleID):
-                if let url = application(bundleID) { return .app(bundleID: bundleID, path: url.path) }
+                if let url = application(bundleID), mayShow(url.path) { return .app(bundleID: bundleID, path: url.path) }
             case .type(let identifier):
                 // CoreTypes declares the special folders' types, but they aren't among Apple's documented ones.
                 if let type = UTType(identifier), !type.isDynamic { return .type(identifier) }
@@ -127,6 +142,14 @@ public struct KnownPlaces: Sendable {
             }
         }
         return .type(UTType.folder.identifier)
+    }
+
+    /// What `place` draws: its icon, but for an app Pith may no longer look up by its path (`mayShowApp`), as once the
+    /// disk the app was on is ejected and another mounted where it was, which draws the place's fallback instead. The
+    /// table is made at launch, and the disks can change after.
+    public func drawnIcon(of place: Place) -> Icon {
+        if case .app(_, let path) = place.icon, !mayShowApp(path) { return place.fallback }
+        return place.icon
     }
 
     public func place(id: String) -> Place? { places.first { $0.id == id } }
@@ -138,17 +161,22 @@ public struct KnownPlaces: Sendable {
 
     /// Whether macOS guards `path`: it's a protected place, other apps' data, a cloud storage folder or a Photos
     /// library, or it's inside one.
-    public func isProtected(_ path: String) -> Bool {
+    public func isProtected(_ path: String) -> Bool { Self.isProtected(path, guarded: guarded) }
+
+    private static func isProtected(_ path: String, guarded: [String]) -> Bool {
         let inside = { (folder: String) in path == folder || path.hasPrefix(folder + "/") }
         return guarded.contains(where: inside) || path.split(separator: "/").contains { $0.hasSuffix(".photoslibrary") }
     }
 
     /// Whether Pith may look an app's icon up by its bundle's path: the app lies on the startup disk, outside the
     /// locations macOS guards. macOS guards removable and network volumes too, so an app on another disk, a share or the
-    /// home automount is never looked up. The owners of folders the map couldn't read, in the unreadable list and on the
-    /// page, and every app the icon route serves the page go by this.
-    public func mayShowApp(_ path: String) -> Bool {
-        !isProtected(path) && mounts().isOnStartupDisk(path)
+    /// home automount is never looked up. Every app icon the Disk tab draws by a bundle's path goes by this: the known
+    /// places' apps, when the table chooses them and again when they're drawn (`drawnIcon(of:)`), the owners of folders
+    /// the map couldn't read, in the unreadable list and on the page, and every app the icon route serves the page.
+    public func mayShowApp(_ path: String) -> Bool { Self.mayShowApp(path, guarded: guarded, mounts: mounts) }
+
+    private static func mayShowApp(_ path: String, guarded: [String], mounts: () -> MountTable) -> Bool {
+        !isProtected(path, guarded: guarded) && mounts().isOnStartupDisk(path)
     }
 
     /// The rule as the disk map's page applies it, with `asking` as `iconKey(for:asking:)` takes it.
