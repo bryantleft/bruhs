@@ -52,8 +52,9 @@ import PithCore
     /// Folders the map lacks until the person answers macOS's question about Pith, as for iCloud Drive: opening one
     /// waits on that answer, and the map goes on without them meanwhile.
     private(set) var asking = 0
-    /// A tree arrived: the map for `path`, as asked for, with its JSON for the page.
-    var received: ((DiskResult, String) -> Void)?
+    /// A tree arrived: the map for `path`, as asked for, with its JSON for the page and what its index holds at the
+    /// places asked about.
+    var received: ((DiskResult, String, [LivePlace]) -> Void)?
     /// The map changed, so a view on screen should ask for its tree again.
     var changed: (() -> Void)?
     /// The tree asked for last couldn't be made, as for a folder the map lacks.
@@ -129,14 +130,14 @@ import PithCore
         if stream == nil { state = .failed("FSEvents can’t watch \(root), so Pith can’t keep its map current.") }
     }
 
-    /// Asks for the map of `path`, with `focus` in finer detail. The answer goes to `received`; asking again first
-    /// drops it.
-    func request(path: String, focus: String?) {
+    /// Asks for the map of `path`, with `focus` in finer detail, and what it holds at each of `places`, from the same
+    /// index. The answer goes to `received`; asking again first drops it.
+    func request(path: String, focus: String?, places: [String]) {
         guard let process, state.isMapped else { return }
         nextRequest += 1
         wanted = nextRequest
         changedSinceTree = false
-        process.tree(path: path, focus: focus, request: nextRequest)
+        process.tree(path: path, focus: focus, request: nextRequest, places: places)
     }
 
     /// Lists a folder again now, everything in it with `deep`.
@@ -245,9 +246,9 @@ import PithCore
             if case .catchingUp(let waiting) = state { state = .live(waiting) }
         case .rebuild(let reason):
             walk(reason: reason)
-        case .tree(let request, let result, let json):
+        case .tree(let request, let result, let json, let places):
             guard request == wanted else { return }
-            received?(result, json)
+            received?(result, json, places)
         case .saved(let through, let bytes, let ms):
             NSLog("Pith: kept the disk map through event \(through): \(bytes) bytes in \(ms) ms.")
         case .checked(let check):

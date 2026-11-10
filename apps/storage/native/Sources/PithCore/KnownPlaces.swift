@@ -39,6 +39,16 @@ public struct KnownPlaces: Sendable {
     /// The locations macOS guards: the protected places, then other apps' containers and the cloud storage folders. A
     /// Photos library is guarded wherever it is, which `isProtected` knows by its extension.
     public let guarded: [String]
+    /// The home folder the places are in.
+    public let home: String
+    /// Other apps' containers, `~/Library/Containers`, each named by its app's bundle ID.
+    private let containers: String
+
+    /// The places the disk map's Places section offers, by id: the ones the design spec names, where Apple's Storage pane
+    /// finds space, and the iPhone and iPad backups Apple's own checklist names. The table also keeps Desktop, Music, TV,
+    /// Books and Podcasts, for their icons.
+    private static let shortcutIDs: Set<String> = ["photos-library", "mail", "messages", "developer", "icloud-drive", "downloads", "documents",
+                                                   "applications", "trash", "backups"]
 
     /// The places in `home`, and at `searchPaths` as `FileManager.urls(for:in:)` gives them, with each owning app
     /// that `application` finds by its bundle ID. A place whose search path is missing is left out. The Trash's icon
@@ -79,6 +89,8 @@ public struct KnownPlaces: Sendable {
                                   isProtected: entry.isProtected) }
         }
         guarded = places.filter(\.isProtected).map(\.path) + ["Containers", "Group Containers", "CloudStorage"].map { library.appendingPathComponent($0).path }
+        self.home = home.path
+        containers = library.appendingPathComponent("Containers").path
     }
 
     /// This Mac's places: the home folder, the search paths, and the apps LaunchServices finds. Applications is the
@@ -116,6 +128,9 @@ public struct KnownPlaces: Sendable {
 
     public func place(at path: String) -> Place? { places.first { $0.path == path } }
 
+    /// The places the disk map's Places section offers, in the table's order.
+    public var shortcuts: [Place] { places.filter { Self.shortcutIDs.contains($0.id) } }
+
     /// Whether macOS guards `path`: it's a protected place, other apps' data, a cloud storage folder or a Photos
     /// library, or it's inside one.
     public func isProtected(_ path: String) -> Bool {
@@ -152,6 +167,96 @@ public struct KnownPlaces: Sendable {
     private static func showsAListing(_ folder: DiskNode) -> Bool {
         folder.size > 0 || (folder.files ?? 0) > 0 || !(folder.children ?? []).isEmpty
     }
+
+    /// The disk map's Places section's table for a live map, whose tree the page shows (`tree`), from what its index
+    /// holds at each place (`live`, which came with that tree): each place the section offers that the index names, in
+    /// the table's order, with its size as the map shows it, or none where Pith can't read it. A place the tree shows has
+    /// the tree's figure, the one its block shows, which is newer than the index's when the map changed since, as when
+    /// Move to Trash took an item out of it. One the tree folds into smaller items has the index's, the figure its own
+    /// map shows once it's opened. The section shows at the live map's root, the startup disk's, and at the home folder.
+    public func placesTable(for tree: DiskNode, mapRoot: String, live: [LivePlace]) -> PlacesTable {
+        let held = Dictionary(live.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
+        let places = shortcuts.compactMap { place -> PlacesTable.Place? in
+            guard let found = held[place.path] else { return nil }
+            let size = found.size.map { tree.folder(at: place.path)?.size ?? $0 }
+            return PlacesTable.Place(id: place.id, name: place.name, path: place.path, key: IconKey.place(place.id).string, size: size)
+        }
+        return PlacesTable(shownAt: [mapRoot, home], places: places)
+    }
+
+    /// The icon of what `folder`, a folder the map couldn't read, belongs to, when Pith can tell without looking the
+    /// folder up by its path. A known place shows its own. A folder inside one shows the app the place belongs to, as one
+    /// in Mail shows Mail's, and a folder in another app's container, `~/Library/Containers/<bundle ID>`, the app that
+    /// `application` finds for that bundle ID. An app where macOS guards isn't looked up either. Anything else shows a
+    /// plain folder.
+    public func ownerKey(for folder: String, application: (String) -> URL?) -> IconKey {
+        if let place = place(at: folder) { return .place(place.id) }
+        let app: String?
+        if let place = places.first(where: { folder.hasPrefix($0.path + "/") }) {
+            if case .app(_, let path) = place.icon { app = path } else { app = nil }
+        } else if folder.hasPrefix(containers + "/"), let bundleID = folder.dropFirst(containers.count + 1).split(separator: "/").first {
+            app = application(String(bundleID))?.path
+        } else {
+            app = nil
+        }
+        guard let app, !isProtected(app) else { return .folder }
+        return .item(app)
+    }
+
+    /// The apps the folders `tree` couldn't read belong to, by folder, as `ownerKey` finds them, for the disk map's
+    /// Couldn't read rows. A known place is left out, since the icon rule gives it its own icon already, and so is a
+    /// folder whose owner Pith can't tell, which keeps the rule's plain folder. Only a folder inside a place with an app
+    /// of its own, or in other apps' containers, can have an owner, so only those folders are gone through.
+    public func owners(in tree: DiskNode, application: (String) -> URL?) -> [String: IconKey] {
+        var owners: [String: IconKey] = [:]
+        let owned = places.filter { if case .app = $0.icon { true } else { false } }.map(\.path) + [containers]
+        var waiting = owned.compactMap { tree.folder(at: $0) }
+        while let node = waiting.popLast() {
+            if node.kind == .unreadable {
+                let key = ownerKey(for: node.path, application: application)
+                if case .item = key { owners[node.path] = key }
+            }
+            waiting.append(contentsOf: node.children ?? [])
+        }
+        return owners
+    }
+}
+
+/// What the disk map's Places section shows from, which native sends the page beside the live map, and only the live
+/// map (`readPlaces` in native-web/places.ts): the folders the section shows at, and each place it can show, with its
+/// size as the map shows it or none where Pith can't read it.
+public struct PlacesTable: Encodable, Equatable, Sendable {
+    public struct Place: Encodable, Equatable, Sendable {
+        public let id: String
+        /// As `KnownPlaces` names it.
+        public let name: String
+        public let path: String
+        /// Its icon's key, `place/<id>`.
+        public let key: String
+        /// Its size as the map shows it, or nil where Pith can't read it, which travels as null.
+        public let size: UInt64?
+
+        public init(id: String, name: String, path: String, key: String, size: UInt64?) {
+            self.id = id; self.name = name; self.path = path; self.key = key; self.size = size
+        }
+
+        enum CodingKeys: String, CodingKey { case id, name, path, key, size }
+
+        public func encode(to encoder: any Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(id, forKey: .id)
+            try container.encode(name, forKey: .name)
+            try container.encode(path, forKey: .path)
+            try container.encode(key, forKey: .key)
+            try container.encode(size, forKey: .size)
+        }
+    }
+
+    /// The startup disk's root and the home folder.
+    public let shownAt: [String]
+    public let places: [Place]
+
+    public init(shownAt: [String], places: [Place]) { self.shownAt = shownAt; self.places = places }
 }
 
 /// Pith's icon rule as the disk map's page applies it (`iconKey` in native-web/icon-rule.ts), which native sends with the

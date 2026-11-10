@@ -13,8 +13,9 @@ public enum LiveReport: Sendable {
     case historyDone
     /// The index can't follow on from here, and only a new walk catches up.
     case rebuild(reason: String)
-    /// A map, decoded, with the scanner's own JSON of it, which the disk map's page takes as it is.
-    case tree(request: Int, result: DiskResult, json: String)
+    /// A map, decoded, with the scanner's own JSON of it, which the disk map's page takes as it is, and what its index
+    /// holds at each known place Pith asked about.
+    case tree(request: Int, result: DiskResult, json: String, places: [LivePlace])
     case saved(through: UInt64, bytes: UInt64, ms: UInt64)
     case checked(LiveCheck)
     case stats(String)
@@ -58,6 +59,18 @@ public struct LiveStatus: Sendable, Equatable {
     }
 }
 
+/// What the live map's index holds at a known place's path, from the same index as the map it comes with (`places` of
+/// a tree line, `Index::places` in scanner/src/index.rs): the folder's size as that map shows it, or none when the map
+/// can't read it, as when macOS keeps Pith out of it or a folder above it, or hasn't answered its question about it yet.
+/// The scanner names no place that isn't there.
+public struct LivePlace: Decodable, Sendable, Equatable {
+    /// As Pith asked for it.
+    public let path: String
+    public let size: UInt64?
+
+    public init(path: String, size: UInt64?) { self.path = path; self.size = size }
+}
+
 /// What a check of every folder found: how many folders FSEvents hadn't reported changes in, and how many bytes.
 public struct LiveCheck: Sendable, Equatable {
     public let folders: UInt64
@@ -67,8 +80,8 @@ public struct LiveCheck: Sendable, Equatable {
 }
 
 public enum LiveDecoder {
-    /// The `result` object of a tree line as the scanner wrote it, `{"type":"tree","request":N,"result":{…}}`, so
-    /// the page gets the scanner's own JSON rather than Pith encoding the map again: 48 ms on the main thread for the
+    /// The `result` object of a tree line as the scanner wrote it, `{"type":"tree","request":N,"places":[…],"result":{…}}`,
+    /// so the page gets the scanner's own JSON rather than Pith encoding the map again: 48 ms on the main thread for the
     /// development Mac's whole disk.
     static func resultJSON(_ line: Data) throws -> String {
         let marker = Data(#","result":"#.utf8)
@@ -105,10 +118,10 @@ public enum LiveDecoder {
             struct Rebuild: Decodable { let reason: String }
             return .rebuild(reason: try decoder.decode(Rebuild.self, from: line).reason)
         case "tree":
-            struct Tree: Decodable { let request: Int; let result: DiskResult }
+            struct Tree: Decodable { let request: Int; let result: DiskResult; let places: [LivePlace]? }
             let tree = try decoder.decode(Tree.self, from: line)
             try tree.result.validate()
-            return .tree(request: tree.request, result: tree.result, json: try resultJSON(line))
+            return .tree(request: tree.request, result: tree.result, json: try resultJSON(line), places: tree.places ?? [])
         case "saved":
             struct Saved: Decodable { let through: UInt64; let bytes: UInt64; let ms: UInt64 }
             let s = try decoder.decode(Saved.self, from: line)
@@ -197,7 +210,10 @@ public final class LiveProcess: @unchecked Sendable {
         send(["cmd": "open", "root": root, "snapshot": snapshot?.path ?? NSNull(), "volume": volume ?? NSNull()])
     }
     public func walk(since: UInt64) { send(["cmd": "walk", "since": since]) }
-    public func tree(path: String, focus: String?, request: Int) { send(["cmd": "tree", "path": path, "focus": focus ?? NSNull(), "request": request]) }
+    /// Asks for the map of `path`, with `focus` in finer detail, and what it holds at each of `places`.
+    public func tree(path: String, focus: String?, request: Int, places: [String] = []) {
+        send(["cmd": "tree", "path": path, "focus": focus ?? NSNull(), "request": request, "places": places])
+    }
     public func relist(path: String, deep: Bool) { send(["cmd": "relist", "path": path, "deep": deep]) }
     public func retryUnreadable() { send(["cmd": "retry"]) }
     public func save() { send(["cmd": "save"]) }

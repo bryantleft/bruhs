@@ -8,6 +8,7 @@ import {
   itemAt,
   itemKey,
   readIconRule,
+  readOwners,
 } from "../native-web/icon-rule.ts";
 import type { DirNode, FileNode, TreeNode } from "../src/lib/types.ts";
 
@@ -149,5 +150,32 @@ describe("itemAt", () => {
       iconKey(itemAt(map, `${home}/Documents`, []), rule),
       "place/documents",
     );
+  });
+});
+
+describe("readOwners", () => {
+  const notes = "/Users/zo\u00eb/Library/Containers/com.apple.Notes/Data";
+  const app = itemKey("/System/Applications/Notes.app");
+
+  test("reads the apps native names as the owners of folders the map couldn't read", () => {
+    const owners = readOwners(JSON.stringify({ [notes]: app }));
+    assert.equal(owners.size, 1);
+    assert.equal(owners.get(notes), app);
+  });
+
+  test("takes anything else for no owners, so each folder keeps the rule's key", () => {
+    for (const text of [
+      null,
+      undefined,
+      7,
+      "",
+      "{",
+      JSON.stringify(null),
+      JSON.stringify([app]),
+      JSON.stringify({ [notes]: 7 }),
+      JSON.stringify({ [notes]: app, "/x": null }),
+    ]) {
+      assert.equal(readOwners(text).size, 0, String(text));
+    }
   });
 });

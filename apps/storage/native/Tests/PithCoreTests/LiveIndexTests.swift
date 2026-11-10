@@ -62,14 +62,25 @@ final class LiveIndexTests: XCTestCase {
 
     func testATreeIsCheckedLikeAScanResult() throws {
         let tree = #"{"type":"tree","request":3,"result":{"type":"result","version":4,"root":{"name":"x","path":"/x","size":10,"kind":"dir","files":1,"children":[]},"topFiles":[],"volumes":[],"unreadableFolders":[],"summary":{"dirs":1,"files":1,"bytes":10,"errors":0,"unreadable":{"protected":0,"denied":0,"other":0},"entryErrors":0,"cloudOnly":{"files":0,"bytes":0,"folders":0},"clones":{"files":0,"bytes":0},"elapsedMs":5,"engine":"bulk"}}}"#
-        guard case .tree(let request, let result, let json) = try LiveDecoder.decode(Data(tree.utf8)) else { return XCTFail("not a tree") }
+        guard case .tree(let request, let result, let json, let places) = try LiveDecoder.decode(Data(tree.utf8)) else { return XCTFail("not a tree") }
         XCTAssertEqual(request, 3)
+        XCTAssertEqual(places, [], "a tree asked for without places")
         XCTAssertEqual(result.root.size, 10)
         // The page gets the result object exactly as the scanner wrote it.
         XCTAssertTrue(json.hasPrefix(#"{"type":"result","version":4"#) && json.hasSuffix(#""engine":"bulk"}}"#))
         XCTAssertEqual(try JSONDecoder().decode(DiskResult.self, from: Data(json.utf8)).root.path, "/x")
         // The same checks as a scan's result: a map of another version is refused.
         XCTAssertThrowsError(try LiveDecoder.decode(Data(tree.replacingOccurrences(of: #""version":4"#, with: #""version":3"#).utf8)))
+    }
+
+    /// The scanner answers for the known places Pith names beside the map they go with, ahead of the map, which the page
+    /// still gets exactly as the scanner wrote it.
+    func testATreeSaysWhatItsIndexHoldsAtEachPlace() throws {
+        let result = #"{"type":"result","version":4,"root":{"name":"x","path":"/x","size":10,"kind":"dir","files":1,"children":[]},"topFiles":[],"volumes":[],"unreadableFolders":[],"summary":{"dirs":1,"files":1,"bytes":10,"errors":0,"unreadable":{"protected":0,"denied":0,"other":0},"entryErrors":0,"cloudOnly":{"files":0,"bytes":0,"folders":0},"clones":{"files":0,"bytes":0},"elapsedMs":5,"engine":"bulk"}}"#
+        let line = #"{"type":"tree","request":3,"places":[{"path":"/x/Library/Mail","size":null},{"path":"/x/Library/Developer","size":4096}],"result":"# + result + "}"
+        guard case .tree(_, _, let json, let places) = try LiveDecoder.decode(Data(line.utf8)) else { return XCTFail("not a tree") }
+        XCTAssertEqual(places, [LivePlace(path: "/x/Library/Mail", size: nil), LivePlace(path: "/x/Library/Developer", size: 4096)])
+        XCTAssertEqual(json, result)
     }
 
     func testASavedMapCatchesUpOnlyWhileHistoryReachesItCheaply() {
@@ -201,10 +212,42 @@ final class LiveIndexTests: XCTestCase {
             request += 1
             process.tree(path: folder.path, focus: nil, request: request)
             let asked = request
-            _ = waitFor(reports, timeout: 2) { if case .tree(asked, let result, _) = $0 { size = result.root.size; return true }; return false }
+            _ = waitFor(reports, timeout: 2) { if case .tree(asked, let result, _, _) = $0 { size = result.root.size; return true }; return false }
             RunLoop.current.run(until: Date().addingTimeInterval(0.5))
         }
         XCTAssertEqual(size, scanned)
+    }
+
+    /// The real scanner answers for the places Pith names with the map they go with: a folder's size as that map
+    /// shows it, none for one it couldn't read or inside one, and nothing for one that isn't there.
+    func testThePlacesComeWithTheSizesOfTheirMap() throws {
+        let storage = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let binary = storage.appendingPathComponent("scanner/target/release/storage-scanner")
+        guard FileManager.default.isExecutableFile(atPath: binary.path) else { throw XCTSkip("Build the Rust scanner before running integration tests") }
+        let folder = try temporaryFolder().resolvingSymlinksInPath()
+        let locked = folder.appendingPathComponent("Mail")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path)
+            try? FileManager.default.removeItem(at: folder)
+        }
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("Developer"), withIntermediateDirectories: true)
+        try Data(count: 50_000).write(to: folder.appendingPathComponent("Developer/one.bin"))
+        try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: false, attributes: [.posixPermissions: 0])
+        let reports = LockedValue<[LiveReport]>([])
+        let process = LiveProcess(binary: binary, receive: { report in reports.update { $0.append(report) } }, exited: { _ in })
+        try process.start()
+        defer { process.terminate() }
+        process.open(root: folder.path, snapshot: nil, volume: nil)
+        process.walk(since: DiskWatcher.currentEventID)
+        XCTAssertTrue(waitFor(reports) { if case .walked = $0 { return true }; return false })
+        let developer = folder.appendingPathComponent("Developer").path, inside = locked.appendingPathComponent("V10").path
+        process.tree(path: folder.path, focus: nil, request: 1, places: [developer, locked.path, inside, folder.appendingPathComponent("Messages").path])
+        var answer: (DiskResult, [LivePlace])?
+        XCTAssertTrue(waitFor(reports) { if case .tree(1, let result, _, let places) = $0 { answer = (result, places); return true }; return false })
+        let (map, places) = try XCTUnwrap(answer)
+        XCTAssertEqual(places, [LivePlace(path: developer, size: map.item(at: developer)?.size), LivePlace(path: locked.path, size: nil),
+                                LivePlace(path: inside, size: nil)])
+        XCTAssertNotNil(map.item(at: developer)?.size)
     }
 
     private func runScan(binary: URL, root: URL) throws -> UInt64 {

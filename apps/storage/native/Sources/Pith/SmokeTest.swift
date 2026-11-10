@@ -128,6 +128,7 @@ extension AppDelegate {
             checks.merge(await checkListIcons(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkMapMarks(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkSideLists(fixture), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkPlaces(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkIconsReachEveryPage(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkIconRoute(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkPathBar(fixture, in: main), uniquingKeysWith: { _, new in new })
@@ -400,6 +401,78 @@ extension AppDelegate {
           wrote: wrote.length === 2 && loaded(wrote[0]) && wrote[0].src.endsWith("/" + appKey + ".png") && wrote[1] === null,
           unreadable: unreadable.some((icon) => loaded(icon) && icon.src.endsWith("/folder.png")),
         };
+        """
+
+    /// Places opens the side column at the live map's root and the home folder, from the table native makes for the
+    /// startup disk's map. The smoke test gives the map a table of its own, whose home folder is inside the fixture, so
+    /// the section shows through the same code while Pith looks at none of the person's folders. Its Mail, which nobody
+    /// may read, shows "Needs Full Disk Access" with its place's icon at the fixture's root and the home folder, and the
+    /// section is gone further down. Developer and Messages, under 1 GB, don't show. Each has the size the map shows once
+    /// its folder is opened: Developer's from its block on the map, and that of Messages, too small for a block of its
+    /// own, from the live map's index.
+    private func checkPlaces(_ fixture: String) async -> [String: Bool] {
+        let names = ["places_show_at_the_root_and_home", "places_have_the_maps_sizes"]
+        let files = FileManager.default, mark = UUID().uuidString.prefix(8).lowercased()
+        let home = (fixture as NSString).appendingPathComponent("pith-smoke-home-\(mark)")
+        let library = (home as NSString).appendingPathComponent("Library")
+        let mail = (library as NSString).appendingPathComponent("Mail"), developer = (library as NSString).appendingPathComponent("Developer")
+        let messages = (library as NSString).appendingPathComponent("Messages")
+        let kept = disk.sectionPlaces
+        let cleanUp = {
+            self.disk.sectionPlaces = kept
+            // Readable again first: a folder nobody may list can't be emptied to remove.
+            try? files.setAttributes([.posixPermissions: 0o755], ofItemAtPath: mail)
+            try? files.removeItem(atPath: home)
+        }
+        defer { cleanUp() }
+        let made = (try? files.createDirectory(atPath: developer, withIntermediateDirectories: true)) != nil
+            && (try? files.createDirectory(atPath: messages, withIntermediateDirectories: true)) != nil
+            && files.createFile(atPath: (developer as NSString).appendingPathComponent("tool.bin"), contents: Data(count: 1 << 20))
+            && (try? files.createDirectory(atPath: mail, withIntermediateDirectories: false, attributes: [.posixPermissions: 0])) != nil
+        disk.sectionPlaces = KnownPlaces(home: URL(fileURLWithPath: home), searchPaths: [:]) { _ in nil }
+        func place(_ id: String) -> PlacesTable.Place? { disk.placesTable?.places.first { $0.id == id } }
+        guard made, let web = webView,
+              await eventually({ place("mail") != nil && place("developer")?.size != nil && place("messages")?.size != nil }) else {
+            return Dictionary(uniqueKeysWithValues: names.map { ($0, false) })
+        }
+        let unreadable = place("mail")?.size == nil
+        let sized = (developer: place("developer")?.size, messages: place("messages")?.size)
+        func showsMail(_ rows: [[String: Any]]?) -> Bool {
+            guard let rows, rows.count == 1, let text = rows[0]["text"] as? String else { return false }
+            return text.contains("Mail") && text.contains("Needs Full Disk Access") && rows[0]["title"] as? String == mail
+                && (rows[0]["icon"] as? String)?.hasSuffix("/place/mail.png") == true
+        }
+        let atRoot = await pageAnswer(web, Self.placeRows) { showsMail($0) }
+        disk.pageCommand?(.open(home))
+        let atHome = await eventually { self.disk.openFolder == home } ? await pageAnswer(web, Self.placeRows) { showsMail($0) } : nil
+        disk.pageCommand?(.open(developer))
+        let inDeveloper = await eventually { self.disk.openFolder == developer }
+        let gone = await pageAnswer(web, "return document.getElementById('places-heading') === null") { (gone: Bool?) in gone == true } == true
+        let developerShown = disk.result?.root.folder(at: developer)?.size
+        // Too small for a block at the root, it opens once the live map sends its folder in detail.
+        disk.pageCommand?(.open(messages))
+        let inMessages = await eventually { self.disk.openFolder == messages }
+        let messagesShown = disk.result?.root.folder(at: messages)?.size
+        disk.pageCommand?(.open(fixture))
+        let back = await eventually { self.disk.openFolder == fixture }
+        cleanUp()
+        let cleared = await eventually { self.disk.result?.root.children?.contains { $0.path == home } != true }
+        let settled = await mapSettles()
+        print("places: Mail \(unreadable ? "can't be read" : "has a size") and shows at the root \(showsMail(atRoot)) and at home \(showsMail(atHome)), "
+              + "gone further down \(gone); Developer \(sized.developer.map(String.init) ?? "none") against the map's "
+              + "\(developerShown.map(String.init) ?? "none"), Messages \(sized.messages.map(String.init) ?? "none") against \(messagesShown.map(String.init) ?? "none")")
+        return [names[0]: unreadable && showsMail(atRoot) && showsMail(atHome) && inDeveloper && gone && back && cleared && settled,
+                names[1]: (sized.developer ?? 0) >= 1 << 20 && sized.developer == developerShown && inMessages && sized.messages != nil
+                    && sized.messages == messagesShown]
+    }
+
+    /// The rows of Places: each one's text and tooltip, and its icon once it has loaded, decorative.
+    private static let placeRows = """
+        return [...document.querySelectorAll('[aria-labelledby="places-heading"] li')].map((row) => {
+          const icon = row.querySelector("img");
+          return { text: row.innerText, title: row.querySelector("button")?.title ?? null,
+            icon: icon !== null && icon.complete && icon.naturalWidth > 0 && icon.alt === "" ? icon.src : null };
+        });
         """
 
     /// The icons' base and rule reach the page once it's ready and again when either changes, never with each map: a map

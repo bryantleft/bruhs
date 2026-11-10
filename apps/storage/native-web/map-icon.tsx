@@ -11,7 +11,9 @@ import {
   type IconItem,
   type IconRule,
   iconKey,
+  NO_OWNERS,
   readIconRule,
+  readOwners,
 } from "./icon-rule";
 import {
   ICON_POINTS,
@@ -33,6 +35,11 @@ declare global {
     pithReceiveIconBase: (base: string | null, rule?: string | null) => void;
     /** The icons' base as Pith last sent it. */
     pithIconBase?: string;
+    /**
+     * The apps that own the folders the map couldn't read, by folder, as JSON (`KnownPlaces.owners`). Pith sends them
+     * with a map, once the page is ready and whenever they change.
+     */
+    pithReceiveOwners: (owners: string | null) => void;
   }
 }
 
@@ -81,6 +88,21 @@ export function MapIcon({
   }
   if (state !== "loaded") return room;
   return <img src={url} alt="" draggable={false} className={box} />;
+}
+
+/**
+ * The apps that own the folders the map couldn't read, by folder, as Pith last sent them: a Couldn't read row shows its
+ * owner's icon in place of the rule's plain folder. None until Pith sends them.
+ */
+export function useOwners(): ReadonlyMap<string, string> {
+  const [owners, setOwners] = useState(NO_OWNERS);
+  useEffect(() => {
+    window.pithReceiveOwners = (text) => setOwners(readOwners(text));
+    return () => {
+      window.pithReceiveOwners = () => {};
+    };
+  }, []);
+  return owners;
 }
 
 /** The URLs of macOS's icons for the page, at its own pixel ratio, and the map's own icons. */

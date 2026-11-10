@@ -159,6 +159,33 @@ export function readIconRule(text: unknown): IconRule | null {
   return { places: byPath, guarded: folders, asking };
 }
 
+/** No owners: each folder the map couldn't read keeps the rule's key. */
+export const NO_OWNERS: ReadonlyMap<string, string> = new Map();
+
+/**
+ * The apps that own folders the map couldn't read, by folder, as native sends them with the map (`KnownPlaces.owners`):
+ * each folder's owner's key, an app's `item/<bundle>`, which a Couldn't read row shows in place of the rule's plain
+ * folder. Native finds them, since only it can ask LaunchServices for a container's app. No owners for anything else.
+ */
+export function readOwners(text: unknown): ReadonlyMap<string, string> {
+  if (typeof text !== "string") return NO_OWNERS;
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return NO_OWNERS;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return NO_OWNERS;
+  }
+  const owners = new Map<string, string>();
+  for (const [folder, key] of Object.entries(value)) {
+    if (typeof key !== "string") return NO_OWNERS;
+    owners.set(folder, key);
+  }
+  return owners;
+}
+
 /**
  * The item a list names by its path alone, as Grew since does, for its icon: the map's node at `path`, found by
  * following the path down from `folder`, or else a file the map lists among the largest. Anything else is a path the

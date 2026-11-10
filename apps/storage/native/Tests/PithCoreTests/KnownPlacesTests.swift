@@ -162,6 +162,118 @@ final class KnownPlacesTests: XCTestCase {
         XCTAssertEqual(table.iconKey(for: folder("Projects/New"), asking: false), .item(path("Projects/New")))
     }
 
+    /// The places the disk map's Places section offers are the ones the spec names, in the table's order: Apple's Storage
+    /// categories and its checklist's backups, not every folder the table keeps an icon for.
+    func testTheSectionOffersThePlacesTheSpecNames() {
+        let table = places()
+        XCTAssertEqual(table.shortcuts.map(\.id), ["photos-library", "mail", "messages", "developer", "icloud-drive", "downloads", "documents",
+                                                   "applications", "trash", "backups"])
+        XCTAssertEqual(table.home, home.path)
+    }
+
+    private func folder(_ relative: String, size: UInt64, children: [DiskNode] = []) -> DiskNode {
+        DiskNode(kind: .dir, name: (relative as NSString).lastPathComponent, path: path(relative), size: size, files: 1, children: children)
+    }
+
+    /// A live map of the test home, as the page has it: Developer has a block of its own, Mail couldn't be read, and
+    /// Downloads is too small for a block, so it's among the home folder's smaller items.
+    private var homeMap: DiskNode {
+        DiskNode(kind: .dir, name: home.lastPathComponent, path: home.path, size: 9_000_000_000, files: 12, children: [
+            folder("Library", size: 7_000_000_000, children: [
+                folder("Library/Developer", size: 6_000_000_000),
+                DiskNode(kind: .unreadable, name: "Mail", path: path("Library/Mail"), size: 0, reason: .protected, children: nil),
+                folder("Library/Caches", size: 1_000_000_000),
+            ]),
+            DiskNode(kind: .aggregate, name: "(smaller items)", path: home.path + "/__other__", size: 2_000_000_000, files: 11, children: nil),
+        ])
+    }
+
+    func testThePlacesSectionGivesEachPlaceTheFigureTheMapShows() throws {
+        let table = places()
+        let live = [
+            // The index has moved on since the map was made: Move to Trash took an item out of the map, which the live
+            // map's next tree catches up with.
+            LivePlace(path: path("Library/Developer"), size: 6_100_000_000),
+            LivePlace(path: path("Library/Mail"), size: nil),
+            LivePlace(path: path("Library/Mobile Documents"), size: nil),
+            LivePlace(path: path("Downloads"), size: 800_000_000),
+            // Known places the section doesn't offer.
+            LivePlace(path: path("Desktop"), size: 5_000_000_000),
+            LivePlace(path: path("Music/Music"), size: 5_000_000_000),
+        ]
+        let sent = table.placesTable(for: homeMap, mapRoot: "/", live: live)
+        XCTAssertEqual(sent.shownAt, ["/", home.path], "the startup disk's root and the home folder")
+        XCTAssertEqual(sent.places.map(\.id), ["mail", "developer", "icloud-drive", "downloads"], "the table's order, with only the places the index has")
+        let developer = try XCTUnwrap(sent.places.first { $0.id == "developer" })
+        XCTAssertEqual(developer, PlacesTable.Place(id: "developer", name: "Developer", path: path("Library/Developer"), key: "place/developer", size: 6_000_000_000),
+                       "the figure the map shows")
+        XCTAssertEqual(sent.places.first { $0.id == "downloads" }?.size, 800_000_000, "the index's own figure for a place the map folds away")
+        XCTAssertEqual(sent.places.first { $0.id == "mail" }, PlacesTable.Place(id: "mail", name: "Mail", path: path("Library/Mail"), key: "place/mail", size: nil))
+        XCTAssertNil(try XCTUnwrap(sent.places.first { $0.id == "icloud-drive" }).size, "waiting on macOS's question")
+        XCTAssertEqual(table.placesTable(for: homeMap, mapRoot: "/", live: []).places, [], "a map whose index names no place")
+    }
+
+    func testThePlacesTableTravelsAsThePageReadsIt() throws {
+        let sent = PlacesTable(shownAt: ["/", "/Users/x"], places: [
+            PlacesTable.Place(id: "mail", name: "Mail", path: "/Users/x/Library/Mail", key: "place/mail", size: nil),
+            PlacesTable.Place(id: "developer", name: "Developer", path: "/Users/x/Library/Developer", key: "place/developer", size: 6_000_000_000),
+        ])
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(sent)) as? [String: Any])
+        XCTAssertEqual(Set(json.keys), ["shownAt", "places"])
+        let places = try XCTUnwrap(json["places"] as? [[String: Any]])
+        XCTAssertEqual(places.map { Set($0.keys) }, [["id", "name", "path", "key", "size"], ["id", "name", "path", "key", "size"]])
+        XCTAssertTrue(places[0]["size"] is NSNull, "no size where Pith can't read it")
+        XCTAssertEqual(places[1]["size"] as? UInt64, 6_000_000_000)
+    }
+
+    /// A folder the map couldn't read shows the icon of the app it belongs to when Pith can tell, without looking the
+    /// folder up: LaunchServices is asked only for a container's app, by the container's bundle ID.
+    func testAFolderTheMapCouldntReadShowsTheAppThatOwnsIt() {
+        let table = places()
+        let found = ["com.apple.Notes": URL(fileURLWithPath: "/Test Apps/Notes.app"), "com.example.Downloaded": URL(fileURLWithPath: path("Downloads/Downloaded.app"))]
+        var asked: [String] = []
+        func owner(_ relative: String) -> IconKey {
+            table.ownerKey(for: relative.hasPrefix("/") ? relative : path(relative)) { asked.append($0); return found[$0] }
+        }
+        XCTAssertEqual(owner("Library/Mail"), .place("mail"), "a known place shows its own icon")
+        XCTAssertEqual(owner("Library/Mail/V10"), .item("/Test Apps/Mail.app"), "inside a place, the app it belongs to")
+        XCTAssertEqual(owner("Library/Developer/CoreSimulator/Devices"), .item("/Test Apps/Xcode.app"))
+        XCTAssertEqual(owner("Pictures/Photos Library.photoslibrary/database"), .item("/Test Apps/Photos.app"))
+        XCTAssertEqual(asked, [], "a place's app was found with the table")
+        XCTAssertEqual(owner("Library/Containers/com.apple.Notes"), .item("/Test Apps/Notes.app"), "another app's container, by its bundle ID")
+        XCTAssertEqual(owner("Library/Containers/com.apple.Notes/Data"), .item("/Test Apps/Notes.app"), "and what's inside it")
+        XCTAssertEqual(owner("Library/Containers/com.example.Gone/Data"), .folder, "a container whose app this Mac doesn't have")
+        XCTAssertEqual(owner("Library/Containers/com.example.Downloaded/Data"), .folder, "an app where macOS guards is never looked up")
+        XCTAssertEqual(asked, ["com.apple.Notes", "com.apple.Notes", "com.example.Gone", "com.example.Downloaded"])
+        for plain in ["Documents/Locked", "Library/Containers", "Library/Group Containers/group.com.apple.notes", "Library/Safari", "/private/var/db/sudo"] {
+            XCTAssertEqual(owner(plain), .folder, plain)
+        }
+        XCTAssertEqual(places(missing: ["com.apple.mail"]).ownerKey(for: path("Library/Mail/V10")) { _ in nil }, .folder, "a place without its app")
+    }
+
+    func testTheMapsUnreadableFoldersNameTheAppsThatOwnThem() {
+        let table = places()
+        let notes = path("Library/Containers/com.apple.Notes/Data"), devices = path("Library/Developer/Devices")
+        let tree = DiskNode(kind: .dir, name: home.lastPathComponent, path: home.path, size: 2, files: 2, children: [
+            folder("Library", size: 2, children: [
+                DiskNode(kind: .unreadable, name: "Mail", path: path("Library/Mail"), size: 0, reason: .protected, children: nil),
+                folder("Library/Developer", size: 1, children: [
+                    DiskNode(kind: .unreadable, name: "Devices", path: devices, size: 0, reason: .denied, children: nil),
+                    folder("Library/Developer/Xcode", size: 1),
+                ]),
+                folder("Library/Containers", size: 1, children: [
+                    folder("Library/Containers/com.apple.Notes", size: 1, children: [
+                        DiskNode(kind: .unreadable, name: "Data", path: notes, size: 0, reason: .protected, children: nil),
+                    ]),
+                ]),
+                DiskNode(kind: .unreadable, name: "Safari", path: path("Library/Safari"), size: 0, reason: .protected, children: nil),
+            ]),
+        ])
+        let owners = table.owners(in: tree) { $0 == "com.apple.Notes" ? URL(fileURLWithPath: "/Test Apps/Notes.app") : nil }
+        // Mail shows its place's icon by the rule, and Safari's folder has no owner Pith can tell: a plain folder.
+        XCTAssertEqual(owners, [devices: .item("/Test Apps/Xcode.app"), notes: .item("/Test Apps/Notes.app")])
+    }
+
     func testTheIconRuleForItemsOfTheMap() {
         let table = places()
         func node(_ kind: DiskNode.Kind, _ path: String) -> DiskNode {

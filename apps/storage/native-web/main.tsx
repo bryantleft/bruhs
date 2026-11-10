@@ -22,8 +22,10 @@ import type {
 } from "../src/lib/types";
 import { GROUP_KEY, itemAt, itemKey } from "./icon-rule";
 import { KindLegend } from "./kind-legend";
-import { MapIcon, useAnyIcon, usePageIcons } from "./map-icon";
+import { MapIcon, useAnyIcon, useOwners, usePageIcons } from "./map-icon";
 import { type NavigationAction, NO_MAP, navigate } from "./navigation";
+import { placesIn } from "./places";
+import { Places, usePlaces } from "./places-section";
 import { GREW_SHOWN, UNREADABLE_SHOWN, WRITERS_SHOWN } from "./side-lists";
 import "./styles.css";
 
@@ -176,6 +178,10 @@ function DiskMap() {
   const [growth, setGrowth] = useState<Growth | null>(null);
   // macOS's icons, once Pith has sent where they are and its rule for each item's key.
   const icons = usePageIcons();
+  // Taken before the page says it's ready too, since they come with the first map: the Places section's table, and
+  // the apps that own the folders the map couldn't read.
+  const places = usePlaces();
+  const owners = useOwners();
   // Taken before the page says it's ready, as the icons are.
   const doubleClickInterval = useDoubleClickInterval();
   const glyphs = useDifferentiateWithoutColor();
@@ -290,6 +296,11 @@ function DiskMap() {
     (folder: DirNode) => go({ type: "open", path: folder.path, from: here }),
     [go, here],
   );
+  // A place opens straight from here, however far down it is.
+  const openPlace = useCallback(
+    (path: string) => go({ type: "open", path, from: here }),
+    [go, here],
+  );
 
   // Pith's path bar and Go menu (Back, Forward and Enclosing Folder) move the map, wherever focus is.
   useEffect(() => {
@@ -367,6 +378,8 @@ function DiskMap() {
   // Before a map the page stays empty: Pith's bar above says there's no map yet and holds the disk menu.
   if (!result || !current) return null;
 
+  // The well-known places in the open folder, at the startup disk's root and the home folder of its live map.
+  const shownPlaces = placesIn(places, current.path);
   // Unreadable folders in the open folder, which the map can't size, so it lists them instead.
   const unreadable = current.children.filter(
     (child) => child.kind === "unreadable",
@@ -421,6 +434,9 @@ function DiskMap() {
           />
         </section>
         <div className="flex min-h-0 flex-col gap-5">
+          {shownPlaces.length > 0 && (
+            <Places places={shownPlaces} icons={icons} onOpen={openPlace} />
+          )}
           {kindBytes && (
             <KindLegend
               bytes={kindBytes}
@@ -533,16 +549,24 @@ function DiskMap() {
                 Couldn’t read
               </h2>
               <ul className="space-y-0.5">
-                {unreadable.slice(0, UNREADABLE_SHOWN).map((folder) => (
-                  <li
-                    key={folder.path}
-                    title={folder.path}
-                    className="text-code-sm flex items-center gap-2 text-(--role-text-secondary)"
-                  >
-                    {icons && <MapIcon url={icons.item(folder)} />}
-                    <span className="min-w-0 truncate">{folder.name}</span>
-                  </li>
-                ))}
+                {unreadable.slice(0, UNREADABLE_SHOWN).map((folder) => {
+                  // The app the folder belongs to, when Pith can tell; else its place's icon or a plain folder.
+                  const owner = owners.get(folder.path);
+                  return (
+                    <li
+                      key={folder.path}
+                      title={folder.path}
+                      className="text-code-sm flex items-center gap-2 text-(--role-text-secondary)"
+                    >
+                      {icons && (
+                        <MapIcon
+                          url={owner ? icons.key(owner) : icons.item(folder)}
+                        />
+                      )}
+                      <span className="min-w-0 truncate">{folder.name}</span>
+                    </li>
+                  );
+                })}
               </ul>
               {unreadable.length > UNREADABLE_SHOWN && (
                 <p className="text-label-sm text-(--role-text-tertiary)">

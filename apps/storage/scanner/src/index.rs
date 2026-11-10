@@ -1129,6 +1129,27 @@ impl Index {
         serde_json::to_string(&result).map_err(|e| format!("The map couldn't be written out: {e}."))
     }
 
+    /// What the index holds at each of `paths`, the known places Pith names beside the map, such as Mail or Developer:
+    /// a folder's size, the figure its map shows, or none when the map can't read it. It can't when its listing failed,
+    /// when the folder waits on macOS's question about Pith (`asking`), or when a folder above it did either, so the map
+    /// can't tell whether it's there. A path its listed parent doesn't have isn't there, and gives nothing; so does a
+    /// path outside the index, or one found but waiting its turn to be listed.
+    pub fn places(&self, paths: &[String], asking: &dyn Fn(u32) -> bool) -> Vec<Place> {
+        paths
+            .iter()
+            .filter_map(|path| {
+                let (id, exact) = self.find(path)?;
+                let size = match self.folders[id as usize].status {
+                    Status::Listed | Status::Volume if exact => Some(self.folders[id as usize].size),
+                    Status::Unreadable => None,
+                    Status::Pending if asking(id) => None,
+                    _ => return None,
+                };
+                Some(Place { path: path.clone(), size })
+            })
+            .collect()
+    }
+
     fn tree(&self, id: u32, path: String, shape: &Shape<'_>, min: u64) -> TreeNode {
         let folder = &self.folders[id as usize];
         let name = self.name(id).to_string();
@@ -1510,6 +1531,15 @@ impl Folder {
     }
 }
 
+/// A known place's folder as the index holds it (`Index::places`), for Pith's Places beside the map.
+#[derive(Debug, PartialEq, Eq, serde::Serialize)]
+pub struct Place {
+    /// As Pith asked for it.
+    pub path: String,
+    /// The folder's size as its map shows it, or none when the map can't read it.
+    pub size: Option<u64>,
+}
+
 /// How the map prunes: folders and files under `min` fold into a group, except on the way to the focus, and inside
 /// the focus under its own `min`.
 struct Shape<'a> {
@@ -1628,6 +1658,97 @@ mod tests {
         index.change(ROOT, &Totals::default(), &Totals { size: 5, ..Totals::default() });
         assert_eq!(index.inconsistencies, 1);
         assert_eq!(index.totals(ROOT).size, 0);
+    }
+
+    /// Lists the folder at `path`, which its parent's listing gave `inode`, as holding `entries`.
+    fn list(index: &mut Index, path: &str, inode: u64, entries: Vec<crate::walk::Entry>) {
+        let (id, exact) = index.find(path).unwrap();
+        assert!(exact, "the index has no {path}");
+        index.apply(id, Path::new(path), crate::listing::Listing { inode, outcome: crate::listing::Outcome::Listed(entries) }, false, true);
+    }
+
+    /// The folder at `path` couldn't be read: macOS kept Pith out.
+    fn unreadable(index: &mut Index, path: &str) {
+        let id = index.find(path).unwrap().0;
+        index.apply(id, Path::new(path), crate::listing::Listing { inode: 0, outcome: crate::listing::Outcome::Unreadable(libc::EPERM) }, false, true);
+    }
+
+    /// A home folder's places in every state the map can hold them in.
+    fn home() -> Index {
+        let mut index = Index::new("/x", HashMap::new());
+        list(&mut index, "/x", 2, vec![folder("Users", 3)]);
+        list(&mut index, "/x/Users", 3, vec![folder("me", 4)]);
+        list(&mut index, "/x/Users/me", 4, vec![folder("Library", 5), folder("Pictures", 6), folder("Downloads", 7)]);
+        let library = vec![folder("Mail", 8), folder("Developer", 9), folder("Mobile Documents", 10), folder("Application Support", 11), folder("Messages", 12)];
+        list(&mut index, "/x/Users/me/Library", 5, library);
+        list(&mut index, "/x/Users/me/Pictures", 6, vec![file("Holiday.heic", 60, 3_000_000)]);
+        list(&mut index, "/x/Users/me/Downloads", 7, vec![file("Installer.dmg", 61, 2_000_000_000)]);
+        unreadable(&mut index, "/x/Users/me/Library/Mail");
+        list(&mut index, "/x/Users/me/Library/Developer", 9, vec![file("Simulator.dmg", 62, 5_000_000_000), file("notes.txt", 63, 4096)]);
+        list(&mut index, "/x/Users/me/Library/Application Support", 11, vec![folder("MobileSync", 13)]);
+        unreadable(&mut index, "/x/Users/me/Library/Application Support/MobileSync");
+        // Mobile Documents and Messages are found in Library's listing and not listed themselves yet.
+        index
+    }
+
+    /// What the index holds at each known place's path, from the folders macOS is asking about.
+    fn places_of(index: &Index, asking: &[&str]) -> HashMap<String, Option<u64>> {
+        let asking: Vec<u32> = asking.iter().map(|path| index.find(path).unwrap().0).collect();
+        let paths = [
+            "Library/Mail", "Library/Developer", "Library/Mobile Documents", "Library/Mobile Documents/com~apple~CloudDocs", "Library/Messages",
+            "Library/Messages/Archive", "Library/Application Support/MobileSync/Backup", "Pictures/Photos Library.photoslibrary", "Downloads",
+        ]
+        .map(|path| format!("/x/Users/me/{path}"));
+        let mut places: Vec<String> = paths.to_vec();
+        places.push("/elsewhere/Applications".into());
+        let found = index.places(&places, &|id| asking.contains(&id));
+        assert!(found.iter().all(|place| places.contains(&place.path)), "it names only the places asked about");
+        found.into_iter().map(|place| (place.path.trim_start_matches("/x/Users/me/").to_string(), place.size)).collect()
+    }
+
+    #[test]
+    fn a_place_has_the_size_the_map_shows_or_none_when_the_map_cant_read_it() {
+        let index = home();
+        let places = places_of(&index, &["/x/Users/me/Library/Mobile Documents"]);
+        assert_eq!(places.get("Library/Developer"), Some(&Some(5_000_004_096)), "a folder the map has listed");
+        assert_eq!(places.get("Downloads"), Some(&Some(2_000_000_000)));
+        assert_eq!(places.get("Library/Mail"), Some(&None), "a folder macOS keeps Pith out of");
+        assert_eq!(places.get("Library/Mobile Documents"), Some(&None), "a folder waiting on macOS's question");
+        assert_eq!(places.get("Library/Mobile Documents/com~apple~CloudDocs"), Some(&None), "inside one waiting on macOS");
+        assert_eq!(places.get("Library/Application Support/MobileSync/Backup"), Some(&None), "below a folder the map couldn't read");
+        // Nothing is known of these yet, or they aren't there.
+        assert_eq!(places.get("Library/Messages"), None, "found, and waiting its turn to be listed");
+        assert_eq!(places.get("Library/Messages/Archive"), None, "below one waiting its turn");
+        assert_eq!(places.get("Pictures/Photos Library.photoslibrary"), None, "a folder its parent's listing doesn't have");
+        assert_eq!(places.get("/elsewhere/Applications"), None, "outside the map");
+        assert_eq!(places.len(), 6);
+        // Once macOS has answered, a folder that still waits only waits its turn.
+        assert_eq!(places_of(&index, &[]).get("Library/Mobile Documents"), None);
+    }
+
+    #[test]
+    fn a_places_size_equals_the_maps_figure_for_its_folder() {
+        let index = home();
+        let sized: Vec<(String, u64)> = index
+            .places(&["/x/Users/me/Library/Developer".into(), "/x/Users/me/Downloads".into(), "/x/Users/me".into()], &|_| false)
+            .into_iter()
+            .map(|place| (place.path, place.size.unwrap()))
+            .collect();
+        assert_eq!(sized.len(), 3);
+        fn find<'a>(node: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
+            if node["path"] == path {
+                return Some(node);
+            }
+            node["children"].as_array()?.iter().find_map(|child| find(child, path))
+        }
+        // In the map of the whole index, in one focused on the home folder, and in the map of the folder itself.
+        for (path, size) in &sized {
+            for (map, focus) in [("/x", None), ("/x", Some("/x/Users/me")), (path.as_str(), None)] {
+                let result: serde_json::Value = serde_json::from_str(&index.result(map, focus).unwrap()).unwrap();
+                let node = find(&result["root"], path).unwrap_or_else(|| panic!("the map of {map} has no {path}"));
+                assert_eq!(node["size"].as_u64(), Some(*size), "{path} in the map of {map}, focus {focus:?}");
+            }
+        }
     }
 
     #[test]

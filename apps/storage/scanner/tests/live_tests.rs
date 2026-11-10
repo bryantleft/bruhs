@@ -711,6 +711,50 @@ fn serve_keeps_a_map_current_over_its_pipes() {
     remove(&root);
 }
 
+/// `serve` answers for the known places Pith names with the map they go with, from the same index: each folder's size
+/// as that map shows it, or none where the map can't read it, and nothing for a place that isn't there.
+#[test]
+fn serve_gives_each_place_its_size_in_the_map_it_answers_with() {
+    let root = fixture("serve_gives_each_place_its_size_in_the_map_it_answers_with");
+    seeded(&root);
+    let mut serve = Serve::start();
+    serve.send(serde_json::json!({ "cmd": "open", "root": root, "snapshot": null, "volume": "V" }));
+    serve.until("opened");
+    serve.send(serde_json::json!({ "cmd": "walk", "since": 100 }));
+    serve.until("walked");
+    let at = |path: &str| root.join(path).to_string_lossy().into_owned();
+    let places = [at("a"), at("a/b"), at("d/e"), at("locked"), at("locked/inside"), at("nowhere"), "/elsewhere".to_string()];
+    serve.send(serde_json::json!({ "cmd": "tree", "path": root, "focus": null, "request": 3, "places": places }));
+    let line = serve.line_where("tree", |_| true);
+    let tree: serde_json::Value = serde_json::from_str(&line).unwrap();
+    let answered: HashMap<String, serde_json::Value> =
+        tree["places"].as_array().unwrap().iter().map(|place| (place["path"].as_str().unwrap().to_string(), place["size"].clone())).collect();
+    fn find<'a>(node: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
+        if node["path"] == path {
+            return Some(node);
+        }
+        node["children"].as_array()?.iter().find_map(|child| find(child, path))
+    }
+    for folder in ["a", "a/b"] {
+        let node = find(&tree["result"]["root"], &at(folder)).unwrap_or_else(|| panic!("the map has no {folder}"));
+        assert_eq!(answered[&at(folder)], node["size"], "{folder}'s size is the map's");
+    }
+    assert_eq!(answered[&at("locked")], serde_json::Value::Null, "a folder the map couldn't read");
+    assert_eq!(answered[&at("locked/inside")], serde_json::Value::Null, "inside one, where the map can't tell");
+    assert_eq!(answered.len(), 5, "nothing for a folder that isn't there, or one outside the map: {answered:?}");
+    // A folder too small for a block of its own in this map has the size its own map gives it.
+    assert!(find(&tree["result"]["root"], &at("d/e")).is_none());
+    serve.send(serde_json::json!({ "cmd": "tree", "path": at("d/e"), "focus": null, "request": 4 }));
+    assert_eq!(answered[&at("d/e")], serve.until("tree")["result"]["root"]["size"]);
+    // Pith hands the page the map as the scanner wrote it, everything after `,"result":`, so the places come first.
+    assert!(line.find(r#","places":"#).is_some_and(|places| line.find(r#","result":"#).is_some_and(|result| places < result)), "{line}");
+    // A map asked for without places says nothing of any.
+    serve.send(serde_json::json!({ "cmd": "tree", "path": root, "focus": null, "request": 5 }));
+    assert_eq!(serve.until("tree")["places"], serde_json::json!([]));
+    serve.close();
+    remove(&root);
+}
+
 struct Serve {
     child: std::process::Child,
     lines: mpsc::Receiver<String>,
@@ -747,13 +791,18 @@ impl Serve {
     }
 
     fn until_where(&mut self, kind: &str, accept: impl Fn(&serde_json::Value) -> bool) -> serde_json::Value {
+        serde_json::from_str(&self.line_where(kind, accept)).unwrap()
+    }
+
+    /// The next line of `kind` that `accept` takes, as `serve` wrote it.
+    fn line_where(&mut self, kind: &str, accept: impl Fn(&serde_json::Value) -> bool) -> String {
         loop {
             let line = self.lines.recv_timeout(Duration::from_secs(20)).unwrap_or_else(|_| panic!("no {kind} line within 20 s"));
             let value: serde_json::Value = serde_json::from_str(&line).unwrap();
             assert_ne!(value["type"], "error", "serve reported an error: {line}");
             assert_ne!(value["type"], "fatal", "serve stopped: {line}");
             if value["type"] == kind && accept(&value) {
-                return value;
+                return line;
             }
         }
     }

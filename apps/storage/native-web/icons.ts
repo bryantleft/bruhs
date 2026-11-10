@@ -5,7 +5,12 @@
  */
 
 import { LARGEST_FILES_SHOWN } from "../src/lib/largest-files.ts";
-import { GREW_SHOWN, UNREADABLE_SHOWN, WRITERS_SHOWN } from "./side-lists.ts";
+import {
+  GREW_SHOWN,
+  PLACES_SHOWN,
+  UNREADABLE_SHOWN,
+  WRITERS_SHOWN,
+} from "./side-lists.ts";
 
 /** How many CSS pixels across the side lists and the hover card show icons. */
 export const ICON_POINTS = 16;
@@ -169,14 +174,15 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
  *   of Disk's usual window. Real folders show far fewer. Of the 8,474 folders of three real maps (a startup disk, a
  *   repository and a generated fixture), the most icons one showed was 152 at that size, and 271 on a 2,600 by
  *   1,500 px map, a full-screen window on a 6K display.
- * - The side lists show at most Largest files' rows and those of Grew since, Wrote the most since and Couldn't read
- *   (side-lists.ts). The hover card shows one.
+ * - The side lists show at most Largest files' rows and those of Places, Grew since, Wrote the most since and Couldn't
+ *   read (side-lists.ts). The hover card shows one.
  * An icon decoded at 2x takes 2.3 to 4 KiB (12 to 16 pt), and at 3x 5 to 9 KiB, so the cap holds at most about
  * 7 MiB of them at 2x and 16 MiB at 3x.
  */
 export const PAGE_ICON_CAP =
   Math.floor((776 * 612) / (19 * 16)) +
   LARGEST_FILES_SHOWN +
+  PLACES_SHOWN +
   GREW_SHOWN +
   WRITERS_SHOWN +
   UNREADABLE_SHOWN +
