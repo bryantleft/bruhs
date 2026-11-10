@@ -62,6 +62,38 @@ import XCTest
         XCTAssertEqual(undone.count, 2, "a move undone already isn't undone again")
     }
 
+    /// The records keep within a budget of memory: past it the oldest moves go, out of the undo manager too, so ⌘Z
+    /// stops at the oldest kept. The latest is always kept, for the note's Undo, however large.
+    func testTheStackKeepsWithinItsBudgetLettingTheOldestMovesGo() {
+        var undone: [String] = []
+        let a = record("a"), b = record("b"), c = record("c")
+        let stack = TrashUndoStack(budget: a.bytes * 2) { undone.append($0.note) }
+        let window = manager()
+        for moved in [a, b, c] { move(moved, on: stack, with: window) }
+        XCTAssertEqual(stack.records.map(\.note), ["Moved b", "Moved c"], "a went, to keep within the budget")
+        window.undo()
+        window.undo()
+        XCTAssertEqual(undone, ["Moved c", "Moved b"])
+        XCTAssertFalse(window.canUndo, "a's registration went with it")
+        let tight = TrashUndoStack(budget: 1) { undone.append($0.note) }
+        move(record("d"), on: tight, with: window)
+        move(record("e"), on: tight, with: window)
+        XCTAssertEqual(tight.records.map(\.note), ["Moved e"], "the latest stays, over the budget alone")
+    }
+
+    /// What a record keeps, from what was measured (`TrashRecord.bytes`): a file moved alone about 2 KB, and a folder
+    /// whose map drew 20,201 nodes in it about 7.2 MB.
+    func testARecordsSizeIsWhatItKeeps() {
+        XCTAssertEqual(Double(record("a").bytes), 2_100, accuracy: 600)
+        let leaves = (0..<100).map { DiskNode(kind: .file, name: "f\($0)", path: "/r/big/d/f\($0)", size: 1, children: nil) }
+        let folders = (0..<200).map { DiskNode(kind: .dir, name: "d\($0)", path: "/r/big/d\($0)", size: 100, files: 100, children: leaves) }
+        let big = DiskNode(kind: .dir, name: "big", path: "/r/big", size: 20_000, files: 20_000, children: folders)
+        let plan = TrashPlan(target: URL(fileURLWithPath: "/r/big"), name: "big", size: 20_000, files: 20_000, isFolder: true, consequences: [])
+        let moved = TrashRecord(moves: [TrashMove(plan: plan, trashed: URL(fileURLWithPath: "/trash/big"))], note: "Moved big",
+                                items: ["/r/big": .init(node: big, topFiles: [], places: [])])
+        XCTAssertEqual(Double(moved.bytes), 7_170_000, accuracy: 500_000)
+    }
+
     /// A move registered with no undo manager, as the smoke test makes some, can only be undone by the note's Undo, so
     /// it's let go once a later move takes the note; one whose window has closed, taking its undo manager, is let go too.
     func testAMoveNothingCanUndoAnyMoreIsLetGo() {
