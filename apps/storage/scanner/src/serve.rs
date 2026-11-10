@@ -97,8 +97,14 @@ enum Command {
         #[serde(default)]
         back: Vec<String>,
     },
-    /// Lists a folder again now, and with `deep` everything in it: Pith asks, past the folder's cooldown too.
-    Relist { path: String, deep: bool },
+    /// Lists a folder again now, and with `deep` everything in it: Pith asks, past the folder's cooldown too. With a
+    /// `request`, as Check Again sends one, a `relisted` line with it says when that has landed.
+    Relist {
+        path: String,
+        deep: bool,
+        #[serde(default)]
+        request: Option<u64>,
+    },
     /// Lists the folders it couldn't read again, as after Full Disk Access is granted.
     Retry,
     Save,
@@ -269,7 +275,8 @@ impl Server {
                     self.last_relief = Instant::now();
                 }
             }
-            Command::Relist { path, deep } => self.sched.ask(path, deep, Instant::now()),
+            Command::Relist { path, deep, request: None } => self.sched.ask(path, deep, Instant::now()),
+            Command::Relist { path, deep, request: Some(request) } => self.sched.ask_for(path, deep, Instant::now(), request),
             Command::Retry => {
                 let folders = self.index.as_ref().map(Index::unreadable_ids).unwrap_or_default();
                 for (_, path) in folders {
@@ -463,6 +470,14 @@ impl Server {
             self.checked(report);
         }
         self.finish_waiting();
+        self.answer_relists();
+    }
+
+    /// Says which of Pith's relists by request have landed whole (`Scheduler::ask_for`).
+    fn answer_relists(&mut self) {
+        for request in self.sched.take_answered() {
+            send(&format!(r#"{{"type":"relisted","request":{request}}}"#));
+        }
     }
 
     fn checked(&mut self, report: CheckReport) {
@@ -662,6 +677,8 @@ impl Server {
                 for request in requests {
                     self.run(request);
                 }
+                // A relist of a folder the index doesn't have is answered as soon as that's known.
+                self.answer_relists();
             }
         }
         let idle = self.sched.idle();

@@ -958,6 +958,66 @@ fn a_relist_pith_asks_for_skips_the_folders_cooldown() {
     remove(&root);
 }
 
+/// Pith's own relist of a folder by request, as Check Again asks for one, with everything inside it: it's answered once
+/// the folder and every folder inside it have been listed again, and not before, and once. A relist of a path the index
+/// doesn't have, inside the map or outside it, has nothing to list and is answered as soon as that's known.
+#[test]
+fn a_relist_pith_asks_for_is_answered_once_everything_inside_it_has_landed() {
+    let root = fixture("a_relist_pith_asks_for_is_answered_once_everything_inside_it_has_landed");
+    seeded(&root);
+    let mut live = Live::build(&root);
+    live.sched.ask_for(root.join("a").to_string_lossy().into_owned(), true, Instant::now(), 7);
+    let mut queue = live.sched.due(&live.index, Instant::now());
+    assert_eq!(queue.len(), 1, "a first");
+    let mut landed = 0;
+    while let Some(request) = queue.pop() {
+        assert!(live.sched.take_answered().is_empty(), "answered after {landed} listings, with {} to go", queue.len() + 1);
+        let listing = list(&request.path, &live.cx);
+        let (next, _) = live.sched.landed(&mut live.index, &request, listing, Duration::ZERO, Instant::now());
+        landed += 1;
+        queue.extend(next);
+        queue.extend(live.sched.due(&live.index, Instant::now()));
+    }
+    assert_eq!(landed, 3, "a, a/b and a/b/c");
+    assert_eq!(live.sched.take_answered(), vec![7]);
+    assert!(live.sched.take_answered().is_empty(), "answered once");
+
+    live.sched.ask_for("/elsewhere".into(), true, Instant::now(), 8);
+    assert!(live.sched.due(&live.index, Instant::now()).is_empty());
+    assert_eq!(live.sched.take_answered(), vec![8], "outside the map");
+    live.sched.ask_for(root.join("gone/deeper").to_string_lossy().into_owned(), true, Instant::now(), 9);
+    let mut queue = live.sched.due(&live.index, Instant::now());
+    while let Some(request) = queue.pop() {
+        let listing = list(&request.path, &live.cx);
+        let (next, _) = live.sched.landed(&mut live.index, &request, listing, Duration::ZERO, Instant::now());
+        queue.extend(next);
+        queue.extend(live.sched.due(&live.index, Instant::now()));
+    }
+    assert_eq!(live.sched.take_answered(), vec![9], "once the root's listing shows there's no such folder");
+    remove(&root);
+}
+
+/// `serve` answers Pith's relist of a folder by request once it has landed, so the map asked for after it has what the
+/// relist found, deep inside the folder too.
+#[test]
+fn serve_answers_a_relist_pith_asks_for_once_it_has_landed() {
+    let root = fixture("serve_answers_a_relist_pith_asks_for_once_it_has_landed");
+    seeded(&root);
+    let mut serve = Serve::start();
+    serve.send(serde_json::json!({ "cmd": "open", "root": root, "snapshot": null, "volume": "V" }));
+    serve.until("opened");
+    serve.send(serde_json::json!({ "cmd": "walk", "since": 100 }));
+    serve.until("walked");
+    // No event for it: only the relist finds it.
+    fs::write(root.join("a/b/c/new.bin"), vec![b'n'; 200_000]).unwrap();
+    serve.send(serde_json::json!({ "cmd": "relist", "path": root.join("a"), "deep": true, "request": 5 }));
+    assert_eq!(serve.until("relisted")["request"], 5);
+    serve.send(serde_json::json!({ "cmd": "tree", "path": root, "focus": null, "request": 6 }));
+    assert_eq!(serve.until("tree")["result"]["root"]["size"], Live::build(&root).index.totals(ROOT).size);
+    serve.close();
+    remove(&root);
+}
+
 /// Which of the person's own changes the index doesn't show yet: an item moved to the Trash while the index still holds
 /// it, and one put back until the index has listed it, a folder with everything inside it but what waits on macOS.
 #[test]

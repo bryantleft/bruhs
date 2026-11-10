@@ -111,6 +111,14 @@ pub struct Scheduler {
     /// Every event up to this ID is in the index.
     base: u64,
     received: u64,
+    /// Pith's relists by request (`ask_for`), each with how many of its paths waiting and listings in flight are still
+    /// to land: the folder asked for, and with `deep` every folder inside it.
+    requests: HashMap<u64, usize>,
+    /// The requests each path waiting carries, and each listing in flight.
+    pending_requests: HashMap<String, Vec<u64>>,
+    flight_requests: HashMap<u32, Vec<u64>>,
+    /// Requests whose relist has landed whole since they were last taken (`take_answered`).
+    answered: Vec<u64>,
 }
 
 impl Scheduler {
@@ -130,6 +138,10 @@ impl Scheduler {
             costs: HashMap::new(),
             base: 0,
             received: 0,
+            requests: HashMap::new(),
+            pending_requests: HashMap::new(),
+            flight_requests: HashMap::new(),
+            answered: Vec::new(),
         }
     }
 
@@ -187,6 +199,49 @@ impl Scheduler {
         if let Some(pending) = self.pending.get_mut(&path) {
             pending.asked = true;
         }
+    }
+
+    /// `ask` by `request`, as Check Again asks: the request is answered (`take_answered`) once the folder, and with `deep`
+    /// every folder inside it, has been listed again, or at once when there's no such folder to list.
+    pub fn ask_for(&mut self, path: String, deep: bool, now: Instant, request: u64) {
+        self.ask(path.clone(), deep, now);
+        self.pending_requests.entry(path).or_default().push(request);
+        *self.requests.entry(request).or_insert(0) += 1;
+    }
+
+    /// The requests answered since the last time.
+    pub fn take_answered(&mut self) -> Vec<u64> {
+        std::mem::take(&mut self.answered)
+    }
+
+    /// `requests` go with the listing of `folder` in flight, each one more listing to wait for.
+    fn carry(&mut self, folder: u32, requests: &[u64]) {
+        if requests.is_empty() {
+            return;
+        }
+        for request in requests {
+            *self.requests.entry(*request).or_insert(0) += 1;
+        }
+        self.flight_requests.entry(folder).or_default().extend_from_slice(requests);
+    }
+
+    /// One path or listing each of `requests` waited on is done with; a request with none left is answered.
+    fn finish(&mut self, requests: &[u64]) {
+        for request in requests {
+            let Some(left) = self.requests.get_mut(request) else { continue };
+            *left = left.saturating_sub(1);
+            if *left == 0 {
+                self.requests.remove(request);
+                self.answered.push(*request);
+            }
+        }
+    }
+
+    /// The path `path` waited for is gone: the requests it carried are done with it.
+    fn forget(&mut self, path: &str) -> Option<Pending> {
+        let requests = self.pending_requests.remove(path).unwrap_or_default();
+        self.finish(&requests);
+        self.pending.remove(path)
     }
 
     /// Asks for a folder to be listed. Returns the request to run, or none when it's being listed already, in which
@@ -253,13 +308,13 @@ impl Scheduler {
                 continue;
             }
             let Some((folder, exact)) = index.find(&path) else {
-                self.pending.remove(&path);
+                self.forget(&path);
                 continue;
             };
             if !exact && pending.through == Some(folder) {
                 // Its deepest known folder was listed since and still doesn't have it: it's gone, or it moved, which
                 // the items it held show: each still there is listed where it is now.
-                let items = self.pending.remove(&path).map(|p| p.items).unwrap_or_default();
+                let items = self.forget(&path).map(|p| p.items).unwrap_or_default();
                 let volume = PathBuf::from(index.path(ROOT));
                 for item in items {
                     if let Some(parent) = path_of_inode(&volume, item).and_then(|p| p.parent().map(|p| p.to_string_lossy().into_owned())) {
@@ -283,9 +338,13 @@ impl Scheduler {
             group.2.push((path, exact));
         }
         for (folder, (deep, first, paths)) in folders {
+            // Pith's requests on the paths listed go with the folder's listing, or with the one in flight, which lists
+            // it once more after.
+            let mut carried = Vec::new();
             for (path, exact) in paths {
                 if exact {
                     self.pending.remove(&path);
+                    carried.extend(self.pending_requests.remove(&path).unwrap_or_default());
                 } else if let Some(pending) = self.pending.get_mut(&path) {
                     pending.through = Some(folder);
                     pending.waiting = true;
@@ -293,6 +352,9 @@ impl Scheduler {
                 }
             }
             requests.extend(self.submit(folder, PathBuf::from(index.path(folder)), Purpose::Relist, deep, first));
+            if !carried.is_empty() {
+                self.flight_requests.entry(folder).or_default().extend(carried);
+            }
         }
         for path in moved {
             self.note(path, None, false, now, true);
@@ -305,6 +367,8 @@ impl Scheduler {
         let mut requests = Vec::new();
         let mut landed = Landed::default();
         let Some(flight) = self.flights.remove(&request.folder) else { return (requests, landed) };
+        // Pith's requests this listing is part of: done with it, unless it goes on to the folders inside or comes again.
+        let asked = self.flight_requests.remove(&request.folder).unwrap_or_default();
         let checking = flight.purpose == Purpose::Check || flight.check;
         // Folders that went missing from this one are tried again now that its listing says whether they're there.
         for waiting in self.deferred.values_mut().filter(|d| d.waits_on == Some(request.folder)) {
@@ -323,6 +387,7 @@ impl Scheduler {
             }
         }
         if index.status(request.folder) == Status::Free {
+            self.finish(&asked);
             landed.checked = self.checked_one(checking, false, 0);
             return (requests, landed);
         }
@@ -330,6 +395,7 @@ impl Scheduler {
             // In limbo with a folder above it that moved: listed again once that folder is found.
             let misses = self.deferred.get(&request.folder).map_or(0, |d| d.misses);
             self.deferred.insert(request.folder, Deferred { first: carried, waits_on: None, misses });
+            self.finish(&asked);
             landed.checked = self.checked_one(checking, false, 0);
             return (requests, landed);
         }
@@ -338,6 +404,9 @@ impl Scheduler {
             // It moved while it was listed: listed again where it is now.
             let retried = Request { path: current, ..request.clone() };
             self.flights.insert(request.folder, flight);
+            if !asked.is_empty() {
+                self.flight_requests.insert(request.folder, asked);
+            }
             requests.push(retried);
             return (requests, landed);
         }
@@ -369,6 +438,7 @@ impl Scheduler {
             if let Some(parent) = index.parent(request.folder) {
                 requests.extend(self.submit(parent, PathBuf::from(index.path(parent)), Purpose::Relist, false, carried));
             }
+            self.finish(&asked);
             landed.checked = self.checked_one(checking, false, 0);
             return (requests, landed);
         }
@@ -379,8 +449,13 @@ impl Scheduler {
             applied.next
         };
         let purpose = if checking { Purpose::Check } else { flight.purpose };
+        let deep = checking || request.deep;
         for (child, path) in next {
-            requests.extend(self.submit(child, path, purpose, checking || request.deep, if checking { None } else { carried }));
+            requests.extend(self.submit(child, path, purpose, deep, if checking { None } else { carried }));
+            // A deep relist Pith asked for waits for every folder inside it too.
+            if deep {
+                self.carry(child, &asked);
+            }
         }
         // A walk or a check lists every folder anyway, the originals' included.
         if flight.purpose == Purpose::Relist && !checking {
@@ -397,6 +472,12 @@ impl Scheduler {
         }
         if flight.again {
             requests.extend(self.submit(request.folder, current, Purpose::Relist, flight.deep, flight.first));
+            // Listed once more: Pith's requests wait for that listing instead.
+            if !asked.is_empty() {
+                self.flight_requests.entry(request.folder).or_default().extend(asked);
+            }
+        } else {
+            self.finish(&asked);
         }
         landed.checked = self.checked_one(checking, flight.purpose == Purpose::Check && applied.changed, applied.drift);
         (requests, landed)

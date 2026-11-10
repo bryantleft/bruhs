@@ -62,6 +62,8 @@ import PithCore
     var changed: (() -> Void)?
     /// The tree asked for last couldn't be made, as for a folder the map lacks.
     var treeFailed: ((String) -> Void)?
+    /// The person's Check Again has landed: the folder, and everything in it, listed again (`checkAgain`).
+    var checkedAgain: (() -> Void)?
 
     private var process: LiveProcess?
     private var stream: LiveStream?
@@ -74,6 +76,8 @@ import PithCore
     private var wanted = 0
     /// The person's changes the tree asked for last asked about.
     private var askedEdits: Set<String> = []
+    /// The requests of the person's Check Agains whose relists haven't landed yet.
+    private var checksAsked: Set<Int> = []
     private var stopped: (@MainActor () -> Void)?
     private var checker: NSBackgroundActivityScheduler?
     /// Whether this map registered the daily check with macOS's scheduler. An automated run's never does: macOS keeps
@@ -125,6 +129,8 @@ import PithCore
         guard let process else { return }
         stream?.stop()
         rebuildReason = reason
+        // A walk starts the scanner's index over, and the relists Check Again asked for with it, which the walk lists.
+        checksAsked = []
         // Watching from before the walk begins catches what changes while it runs.
         let since = FSEventsGetCurrentEventId()
         historyDone = true
@@ -162,6 +168,15 @@ import PithCore
 
     /// Lists a folder again now, past its cooldown too, everything in it with `deep`.
     func relist(_ path: String, deep: Bool) { process?.relist(path: path, deep: deep) }
+
+    /// The person's Check Again: lists `path` again now, past its cooldown, with everything in it, and says when that has
+    /// landed (`checkedAgain`), however long it takes.
+    func checkAgain(_ path: String) {
+        guard let process else { return }
+        nextRequest += 1
+        checksAsked.insert(nextRequest)
+        process.relist(path: path, deep: true, request: nextRequest)
+    }
 
     /// Lists the folders the map couldn't read again, as after Full Disk Access is granted.
     func retryUnreadable() { process?.retryUnreadable() }
@@ -274,6 +289,8 @@ import PithCore
         case .tree(let request, let result, let json, let places, let unlisted):
             guard request == wanted else { return }
             received?(result, json, places, LiveEdits.Answer(asked: askedEdits, unlisted: Set(unlisted)))
+        case .relisted(let request):
+            if checksAsked.remove(request) != nil { checkedAgain?() }
         case .saved(let through, let bytes, let ms):
             NSLog("Pith: kept the disk map through event \(through): \(bytes) bytes in \(ms) ms.")
         case .checked(let check):

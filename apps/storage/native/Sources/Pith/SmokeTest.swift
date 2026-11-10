@@ -153,6 +153,7 @@ extension AppDelegate {
             checks.merge(await checkPathBar(fixture, in: main), uniquingKeysWith: { _, new in new })
             checks.merge(await checkMapHoldsStill(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkOwnChangesShowAtOnce(fixture), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkCheckAgainShowsAtOnce(fixture), uniquingKeysWith: { _, new in new })
             // The selection bridge carries several items too, which ⌘-click picks and Pith keeps.
             let several = await checkSeveralSelected(fixture, picture: report.deletingLastPathComponent().appendingPathComponent("selection-bar.png"))
             checks["selection_bridge"] = checks["selection_bridge"] == true && several

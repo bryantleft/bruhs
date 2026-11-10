@@ -33,6 +33,29 @@ final class LiveIndexTests: XCTestCase {
         XCTAssertEqual(reason, "The map has no folder at /x.")
         guard case .fatal = try decode(#"{"type":"fatal","reason":"no"}"#) else { return XCTFail("not fatal") }
         XCTAssertThrowsError(try decode(#"{"type":"surprise"}"#))
+        guard case .relisted(let relisted) = try decode(#"{"type":"relisted","request":12}"#) else { return XCTFail("not a relist's end") }
+        XCTAssertEqual(relisted, 12)
+    }
+
+    /// The real scanner says when the relist Check Again asks for has landed, the folder and everything in it listed
+    /// again, by the request it came with, so Disk asks for that map at once.
+    func testTheScannerSaysWhenCheckAgainsRelistHasLanded() throws {
+        let storage = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let binary = storage.appendingPathComponent("scanner/target/release/storage-scanner")
+        guard FileManager.default.isExecutableFile(atPath: binary.path) else { throw XCTSkip("Build the Rust scanner before running integration tests") }
+        let folder = try temporaryFolder().resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("sub/deeper"), withIntermediateDirectories: true)
+        try Data(count: 50_000).write(to: folder.appendingPathComponent("sub/deeper/one.bin"))
+        let reports = LockedValue<[LiveReport]>([])
+        let process = LiveProcess(binary: binary, receive: { report in reports.update { $0.append(report) } }, exited: { _ in })
+        try process.start()
+        defer { process.terminate() }
+        process.open(root: folder.path, snapshot: nil, volume: nil)
+        process.walk(since: DiskWatcher.currentEventID)
+        XCTAssertTrue(waitFor(reports) { if case .walked = $0 { return true }; return false })
+        process.relist(path: folder.appendingPathComponent("sub").path, deep: true, request: 21)
+        XCTAssertTrue(waitFor(reports) { if case .relisted(21) = $0 { return true }; return false })
     }
 
     func testLinesAreSplitWhereverTheReadsFall() {

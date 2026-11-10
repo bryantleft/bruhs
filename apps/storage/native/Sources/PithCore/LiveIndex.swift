@@ -17,6 +17,8 @@ public enum LiveReport: Sendable {
     /// at each known place Pith asked about, and which of the person's changes Pith asked about its index doesn't show
     /// yet (`LiveEdits`).
     case tree(request: Int, result: DiskResult, json: String, places: [LivePlace], unlisted: [String])
+    /// The relist Pith asked for by `request`, as Check Again asks, has landed: the folder, and everything in it.
+    case relisted(request: Int)
     case saved(through: UInt64, bytes: UInt64, ms: UInt64)
     case checked(LiveCheck)
     case stats(String)
@@ -135,6 +137,9 @@ public enum LiveDecoder {
             let tree = try decoder.decode(Tree.self, from: line)
             try tree.result.validate()
             return .tree(request: tree.request, result: tree.result, json: try resultJSON(line), places: tree.places ?? [], unlisted: tree.unlisted ?? [])
+        case "relisted":
+            struct Relisted: Decodable { let request: Int }
+            return .relisted(request: try decoder.decode(Relisted.self, from: line).request)
         case "saved":
             struct Saved: Decodable { let through: UInt64; let bytes: UInt64; let ms: UInt64 }
             let s = try decoder.decode(Saved.self, from: line)
@@ -228,8 +233,13 @@ public final class LiveProcess: @unchecked Sendable {
     public func tree(path: String, focus: String?, request: Int, places: [String] = [], gone: [String] = [], back: [String] = []) {
         send(["cmd": "tree", "path": path, "focus": focus ?? NSNull(), "request": request, "places": places, "gone": gone, "back": back])
     }
-    /// Lists a folder again now, past its cooldown too, and with `deep` everything in it.
-    public func relist(path: String, deep: Bool) { send(["cmd": "relist", "path": path, "deep": deep]) }
+    /// Lists a folder again now, past its cooldown too, and with `deep` everything in it. With a `request`, the scanner
+    /// says when that has landed (`LiveReport.relisted`).
+    public func relist(path: String, deep: Bool, request: Int? = nil) {
+        var command: [String: Any] = ["cmd": "relist", "path": path, "deep": deep]
+        if let request { command["request"] = request }
+        send(command)
+    }
     public func retryUnreadable() { send(["cmd": "retry"]) }
     public func save() { send(["cmd": "save"]) }
     public func check() { send(["cmd": "check"]) }

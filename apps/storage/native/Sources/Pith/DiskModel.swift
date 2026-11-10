@@ -312,6 +312,8 @@ enum MapCommand: Equatable {
         live.received = { [weak self] value, json, places, answer in self?.liveTreeArrived(value, json: json, places: places, answer: answer) }
         live.treeFailed = { [weak self] reason in self?.liveTreeFailed(reason) }
         live.changed = { [weak self] in self?.refreshLive() }
+        // Check Again's map comes at once, past the wait between refreshes, and shows at once, as Refresh's does.
+        live.checkedAgain = { [weak self] in self?.refreshLive(now: true, checkedAgain: true) }
         self.live = live
         liveView = root
         scope = root
@@ -352,10 +354,12 @@ enum MapCommand: Equatable {
 
     /// Asks the live map for the view's tree, at most every two seconds, unless a folder just opened whose detail the
     /// tree lacks. A map of the whole startup disk is a few megabytes of JSON for Pith to decode and the page to lay
-    /// out, so it doesn't follow every listing.
-    private func refreshLive(now: Bool = false, opening: Bool = false) {
+    /// out, so it doesn't follow every listing. A folder shown `now`, or one opened, is the person's own ask, and so is
+    /// the tree after their Check Again has landed (`checkedAgain`), which comes even when nothing changed
+    /// (`LiveTreeAsks`).
+    private func refreshLive(now: Bool = false, opening: Bool = false, checkedAgain: Bool = false) {
         guard let live, let path = liveView, live.state.isMapped, isVisible || result == nil || now else { return }
-        guard live.changedSinceTree || result?.root.path != path || openFolderNeedsDetail else { return }
+        guard live.changedSinceTree || result?.root.path != path || openFolderNeedsDetail || checkedAgain else { return }
         let wait = 2.0 - Date().timeIntervalSince(lastTree)
         if wait > 0 && !now && !(opening && openFolderNeedsDetail) {
             guard treeLater == nil else { return }
@@ -369,9 +373,14 @@ enum MapCommand: Equatable {
         }
         treeLater?.cancel(); treeLater = nil
         lastTree = Date()
+        treeAsks.asked(checkedAgain ? .checkAgain : now || opening ? .opening : .refresh)
         live.request(path: path, focus: detailFolder, places: sideColumn.places.shortcuts.map(\.path), gone: liveEdits.gone, back: liveEdits.back)
         detailAsked = detailFolder
     }
+
+    /// Which of the live map's trees answer the person's own action: shown at once, or fallen back on with a scan of
+    /// theirs.
+    @ObservationIgnored private var treeAsks = LiveTreeAsks()
 
     /// The open folder, or the one the page wants while the tree leaves it out, when it's inside the view: the map
     /// shows it in finer detail.
@@ -440,6 +449,8 @@ enum MapCommand: Equatable {
         scope = value.root.path
         compareWithBaseline(edited.map)
         keepSelection()
+        // The map after the person's Check Again shows at once, as Refresh's does.
+        if treeAsks.arrived() { mapAnswersPerson = true }
         revision = UUID()
     }
 
@@ -516,9 +527,10 @@ enum MapCommand: Equatable {
         }
     }
 
-    /// Lists a folder of the live map again, with everything in it, for when it looks off.
+    /// Lists a folder of the live map again, with everything in it, for when it looks off. Once that has landed, its map
+    /// comes at once and shows at once (`LiveMap.checkedAgain`).
     func checkAgain(_ folder: String) {
-        live?.relist(folder, deep: true)
+        live?.checkAgain(folder)
     }
 
     /// Lists the folders the map couldn't read again, as after Full Disk Access is granted.
@@ -568,18 +580,21 @@ enum MapCommand: Equatable {
     }
 
     /// The live map couldn't show the folder asked for: one it lacks, such as a folder inside one it couldn't read,
-    /// is scanned instead.
+    /// is scanned instead. The scan's map answers the person, and shows at once, only when the tree it replaces was the
+    /// person's own ask, a folder they opened or Check Again; a refresh's waits for the hold like any refresh.
     private func liveTreeFailed(_ reason: String) {
         guard let live, let path = liveView else { return }
+        let persons = treeAsks.failed()
         if path == live.root {
             problem = DiskProblem(message: reason)
         } else {
-            scanOnce(URL(fileURLWithPath: path))
+            scanOnce(URL(fileURLWithPath: path), answersPerson: persons)
         }
     }
 
-    /// Scans `root` once. The current map stays until the new one arrives, so a cancelled or failed scan leaves it.
-    private func scanOnce(_ root: URL) {
+    /// Scans `root` once. The current map stays until the new one arrives, so a cancelled or failed scan leaves it. Its
+    /// map answers the person's own action unless `answersPerson` says otherwise, as for a scan a refresh fell back on.
+    private func scanOnce(_ root: URL, answersPerson: Bool = true) {
         liveView = nil
         sideColumn.mapIsntLive()
         operation?.cancel()
@@ -607,8 +622,9 @@ enum MapCommand: Equatable {
                 volumeUse = figures
                 result = value; scannedAt = Date(); edited = false; trashed = nil
                 compareWithLastScan(value)
-                // The person asked for this scan: a folder they chose or opened, Refresh, or Scan Again.
-                mapAnswersPerson = true
+                // The person asked for this scan: a folder they chose or opened, Refresh, or Scan Again, or the tree it
+                // stands in for.
+                mapAnswersPerson = answersPerson
                 revision = UUID()
                 changes = DiskChanges()
                 watch(root.path, since: since)
