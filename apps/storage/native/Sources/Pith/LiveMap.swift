@@ -55,10 +55,8 @@ import PithCore
     /// Folders the map lacks until the person answers macOS's question about Pith, as for iCloud Drive: opening one
     /// waits on that answer, and the map goes on without them meanwhile.
     private(set) var asking = 0
-    /// A tree arrived, for the request that asked for it (`request(path:focus:places:gone:back:)`): the map for `path`,
-    /// with its JSON for the page, what its index holds at the places asked about, and which of the person's changes
-    /// asked about its index doesn't show yet.
-    var received: ((Int, DiskResult, String, [LivePlace], LiveEdits.Answer) -> Void)?
+    /// A tree arrived, as the request that asked for it last wanted (`request(path:focus:places:gone:back:)`).
+    var received: ((LiveTree) -> Void)?
     /// The map changed, so a view on screen should ask for its tree again.
     var changed: (() -> Void)?
     /// The tree asked for last, by the request given, couldn't be made, as for a folder the map lacks.
@@ -291,7 +289,8 @@ import PithCore
             walk(reason: reason)
         case .tree(let request, let result, let json, let places, let unlisted):
             guard request == wanted else { return }
-            received?(request, result, json, places, LiveEdits.Answer(asked: askedEdits, unlisted: Set(unlisted)))
+            let answer = LiveEdits.Answer(asked: askedEdits, unlisted: Set(unlisted))
+            received?(LiveTree(request: request, map: result, json: json, places: places, answer: answer))
         case .relisted(let request):
             if checksAsked.remove(request) != nil { checkedAgain?() }
         case .saved(let through, let bytes, let ms):
@@ -387,6 +386,17 @@ import PithCore
         case .failed(let message): .failed(message)
         }
     }
+}
+
+/// A tree of the live map, as it came for the request that asked for it: the map, the scanner's own JSON of it for the
+/// page, what its index holds at the places asked about, and which of the person's changes asked about its index doesn't
+/// show yet.
+struct LiveTree {
+    let request: Int
+    let map: DiskResult
+    let json: String
+    let places: [LivePlace]
+    let answer: LiveEdits.Answer
 }
 
 /// Whether the Mac runs on power rather than its battery, from IOKit's power sources.

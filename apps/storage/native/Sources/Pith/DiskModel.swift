@@ -315,9 +315,7 @@ enum MapCommand: Equatable {
     func startLive(root: String = "/", keep: Bool? = nil) {
         guard live == nil else { return }
         let live = LiveMap(root: root)
-        live.received = { [weak self] request, value, json, places, answer in
-            self?.liveTreeArrived(value, json: json, places: places, answer: answer, request: request)
-        }
+        live.received = { [weak self] tree in self?.liveTreeArrived(tree) }
         live.treeFailed = { [weak self] request, reason in self?.liveTreeFailed(reason, request: request) }
         live.changed = { [weak self] in self?.refreshLive() }
         // Check Again's map comes at once, past the wait between refreshes, and shows at once, as Refresh's does.
@@ -417,8 +415,8 @@ enum MapCommand: Equatable {
 
     /// A live map came. Its volume's figures are measured off the main thread first, and whether the items the person
     /// changed are on the disk, and then the map goes out with its figures, as the person's changes have it.
-    private func liveTreeArrived(_ value: DiskResult, json: String, places: [LivePlace], answer: LiveEdits.Answer, request: Int) {
-        guard value.root.path == liveView else { return }
+    private func liveTreeArrived(_ tree: LiveTree) {
+        guard tree.map.root.path == liveView else { return }
         liveMaps += 1
         let number = liveMaps
         // A change the index never shows, as a hard-linked file put back whose bytes it counts at another link, is held
@@ -428,12 +426,12 @@ enum MapCommand: Equatable {
         }
         let changed = Set(liveEdits.gone + liveEdits.back)
         Task {
-            async let figures = self.figures(for: value.root.path)
+            async let figures = self.figures(for: tree.map.root.path)
             let onDisk = changed.isEmpty ? [] : await Task.detached(priority: .utility) { Set(changed.filter(Self.exists)) }.value
             let measured = await figures
             guard number == liveMaps else { return }
             liveEdits.keep(onDisk: onDisk, of: changed)
-            showLive(value, json: json, places: places, answer: answer, figures: measured, request: request)
+            showLive(tree, figures: measured)
         }
     }
 
@@ -443,24 +441,24 @@ enum MapCommand: Equatable {
         return lstat(path, &info) == 0
     }
 
-    private func showLive(_ value: DiskResult, json: String, places: [LivePlace], answer: LiveEdits.Answer, figures: VolumeFigures?, request: Int) {
-        guard value.root.path == liveView else { return }
+    private func showLive(_ tree: LiveTree, figures: VolumeFigures?) {
+        guard tree.map.root.path == liveView else { return }
         // A map from an index that doesn't show the person's changes yet shows them anyway, and is then no longer the
         // scanner's own JSON.
-        let edited = liveEdits.apply(to: value, places: places, answer: answer)
+        let edited = liveEdits.apply(to: tree.map, places: tree.places, answer: tree.answer)
         liveMapsShown += 1
         if edited.changed { mapsShowingChanges += 1 }
         if let live { sideColumn.liveTreeArrived(root: live.root, places: edited.places) }
         settingLive = true
         volumeUse = figures
         result = edited.map
-        resultJSON = edited.changed ? nil : json
+        resultJSON = edited.changed ? nil : tree.json
         settingLive = false
-        scope = value.root.path
+        scope = tree.map.root.path
         compareWithBaseline(edited.map)
         keepSelection()
         // The map after the person's Check Again shows at once, as Refresh's does.
-        if treeAsks.arrived(request: request) { mapAnswersPerson = true }
+        if treeAsks.arrived(request: tree.request) { mapAnswersPerson = true }
         revision = UUID()
     }
 
