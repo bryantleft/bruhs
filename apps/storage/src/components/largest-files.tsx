@@ -6,8 +6,13 @@ import type { FileEntry } from "~/lib/types";
 interface Props {
   files: readonly FileEntry[];
   onSelect: (file: FileEntry) => void;
-  /** The selected path, marked in the list. */
-  selectedPath?: string | null;
+  /**
+   * A ⌘-click on a row: add its file to the selection, or take it out, for a host that keeps several, as Pith does.
+   * Without it a ⌘-click selects as a click does.
+   */
+  onToggle?: (file: FileEntry) => void;
+  /** The selected paths, each marked in the list. */
+  selectedPaths?: readonly string[];
   /** A path hovered on the map: its row, and rows inside it, are highlighted. */
   hoveredPath?: string | null;
   /** The row under the pointer or keyboard focus changed, for linking the map. */
@@ -33,7 +38,8 @@ const inside = (path: string, folder: string) =>
 export function LargestFiles({
   files,
   onSelect,
-  selectedPath = null,
+  onToggle,
+  selectedPaths = [],
   hoveredPath = null,
   onHoverPath,
   base,
@@ -68,12 +74,15 @@ export function LargestFiles({
             <li key={f.path}>
               <button
                 type="button"
-                onClick={() => onSelect(f)}
+                onClick={(event) =>
+                  event.metaKey && onToggle ? onToggle(f) : onSelect(f)
+                }
                 onContextMenu={
                   onMenu
                     ? (event) => {
                         event.preventDefault();
-                        onSelect(f);
+                        // A file selected already keeps the selection, whose items the menu acts on.
+                        if (!selectedPaths.includes(f.path)) onSelect(f);
                         onMenu(f);
                       }
                     : undefined
@@ -83,7 +92,7 @@ export function LargestFiles({
                 onFocus={() => onHoverPath?.(f.path)}
                 onBlur={() => onHoverPath?.(null)}
                 aria-label={`${f.name}, ${size}, in ${folderPath}`}
-                aria-pressed={f.path === selectedPath}
+                aria-pressed={selectedPaths.includes(f.path)}
                 data-highlighted={
                   hoveredPath !== null && inside(f.path, hoveredPath)
                     ? ""

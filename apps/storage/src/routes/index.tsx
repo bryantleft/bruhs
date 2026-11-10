@@ -190,7 +190,7 @@ function ScanView({ result }: { result: ResultEvent }) {
               root={current}
               onEnterDir={enterDir}
               onSelect={setSelected}
-              selectedPath={selected?.path ?? null}
+              selectedPaths={selected ? [selected.path] : []}
             />
           </div>
         </section>

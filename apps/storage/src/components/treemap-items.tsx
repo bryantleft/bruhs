@@ -6,9 +6,12 @@ import type { DirNode, TreeNode } from "~/lib/types";
 interface TreemapItemsProps {
   /** The directory the map shows, whose items the list names. */
   root: DirNode;
-  selectedPath: string | null;
+  /** The items selected, by path, each pressed in the list. */
+  selectedPaths: readonly string[];
   /** Selects an item, as a click on its block does. */
   onSelect: (node: TreeNode | null) => void;
+  /** Adds an item to the selection or takes it out, as a ⌘-click on its block does, for a host that keeps several. */
+  onToggle?: (node: TreeNode) => void;
   /** Opens a child folder of `root`. */
   onEnterDir: (node: DirNode) => void;
   /** The item under VoiceOver or keyboard focus, which the map outlines, or null for none. */
@@ -31,12 +34,14 @@ function isOpenable(node: TreeNode, root: DirNode): node is DirNode {
  * buttons, including the ones too small to draw and the folders the scan couldn't read,
  * and then the Not measured block, which explains itself. The list stays out of the tab
  * order, since the map itself is the one tab stop; VoiceOver still reaches every button,
- * and the item it's on is outlined on the map.
+ * and the item it's on is outlined on the map. A button pressed with ⌘ down adds its item
+ * to the selection or takes it out, as a ⌘-click on its block does.
  */
 export const TreemapItems = memo(function TreemapItems({
   root,
-  selectedPath,
+  selectedPaths,
   onSelect,
+  onToggle,
   onEnterDir,
   onFocusItem,
   unmeasured,
@@ -53,9 +58,18 @@ export const TreemapItems = memo(function TreemapItems({
           <button
             type="button"
             tabIndex={-1}
-            aria-pressed={child.path === selectedPath}
+            aria-pressed={selectedPaths.includes(child.path)}
             disabled={child.kind === "unreadable" || child.kind === "volume"}
-            onClick={() => onSelect(child)}
+            onClick={(event) => {
+              // Only an item joins the selection: the smaller items are no item.
+              if (event.metaKey && onToggle) {
+                if (child.kind === "dir" || child.kind === "file") {
+                  onToggle(child);
+                }
+              } else {
+                onSelect(child);
+              }
+            }}
             onFocus={() =>
               onFocusItem(child.kind === "aggregate" ? null : child.path)
             }

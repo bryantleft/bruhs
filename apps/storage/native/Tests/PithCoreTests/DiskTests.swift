@@ -48,6 +48,26 @@ final class DiskTests: XCTestCase {
 
     // MARK: Editing the map
 
+    /// The selection looks each of its items up with every map, so a lookup goes down the folders that hold the path.
+    func testAnItemIsFoundDownTheFoldersThatHoldIt() {
+        let result = sample()
+        XCTAssertEqual(result.item(at: "/r")?.kind, .dir, "the root is an item of its map")
+        XCTAssertEqual(result.item(at: "/r/a")?.size, 40)
+        XCTAssertEqual(result.item(at: "/r/a/big.bin")?.size, 30)
+        XCTAssertEqual(result.item(at: "/r/b/hidden.log")?.size, 5, "a file folded into the smaller items, from the largest files")
+        XCTAssertNil(result.item(at: "/r/a/locked"), "a folder the scan couldn't read is no item")
+        XCTAssertNil(result.item(at: "/r/b/__other__"), "nor are the smaller items")
+        XCTAssertNil(result.item(at: "/r/a/big"), "a path that only starts like an item's")
+        XCTAssertNil(result.item(at: "/r/ab/big.bin"), "a path inside a folder that only starts like one")
+        XCTAssertNil(result.item(at: "relative"))
+        let everything = DiskResult(root: DiskNode(kind: .dir, name: "", path: "/", size: 1, files: 1, children: [
+            DiskNode(kind: .dir, name: "Users", path: "/Users", size: 1, files: 1, children: [
+                DiskNode(kind: .file, name: "a.bin", path: "/Users/a.bin", size: 1, children: nil),
+            ]),
+        ]), topFiles: [], summary: summary(bytes: 1, files: 1, errors: 0))
+        XCTAssertEqual(everything.item(at: "/Users/a.bin")?.name, "a.bin", "under the startup disk's root")
+    }
+
     func testRemovingAnItemShrinksEveryFolderAboveIt() throws {
         let result = sample()
         let updated = try XCTUnwrap(result.removing("/r/a/big.bin"))

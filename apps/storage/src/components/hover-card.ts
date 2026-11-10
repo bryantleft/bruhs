@@ -85,6 +85,11 @@ export interface CardContext {
    * map dimmed, and the card then offers none.
    */
   readonly clicks: boolean;
+  /**
+   * Whether a ⌘-click adds an item to the selection, or takes it out, for a host that keeps several, as Pith does: the
+   * card's click hint says so.
+   */
+  readonly several?: boolean;
   /** How much the block changed since the last scan, e.g. "+12.3 GB since Nov 3". */
   readonly change: string | null;
 }
@@ -95,12 +100,15 @@ export interface CardContext {
  */
 export function describe(
   tile: Tile,
-  { open, layout, hints, clicks, change }: CardContext,
+  { open, layout, hints, clicks, several = false, change }: CardContext,
 ): Card {
   const size = formatBytes(tileSize(tile));
   const share = shareOf(tile, layout);
   const openFolder =
     open && clicks ? ` Double-click to open ${open.name}/.` : "";
+  const select = several
+    ? "Click to select, or ⌘-click to select several."
+    : "Click to select.";
   const title = middleTruncate(tileName(tile), 34);
   const fill = (category: Category) => `var(${CATEGORY_VAR[category]})`;
   const hint = (text: string) => (hints && clicks ? text : null);
@@ -127,7 +135,7 @@ export function describe(
         },
         size,
         share,
-        hint: hint(`Click to select.${openFolder}`),
+        hint: hint(`${select}${openFolder}`),
         unreadable: null,
         change,
       };
@@ -159,7 +167,7 @@ export function describe(
         kind: { label: blockKind(tile), fill: fill(tile.category) },
         size,
         share,
-        hint: hint("Click to select. Double-click to open."),
+        hint: hint(`${select} Double-click to open.`),
         unreadable: unreadableInside(tile.node),
         change,
       };
@@ -170,7 +178,7 @@ export function describe(
         kind: { label: "Folder", fill: null },
         size,
         share,
-        hint: hint("Click to select. Double-click to open."),
+        hint: hint(`${select} Double-click to open.`),
         unreadable: unreadableInside(tile.node),
         change,
       };

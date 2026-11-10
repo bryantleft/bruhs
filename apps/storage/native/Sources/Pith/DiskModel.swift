@@ -16,18 +16,18 @@ struct DiskProblem: Equatable {
     var offersDiskAccess = false
 }
 
-/// The last item moved to the Trash, while Pith can still put it back.
-struct TrashedItem: Equatable {
-    let name: String
-    let size: UInt64
-    let original: URL
-    let trashed: URL
+/// The items the last move to the Trash moved, while Pith can still put them back with one Undo.
+struct TrashedItems: Equatable {
+    /// Each item that moved, where it was and where it went.
+    let moves: [TrashMove]
+    /// What the notice says of them (`TrashOutcome.note`).
+    let note: String
     /// The map before the move, which Undo restores exactly.
     let previous: DiskResult
-    /// The places the move took out of Places, which Undo puts back with the map.
-    let places: [LivePlace]
+    /// The places the move took out of Places, by the path of the item that held them, which Undo puts back with it.
+    let places: [String: [LivePlace]]
 
-    static func == (lhs: TrashedItem, rhs: TrashedItem) -> Bool { lhs.trashed == rhs.trashed && lhs.original == rhs.original }
+    static func == (lhs: TrashedItems, rhs: TrashedItems) -> Bool { lhs.moves == rhs.moves }
 }
 
 /// The apps that wrote the most to disk over a stretch, shown beside what grew. macOS doesn't say which app wrote to
@@ -78,17 +78,20 @@ enum MapCommand: Equatable {
     var scannedAt: Date?
     /// True once a scanned map has changed since its scan: an item moved to the Trash, or a folder scanned again.
     private(set) var edited = false
-    var selected: String?
-    /// The selected item as the map has it.
-    private(set) var selectedItem: DiskNode?
-    /// What moving the selected item to the Trash would do, or why it can't go.
-    private(set) var selectedPlan: Result<TrashPlan, DiskFailure>?
-    /// What deleting the selected item frees now, once the scanner has measured it: clones, hard links and snapshots
-    /// outside it can keep part of its size.
+    /// The items selected on the map, in the order they were picked, none inside another (`DiskSelection`). Pith keeps
+    /// them, and the map's page outlines them.
+    private(set) var selection = DiskSelection()
+    /// The selected items as the map has them, in that order.
+    private(set) var selectedItems: [DiskNode] = []
+    /// What moving the selected items to the Trash would do, or why they can't go.
+    private(set) var selectedPlan: Result<TrashBatch, DiskFailure>?
+    /// What deleting the selected items frees now, from one measurement of them all, once the scanner has made it: clones,
+    /// hard links and snapshots outside them can keep part of their size, and those shared among them count once.
     private(set) var selectedFrees: DiskFrees?
+    @ObservationIgnored private var frees = FreesSchedule()
     private var freesTask: Task<Void, Never>?
-    /// A move to the Trash waiting for the user to confirm what it does to a synced item.
-    var confirming: TrashPlan?
+    /// A move to the Trash waiting for the person to confirm what it does to a synced item or a Photos library.
+    var confirming: TrashBatch?
     /// Where the volume's space went, for a map of a whole volume: the volume's own figures set against the map as it is
     /// now (`account`), so what the map gains or loses, as by Move to Trash and Undo, moves Not measured at once.
     private(set) var accounting: DiskAccounting?
@@ -142,7 +145,7 @@ enum MapCommand: Equatable {
     private(set) var progress: DiskProgress?
     /// How the last scan ended when it didn't produce a map.
     private(set) var note: String?
-    private(set) var trashed: TrashedItem?
+    private(set) var trashed: TrashedItems?
     /// The folder the map is showing, as the page reports it. Nil until the page reports a new map's folder.
     private(set) var openFolder: String?
     /// A folder the page went back or forward to that the map's tree leaves out: the live map shows it in detail, so
@@ -235,9 +238,15 @@ enum MapCommand: Equatable {
     }
 
     /// The page moved the map: the folder it shows now, one it went back or forward to that the tree leaves out, and
-    /// whether its Back and Forward can go anywhere.
+    /// whether its Back and Forward can go anywhere. The selection keeps the items still on the map, those inside the
+    /// folder it shows.
     func pageMoved(to folder: String, wanting wanted: String?, canGoBack: Bool, canGoForward: Bool) {
         let opened = folder != openFolder || (wanted != wantedFolder && wanted != nil)
+        if folder != openFolder {
+            var kept = selection
+            kept.keep(inside: folder)
+            if kept != selection { setSelection(kept) }
+        }
         wantedFolder = wanted
         openFolder = folder
         // A new open folder asks for its tree in detail, the wanted folder's when there is one.
@@ -312,7 +321,7 @@ enum MapCommand: Equatable {
         isScanning = false; rescanning = nil; progress = nil
         problem = nil; note = nil; scannedAt = nil; edited = false; trashed = nil
         if result?.root.path != path {
-            select(nil)
+            select([])
             result = nil
             mapStartsOver()
             volumeUse = nil
@@ -389,13 +398,17 @@ enum MapCommand: Equatable {
         revision = UUID()
     }
 
-    /// The selection, as the newer map has it. What deleting it frees isn't measured again: a busy folder changes with
-    /// every map, and measuring again each time would never finish.
+    /// The selection as a newer map has it: an item the map no longer holds leaves it. What deleting the rest frees is
+    /// measured again only once an item's size has moved by more than a megabyte since it was last measured, one
+    /// measurement at a time (`FreesSchedule`): a busy folder changes with every map, and measuring it each time would
+    /// never finish.
     private func keepSelection() {
-        guard let path = selected else { return }
-        guard let item = result?.item(at: path) else { select(nil); return }
-        selectedItem = item
-        selectedPlan = trashPlan(path)
+        guard !selection.isEmpty else { return }
+        var kept = selection
+        kept.keep { self.result?.item(at: $0) != nil }
+        if kept != selection { setSelection(kept); return }
+        refreshSelected()
+        if frees.mapChanged(selectedSizes) { measureFrees() }
     }
 
     /// The live map's folder sizes against a baseline kept from up to a day before, so the map shows what grew. A day
@@ -516,7 +529,7 @@ enum MapCommand: Equatable {
                 // Cancel that comes while they're measured is too late for it.
                 let figures = await self.figures(for: value.root.path, full: true)
                 guard generation == id else { return }
-                select(nil)
+                select([])
                 // The page opens a map of another folder at its root; a new scan of the same one stays where it was.
                 if result?.root.path != value.root.path { mapStartsOver() }
                 volumeUse = figures
@@ -588,7 +601,7 @@ enum MapCommand: Equatable {
                     // Refresh or Scan Again, which the person asked for.
                     volumeUse = figures
                     self.result = merged; edited = true; trashed = nil; mapAnswersPerson = true; revision = UUID()
-                    select(selected)
+                    keepSelection()
                 } catch {
                     changes.merge(earlier)
                     guard generation == id, !Task.isCancelled else { return }
@@ -612,31 +625,65 @@ enum MapCommand: Equatable {
         runner.cancelImmediately()
     }
 
-    /// Selects a real item from the current map; anything else clears the selection.
-    func select(_ path: String?) {
-        freesTask?.cancel()
-        selectedFrees = nil
-        guard let path, let item = result?.item(at: path) else { selected = nil; selectedItem = nil; selectedPlan = nil; return }
-        selected = path
-        selectedItem = item
-        selectedPlan = trashPlan(path)
-        measureFrees(path)
+    /// A click: selects the real items of `paths` in the map shown, none for anything else.
+    func select(_ paths: [String]) {
+        var next = DiskSelection(paths)
+        next.keep { self.result?.item(at: $0) != nil }
+        setSelection(next)
     }
 
-    /// Asks the scanner what deleting `path` frees, after a short pause so arrowing across the map doesn't start a
-    /// walk for every item passed. A new selection cancels it.
-    private func measureFrees(_ path: String) {
-        let binary = binary
+    /// A ⌘-click: adds the item at `path` to the selection, or takes it out. A path that's no item of the map changes
+    /// nothing.
+    func toggle(_ path: String) {
+        guard selection.paths.contains(path) || result?.item(at: path) != nil else { return }
+        var next = selection
+        next.toggle(path)
+        setSelection(next)
+    }
+
+    /// Makes `next` the selection, with its items and plan. Other items than before are measured afresh, and a
+    /// measurement of the last ones is dropped.
+    private func setSelection(_ next: DiskSelection) {
+        let changed = next != selection
+        selection = next
+        refreshSelected()
+        guard changed else { return }
+        freesTask?.cancel(); freesTask = nil
+        selectedFrees = nil
+        if frees.selected(selectedSizes) { measureFrees() }
+    }
+
+    /// The selected items and their plan, from the map shown.
+    private func refreshSelected() {
+        selectedItems = selection.paths.compactMap { result?.item(at: $0) }
+        selectedPlan = selection.isEmpty ? nil : trashPlan(selection.paths)
+    }
+
+    /// The selected items' sizes by path, which say when to measure what deleting them frees again.
+    private var selectedSizes: [String: UInt64] {
+        Dictionary(selectedItems.map { ($0.path, $0.size) }) { first, _ in first }
+    }
+
+    /// Asks the scanner what deleting the selected items frees, in one measurement of them all, so clone groups and
+    /// hard links shared among them count once. It waits a moment first, so arrowing across the map doesn't start a walk
+    /// for every item passed. One that lands once the selection has changed is dropped.
+    private func measureFrees() {
+        let binary = binary, paths = selection.paths
         freesTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
             do {
-                let frees = try await ScannerRunner.frees(binary: binary, paths: [path])
-                guard !Task.isCancelled, let self, self.selected == path else { return }
-                self.selectedFrees = frees
+                let measured = try await ScannerRunner.frees(binary: binary, paths: paths)
+                guard !Task.isCancelled, let self, self.selection.paths == paths else { return }
+                self.freesTask = nil
+                self.selectedFrees = measured
+                // The items moved while they were measured.
+                if self.frees.landed(now: self.selectedSizes) { self.measureFrees() }
             } catch {
                 guard !Task.isCancelled else { return }
-                NSLog("Pith: couldn't measure what deleting \(path) frees: \(error.localizedDescription)")
+                self?.freesTask = nil
+                self?.frees.failed()
+                NSLog("Pith: couldn't measure what deleting \(paths.joined(separator: ", ")) frees: \(error.localizedDescription)")
             }
         }
     }
@@ -694,52 +741,53 @@ enum MapCommand: Equatable {
         return live.asking > 0
     }
 
-    /// What moving `path` to the Trash would do, or why it can't go.
-    func trashPlan(_ path: String) -> Result<TrashPlan, DiskFailure> {
+    /// What moving the items at `paths` to the Trash would do, or why they can't go (`TrashBatch.plan`).
+    func trashPlan(_ paths: [String]) -> Result<TrashBatch, DiskFailure> {
         guard let result else { return .failure(DiskFailure("Open the map first.")) }
-        do { return .success(try TrashPolicy.plan(path, result: result, home: FileManager.default.homeDirectoryForCurrentUser)) }
-        catch let failure as DiskFailure { return .failure(failure) }
-        catch { return .failure(DiskFailure(error.localizedDescription)) }
+        return TrashBatch.plan(paths, result: result, home: FileManager.default.homeDirectoryForCurrentUser)
     }
 
-    /// Moves `path` to the Trash at once, as Finder does, since Undo can put it back. A synced item or Photos library
-    /// asks first: the Trash also takes it off the user's other devices or out of Photos.
-    func requestTrash(_ path: String, undoManager: UndoManager?) {
-        switch trashPlan(path) {
+    /// Moves the items at `paths` to the Trash at once, as Finder does, since Undo can put them back. If any can't go,
+    /// none do, and Pith says which and why. A synced item or Photos library asks first, once for them all: the Trash also
+    /// takes it off the person's other devices or out of Photos.
+    func requestTrash(_ paths: [String], undoManager: UndoManager?) {
+        switch trashPlan(paths) {
         case .failure(let failure): problem = DiskProblem(message: failure.message)
-        case .success(let plan) where !plan.consequences.isEmpty: confirming = plan
-        case .success(let plan): trash(plan, undoManager: undoManager)
+        case .success(let batch) where batch.asks: confirming = batch
+        case .success(let batch): trash(batch, undoManager: undoManager)
         }
     }
 
-    /// Moves the item to the Trash and takes it off the map at once; the live map then follows the move itself.
-    /// Undo puts it back.
-    func trash(_ plan: TrashPlan, undoManager: UndoManager?) {
+    /// Moves the items to the Trash and takes them off the map at once; the live map then follows the move itself. One
+    /// Undo puts back every item that moved. A move that stops at an item it can't move says which moved and which
+    /// stayed, and its Undo puts back the ones that moved.
+    func trash(_ batch: TrashBatch, undoManager: UndoManager?) {
         guard let result, !isScanning, !isTrashing else { return }
         isTrashing = true; problem = nil
         defer { isTrashing = false }
-        do {
-            let trashedURL = try moveToTrash(plan.target)
+        let outcome = batch.move { try moveToTrash($0) }
+        if let message = outcome.problem { problem = DiskProblem(message: message) }
+        guard let note = outcome.note else { return }
+        var updated = result, places: [String: [LivePlace]] = [:]
+        for move in outcome.moved {
+            let path = move.plan.target.path
             // A place it held leaves Places with it, until Undo puts it back.
-            let places = sideColumn.tookOff(plan.target.path)
-            if selected == plan.target.path { select(nil) }
-            if let updated = result.removing(plan.target.path) {
-                self.result = updated
-            } else if liveView == nil {
-                // The tree didn't hold it (an item inside a group of smaller ones): the next scan reflects it.
-                edited = true
-            }
-            trashed = trashedURL.map { TrashedItem(name: plan.name, size: plan.size, original: plan.target, trashed: $0, previous: result, places: places) }
-            if liveView == nil { edited = true }
-            mapAnswersPerson = true
-            revision = UUID()
-            if trashed != nil {
-                undoManager?.registerUndo(withTarget: self) { model in MainActor.assumeIsolated { model.undoTrash() } }
-                undoManager?.setActionName("Move to Trash")
-            }
-        } catch {
-            problem = DiskProblem(message: "Pith couldn’t move \(plan.name) to the Trash. \(Self.plain(error))")
+            places[path] = sideColumn.tookOff(path)
+            // An item the tree doesn't hold, inside a group of smaller ones, leaves the map with its next scan or listing.
+            updated = updated.removing(path) ?? updated
         }
+        self.result = updated
+        if liveView == nil { edited = true }
+        // What moved leaves the selection; what stayed where it was stays selected.
+        let gone = Set(outcome.moved.map(\.plan.target.path))
+        var kept = selection
+        kept.keep { !gone.contains($0) }
+        setSelection(kept)
+        trashed = TrashedItems(moves: outcome.moved, note: note, previous: result, places: places)
+        mapAnswersPerson = true
+        revision = UUID()
+        undoManager?.registerUndo(withTarget: self) { model in MainActor.assumeIsolated { model.undoTrash() } }
+        undoManager?.setActionName("Move to Trash")
     }
 
     /// Moves `item` to the person's Trash, as Finder does, and says where it went. An automated run never touches the
@@ -760,33 +808,36 @@ enum MapCommand: Equatable {
         return moved
     }
 
-    /// Moves the last trashed item back where it was and restores the map from before.
+    /// Moves every item of the last move to the Trash back where it was, restores the map from before and selects them
+    /// again. One that can't go back stays in the Trash, and off the map, and Pith says which.
     func undoTrash() {
-        guard let item = trashed, !isScanning else { return }
-        do {
-            try FileManager.default.moveItem(at: item.trashed, to: item.original)
-            result = item.previous; trashed = nil; mapAnswersPerson = true
-            sideColumn.putBack(item.places)
-            revision = UUID()
-            select(item.original.path)
-        } catch {
-            problem = DiskProblem(message: "Pith couldn’t put \(item.name) back. Open the Trash in Finder and drag it out instead.")
-            trashed = nil
-        }
+        guard let record = trashed, !isScanning else { return }
+        let (restored, stuck) = TrashUndo.putBack(record.moves) { try FileManager.default.moveItem(at: $0, to: $1) }
+        trashed = nil
+        if let message = TrashUndo.problem(stuck: stuck) { problem = DiskProblem(message: message) }
+        guard !restored.isEmpty else { return }
+        result = stuck.reduce(record.previous) { $0.removing($1.plan.target.path) ?? $0 }
+        mapAnswersPerson = true
+        for move in restored { sideColumn.putBack(record.places[move.plan.target.path] ?? []) }
+        revision = UUID()
+        select(restored.reversed().map(\.plan.target.path))
     }
 
     func dismissTrashNote() { trashed = nil }
 
-    func quickLook(_ path: String?) {
-        guard let path = path ?? selected, result?.item(at: path) != nil else { return }
-        showQuickLook?([URL(fileURLWithPath: path)])
+    /// Shows the items at `paths` in Quick Look, or the selection's, as many as the map has: the panel goes through them.
+    func quickLook(_ paths: [String]? = nil) {
+        let urls = (paths ?? selection.paths).filter { result?.item(at: $0) != nil }.map { URL(fileURLWithPath: $0) }
+        guard !urls.isEmpty else { return }
+        showQuickLook?(urls)
     }
 
-    func reveal(_ path: String) { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)]) }
+    func reveal(_ paths: [String]) { NSWorkspace.shared.activateFileViewerSelecting(paths.map { URL(fileURLWithPath: $0) }) }
 
-    func copyPath(_ path: String) {
+    /// Copies the paths, each on a line of its own, as Finder copies several items' pathnames.
+    func copyPath(_ paths: [String]) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(path, forType: .string)
+        NSPasteboard.general.setString(paths.joined(separator: "\n"), forType: .string)
     }
 
     /// Compares a finished scan with the last one of the same folder, then keeps this one for next time.
@@ -968,10 +1019,5 @@ enum MapCommand: Equatable {
             return DiskProblem(message: "This folder’s permissions don’t let you read it, so Pith can’t scan it.")
         }
         return DiskProblem(message: text)
-    }
-
-    private static func plain(_ error: Error) -> String {
-        let text = (error as NSError).localizedDescription
-        return text.hasSuffix(".") ? text : text + "."
     }
 }

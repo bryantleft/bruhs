@@ -145,6 +145,10 @@ extension AppDelegate {
             checks.merge(await checkPathBar(fixture, in: main), uniquingKeysWith: { _, new in new })
             checks.merge(await checkMapHoldsStill(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkOwnChangesShowAtOnce(fixture), uniquingKeysWith: { _, new in new })
+            // The selection bridge carries several items too, which ⌘-click picks and Pith keeps.
+            let several = await checkSeveralSelected(fixture, picture: report.deletingLastPathComponent().appendingPathComponent("selection-bar.png"))
+            checks["selection_bridge"] = checks["selection_bridge"] == true && several
+            checks.merge(await checkSeveralTrashed(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkOpenedFolderDetail(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(try await checkLiveFollows(disk, in: fixture, prefix: "live_map"), uniquingKeysWith: { _, new in new })
             checks.merge(try await checkLiveReopens(fixture), uniquingKeysWith: { _, new in new })
@@ -216,7 +220,7 @@ extension AppDelegate {
         }
         _ = try await web.callAsyncJavaScript("document.querySelector('aside button')?.click()", in: nil, contentWorld: .page)
         try await Task.sleep(for: .milliseconds(400))
-        let selection = disk.selected != nil
+        let selection = !disk.selection.isEmpty
         // The bundled scanner measures what deleting the selection frees, beside the scan's own runner.
         let frees = await eventually { self.disk.selectedFrees != nil }
         let after = try await web.callAsyncJavaScript(mapHeight, in: nil, contentWorld: .page) as? Double
@@ -239,7 +243,7 @@ extension AppDelegate {
     /// Switches the window to light and then to dark: the bar under the map draws the selection's icon again for
     /// each, off the main thread. The window goes back to following the system after.
     private func checkSelectionIcon() async -> Bool {
-        guard let window = mainWindow?.window, let item = disk.selectedItem else { return false }
+        guard let window = mainWindow?.window, let item = disk.selectedItems.first else { return false }
         let key = disk.iconKey(for: item)
         let size = IconSize(points: 16, scale: window.backingScaleFactor)
         let chosen = window.appearance
@@ -877,7 +881,7 @@ extension AppDelegate {
         }
         let trash = try? await web.callAsyncJavaScript(Self.trashUnderPointer, arguments: ["payload": payload, "name": name], in: nil,
                                                        contentWorld: .page) as? [String: Any]
-        inTrash = disk.trashed?.trashed
+        inTrash = disk.trashed?.moves.first?.trashed
         // Into the run's own folder, not the person's Trash.
         let own = disk.trashFolder.map { folder in inTrash?.path.hasPrefix(folder.path + "/") == true } ?? false
         let after = trash?["after"] as? Double
@@ -1321,7 +1325,8 @@ extension AppDelegate {
     /// - `draws`, each time the map drew while the script ran, with the time and what the canvas said it showed.
     /// - `mouse(type, at, detail)`, `click(at, detail)`, and `leave()`, which moves the pointer off the map.
     /// - `boxOf(name)`, the painted box of the open folder's item `name` in the page, found by selecting the item in the
-    ///   map's list of items and reading the ring that outlines it, or null; `blockOf(name)`, that box's middle.
+    ///   map's list of items and reading the ring that outlines it once Pith has answered with the selection, or null;
+    ///   `blockOf(name)`, that box's middle.
     /// - `card()`, what the hover card says, or nothing when it's closed.
     static func mapScript(_ body: String) -> String {
         """
@@ -1344,8 +1349,10 @@ extension AppDelegate {
         const leave = () => canvas.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body }));
         const boxOf = async (name) => {
           const ring = () => canvas.parentElement.querySelector("div.pointer-events-none.absolute");
-          [...document.querySelectorAll('[aria-label^="Items in"] button')].find((button) => button.textContent.startsWith(name + " "))?.click();
-          if (!(await until(() => ring() !== null))) return null;
+          const button = [...document.querySelectorAll('[aria-label^="Items in"] button')].find((button) => button.textContent.startsWith(name + " "));
+          button?.click();
+          // The selection's rings come before any other, once Pith's answer presses the item's row.
+          if (!button || !(await until(() => button.getAttribute("aria-pressed") === "true" && ring() !== null))) return null;
           return ring().getBoundingClientRect();
         };
         const blockOf = async (name) => {

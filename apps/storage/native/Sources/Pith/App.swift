@@ -337,10 +337,11 @@ import PithCore
         guard let root = disk.result?.root.path ?? disk.scope else { return }
         disk.scan(URL(fileURLWithPath: root))
     }
-    @objc private func quickLookSelection() { disk.quickLook(nil) }
-    @objc private func revealSelection() { if let path = disk.selected { disk.reveal(path) } }
-    @objc private func copySelectionPath() { if let path = disk.selected { disk.copyPath(path) } }
-    @objc private func trashSelection() { if let path = disk.selected { disk.requestTrash(path, undoManager: mainWindow?.window.undoManager) } }
+    // Each acts on every item selected.
+    @objc private func quickLookSelection() { disk.quickLook() }
+    @objc private func revealSelection() { disk.reveal(disk.selection.paths) }
+    @objc private func copySelectionPath() { disk.copyPath(disk.selection.paths) }
+    @objc private func trashSelection() { disk.requestTrash(disk.selection.paths, undoManager: mainWindow?.window.undoManager) }
     // The map's page keeps the open folders and Back and Forward's history, so the Go menu moves it.
     @objc private func goBack() { disk.pageCommand?(.back) }
     @objc private func goForward() { disk.pageCommand?(.forward) }
@@ -372,10 +373,13 @@ import PithCore
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         let activityShowing = mainWindow?.window.isVisible == true && mainWindow?.state.tab == .activity
-        let selection = diskShowing && disk.selected != nil
+        let selection = diskShowing && !disk.selection.isEmpty
         switch menuItem.action {
         case #selector(findInActivity): return activityShowing
-        case #selector(quickLookSelection), #selector(revealSelection), #selector(copySelectionPath): return selection
+        case #selector(quickLookSelection), #selector(revealSelection): return selection
+        case #selector(copySelectionPath):
+            menuItem.title = disk.selection.paths.count > 1 ? "Copy Paths" : "Copy Path"
+            return selection
         case #selector(trashSelection): return selection && !disk.isScanning && (try? disk.selectedPlan?.get()) != nil
         case #selector(scanAgain):
             let live = disk.liveView != nil

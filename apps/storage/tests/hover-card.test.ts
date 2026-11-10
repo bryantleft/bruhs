@@ -75,16 +75,21 @@ const blocks: readonly Tile[] = [
 ];
 
 /** A card's context: a double-click there opens Users, and the block grew since Nov 3. */
-const context = (clicks: boolean, hints = true): CardContext => ({
+const context = (
+  clicks: boolean,
+  hints = true,
+  several = false,
+): CardContext => ({
   open: users,
   layout,
   hints,
   clicks,
+  several,
   change: "+1 KB since Nov 3",
 });
 
-const hintOf = (tile: Tile, clicks: boolean, hints = true) =>
-  describeCard(tile, context(clicks, hints)).hint;
+const hintOf = (tile: Tile, clicks: boolean, hints = true, several = false) =>
+  describeCard(tile, context(clicks, hints, several)).hint;
 
 describe("the hover card's clicks", () => {
   test("says what clicks do while the map takes them", () => {
@@ -100,6 +105,34 @@ describe("the hover card's clicks", () => {
         "Too small to show one by one. Double-click to open Users/.",
       ],
     );
+  });
+
+  test("says a ⌘-click selects several where the host keeps several, as Pith does, once in each card", () => {
+    assert.deepEqual(
+      blocks.map((tile) => hintOf(tile, true, true, true)),
+      [
+        "Space the scan couldn’t see. Click to see why.",
+        "Click to select, or ⌘-click to select several. Double-click to open Users/.",
+        "Click to select, or ⌘-click to select several. Double-click to open.",
+        "Click to select, or ⌘-click to select several. Double-click to open.",
+        "Click to select, or ⌘-click to select several. Double-click to open.",
+        "Measured, not scanned: macOS keeps this volume apart from your files.",
+        "Too small to show one by one. Double-click to open Users/.",
+      ],
+    );
+    // Neither once the person has learned the clicks, nor while the map takes none.
+    for (const tile of blocks) {
+      assert.doesNotMatch(
+        hintOf(tile, true, false, true) ?? "",
+        /⌘/,
+        tile.kind,
+      );
+      assert.doesNotMatch(
+        hintOf(tile, false, true, true) ?? "",
+        /click/i,
+        tile.kind,
+      );
+    }
   });
 
   test("offers no click while the host takes none, as Pith while a scan runs, and says the rest", () => {

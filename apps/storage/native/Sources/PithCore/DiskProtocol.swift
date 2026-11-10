@@ -44,6 +44,16 @@ public struct DiskNode: Codable, Sendable, Equatable {
 
     public var entries: [DiskNode] { [self] + (children ?? []).flatMap(\.entries) }
 
+    /// The node at `path`: this one, or one inside it, found down the children whose paths hold `path`.
+    func node(at path: String) -> DiskNode? {
+        if self.path == path { return self }
+        guard let children, DiskChanges.isInside(path, self.path) else { return nil }
+        for child in children where DiskChanges.isInside(path, child.path) {
+            if let found = child.node(at: path) { return found }
+        }
+        return nil
+    }
+
     /// A real file or folder: something to select, reveal and move to the Trash.
     public var isItem: Bool { kind == .dir || kind == .file }
 
@@ -163,9 +173,11 @@ public struct DiskResult: Codable, Sendable {
         }
     }
 
-    /// The real file or folder at `path`, from the tree or the largest-files list.
+    /// The real file or folder at `path`, from the tree or the largest-files list. Each node's path is its folder's and
+    /// its name, so the tree is searched only down the folders that hold `path`: a lookup costs the item's depth, not the
+    /// map's size, and the selection looks up each of its items with every map.
     public func item(at path: String) -> DiskNode? {
-        root.entries.first { $0.path == path && $0.isItem }
+        root.node(at: path).flatMap { $0.isItem ? $0 : nil }
             ?? topFiles.first { $0.path == path }.map { DiskNode(kind: .file, name: $0.name, path: $0.path, size: $0.size, children: nil) }
     }
 
@@ -390,6 +402,46 @@ public struct TrashPlan: Sendable, Equatable {
     public let consequences: [Consequence]
 }
 
+/// Why an item can't go to the Trash (`TrashPolicy.check`).
+public enum TrashRefusal: Error, Equatable, Sendable {
+    /// Not an absolute path.
+    case notAPath
+    /// Not a real file or folder of the map, such as its smaller items.
+    case notInMap
+    case outsideMap
+    /// It isn't on the disk any more, or can't be looked at.
+    case gone
+    /// A folder macOS or the person's account needs, by its name: a top-level folder of the system, the home folder,
+    /// a folder above it or one of its vital folders.
+    case needed(String)
+    /// A volume mounted here, by its name, which ejecting removes instead.
+    case volume(String)
+
+    /// What Pith says when the item is the only one to go.
+    public var message: String {
+        switch self {
+        case .notAPath: "Select an absolute path from the current scan."
+        case .notInMap: "This item isn’t a real entry in the current scan. Scan again before moving it to the Trash."
+        case .outsideMap: "This item is outside the scanned folder."
+        case .gone: "The item no longer exists or can’t be read. Scan again and try again."
+        case .needed(let name): "macOS or your account needs \(name), so Pith won’t move it to the Trash. You can still move items inside it."
+        case .volume(let name): "\(name) is a volume. Eject it in Finder instead."
+        }
+    }
+
+    /// Why it can't go, said after "because" in a sentence that names the item, or several refused alike.
+    public func reason(several: Bool) -> String {
+        switch self {
+        case .notAPath: several ? "they aren’t paths from the current scan" : "it isn’t a path from the current scan"
+        case .notInMap: several ? "they aren’t real entries in the current scan" : "it isn’t a real entry in the current scan"
+        case .outsideMap: several ? "they’re outside the scanned folder" : "it’s outside the scanned folder"
+        case .gone: several ? "they no longer exist or can’t be read" : "it no longer exists or can’t be read"
+        case .needed: several ? "macOS or your account needs them" : "macOS or your account needs it"
+        case .volume: several ? "they’re volumes" : "it’s a volume"
+        }
+    }
+}
+
 public enum TrashPolicy {
     /// Folders in the home folder that never go to the Trash whole (`VITAL_HOME_FOLDERS` in scanner/src/trash.rs).
     public static let vitalHomeFolders = [
@@ -401,29 +453,32 @@ public enum TrashPolicy {
     public static let systemRoots = ["/", "/System/Volumes/Data"]
 
     public static func plan(_ input: String, result: DiskResult, home: URL) throws -> TrashPlan {
-        guard input.hasPrefix("/"), !input.utf8.contains(0) else { throw DiskFailure("Select an absolute path from the current scan.") }
-        guard let node = result.item(at: input), !input.split(separator: "/").contains("__other__") else {
-            throw DiskFailure("This item isn’t a real entry in the current scan. Scan again before moving it to the Trash.")
+        switch check(input, result: result, home: home, protected: protectedIdentities(home: home)) {
+        case .success(let plan): return plan
+        case .failure(let refusal): throw DiskFailure(refusal.message)
         }
+    }
+
+    /// What moving `input` to the Trash would do, or why it can't go. `protected` is `protectedIdentities(home:)`, which
+    /// several items checked together share.
+    public static func check(_ input: String, result: DiskResult, home: URL, protected: Set<Identity>) -> Result<TrashPlan, TrashRefusal> {
+        guard input.hasPrefix("/"), !input.utf8.contains(0) else { return .failure(.notAPath) }
+        guard let node = result.item(at: input), !input.split(separator: "/").contains("__other__") else { return .failure(.notInMap) }
         let normalized = URL(fileURLWithPath: input).standardizedFileURL
         let target = normalized.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(normalized.lastPathComponent)
         let root = URL(fileURLWithPath: result.root.path).resolvingSymlinksInPath().standardizedFileURL
         func inside(_ child: URL, _ parent: URL) -> Bool {
             child.path != parent.path && child.pathComponents.starts(with: parent.pathComponents)
         }
-        guard inside(target, root) else { throw DiskFailure("This item is outside the scanned folder.") }
-        guard let identity = identity(of: target.path, following: false) else {
-            throw DiskFailure("The item no longer exists or can’t be read. Scan again and try again.")
-        }
+        guard inside(target, root) else { return .failure(.outsideMap) }
+        guard let identity = identity(of: target.path, following: false) else { return .failure(.gone) }
         // Paths can't decide this: the startup disk shows each firmlinked folder at two paths.
-        if protectedIdentities(home: home).contains(identity) {
-            throw DiskFailure("macOS or your account needs \(target.lastPathComponent), so Pith won’t move it to the Trash. You can still move items inside it.")
-        }
+        if protected.contains(identity) { return .failure(.needed(target.lastPathComponent)) }
         if node.kind == .dir, let parent = Self.identity(of: target.deletingLastPathComponent().path, following: true), parent.device != identity.device {
-            throw DiskFailure("\(target.lastPathComponent) is a volume. Eject it in Finder instead.")
+            return .failure(.volume(target.lastPathComponent))
         }
-        return TrashPlan(target: target, name: target.lastPathComponent, size: node.size, files: node.fileCount, isFolder: node.kind == .dir,
-                         consequences: consequences(of: target, home: home.resolvingSymlinksInPath()))
+        return .success(TrashPlan(target: target, name: target.lastPathComponent, size: node.size, files: node.fileCount, isFolder: node.kind == .dir,
+                                  consequences: consequences(of: target, home: home.resolvingSymlinksInPath())))
     }
 
     /// Device and inode, which a folder keeps at every path that reaches it.

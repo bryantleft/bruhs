@@ -166,8 +166,8 @@ private struct FolderActions: View {
     let path: String
 
     var body: some View {
-        Button("Reveal in Finder") { model.reveal(path) }
-        Button("Copy Path") { model.copyPath(path) }
+        Button("Reveal in Finder") { model.reveal([path]) }
+        Button("Copy Path") { model.copyPath([path]) }
     }
 }
 

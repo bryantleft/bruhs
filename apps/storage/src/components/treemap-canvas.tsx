@@ -75,9 +75,15 @@ interface Props {
    * level, so the host's path keeps a step for each folder.
    */
   onEnterDir: (node: DirNode) => void;
-  /** Selection changed (for the details/delete panel). null clears. */
+  /** A click selected an item (for the details/delete panel), or null to select nothing. */
   onSelect: (node: TreeNode | null) => void;
-  selectedPath: string | null;
+  /**
+   * A ⌘-click on an item: add it to the selection, or take it out, as in Finder, for a host that keeps several, as
+   * Pith does. Without it a ⌘-click selects as a click does.
+   */
+  onToggle?: (node: TreeNode) => void;
+  /** The items selected, by path, each outlined; the last one picked is where the arrow keys move from. */
+  selectedPaths: readonly string[];
   /** Follow the system's light or dark appearance. The browser app is dark-only. */
   followSystemAppearance?: boolean;
   /** Dim every block that isn't this kind. */
@@ -91,10 +97,10 @@ interface Props {
    * null for the open folder itself. Without it the map shows no menu.
    */
   onMenu?: (path: string | null) => void;
-  /** Space on the selected item: show it in Quick Look. */
-  onPreview?: (path: string) => void;
-  /** Command-Delete on the selected item: move it to the Trash. */
-  onTrash?: (path: string) => void;
+  /** Space with items selected: show them in Quick Look. */
+  onPreview?: (paths: readonly string[]) => void;
+  /** Command-Delete with items selected: move them to the Trash. */
+  onTrash?: (paths: readonly string[]) => void;
   /** How much items changed since the last scan of the scan's folder, in bytes by path. */
   growth?: ReadonlyMap<string, number>;
   /** When that scan was, e.g. "Nov 3". */
@@ -592,7 +598,8 @@ export function TreemapCanvas({
   root,
   onEnterDir,
   onSelect,
-  selectedPath,
+  onToggle,
+  selectedPaths,
   followSystemAppearance = false,
   highlightKind = null,
   linkedPath = null,
@@ -730,8 +737,18 @@ export function TreemapCanvas({
   const outlined =
     pointed ??
     (layout && outlinedPath ? tileForPath(layout, outlinedPath) : null);
-  const selected =
-    layout && selectedPath ? tileForPath(layout, selectedPath) : null;
+  // The blocks that show the items selected, each once: items folded into one group share its block.
+  const selected = useMemo(
+    () =>
+      layout
+        ? [
+            ...new Set(
+              selectedPaths.flatMap((path) => tileForPath(layout, path) ?? []),
+            ),
+          ]
+        : [],
+    [layout, selectedPaths],
+  );
 
   // The hover card is open while a block is under the pointer, and a steady map holds still meanwhile.
   const cardOpen = pointed !== null;
@@ -771,9 +788,9 @@ export function TreemapCanvas({
     if (e.button === 0) shownLayout.press(e.detail);
   };
 
-  // Single click selects (for inspect/delete). Double click opens a folder.
-  // Keeping these separate means nothing is ever left "selected" just by navigating.
-  // Both act on the blocks on screen when the click began, whatever came since.
+  // Single click selects (for inspect/delete), and a ⌘-click adds an item to the selection or takes it out, where the
+  // host keeps several. Double click opens a folder. Keeping these separate means nothing is ever left "selected" just
+  // by navigating. Both act on the blocks on screen when the click began, whatever came since.
   const onClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const clicked = shownLayout.clicked();
     if (!clicked) return;
@@ -785,6 +802,11 @@ export function TreemapCanvas({
     }
     const node = selectable(tile);
     if (node) learn("selected");
+    // A ⌘-click on what's no item, such as the smaller items, leaves the selection as it was.
+    if (e.metaKey && onToggle) {
+      if (node) onToggle(node);
+      return;
+    }
     onSelect(node);
   };
 
@@ -810,14 +832,16 @@ export function TreemapCanvas({
     const node = selectable(
       tileAt(layout, e.nativeEvent.offsetX, e.nativeEvent.offsetY),
     );
-    // The menu acts on what's under the pointer, so that becomes the selection, as in Finder.
-    if (node) onSelect(node);
+    // The menu acts on what's under the pointer, so that becomes the selection, as in Finder; on an item selected
+    // already, it acts on every item selected.
+    if (node && !selectedPaths.includes(node.path)) onSelect(node);
     onMenu(node ? node.path : null);
   };
 
   /**
-   * One tab stop for the whole map: arrows move the selection to the nearest item in that
-   * direction, Return opens a folder, Space previews, Command-Delete trashes, Escape deselects.
+   * One tab stop for the whole map: arrows move the selection to the nearest item in that direction from the item
+   * picked last, Return opens it when it's a folder, Space previews the selection, Command-Delete trashes it, and
+   * Escape deselects.
    */
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!layout || e.target !== e.currentTarget) return;
@@ -825,8 +849,8 @@ export function TreemapCanvas({
     const items: readonly Tile[] = layout.tiles.filter(
       (tile) => tile.kind !== "unmeasured",
     );
-    const current =
-      (selectedPath ? tileForPath(layout, selectedPath) : null) ?? null;
+    const last = selectedPaths.at(-1);
+    const current = last === undefined ? null : tileForPath(layout, last);
     const own = current && items.includes(current) ? current : null;
     switch (e.key) {
       case "ArrowLeft":
@@ -852,18 +876,18 @@ export function TreemapCanvas({
       }
       case " ": {
         e.preventDefault();
-        if (selectedPath) onPreview?.(selectedPath);
+        if (selectedPaths.length > 0) onPreview?.(selectedPaths);
         return;
       }
       case "Backspace":
       case "Delete": {
-        if (!e.metaKey || !selectedPath) return;
+        if (!e.metaKey || selectedPaths.length === 0) return;
         e.preventDefault();
-        onTrash?.(selectedPath);
+        onTrash?.(selectedPaths);
         return;
       }
       case "Escape": {
-        if (selectedPath) {
+        if (selectedPaths.length > 0) {
           e.preventDefault();
           onSelect(null);
         }
@@ -909,6 +933,7 @@ export function TreemapCanvas({
           layout,
           hints: !(learned.selected && learned.opened),
           clicks: !scanning,
+          several: onToggle !== undefined,
           change,
         })
       : null;
@@ -917,7 +942,14 @@ export function TreemapCanvas({
       ? colors.palette.ink[tile.category]
       : colors.palette.role.text;
 
-  const selectedNode = selected && nodeOf(selected);
+  // What VoiceOver hears of the selection: one item's name and size, or how many.
+  const selectedNode = selected.length === 1 ? nodeOf(selected[0]) : null;
+  const announced =
+    selectedPaths.length > 1
+      ? `${selectedPaths.length} items selected`
+      : selectedNode
+        ? `${selectedNode.name}, ${formatBytes(selectedNode.size)}`
+        : "";
   return (
     // One tab stop that handles its own keys, so it's an application to assistive technology.
     <div
@@ -953,16 +985,18 @@ export function TreemapCanvas({
           Nothing in this folder takes up space.
         </p>
       )}
-      {selected && (
+      {selected.map((tile) => (
         <Ring
-          tile={selected}
+          // Blocks never share a corner, so it names the block.
+          key={`${tile.x0},${tile.y0}`}
+          tile={tile}
           // On a coloured block, a line of its label ink keeps the accent apart from the fill.
           shadow={`inset 0 0 0 2px ${colors.palette.role.accent}${
-            filled(selected) ? `, inset 0 0 0 3px ${ink(selected)}` : ""
+            filled(tile) ? `, inset 0 0 0 3px ${ink(tile)}` : ""
           }`}
         />
-      )}
-      {outlined && outlined !== selected && (
+      ))}
+      {outlined && !selected.includes(outlined) && (
         <Ring tile={outlined} shadow={`inset 0 0 0 2px ${ink(outlined)}`} />
       )}
       {card && pointer && (
@@ -1032,14 +1066,13 @@ export function TreemapCanvas({
         </div>
       )}
       <p aria-live="polite" className="sr-only">
-        {selectedNode
-          ? `${selectedNode.name}, ${formatBytes(selectedNode.size)}`
-          : ""}
+        {announced}
       </p>
       <TreemapItems
         root={root}
-        selectedPath={selectedPath}
+        selectedPaths={selectedPaths}
         onSelect={onSelect}
+        onToggle={onToggle}
         onEnterDir={onEnterDir}
         onFocusItem={focusItem}
         unmeasured={usedSpace?.unmeasured}

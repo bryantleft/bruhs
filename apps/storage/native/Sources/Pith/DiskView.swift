@@ -47,13 +47,13 @@ struct DiskView: View {
             // Always there while a map is: appearing on a selection would shrink the map under the pointer, so the second
             // click of a double-click could land on another block. Without a selection it describes the open folder.
             if let result = model.result {
-                if let item = model.selectedItem, let path = model.selected {
-                    DiskSelectionBar(model: model, item: item, path: path, isSelection: true, plan: model.selectedPlan) {
-                        model.requestTrash(path, undoManager: undoManager)
+                if !model.selectedItems.isEmpty {
+                    DiskSelectionBar(model: model, items: model.selectedItems, isSelection: true, plan: model.selectedPlan) {
+                        model.requestTrash(model.selection.paths, undoManager: undoManager)
                     }
                 } else {
                     let folder = model.openFolder.flatMap { result.item(at: $0) } ?? result.root
-                    DiskSelectionBar(model: model, item: folder, path: folder.path, isSelection: false, plan: nil) {}
+                    DiskSelectionBar(model: model, items: [folder], isSelection: false, plan: nil) {}
                 }
             }
         }
@@ -64,26 +64,16 @@ struct DiskView: View {
         }
         .onChange(of: visible) { _, now in model.visibilityChanged(now) }
         .onDisappear { model.visibilityChanged(false) }
-        .alert(model.confirming.map { "Move “\($0.name)” to the Trash?" } ?? "", isPresented: Binding(get: { model.confirming != nil }, set: { if !$0 { model.confirming = nil } })) {
+        // One question for the whole move, listing what it does to each item that syncs or is a Photos library.
+        .alert(model.confirming?.question ?? "", isPresented: Binding(get: { model.confirming != nil }, set: { if !$0 { model.confirming = nil } })) {
             Button("Cancel", role: .cancel) { model.confirming = nil }
             Button("Move to Trash", role: .destructive) {
-                if let plan = model.confirming { model.trash(plan, undoManager: undoManager) }
+                if let batch = model.confirming { model.trash(batch, undoManager: undoManager) }
                 model.confirming = nil
             }
         } message: {
-            Text(model.confirming.map(confirmation) ?? "")
+            Text(model.confirming?.confirmation ?? "")
         }
-    }
-
-    private func confirmation(_ plan: TrashPlan) -> String {
-        let effects = plan.consequences.map { consequence -> String in
-            switch consequence {
-            case .iCloud: "It syncs with iCloud Drive, so the Trash removes it from your other devices too."
-            case .cloudStorage(let provider): "It syncs with \(provider), so the Trash removes it there and from your other devices too."
-            case .photosLibrary: "It’s a Photos library: its photos and edits go to the Trash with it."
-            }
-        }
-        return (effects + ["You can put it back from the Trash until you empty it."]).joined(separator: " ")
     }
 }
 
@@ -183,12 +173,11 @@ struct DiskNotices: View {
                     .accessibilityLabel("Dismiss")
             }
         }
-        if let item = model.trashed {
-            DiskNotice(symbol: "trash", tint: BruhsColor.textSecondary,
-                       message: "Moved \(item.name) to the Trash. Its \(bytes(item.size)) comes back when you empty the Trash.") {
+        if let moved = model.trashed {
+            DiskNotice(symbol: "trash", tint: BruhsColor.textSecondary, message: moved.note) {
                 Button("Undo") { model.undoTrash() }
                     .buttonStyle(.bruhsGhost)
-                    .help("Put it back where it was (⌘Z)")
+                    .help(moved.moves.count == 1 ? "Put it back where it was (⌘Z)" : "Put them back where they were (⌘Z)")
                 Button { model.dismissTrashNote() } label: { Image(systemName: "xmark") }
                     .buttonStyle(.bruhsGhost)
                     .help("Dismiss")
@@ -268,8 +257,8 @@ struct UnreadableList: View {
                             BruhsBadge(text: folder.reason == .protected ? "Needs access" : folder.reason == .denied ? "No permission" : "Unreadable")
                         }
                         .contextMenu {
-                            Button("Reveal in Finder") { model.reveal(folder.path) }
-                            Button("Copy Path") { model.copyPath(folder.path) }
+                            Button("Reveal in Finder") { model.reveal([folder.path]) }
+                            Button("Copy Path") { model.copyPath([folder.path]) }
                         }
                     }
                 }
@@ -403,27 +392,31 @@ private struct DiskVolumeList: View {
     }
 }
 
-/// The selected item, led by its icon and path, or the open folder's figures while nothing is selected, since the path
-/// bar names the open folder; and what can be done with it.
+/// The selected item, led by its icon and path, or several, led by the group's icon and how many, with their combined
+/// figures; or the open folder's figures while nothing is selected, since the path bar names the open folder; and what
+/// can be done with them.
 private struct DiskSelectionBar: View {
     let model: DiskModel
-    let item: DiskNode
-    let path: String
+    /// What it describes: the items selected, or the open folder alone.
+    let items: [DiskNode]
     /// False while it describes the open folder, which Move to Trash never targets from here.
     let isSelection: Bool
-    let plan: Result<TrashPlan, DiskFailure>?
+    let plan: Result<TrashBatch, DiskFailure>?
     let trash: () -> Void
+
+    /// The one item it describes, whose own path and figures show; nil for several.
+    private var item: DiskNode? { items.count == 1 ? items.first : nil }
+    private var paths: [String] { items.map(\.path) }
+    /// Their combined size, which counts nothing twice: no item selected is inside another.
+    private var size: UInt64 { items.reduce(0) { $0 + $1.size } }
 
     private var refusal: String? {
         if case .failure(let failure)? = plan { return failure.message }
         return nil
     }
-    private var asks: Bool {
-        if case .success(let plan)? = plan { return !plan.consequences.isEmpty }
-        return false
-    }
+    private var asks: Bool { (try? plan?.get())?.asks == true }
 
-    private var pathText: some View {
+    private func pathText(_ path: String) -> some View {
         Text(path)
             .font(BruhsType.dataSmall)
             .foregroundStyle(BruhsColor.text)
@@ -433,28 +426,33 @@ private struct DiskSelectionBar: View {
             .help(path)
     }
 
+    /// Size, then for one item its Files and Clones, and Frees now when deleting frees less than the size.
     private func figures(files: Bool, clones: Bool) -> some View {
         HStack(spacing: 10) {
-            LabeledFigure(label: "Size", value: bytes(item.size))
-            if files, item.kind == .dir { LabeledFigure(label: "Files", value: monaspaced(item.fileCount.formatted())) }
-            if clones, let shared = item.clones, shared >= 1_000_000 {
-                LabeledFigure(label: "Clones", value: bytes(shared))
-                    .help("It also holds \(bytes(shared)) of APFS clones. Each shares its blocks with another copy, which the map counts instead, so the size leaves them out.")
+            LabeledFigure(label: "Size", value: bytes(size))
+            if let item {
+                if files, item.kind == .dir { LabeledFigure(label: "Files", value: monaspaced(item.fileCount.formatted())) }
+                if clones, let shared = item.clones, shared >= 1_000_000 {
+                    LabeledFigure(label: "Clones", value: bytes(shared))
+                        .help("It also holds \(bytes(shared)) of APFS clones. Each shares its blocks with another copy, which the map counts instead, so the size leaves them out.")
+                }
             }
-            // Clones, hard links and snapshots outside it keep the blocks they share, so deleting it can free less.
-            if isSelection, let frees = model.selectedFrees, frees.bytes + 1_000_000 < item.size {
+            // Clones, hard links and snapshots outside them keep the blocks they share, so deleting them can free less.
+            if isSelection, let frees = model.selectedFrees, frees.bytes + 1_000_000 < size {
                 LabeledFigure(label: "Frees now", value: bytes(frees.bytes))
-                    .help(Self.freesHelp(frees))
+                    .help(Self.freesHelp(frees, several: item == nil))
             }
         }
         .fixedSize()
     }
 
-    /// Why deleting it frees less than its size, in sentences.
-    static func freesHelp(_ frees: DiskFrees) -> String {
-        var sentences = ["Deleting it frees \(bytes(frees.bytes)) now. Moving it to the Trash frees that once you empty the Trash."]
+    /// Why deleting it, or them, frees less than the size, in sentences.
+    static func freesHelp(_ frees: DiskFrees, several: Bool) -> String {
+        let them = several ? "them" : "it"
+        var sentences = ["Deleting \(them) frees \(bytes(frees.bytes)) now. Moving \(them) to the Trash frees that once you empty the Trash."]
         if frees.shared > 0 {
-            sentences.append("\(bytes(frees.shared)) of it is shared with clones or hard links outside it, which keep those blocks.")
+            sentences.append(several ? "\(bytes(frees.shared)) of their size is shared with clones or hard links outside them, which keep those blocks."
+                             : "\(bytes(frees.shared)) of it is shared with clones or hard links outside it, which keep those blocks.")
         }
         if frees.snapshots > 0 {
             sentences.append("\(bytes(frees.snapshots)) stays in local snapshots until macOS deletes them.")
@@ -469,12 +467,24 @@ private struct DiskSelectionBar: View {
         HStack(spacing: 12) {
             if isSelection {
                 HStack(spacing: 6) {
-                    SystemIconView(key: model.iconKey(for: item))
-                    // A short path shows whole; a long one truncates in its middle at a third of a narrow window, so the
-                    // figures keep their room.
-                    ViewThatFits(in: .horizontal) {
-                        pathText.fixedSize()
-                        pathText.frame(maxWidth: 260, alignment: .leading)
+                    if let item {
+                        SystemIconView(key: model.iconKey(for: item))
+                        // A short path shows whole; a long one truncates in its middle at a third of a narrow window, so the
+                        // figures keep their room.
+                        ViewThatFits(in: .horizontal) {
+                            pathText(item.path).fixedSize()
+                            pathText(item.path).frame(maxWidth: 260, alignment: .leading)
+                        }
+                    } else {
+                        // Several: the group's icon, as the map's smaller items have, and how many, a figure then a word.
+                        SystemIconView(key: .group)
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text(verbatim: monaspaced(items.count.formatted())).font(BruhsType.dataSmall)
+                            Text("items").font(BruhsType.note)
+                        }
+                        .foregroundStyle(BruhsColor.text)
+                        .fixedSize()
+                        .accessibilityElement(children: .combine)
                     }
                 }
                 .layoutPriority(2)
@@ -487,18 +497,19 @@ private struct DiskSelectionBar: View {
             }
             .layoutPriority(1)
             Spacer(minLength: 12)
-            if model.liveView == nil, item.kind == .dir, model.changes.touches(path), !model.isScanning {
-                Button("Scan Again") { model.rescan(path) }
+            if model.liveView == nil, let item, item.kind == .dir, model.changes.touches(item.path), !model.isScanning {
+                Button("Scan Again") { model.rescan(item.path) }
                     .buttonStyle(.bruhsGhost)
                     .fixedSize()
                     .disabled(model.isTrashing)
                     .help("Something in it changed since the scan. Scan it again to update its size.")
             }
-            Button("Quick Look") { model.showQuickLook?([URL(fileURLWithPath: path)]) }
+            // Quick Look goes through every item selected, as Finder's does.
+            Button("Quick Look") { model.quickLook(paths) }
                 .buttonStyle(.bruhsGhost)
                 .fixedSize()
-                .help("Preview it (Space)")
-            Button("Reveal in Finder") { model.reveal(path) }
+                .help(item == nil ? "Preview them (Space)" : "Preview it (Space)")
+            Button("Reveal in Finder") { model.reveal(paths) }
                 .buttonStyle(.bruhsGhost)
                 .fixedSize()
             if isSelection {
@@ -506,7 +517,7 @@ private struct DiskSelectionBar: View {
                     .buttonStyle(.bruhsSoftDanger)
                     .fixedSize()
                     .disabled(refusal != nil || model.isScanning || model.isTrashing)
-                    .help(refusal ?? "Move it to the Trash (⌘⌫). You can undo this.")
+                    .help(refusal ?? (item == nil ? "Move them to the Trash (⌘⌫). You can undo this." : "Move it to the Trash (⌘⌫). You can undo this."))
             }
         }
         .padding(.horizontal, 16)
@@ -565,6 +576,7 @@ struct DiskWebView: NSViewRepresentable {
         // After its map, which carries it: a map of a whole volume goes out with the figures measured for it. Without a
         // map, it goes on its own. The page matches it to its map by root.
         context.coordinator.notMeasured = model.notMeasured
+        context.coordinator.selection = model.selection.paths
     }
     static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) {
         view.stopLoading(); view.navigationDelegate = nil
@@ -640,6 +652,13 @@ struct DiskWebView: NSViewRepresentable {
         }
         /// The used space as the page last got it, nil for none.
         private var sentNotMeasured: DiskModel.NotMeasured?
+        /// The items selected, by path, which Pith keeps (`DiskSelection`): the page says what was clicked, and outlines
+        /// what this says, so it goes to the page once it's ready and whenever it changes.
+        var selection: [String]? {
+            didSet { sendSelection() }
+        }
+        /// The selection as the page last got it, nil for none sent to this page.
+        private var sentSelection: [String]?
         /// Reads Differentiate Without Color as macOS has it, for every update of the view and every notice of a change. The
         /// smoke test reads a value of its own here instead, turning the setting for Pith alone, so no system setting
         /// changes.
@@ -678,11 +697,15 @@ struct DiskWebView: NSViewRepresentable {
                 // the icons' base and rule, the map's settings, whether a scan is running, the owners and the click hints
                 // learned, and then the scan again with its places and its volume's used space, and the native selection
                 // and history it no longer has are dropped.
-                ready = true; revision = nil; model.select(nil); model.mapStartsOver(); sendIcons(); sendDoubleClickInterval()
+                ready = true; revision = nil; model.select([]); model.mapStartsOver(); sendIcons(); sendDoubleClickInterval()
                 sendDifferentiateWithoutColor(); sendScanning(); sendOwners(); sendLearnedHints()
-                sentPlaces = nil; sentNotMeasured = nil
+                sentPlaces = nil; sentNotMeasured = nil; sentSelection = nil
                 send(revision: model.revision)
-            case "select": model.select(path)
+                selection = model.selection.paths
+            // A click selects the item clicked, or none; a ⌘-click adds it or takes it out. Pith answers with the selection.
+            case "select":
+                let paths = body["paths"] as? [String] ?? []
+                if body["toggle"] as? Bool == true { for path in paths { model.toggle(path) } } else { model.select(paths) }
             case "learnedHint": if let hint = body["hint"] as? String { model.mapHints.learn(hint) }
             case "whereTheSpaceIs": model.explainNotMeasured()
             case "fullDiskAccess": openDiskAccess()
@@ -691,23 +714,26 @@ struct DiskWebView: NSViewRepresentable {
                     model.pageMoved(to: path, wanting: body["wanted"] as? String, canGoBack: body["canGoBack"] as? Bool == true,
                                     canGoForward: body["canGoForward"] as? Bool == true)
                 }
-            case "quickLook": model.quickLook(path)
-            case "trash": if let path { model.requestTrash(path, undoManager: web?.window?.undoManager) }
+            case "quickLook": model.quickLook(body["paths"] as? [String] ?? [])
+            case "trash":
+                if let paths = body["paths"] as? [String], !paths.isEmpty { model.requestTrash(paths, undoManager: web?.window?.undoManager) }
             case "menu": showMenu(for: path)
             default: break
             }
         }
 
-        /// The item's actions at the pointer, as Finder offers them. WebKit's own menu would offer Reload, which empties the map.
+        /// The item's actions at the pointer, as Finder offers them: on an item selected among several, they act on every
+        /// item selected. WebKit's own menu would offer Reload, which empties the map.
         private func showMenu(for path: String?) {
             guard let web, let window = web.window, let result = model.result else { return }
             let target = path.flatMap { result.item(at: $0) }
             let folder = target?.kind == .dir ? target?.path : nil
+            let targets = target.map { model.selection.paths.contains($0.path) ? model.selection.paths : [$0.path] } ?? []
             let menu = DiskItemMenu()
-            if let target {
-                menu.add("Quick Look") { [model] in model.quickLook(target.path) }
-                menu.add("Reveal in Finder") { [model] in model.reveal(target.path) }
-                menu.add("Copy Path") { [model] in model.copyPath(target.path) }
+            if !targets.isEmpty {
+                menu.add("Quick Look") { [model] in model.quickLook(targets) }
+                menu.add("Reveal in Finder") { [model] in model.reveal(targets) }
+                menu.add(targets.count == 1 ? "Copy Path" : "Copy Paths") { [model] in model.copyPath(targets) }
             }
             let rescan = folder ?? model.openFolder ?? result.root.path
             if model.liveView != nil {
@@ -716,12 +742,11 @@ struct DiskWebView: NSViewRepresentable {
             } else {
                 menu.add(rescan == result.root.path ? "Scan Again" : "Scan This Folder Again", enabled: !model.isScanning) { [model] in model.rescan(rescan) }
             }
-            if let target {
+            if !targets.isEmpty {
                 menu.separator()
-                let plan = model.trashPlan(target.path)
-                let asks = (try? plan.get())?.consequences.isEmpty == false
-                menu.add(asks ? "Move to Trash…" : "Move to Trash", enabled: (try? plan.get()) != nil && !model.isScanning) { [model, weak window] in
-                    model.requestTrash(target.path, undoManager: window?.undoManager)
+                let plan = try? model.trashPlan(targets).get()
+                menu.add(plan?.asks == true ? "Move to Trash…" : "Move to Trash", enabled: plan != nil && !model.isScanning) { [model, weak window] in
+                    model.requestTrash(targets, undoManager: window?.undoManager)
                 }
             }
             self.menu = menu
@@ -841,6 +866,14 @@ struct DiskWebView: NSViewRepresentable {
             guard ready, let web, let scanning else { return }
             web.callAsyncJavaScript("window.pithReceiveScanning?.(on)", arguments: ["on": scanning], in: nil, in: .page) { result in
                 if case .failure(let error) = result { NSLog("Pith: the disk map didn’t take whether a scan is running: \(error.localizedDescription)") }
+            }
+        }
+        /// Gives the page the items selected once it's ready, and again whenever they change.
+        private func sendSelection() {
+            guard ready, let web, let selection, selection != sentSelection else { return }
+            sentSelection = selection
+            web.callAsyncJavaScript("window.pithReceiveSelection?.(paths)", arguments: ["paths": selection], in: nil, in: .page) { result in
+                if case .failure(let error) = result { NSLog("Pith: the disk map didn’t take the selection: \(error.localizedDescription)") }
             }
         }
         /// Gives the page the click hints the person has learned, from Pith's settings, once it's ready for them: a new

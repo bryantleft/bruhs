@@ -170,14 +170,14 @@ extension AppDelegate {
             // The share the card gives, of the volume's used space, rounded as the page rounds it.
             let share = block.flatMap { block in used.map { "\(Int((Double(block) / Double($0) * 100).rounded()))% of used space" } }
             let listed = await pageAnswer(web, Self.notMeasuredItem) { (text: String?) in text != nil }
-            let selectedBefore = disk.selected
+            let selectedBefore = disk.selection
             let clicked = try? await web.callAsyncJavaScript(Self.clickTheBlock, in: nil, contentWorld: .page) as? [String: Any]
             let card = clicked?["card"] as? String
             let explains = await eventually { self.disk.showsWhereTheSpaceIs }
             let presented = await eventually { Self.popoverShows }
             // Long enough for a folder a double-click opened to have reached the native side.
             try? await Task.sleep(for: .milliseconds(300))
-            let stayed = disk.selected == selectedBefore && disk.openFolder == fixture
+            let stayed = disk.selection == selectedBefore && disk.openFolder == fixture
             disk.showsWhereTheSpaceIs = false
             let closed = await eventually { !Self.popoverShows }
             let listClicked = (try? await web.callAsyncJavaScript(Self.clickNotMeasuredItem, in: nil, contentWorld: .page) as? Bool) == true
@@ -191,7 +191,7 @@ extension AppDelegate {
 
             // Move to Trash and Undo, as the person makes them.
             let size = disk.result?.item(at: item)?.size
-            disk.requestTrash(item, undoManager: nil)
+            disk.requestTrash([item], undoManager: nil)
             let joined = block.flatMap { block in size.map { block + $0 } }
             let trashed = disk.trashed != nil && !files.fileExists(atPath: item)
             let atOnce = disk.notMeasured?.bytes
@@ -282,7 +282,7 @@ extension AppDelegate {
         disk.showsWhereTheSpaceIs = false
         _ = await eventually { !Self.popoverShows }
 
-        let selected = disk.selected
+        let selected = disk.selection
         disk.isScanning = true
         // Once the page knows, the block's card offers no click, and no other card does.
         let told = await pageAnswer(web, Self.hoverAt, arguments: place) { (text: String?) in
@@ -294,7 +294,7 @@ extension AppDelegate {
         Self.click(at: point, in: window)
         // Longer than the click took to open it without a scan.
         try? await Task.sleep(for: .milliseconds(600))
-        let ignored = !disk.showsWhereTheSpaceIs && disk.selected == selected
+        let ignored = !disk.showsWhereTheSpaceIs && disk.selection == selected
         let linked = await linkOpens()
         disk.showsWhereTheSpaceIs = false
         _ = await eventually { !Self.popoverShows }

@@ -32,19 +32,21 @@ import { MapIcon, useAnyIcon, useOwners, usePageIcons } from "./map-icon";
 import { type NavigationAction, NO_MAP, navigate } from "./navigation";
 import { placesIn, unreadableBesides } from "./places";
 import { Places, usePlaces } from "./places-section";
+import { type SelectMessage, selectMessage, useSelection } from "./selection";
 import { GREW_SHOWN, UNREADABLE_SHOWN, WRITERS_SHOWN } from "./side-lists";
 import { useUsedSpace } from "./used-space";
 import "./styles.css";
 
 /**
- * What the page tells Pith: the selection; the open folder, with one gone back or forward to that the map leaves out
- * and whether Back and Forward can go anywhere; a click hint the map learned, which Pith keeps in its settings; and
- * requests for native actions: an item's menu, Quick Look, Move to Trash, "Where the space is" for the Not measured
- * block, and Full Disk Access in System Settings for a place Pith can't read.
+ * What the page tells Pith: a click or ⌘-click that selects, which Pith answers with the selection; the open folder,
+ * with one gone back or forward to that the map leaves out and whether Back and Forward can go anywhere; a click hint
+ * the map learned, which Pith keeps in its settings; and requests for native actions: an item's menu, Quick Look and
+ * Move to Trash for the items selected, "Where the space is" for the Not measured block, and Full Disk Access in
+ * System Settings for a place Pith can't read.
  */
 type Message =
   | { action: "ready" }
-  | { action: "select"; path: string | null }
+  | SelectMessage
   | {
       action: "location";
       path: string;
@@ -53,8 +55,8 @@ type Message =
       canGoForward: boolean;
     }
   | { action: "menu"; path: string | null }
-  | { action: "quickLook"; path: string }
-  | { action: "trash"; path: string }
+  | { action: "quickLook"; paths: readonly string[] }
+  | { action: "trash"; paths: readonly string[] }
   | { action: "learnedHint"; hint: HintStep }
   | { action: "whereTheSpaceIs" }
   | { action: "fullDiskAccess" };
@@ -201,7 +203,8 @@ function DiskMap() {
   const [atOnce, setAtOnce] = useState(false);
   // The open folders and where Back and Forward go, which Pith's path bar and Go menu move.
   const [nav, dispatch] = useReducer(navigate, NO_MAP);
-  const [selected, setSelected] = useState<string | null>(null);
+  // The items selected, as Pith keeps them: it drops what a newer map or the open folder no longer shows.
+  const selected = useSelection();
   const [hovered, setHovered] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<Kind | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -240,14 +243,13 @@ function DiskMap() {
         setError(null);
         setResult(parsed);
         setAtOnce(answers === true);
-        // The live map sends a newer map as the disk changes: what's selected or under the pointer stays while it's
-        // still there.
+        // The live map sends a newer map as the disk changes: what's under the pointer stays while it's still there,
+        // and so does what's selected, which Pith keeps.
         const stillThere = (path: string | null) =>
           path !== null &&
           parsed !== null &&
           (findByPath(parsed.root, path) !== null ||
             parsed.topFiles.some((file) => file.path === path));
-        setSelected((path) => (stillThere(path) ? path : null));
         setHovered((path) => (stillThere(path) ? path : null));
         if (parsed) {
           if (mapRoot.current !== parsed.root.path) setHighlight(null);
@@ -287,11 +289,16 @@ function DiskMap() {
     };
   }, []);
 
-  // Stable handlers, so hovering the map doesn't re-render its long item list.
-  const select = useCallback((path: string | null) => {
-    setSelected(path);
-    post({ action: "select", path });
-  }, []);
+  // Stable handlers, so hovering the map doesn't re-render its long item list. A click selects just the item clicked,
+  // or nothing; a ⌘-click adds it or takes it out. Pith answers with the selection, which the page then shows.
+  const select = useCallback(
+    (path: string | null) => post(selectMessage(path, false)),
+    [],
+  );
+  const toggle = useCallback(
+    (path: string) => post(selectMessage(path, true)),
+    [],
+  );
   const selectNode = useCallback(
     (node: TreeNode | null) =>
       select(
@@ -301,16 +308,22 @@ function DiskMap() {
       ),
     [select],
   );
+  const toggleNode = useCallback(
+    (node: TreeNode) => {
+      if (node.kind === "dir" || node.kind === "file") toggle(node.path);
+    },
+    [toggle],
+  );
   const showMenu = useCallback(
     (path: string | null) => post({ action: "menu", path }),
     [],
   );
   const preview = useCallback(
-    (path: string) => post({ action: "quickLook", path }),
+    (paths: readonly string[]) => post({ action: "quickLook", paths }),
     [],
   );
   const trash = useCallback(
-    (path: string) => post({ action: "trash", path }),
+    (paths: readonly string[]) => post({ action: "trash", paths }),
     [],
   );
   const explainNotMeasured = useCallback(
@@ -325,16 +338,19 @@ function DiskMap() {
     (file: FileEntry) => select(file.path),
     [select],
   );
-
-  /** Show another folder; the selection and hover belonged to the old one. */
-  const go = useCallback(
-    (action: NavigationAction) => {
-      dispatch(action);
-      setHovered(null);
-      select(null);
-    },
-    [select],
+  const toggleFile = useCallback(
+    (file: FileEntry) => toggle(file.path),
+    [toggle],
   );
+
+  /**
+   * Show another folder; the hover belonged to the old one. Pith keeps the items selected that are still on the map,
+   * those inside the folder shown, once the page says where it is.
+   */
+  const go = useCallback((action: NavigationAction) => {
+    dispatch(action);
+    setHovered(null);
+  }, []);
   const current = nav.trail.at(-1) ?? null;
   const here = current?.path;
   // The map opens a folder further down one level at a time, all from here: one step back.
@@ -378,11 +394,11 @@ function DiskMap() {
     }
   }, [current, wanted, nav.back, nav.forward]);
 
-  // Copy with an item selected copies its path, as Finder's Copy does with a file's name.
+  // Copy with items selected copies their paths, each on a line of its own, as Finder's Copy does with files' names.
   useEffect(() => {
     const onCopy = (event: ClipboardEvent) => {
-      if (!selected || window.getSelection()?.toString()) return;
-      event.clipboardData?.setData("text/plain", selected);
+      if (selected.length === 0 || window.getSelection()?.toString()) return;
+      event.clipboardData?.setData("text/plain", selected.join("\n"));
       event.preventDefault();
     };
     document.addEventListener("copy", onCopy);
@@ -460,8 +476,9 @@ function DiskMap() {
             highlightKind={shownKind}
             linkedPath={hovered}
             onHoverPath={setHovered}
-            selectedPath={selected}
+            selectedPaths={selected}
             onSelect={selectNode}
+            onToggle={toggleNode}
             onEnterDir={openFolder}
             onMenu={showMenu}
             onPreview={preview}
@@ -526,10 +543,12 @@ function DiskMap() {
                     <button
                       type="button"
                       title={path}
-                      onClick={() => select(path)}
+                      onClick={(event) =>
+                        event.metaKey ? toggle(path) : select(path)
+                      }
                       onMouseEnter={() => setHovered(path)}
                       onMouseLeave={() => setHovered(null)}
-                      aria-pressed={path === selected}
+                      aria-pressed={selected.includes(path)}
                       className="menu-item gap-2 px-2 py-1 aria-pressed:bg-(--role-selection)"
                     >
                       {icons && (
@@ -641,10 +660,11 @@ function DiskMap() {
               <LargestFiles
                 files={files}
                 base={current.path}
-                selectedPath={selected}
+                selectedPaths={selected}
                 hoveredPath={hovered}
                 onHoverPath={setHovered}
                 onSelect={selectFile}
+                onToggle={toggleFile}
                 onMenu={(file) => showMenu(file.path)}
                 icon={
                   icons
