@@ -81,6 +81,22 @@ import XCTest
         XCTAssertEqual(tight.records.map(\.note), ["Moved e"], "the latest stays, over the budget alone")
     }
 
+    /// A move with no undo manager, which only the note's Undo can undo, still counts against the budget, so the oldest
+    /// moves go at once rather than staying over it until the next move with one.
+    func testAMoveWithNoUndoManagerKeepsTheStackWithinItsBudgetToo() {
+        var undone: [String] = []
+        let a = record("a"), b = record("b"), c = record("c")
+        let stack = TrashUndoStack(budget: a.bytes * 2) { undone.append($0.note) }
+        let window = manager()
+        move(a, on: stack, with: window)
+        move(b, on: stack, with: window)
+        stack.moved(c, undoManager: nil)
+        XCTAssertEqual(stack.records.map(\.note), ["Moved b", "Moved c"], "a went, to keep within the budget")
+        window.undo()
+        XCTAssertEqual(undone, ["Moved b"])
+        XCTAssertFalse(window.canUndo, "a's registration went with it")
+    }
+
     /// What a record keeps, from what was measured (`TrashRecord.bytes`): a file moved alone about 2 KB, and a folder
     /// whose map drew 20,201 nodes in it about 7.2 MB.
     func testARecordsSizeIsWhatItKeeps() {

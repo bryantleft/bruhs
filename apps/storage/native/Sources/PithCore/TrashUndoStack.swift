@@ -59,10 +59,12 @@ public final class TrashRecord: Sendable {
     /// The moves Undo can still put back, the latest last.
     public var records: [TrashRecord] { held.map(\.record) }
 
-    /// A move to the Trash, which `undoManager`'s Undo puts back, or only the note's when there's none.
+    /// A move to the Trash, which `undoManager`'s Undo puts back, or only the note's when there's none. Either way it
+    /// counts against the budget at once.
     public func moved(_ record: TrashRecord, undoManager: UndoManager?) {
         held.removeAll { $0.undoManager == nil }
         held.append(Held(record: record, undoManager: undoManager))
+        defer { keepWithinBudget() }
         guard let undoManager else { return }
         // A move lands after the event that asked for it, in a task of its own. A window's undo manager groups by event,
         // and a group opened outside one stays open until the next, so every move landing before then joined it, for
@@ -80,7 +82,6 @@ public final class TrashRecord: Sendable {
             undoManager.endUndoGrouping()
             undoManager.groupsByEvent = byEvent
         }
-        keepWithinBudget()
     }
 
     /// Lets the oldest records go, out of their undo managers too, until the rest keep within the budget. The latest
