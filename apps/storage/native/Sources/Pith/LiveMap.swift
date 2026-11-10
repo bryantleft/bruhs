@@ -47,6 +47,9 @@ import PithCore
     private(set) var updatedAt: Date?
     /// The last check of every folder, for the verification notes and Settings.
     private(set) var lastCheck: LiveCheck?
+    /// A check of every folder under way, as the scanner reports it: the daily one Pith asked for, or one the scanner
+    /// began itself when FSEvents lost track of changes. Nil while none runs.
+    private(set) var runningCheck: DiskCaption.Check?
     /// Something the map shows changed since the last tree was asked for.
     private(set) var changedSinceTree = true
     /// Folders the map lacks until the person answers macOS's question about Pith, as for iCloud Drive: opening one
@@ -119,6 +122,7 @@ import PithCore
         // Watching from before the walk begins catches what changes while it runs.
         let since = FSEventsGetCurrentEventId()
         historyDone = true
+        runningCheck = nil
         state = .mapping(nil)
         startStream(since: since, replay: false)
         process.walk(since: since)
@@ -233,6 +237,8 @@ import PithCore
         case .status(let status):
             pending = status.pending
             asking = status.asking
+            // Pith's daily check runs until the scanner says it's done; any other comes from the scanner itself.
+            runningCheck = status.checking ? (checkDone == nil ? .lostTrack : .daily) : nil
             historyDone = historyDone || status.historyDone
             if status.changed {
                 updatedAt = Date()
@@ -253,6 +259,7 @@ import PithCore
             NSLog("Pith: kept the disk map through event \(through): \(bytes) bytes in \(ms) ms.")
         case .checked(let check):
             lastCheck = check
+            runningCheck = nil
             listedAt = Date()
             checkDone?(.finished)
             checkDone = nil
@@ -316,6 +323,17 @@ import PithCore
         let info = ProcessInfo.processInfo
         guard !info.isLowPowerModeEnabled, info.thermalState == .nominal || info.thermalState == .fair else { return false }
         return PowerSource.onPower
+    }
+
+    /// What the map is doing, as Disk's caption tells it (`DiskCaption.live`).
+    var caption: DiskCaption.Live {
+        switch state {
+        case .off, .opening, .unmapped: .quiet
+        case .mapping(let progress): .mapping(found: progress.map { DiskCaption.Found(bytes: $0.bytes, files: $0.files) })
+        case .catchingUp(let waiting): .catchingUp(waiting: waiting)
+        case .live(let waiting): .live(waiting: waiting, check: runningCheck, updatedAt: updatedAt)
+        case .failed(let message): .failed(message)
+        }
     }
 }
 

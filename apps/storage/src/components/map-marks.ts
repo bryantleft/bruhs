@@ -1,15 +1,19 @@
 /**
- * The marks at the start of the disk map's labels: macOS's icons on header strips and on package, volume and folder
- * blocks, which a host such as Pith's page loads as the map shows them, and each kind's glyph on file blocks, which
- * the map draws itself while Differentiate Without Color is on. The layout keeps their room (`Tile.slot`), so a mark
- * that comes late, or never, never moves a label. Nothing here needs React.
+ * The marks on the disk map's labels: macOS's icons on header strips and on package, volume and folder blocks, which
+ * a host such as Pith's page loads as the map shows them, each kind's glyph on file blocks, which the map draws
+ * itself while Differentiate Without Color is on, and the padlock after the name of a header whose folder holds
+ * folders the scan couldn't read. The layout keeps their room (`Tile.slot`, `padlockRoom`), so a mark that comes
+ * late, or never, never moves a label. Nothing here needs React.
  */
 
 import type { Category } from "../lib/format.ts";
 import { GLYPH_BOX, KIND_GLYPHS } from "../lib/kind-glyphs.ts";
 import {
   type LabelMetrics,
+  labelMiddle,
   markPlace,
+  markRoom,
+  PADLOCK,
   type Tile,
 } from "../lib/treemap-layout.ts";
 
@@ -156,6 +160,41 @@ export function drawMark(
   } else {
     icons?.draw(context, tile, place.x, place.y, place.size);
   }
+}
+
+/** The page's own padlock, the hover card's and the map's, as SVG path data in a 10 by 12 box (`PADLOCK_BOX`). */
+export const PADLOCK_PATH =
+  "M2 5V3.5a3 3 0 0 1 6 0V5h.5A1.5 1.5 0 0 1 10 6.5v4A1.5 1.5 0 0 1 8.5 12h-7A1.5 1.5 0 0 1 0 10.5v-4A1.5 1.5 0 0 1 1.5 5H2Zm1.5 0h3V3.5a1.5 1.5 0 0 0-3 0V5Z";
+
+/** The box `PADLOCK_PATH` is drawn in. */
+export const PADLOCK_BOX = { width: 10, height: 12 } as const;
+
+/** The padlock as a canvas path, made when first drawn. */
+let padlockPath: Path2D | null = null;
+
+/**
+ * Draws `tile`'s padlock, if its layout gave it one: after its name, `nameWidth` CSS pixels as drawn, in the room the
+ * layout kept (`padlockRoom`), centred on its header strip, in `color`.
+ */
+export function drawPadlock(
+  context: CanvasRenderingContext2D,
+  tile: Tile,
+  metrics: LabelMetrics,
+  nameWidth: number,
+  color: string,
+): void {
+  if (tile.kind !== "folder" || !tile.padlock) return;
+  padlockPath ??= new Path2D(PADLOCK_PATH);
+  const scale = PADLOCK.height / PADLOCK_BOX.height;
+  context.save();
+  context.translate(
+    tile.x0 + metrics.padX + markRoom(tile) + nameWidth + PADLOCK.gap,
+    Math.round(labelMiddle(tile, metrics) - PADLOCK.height / 2),
+  );
+  context.scale(scale, scale);
+  context.fillStyle = color;
+  context.fill(padlockPath, "nonzero");
+  context.restore();
 }
 
 /** Each kind's glyph as canvas paths, made once each, when first drawn. */

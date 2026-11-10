@@ -15,6 +15,9 @@ extension AppDelegate {
         disk.scansFolder = scans
         disk.trashFolder = trash
         let forgetFolders = { for folder in [scans, trash] { _ = try? FileManager.default.removeItem(at: folder) } }
+        // No smoke check opens System Settings: each pane Pith asks for is recorded instead.
+        let panes = SystemSettingsAsked()
+        openSystemSettings = { panes.asked.append($0) }
         checks["native_fonts_registered"] = BruhsFonts.isAvailable
         // The fallback symbol is a template image too, so the SVG itself has to decode.
         let glyph = Bundle.main.url(forResource: "StatusGlyph", withExtension: "svg").flatMap(NSImage.init(contentsOf:))
@@ -128,8 +131,12 @@ extension AppDelegate {
             // Before the icon route's check, which stops every load the page has going.
             checks.merge(await checkListIcons(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkMapMarks(), uniquingKeysWith: { _, new in new })
+            // Before anything clicks the map, which would learn the hints.
+            let hints = await learnHints(fixture)
             checks.merge(await checkSideLists(fixture), uniquingKeysWith: { _, new in new })
-            checks.merge(await checkPlaces(fixture, report: report), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkPlaces(fixture, report: report, panes: panes), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkNotMeasured(fixture, report: report), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkAskingNotice(panes), uniquingKeysWith: { _, new in new })
             checks.merge(await checkIconsReachEveryPage(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkIconRoute(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkPathBar(fixture, in: main), uniquingKeysWith: { _, new in new })
@@ -148,6 +155,8 @@ extension AppDelegate {
             main.window.performClose(nil)
             checks["disk_webview_released"] = await eventually { self.webView == nil }
             checks["main_window_released"] = mainWindow == nil
+            // A new window's map, with a page of its own, still knows the hints learned in the last one.
+            checks["hints_stay_learned_after_reopen"] = await hintsStayLearned(hints, fixture: fixture)
             let samples = activity.history.system.count
             checks["monitoring_survives_window_close"] = await eventually { !self.activity.paused && self.activity.history.system.count > samples }
             // Before the panel opens, which would count as watching again.
@@ -417,9 +426,11 @@ extension AppDelegate {
     /// - Opened, Mail's Couldn't read row for a folder in it leads with its app's icon, Finder's. So does that folder's
     ///   row in Disk's list of the folders the map couldn't read, drawn as the notice's popover draws it, in a window of
     ///   its own off screen, beside the rows of Messages and Downloads with their places' icons.
-    private func checkPlaces(_ fixture: String, report: URL) async -> [String: Bool] {
+    /// - A click on Downloads, which Pith can't read, asks for Full Disk Access in System Settings, as the notices'
+    ///   buttons do, and leaves the map where it was. The pane is recorded in `panes`, not opened.
+    private func checkPlaces(_ fixture: String, report: URL, panes: SystemSettingsAsked) async -> [String: Bool] {
         let names = ["places_show_at_the_root_and_home", "places_have_the_maps_sizes", "couldnt_read_shows_owner_icons",
-                     "unreadable_list_shows_owner_icons"]
+                     "unreadable_list_shows_owner_icons", "unreadable_places_open_full_disk_access"]
         let files = FileManager.default, mark = UUID().uuidString.prefix(8).lowercased()
         let home = (fixture as NSString).appendingPathComponent("pith-smoke-home-\(mark)")
         let library = (home as NSString).appendingPathComponent("Library"), downloads = (home as NSString).appendingPathComponent("Downloads")
@@ -458,6 +469,12 @@ extension AppDelegate {
             }
         }
         let atRoot = await pageAnswer(web, Self.placeRows) { showsTheUnreadable($0) }
+        let askedBefore = panes.asked.count
+        let clicked = try? await web.callAsyncJavaScript(Self.clickPlace, arguments: ["path": downloads], in: nil, contentWorld: .page) as? Bool
+        let askedForAccess = await eventually { panes.asked.count > askedBefore } && panes.asked.last == fullDiskAccessPane
+        // Long enough for a folder it opened to have reached the native side.
+        try? await Task.sleep(for: .milliseconds(300))
+        let stayed = disk.openFolder == fixture
         disk.pageCommand?(.open(home))
         let atHome = await eventually { self.disk.openFolder == home } ? await pageAnswer(web, Self.placeRows) { showsTheUnreadable($0) } : nil
         // Downloads is named once, in Places: the home folder has nothing else it couldn't read.
@@ -484,14 +501,23 @@ extension AppDelegate {
         print("places: Messages and Downloads \(unreadable ? "can't be read" : "have sizes"), shown at the root \(showsTheUnreadable(atRoot)) and at home "
               + "\(showsTheUnreadable(atHome)), Downloads named once \(namedOnce), gone further down \(gone); Developer "
               + "\(sized.developer.map(String.init) ?? "none") against the map's \(developerShown.map(String.init) ?? "none"), Mail "
-              + "\(sized.mail.map(String.init) ?? "none") against \(mailShown.map(String.init) ?? "none"); V10's Couldn't read icon \(ownerIcon ?? "none")")
+              + "\(sized.mail.map(String.init) ?? "none") against \(mailShown.map(String.init) ?? "none"); V10's Couldn't read icon \(ownerIcon ?? "none"); "
+              + "Downloads clicked \(clicked == true), asked for \(panes.asked.last?.absoluteString ?? "no pane") \(askedForAccess), the map stayed \(stayed)")
         return [names[0]: unreadable && showsTheUnreadable(atRoot) && showsTheUnreadable(atHome) && namedOnce && inDeveloper && gone && back
                     && cleared && settled,
                 names[1]: (sized.developer ?? 0) >= 1 << 20 && sized.developer == developerShown && inMailFolder && sized.mail != nil
                     && sized.mail == mailShown,
                 names[2]: inMailFolder && owned,
-                names[3]: list]
+                names[3]: list,
+                names[4]: clicked == true && askedForAccess && stayed]
     }
+
+    /// Clicks the Places row of the place at `path`: whether there was one.
+    private static let clickPlace = """
+        const button = [...document.querySelectorAll('[aria-labelledby="places-heading"] li button')].find((button) => button.title === path);
+        button?.click();
+        return button !== undefined;
+        """
 
     /// The rows of Places: each one's text and tooltip, and its icon once it has loaded, decorative.
     private static let placeRows = """
@@ -703,7 +729,7 @@ extension AppDelegate {
 
     /// What `script` returns in the map's page, given `arguments`, once `done` holds for it or the smoke test's patience
     /// runs out.
-    private func pageAnswer<Answer>(_ web: WKWebView, _ script: String, arguments: [String: Any] = [:], until done: (Answer?) -> Bool) async -> Answer? {
+    func pageAnswer<Answer>(_ web: WKWebView, _ script: String, arguments: [String: Any] = [:], until done: (Answer?) -> Bool) async -> Answer? {
         let deadline = Date().addingTimeInterval(Self.patience)
         while true {
             let answer = (try? await web.callAsyncJavaScript(script, arguments: arguments, in: nil, contentWorld: .page)) as? Answer
@@ -935,7 +961,7 @@ extension AppDelegate {
 
     /// Waits until no map has reached the page for `quiet` seconds, as once the live map has answered every request:
     /// the fixture doesn't change meanwhile, and the live map answers it within milliseconds.
-    private func mapSettles(quiet: TimeInterval = 0.6) async -> Bool {
+    func mapSettles(quiet: TimeInterval = 0.6) async -> Bool {
         var last = disk.revision, since = Date()
         return await eventually {
             if self.disk.revision != last { last = self.disk.revision; since = Date() }
@@ -951,7 +977,7 @@ extension AppDelegate {
     /// - `boxOf(name)`, the painted box of the open folder's item `name` in the page, found by selecting the item in the
     ///   map's list of items and reading the ring that outlines it, or null; `blockOf(name)`, that box's middle.
     /// - `card()`, what the hover card says, or nothing when it's closed.
-    private static func mapScript(_ body: String) -> String {
+    static func mapScript(_ body: String) -> String {
         """
         const canvas = document.querySelector("canvas");
         const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1314,7 +1340,7 @@ extension AppDelegate {
     }
 
     /// Waits for a checked outcome; a timeout is that check failing, not the whole run.
-    private func eventually(_ predicate: () -> Bool) async -> Bool {
+    func eventually(_ predicate: () -> Bool) async -> Bool {
         let deadline = Date().addingTimeInterval(Self.patience)
         while !predicate() {
             guard Date() < deadline, (try? await Task.sleep(for: .milliseconds(100))) != nil else { return false }

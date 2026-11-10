@@ -174,8 +174,9 @@ export function usePageIcons(): PageIcons | null {
             unreadableKey(folder, owners, sent.rule),
           ),
         map: {
+          // The smaller items have no icon on the map, and the Not measured block is no item to look up.
           url: (tile, points, ratio) =>
-            tile.kind === "group"
+            tile.kind === "group" || tile.kind === "unmeasured"
               ? null
               : iconURL(
                   sent.base,

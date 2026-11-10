@@ -32,16 +32,19 @@ export function usePlaces(): PlacesTable | null {
 /**
  * Places, which opens the side column at the startup disk's root and the home folder (`placesIn`): each place with its
  * own icon, and its size or why Pith can't read it. A click opens the place's folder, as a folder's row opens it in the
- * map's list of items.
+ * map's list of items. A place Pith can't read opens Full Disk Access in System Settings instead (`onNeedsAccess`),
+ * which would let Pith read it, as the notices' Full Disk Access… buttons do.
  */
 export function Places({
   places,
   icons,
   onOpen,
+  onNeedsAccess,
 }: {
   places: readonly Place[];
   icons: PageIcons | null;
   onOpen: (path: string) => void;
+  onNeedsAccess: () => void;
 }) {
   return (
     <section
@@ -60,7 +63,9 @@ export function Places({
             <button
               type="button"
               title={place.path}
-              onClick={() => onOpen(place.path)}
+              onClick={() =>
+                place.size === null ? onNeedsAccess() : onOpen(place.path)
+              }
               className="menu-item gap-2 px-2 py-1"
             >
               {icons && <MapIcon url={icons.key(place.key)} />}

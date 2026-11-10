@@ -27,6 +27,14 @@ import {
   roleTokens,
 } from "~/lib/map-colors";
 import {
+  type HintStep,
+  type LearnedHints,
+  type MapHints,
+  NOTHING_LEARNED,
+  storedHints,
+  storeHint,
+} from "~/lib/map-hints";
+import {
   CATEGORIES,
   type CollapsedTile,
   folderToOpenAt,
@@ -38,6 +46,7 @@ import {
   type LabelMetrics,
   labelMiddle,
   markRoom,
+  NOT_MEASURED,
   type PackageTile,
   type Tile,
   type TreemapLayout,
@@ -52,9 +61,12 @@ import type { DirNode, TreeNode } from "~/lib/types";
 import {
   browserFrames,
   drawMark,
+  drawPadlock,
   iconArrivals,
   iconPaint,
   type MapIcons,
+  PADLOCK_BOX,
+  PADLOCK_PATH,
   paintArrived,
   type WaitingIcon,
 } from "./map-marks";
@@ -120,6 +132,21 @@ interface Props {
    * shows it at once, whatever would hold it still.
    */
   atOnce?: boolean;
+  /**
+   * Used space on `root`'s volume that the scan couldn't measure, from a host that accounts for a whole volume's space,
+   * as Pith's page does at its map's root: it takes a hatched "Not measured" block among `root`'s items, and `root`'s
+   * shares become shares of used space. Without it the map shows the scan alone.
+   */
+  unmeasured?: number;
+  /** The Not measured block was clicked: show what it holds and why. Nothing selects or opens it. */
+  onUnmeasured?: () => void;
+  /** Draw a padlock after the name of each header strip whose folder holds folders the scan couldn't read, as Pith does. */
+  padlocks?: boolean;
+  /**
+   * Which click hints the person has learned, for a host that keeps them, as Pith does in its settings, and what to do
+   * as the map learns one. Without it the map keeps them in the page's own storage.
+   */
+  hints?: MapHints;
 }
 
 /** Labels are Monaspace Neon at 11 px, the size of the native data captions. */
@@ -283,6 +310,7 @@ const drawnBox = (tile: Tile): Drawn => ({
 function matchesKind(tile: Tile, kind: Kind): boolean {
   if (tile.kind === "group") return kind === "grouped";
   if (tile.kind === "volume") return kind === "volume";
+  if (tile.kind === "unmeasured") return false;
   return tile.kind !== "folder" && tile.category === kind;
 }
 
@@ -350,14 +378,15 @@ function drawMap(
     ctx.strokeRect(box.x + 0.5, box.y + 0.5, box.w - 1, box.h - 1);
   };
 
-  const hatch = (box: Drawn) => {
+  /** Hatching that rises to the right, as the group of smaller items has, or falls to the right. */
+  const hatch = (box: Drawn, rising = true) => {
     clipTo(box, () => {
       ctx.strokeStyle = palette.role.textTertiary;
       ctx.globalAlpha *= HATCH.alpha;
       ctx.beginPath();
       for (let d = -box.h; d < box.w; d += HATCH.step) {
-        ctx.moveTo(box.x + d, box.y + box.h);
-        ctx.lineTo(box.x + d + box.h, box.y);
+        ctx.moveTo(box.x + d, rising ? box.y + box.h : box.y);
+        ctx.lineTo(box.x + d + box.h, rising ? box.y : box.y + box.h);
       }
       ctx.stroke();
     });
@@ -382,6 +411,14 @@ function drawMap(
         fonts.name,
         palette.role.text,
         "left",
+      );
+      // After the name as drawn, in the room its layout kept, as the size beside it is drawn.
+      drawPadlock(
+        ctx,
+        tile,
+        metrics,
+        ctx.measureText(label.name).width,
+        palette.role.textSecondary,
       );
       if (label.size) {
         text(
@@ -413,6 +450,15 @@ function drawMap(
       // Measured but not entered: a recessed block with a dashed edge, apart from folders and files.
       ctx.fillStyle = palette.role.well;
       ctx.fillRect(box.x, box.y, box.w, box.h);
+      ctx.setLineDash([3, 2]);
+      outline(box, palette.role.textTertiary);
+      ctx.setLineDash([]);
+    } else if (tile.kind === "unmeasured") {
+      // Used space nothing on the map stands for: recessed, hatched the other way from the smaller items, whose items
+      // the map has, and edged with dashes, as a volume the scan didn't enter is.
+      ctx.fillStyle = palette.role.well;
+      ctx.fillRect(box.x, box.y, box.w, box.h);
+      hatch(box, false);
       ctx.setLineDash([3, 2]);
       outline(box, palette.role.textTertiary);
       ctx.setLineDash([]);
@@ -490,7 +536,10 @@ interface Card {
     readonly fill: string | null;
   } | null;
   readonly size: string;
-  /** The block's share of the open folder, e.g. "12% of Users". */
+  /**
+   * The block's share of the open folder, e.g. "12% of Users", or of used space, e.g. "12% of used space", at a root
+   * with its Not measured block.
+   */
   readonly share: string;
   /** What clicks do; null once the user has done both. */
   readonly hint: string | null;
@@ -521,20 +570,39 @@ function unreadableInside(node: DirNode): string | null {
   return `${count} ${count === 1 ? "folder" : "folders"} inside couldn’t be read`;
 }
 
+/**
+ * What the card says of `tile`, laid out in `layout`. A share is of the layout's folder, or of used space where the
+ * layout has a Not measured block: the folder's size and the block's.
+ */
 function describe(
   tile: Tile,
   open: DirNode | null,
-  root: DirNode,
+  layout: TreemapLayout,
   hints: boolean,
   change: string | null,
 ): Card {
+  const { root, unmeasured } = layout;
   const size = formatBytes(tileSize(tile));
-  const share = `${percentOf(tileSize(tile), root.size)} of ${root.name || "/"}`;
+  const share =
+    unmeasured === undefined
+      ? `${percentOf(tileSize(tile), root.size)} of ${root.name || "/"}`
+      : `${percentOf(tileSize(tile), root.size + unmeasured)} of used space`;
   const openFolder = open ? ` Double-click to open ${open.name}/.` : "";
   const title = middleTruncate(tileName(tile), 34);
   const fill = (category: Category) => `var(${CATEGORY_VAR[category]})`;
   const hint = (text: string) => (hints ? text : null);
   switch (tile.kind) {
+    case "unmeasured":
+      return {
+        title,
+        kind: null,
+        size,
+        share,
+        // Always said: a click here opens no item, so nothing about it is learned.
+        hint: "Space the scan couldn’t see. Click to see why.",
+        unreadable: null,
+        change: null,
+      };
     case "file":
       return {
         title,
@@ -594,28 +662,6 @@ function describe(
   }
 }
 
-/**
- * Click and double-click hints show until the user has selected and opened something on
- * the map once. Stored per viewer; when storage is unavailable the hints keep showing.
- */
-const HINTS_KEY = "pith.mapHintsLearned";
-function hintsLearned(): { selected: boolean; opened: boolean } {
-  try {
-    const saved = JSON.parse(localStorage.getItem(HINTS_KEY) ?? "{}");
-    return { selected: saved.selected === true, opened: saved.opened === true };
-  } catch {
-    return { selected: false, opened: false };
-  }
-}
-function learnHint(step: "selected" | "opened") {
-  try {
-    const learned = { ...hintsLearned(), [step]: true };
-    localStorage.setItem(HINTS_KEY, JSON.stringify(learned));
-  } catch {
-    // Without storage the hints stay, which is harmless.
-  }
-}
-
 /** The tile nearest `from` in an arrow key's direction, among the open folder's own items. */
 function tileInDirection(
   tiles: readonly Tile[],
@@ -670,15 +716,27 @@ function Ring({ tile, shadow }: { tile: Tile; shadow: string }) {
   );
 }
 
-/** A block with a fill of its own, unlike a folder drawn around its contents or the hatched group. */
-const filled = (tile: Tile) => tile.kind !== "folder" && tile.kind !== "group";
+/** A block with a fill of its own, unlike a folder drawn around its contents or the hatched blocks. */
+const filled = (tile: Tile) =>
+  tile.kind !== "folder" && tile.kind !== "group" && tile.kind !== "unmeasured";
 
+/** The item a tile shows, by path, for linking other views: none for the group or the Not measured block. */
 const pathOf = (tile: Tile | null) =>
-  tile && tile.kind !== "group" ? tile.node.path : null;
+  tile && tile.kind !== "group" && tile.kind !== "unmeasured"
+    ? tile.node.path
+    : null;
 
-/** A selectable item: a file or folder. Groups and volumes can't be moved to the Trash or revealed. */
+/**
+ * A selectable item: a file or folder. Groups and volumes can't be moved to the Trash or revealed, and the Not measured
+ * block is no item at all.
+ */
 const selectable = (tile: Tile | null): TreeNode | null =>
-  tile && tile.kind !== "group" && tile.kind !== "volume" ? tile.node : null;
+  tile &&
+  tile.kind !== "group" &&
+  tile.kind !== "volume" &&
+  tile.kind !== "unmeasured"
+    ? tile.node
+    : null;
 
 export function TreemapCanvas({
   root,
@@ -700,13 +758,21 @@ export function TreemapCanvas({
   steady = false,
   doubleClickInterval = 500,
   atOnce = false,
+  unmeasured,
+  onUnmeasured,
+  padlocks = false,
+  hints,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
   const [focusPath, setFocusPath] = useState<string | null>(null);
-  const [learned, setLearned] = useState(hintsLearned);
+  // The hints the page's own storage has learned, unless the host keeps them.
+  const [stored, setStored] = useState<LearnedHints>(() =>
+    hints ? NOTHING_LEARNED : storedHints(),
+  );
+  const learned = hints?.learned ?? stored;
   const reported = useRef<string | null>(null);
   const { appearance, increasedContrast } = useAppearance(
     followSystemAppearance,
@@ -734,17 +800,17 @@ export function TreemapCanvas({
   const { metrics, settled: fontSettled } = useLabelFont(
     "palette" in colors ? colors.palette.font : null,
   );
-  // The marks drawn at the start of labels, which the layout keeps room for where the labels still fit after them.
+  // The marks drawn on labels, which the layout keeps room for where the labels still fit beside them.
   const hasIcons = mapIcons !== undefined;
   const marks = useMemo(
     (): LabelMarks | undefined =>
-      metrics && (hasIcons || kindGlyphs)
-        ? { icons: hasIcons, glyphs: kindGlyphs, metrics }
+      metrics && (hasIcons || kindGlyphs || padlocks)
+        ? { icons: hasIcons, glyphs: kindGlyphs, padlocks, metrics }
         : undefined,
-    [hasIcons, kindGlyphs, metrics],
+    [hasIcons, kindGlyphs, padlocks, metrics],
   );
 
-  // Layout once per folder, size and marks; hovering never lays out again.
+  // Layout once per folder, size, marks and Not measured block; hovering never lays out again.
   const shownLayout = useShownLayout(
     root,
     size.w,
@@ -753,6 +819,7 @@ export function TreemapCanvas({
     doubleClickInterval,
     atOnce,
     marks,
+    unmeasured,
   );
   const { layout, drew } = shownLayout;
 
@@ -839,10 +906,14 @@ export function TreemapCanvas({
     report(focusPath);
   };
 
-  const learn = (step: "selected" | "opened") => {
+  const learn = (step: HintStep) => {
     if (learned[step]) return;
-    learnHint(step);
-    setLearned((current) => ({ ...current, [step]: true }));
+    if (hints) {
+      hints.learn(step);
+      return;
+    }
+    storeHint(step);
+    setStored((current) => ({ ...current, [step]: true }));
   };
 
   const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -855,9 +926,13 @@ export function TreemapCanvas({
   const onClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const clicked = shownLayout.clicked();
     if (!clicked) return;
-    const node = selectable(
-      tileAt(clicked, e.nativeEvent.offsetX, e.nativeEvent.offsetY),
-    );
+    const tile = tileAt(clicked, e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+    // The Not measured block explains itself, and leaves the selection as it was.
+    if (tile?.kind === "unmeasured") {
+      onUnmeasured?.();
+      return;
+    }
+    const node = selectable(tile);
     if (node) learn("selected");
     onSelect(node);
   };
@@ -895,7 +970,10 @@ export function TreemapCanvas({
    */
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!layout || e.target !== e.currentTarget) return;
-    const items = layout.tiles;
+    // The Not measured block is no item to arrow onto; the list of items reaches it.
+    const items: readonly Tile[] = layout.tiles.filter(
+      (tile) => tile.kind !== "unmeasured",
+    );
     const current =
       (selectedPath ? tileForPath(layout, selectedPath) : null) ?? null;
     const own = current && items.includes(current) ? current : null;
@@ -958,12 +1036,16 @@ export function TreemapCanvas({
     highlightKind === null
       ? ""
       : ` Highlighting ${kindLabel(highlightKind).toLowerCase()}.`;
+  const notMeasured =
+    unmeasured !== undefined && unmeasured > 0
+      ? ` ${formatBytes(unmeasured)} more is used space the scan couldn’t measure.`
+      : "";
   const summary = `Treemap of ${root.path}, ${formatBytes(root.size)} in ${
     root.children.length
-  } items.${highlightLabel} Arrow keys select items, Return opens a folder and Space previews. The list after it names every item.`;
+  } items.${notMeasured}${highlightLabel} Arrow keys select items, Return opens a folder and Space previews. The list after it names every item.`;
 
   const delta =
-    pointed && pointed.kind !== "group"
+    pointed && pointed.kind !== "group" && pointed.kind !== "unmeasured"
       ? growth?.get(pointed.node.path)
       : undefined;
   const change =
@@ -976,7 +1058,7 @@ export function TreemapCanvas({
       ? describe(
           pointed,
           folderToOpenAt(layout, pointer.x, pointer.y),
-          layout.root,
+          layout,
           !(learned.selected && learned.opened),
           change,
         )
@@ -987,7 +1069,9 @@ export function TreemapCanvas({
       : colors.palette.role.text;
 
   const selectedNode =
-    selected && selected.kind !== "group" ? selected.node : null;
+    selected && selected.kind !== "group" && selected.kind !== "unmeasured"
+      ? selected.node
+      : null;
   return (
     // One tab stop that handles its own keys, so it's an application to assistive technology.
     <div
@@ -1112,6 +1196,8 @@ export function TreemapCanvas({
         onSelect={onSelect}
         onEnterDir={onEnterDir}
         onFocusItem={focusItem}
+        unmeasured={unmeasured}
+        onUnmeasured={onUnmeasured}
       />
     </div>
   );
@@ -1124,25 +1210,26 @@ function isOpenable(node: TreeNode, root: DirNode): node is DirNode {
   );
 }
 
-/** A small padlock for folders the scan couldn't read, drawn in the text colour. */
+/** A small padlock for folders the scan couldn't read, drawn in the text colour: the one the map's header strips draw. */
 function LockGlyph() {
   return (
     <svg
       aria-hidden="true"
-      viewBox="0 0 10 12"
+      viewBox={`0 0 ${PADLOCK_BOX.width} ${PADLOCK_BOX.height}`}
       className="size-2.5 shrink-0"
       fill="currentColor"
     >
-      <path d="M2 5V3.5a3 3 0 0 1 6 0V5h.5A1.5 1.5 0 0 1 10 6.5v4A1.5 1.5 0 0 1 8.5 12h-7A1.5 1.5 0 0 1 0 10.5v-4A1.5 1.5 0 0 1 1.5 5H2Zm1.5 0h3V3.5a1.5 1.5 0 0 0-3 0V5Z" />
+      <path d={PADLOCK_PATH} />
     </svg>
   );
 }
 
 /**
  * A screen reader can't read the canvas, so the current folder's items are also listed as
- * buttons, including the ones too small to draw and the folders the scan couldn't read.
- * The list stays out of the tab order, since the map itself is the one tab stop; VoiceOver
- * still reaches every button, and the item it's on is outlined on the map.
+ * buttons, including the ones too small to draw and the folders the scan couldn't read,
+ * and then the Not measured block, which explains itself. The list stays out of the tab
+ * order, since the map itself is the one tab stop; VoiceOver still reaches every button,
+ * and the item it's on is outlined on the map.
  */
 const TreemapItems = memo(function TreemapItems({
   root,
@@ -1150,7 +1237,17 @@ const TreemapItems = memo(function TreemapItems({
   onSelect,
   onEnterDir,
   onFocusItem,
-}: Pick<Props, "root" | "selectedPath" | "onSelect" | "onEnterDir"> & {
+  unmeasured,
+  onUnmeasured,
+}: Pick<
+  Props,
+  | "root"
+  | "selectedPath"
+  | "onSelect"
+  | "onEnterDir"
+  | "unmeasured"
+  | "onUnmeasured"
+> & {
   onFocusItem: (path: string | null) => void;
 }) {
   return (
@@ -1195,6 +1292,23 @@ const TreemapItems = memo(function TreemapItems({
           )}
         </li>
       ))}
+      {unmeasured !== undefined && unmeasured > 0 && (
+        <li className="flex items-center gap-1">
+          <button
+            type="button"
+            tabIndex={-1}
+            disabled={!onUnmeasured}
+            onClick={onUnmeasured}
+            onFocus={() => onFocusItem(null)}
+            className="menu-item block min-w-0 flex-1 truncate px-2 py-1"
+          >
+            {NOT_MEASURED}{" "}
+            <span className="text-code-sm text-(--role-text-secondary,var(--color-rambutan-400)) tabular-nums">
+              {formatBytes(unmeasured)}
+            </span>
+          </button>
+        </li>
+      )}
     </ul>
   );
 });

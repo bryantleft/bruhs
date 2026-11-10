@@ -22,6 +22,8 @@ enum Launch {
 /// Pith's settings, each kept in the person's defaults under its own name.
 enum Setting: String, CaseIterable {
     case iconOnly, menuBarShows, keepsHistory, alerts, remembersScans, panelShortcut, textScale, inspectorWidth, welcomeSeen
+    /// The disk map's click hints the person has learned, by name (`MapHints`).
+    case learnedMapHints
 
     /// Its value in an automated run, whatever the person chose: Pith's default, but for Activity's history, which an
     /// automated run keeps, in memory only.
@@ -30,7 +32,7 @@ enum Setting: String, CaseIterable {
         case .iconOnly, .panelShortcut: false
         case .keepsHistory, .remembersScans, .welcomeSeen: true
         case .menuBarShows: MenuBarMetric.cpu.rawValue
-        case .alerts: [String]()
+        case .alerts, .learnedMapHints: [String]()
         case .textScale: 1.0
         case .inspectorWidth: 300.0
         }

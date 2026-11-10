@@ -16,7 +16,9 @@ import {
   layoutTreemap,
   MIN_TILE,
   markPlace,
+  markRoom,
   type PackageTile,
+  padlockRoom,
   siblingOrder,
   type Tile,
   type TreemapLayout,
@@ -24,6 +26,7 @@ import {
   tileForPath,
   tileLabel,
   tileName,
+  type UnmeasuredTile,
 } from "../src/lib/treemap-layout.ts";
 import type {
   AggregateNode,
@@ -98,7 +101,11 @@ function only<T extends Tile["kind"]>(
   path: string,
 ): Extract<Tile, { kind: T }> {
   const found = allTiles(map.tiles).find(
-    (t) => t.kind === kind && t.kind !== "group" && t.node.path === path,
+    (t) =>
+      t.kind === kind &&
+      t.kind !== "group" &&
+      t.kind !== "unmeasured" &&
+      t.node.path === path,
   );
   assert.ok(found, `expected a ${kind} tile for ${path}`);
   return found as Extract<Tile, { kind: T }>;
@@ -455,7 +462,11 @@ function relayout(
 
 /** The names of a folder's items as the layout places them, the group of smaller items left out. */
 const names = (tiles: readonly Tile[]) =>
-  tiles.flatMap((tile) => (tile.kind === "group" ? [] : [tile.node.name]));
+  tiles.flatMap((tile) =>
+    tile.kind === "group"
+      ? []
+      : [tile.kind === "unmeasured" ? tileName(tile) : tile.node.name],
+  );
 
 describe("layoutTreemap with the shown layout's order", () => {
   // Two files fill a 100 × 100 map, 10,000 px², so a file of n bytes gets n px², a square n px² on a side.
@@ -1136,6 +1147,276 @@ describe("icon slots", () => {
         icons,
         marked(root, 600, 400, { icons: true, glyphs: true }),
       ),
+      false,
+    );
+  });
+});
+
+describe("the Not measured block", () => {
+  // 10,000 bytes on the map: a folder of two files and two files of its own.
+  const root = dir("/", [
+    dir("/Users", [file("/Users/a.mov", 4000), file("/Users/b.mov", 2000)]),
+    file("/big.dmg", 3000),
+    file("/small.bin", 1000),
+  ]);
+  const measured = (unmeasured?: number, width = 400, height = 300) =>
+    layoutTreemap(
+      root,
+      width,
+      height,
+      kindBytesByFolder(root),
+      undefined,
+      undefined,
+      unmeasured,
+    );
+  const blocks = (map: TreemapLayout) =>
+    allTiles(map.tiles).filter((tile) => tile.kind === "unmeasured");
+  const block = (map: TreemapLayout) => {
+    const [found] = blocks(map);
+    assert.ok(found, "expected the Not measured block");
+    return found as UnmeasuredTile;
+  };
+
+  test("lays the map out as before without the bytes it couldn't measure", () => {
+    assert.deepEqual(measured(undefined), layout(root, 400, 300));
+    assert.deepEqual(measured(0), layout(root, 400, 300));
+  });
+
+  test("adds one block at the map's root, taking the share of used space the bytes are", () => {
+    // As much again as the map holds: half the used space, so half the map.
+    const map = measured(10_000);
+    assert.equal(blocks(map).length, 1);
+    assert.ok(
+      map.tiles.includes(block(map)),
+      "a block of the map's own folder",
+    );
+    assert.equal(block(map).size, 10_000);
+    assert.equal(map.unmeasured, 10_000);
+    assert.ok(Math.abs(area(block(map)) / (400 * 300) - 0.5) < 0.02);
+    // The rest share the other half by bytes, as before.
+    const users = only(map, "folder", "/Users");
+    assert.ok(Math.abs(area(users) / (400 * 300) - 0.3) < 0.02);
+    assert.equal(
+      map.tiles.reduce((sum, tile) => sum + area(tile), 0),
+      400 * 300,
+    );
+  });
+
+  test("goes at the root alone: no folder inside gets one", () => {
+    for (const tile of blocks(measured(10_000))) assert.equal(tile.depth, 1);
+  });
+
+  test("is named Not measured, with its size", () => {
+    const map = measured(10_000);
+    assert.equal(tileName(block(map)), "Not measured");
+    assert.deepEqual(tileLabel(block(map), METRICS), {
+      name: "Not measured",
+      size: "10.0 KB",
+      lines: 2,
+    });
+  });
+
+  test("is no item: a double-click opens nothing there, and no path leads to it", () => {
+    const map = measured(10_000);
+    const [x, y] = centre(block(map));
+    assert.equal(tileAt(map, x, y), block(map));
+    assert.equal(folderToOpenAt(map, x, y), null);
+    for (const path of ["/Users", "/Users/a.mov", "/big.dmg", "/elsewhere"]) {
+      assert.notEqual(tileForPath(map, path), block(map), path);
+    }
+  });
+
+  test("keeps its place among the root's items while its change in size can't be seen", () => {
+    const before = measured(3010);
+    assert.deepEqual(names(before.tiles), [
+      "Users",
+      "Not measured",
+      "big.dmg",
+      "small.bin",
+    ]);
+    // 2,990 bytes would go after /big.dmg's 3,000, but their squares' sides differ by under a pixel.
+    assert.deepEqual(names(measured(2990).tiles), [
+      "Users",
+      "big.dmg",
+      "Not measured",
+      "small.bin",
+    ]);
+    const after = layoutTreemap(
+      root,
+      400,
+      300,
+      kindBytesByFolder(root),
+      siblingOrder(before),
+      undefined,
+      2990,
+    );
+    assert.deepEqual(names(after.tiles), names(before.tiles));
+  });
+
+  test("draws differently when it comes, goes, or prints another size", () => {
+    const shown = measured(10_000);
+    assert.equal(drawsTheSame(shown, measured(10_000)), true);
+    assert.equal(drawsTheSame(shown, measured(10_001)), true);
+    assert.equal(drawsTheSame(shown, measured(undefined)), false);
+    assert.equal(drawsTheSame(measured(undefined), shown), false);
+    assert.equal(drawsTheSame(shown, measured(14_000)), false);
+  });
+
+  test("leaves out a block too small to draw, and the map's items fill the map", () => {
+    const map = measured(1);
+    assert.equal(blocks(map).length, 0);
+    // Its bytes still count in the used space the root's shares are of.
+    assert.equal(map.unmeasured, 1);
+    assert.equal(
+      map.tiles.reduce((sum, tile) => sum + area(tile), 0),
+      400 * 300,
+    );
+  });
+
+  test("keeps no room for a mark: it has no icon and no glyph", () => {
+    const map = layoutTreemap(
+      root,
+      400,
+      300,
+      kindBytesByFolder(root),
+      undefined,
+      { icons: true, glyphs: true, metrics: METRICS },
+      10_000,
+    );
+    assert.equal(block(map).slot, undefined);
+  });
+});
+
+describe("padlocks", () => {
+  const locked = (path: string): UnreadableNode => ({
+    kind: "unreadable",
+    name: nameOf(path),
+    path,
+    size: 0,
+    reason: "protected",
+  });
+  const root = dir("/r", [
+    dir("/r/Users", [
+      dir("/r/Users/zoe", [
+        file("/r/Users/zoe/a.mov", 3000),
+        file("/r/Users/zoe/b.mov", 1000),
+        locked("/r/Users/zoe/Documents"),
+      ]),
+      file("/r/Users/c.mov", 2000),
+      locked("/r/Users/Shared"),
+    ]),
+    dir("/r/Library", [
+      dir("/r/Library/Caches", [
+        file("/r/Library/Caches/d.bin", 2000),
+        file("/r/Library/Caches/e.bin", 1500),
+      ]),
+      file("/r/Library/f.mov", 1500),
+    ]),
+  ]);
+  const padlocks: Partial<LabelMarks> = { icons: true, padlocks: true };
+  /** Every folder drawn as a header strip, with whether it has a padlock. */
+  const strips = (map: TreemapLayout) =>
+    Object.fromEntries(
+      allTiles(map.tiles)
+        .filter((tile): tile is FolderTile => tile.kind === "folder")
+        .map((tile) => [tile.node.path, tile.padlock === true]),
+    );
+
+  test("keeps no padlock for a host that doesn't draw them", () => {
+    for (const map of [
+      layout(root, 600, 400),
+      marked(root, 600, 400, { icons: true }),
+    ]) {
+      assert.ok(!Object.values(strips(map)).includes(true));
+    }
+  });
+
+  test("puts one on a depth-1 or depth-2 header whose folder holds folders the scan couldn't read", () => {
+    assert.deepEqual(strips(marked(root, 600, 400, padlocks)), {
+      "/r/Users": true,
+      "/r/Users/zoe": true,
+      "/r/Library": false,
+      "/r/Library/Caches": false,
+    });
+  });
+
+  test("puts none on a block: its card counts what couldn't be read", () => {
+    // Too small for a header and its contents, so one block.
+    const small = dir("/r", [
+      file("/r/big.bin", 1_000_000),
+      dir("/r/mixed", [file("/r/mixed/a.png", 3000), locked("/r/mixed/x")]),
+    ]);
+    const map = marked(small, 300, 200, padlocks);
+    assert.equal(only(map, "collapsed", "/r/mixed").kind, "collapsed");
+    assert.ok(!Object.values(strips(map)).includes(true));
+  });
+
+  test("leaves room for the padlock after the name, and the size gives way first", () => {
+    const users = (padlock: boolean): FolderTile => ({
+      kind: "folder",
+      node: root.children[0] as DirNode,
+      header: 18,
+      children: [],
+      depth: 1,
+      x0: 0,
+      y0: 0,
+      x1: 120,
+      y1: 100,
+      ...(padlock ? { padlock } : {}),
+    });
+    // 111 px inside the padding: 18 characters, or 16 after the padlock's 12 px.
+    assert.deepEqual(headerLabel(users(false), METRICS), {
+      name: "Users",
+      size: "6.00 KB",
+    });
+    assert.deepEqual(headerLabel(users(true), METRICS), {
+      name: "Users",
+      size: "6.00 KB",
+    });
+    const narrow = (padlock: boolean) => ({ ...users(padlock), x1: 70 });
+    // 61 px: 10 characters, or 8 after the padlock: the name keeps its room and the size goes.
+    assert.deepEqual(headerLabel(narrow(false), METRICS), {
+      name: "Users",
+      size: null,
+    });
+    assert.deepEqual(headerLabel(narrow(true), METRICS), {
+      name: "Users",
+      size: null,
+    });
+    assert.equal(padlockRoom(users(true)), 12);
+    assert.equal(padlockRoom(users(false)), 0);
+  });
+
+  test("goes only where the name still fits beside it, and never takes an icon's place", () => {
+    const one = (width: number, marks: Partial<LabelMarks>) =>
+      only(marked(root, width, 400, marks), "folder", "/r/Users");
+    let kept = 0;
+    for (let width = 40; width <= 260; width += 1) {
+      const plain = one(width, { icons: true });
+      const locked = one(width, padlocks);
+      assert.equal(locked.slot, plain.slot, `the icon at ${width}`);
+      if (locked.padlock) kept += 1;
+      if (headerLabel(plain, METRICS) !== null) {
+        assert.notEqual(headerLabel(locked, METRICS), null, `at ${width}`);
+      }
+      if (locked.padlock) {
+        // The padding either side, the icon and its gap, the padlock's room and four characters and an ellipsis.
+        const painted = locked.x1 - locked.x0 - GAP;
+        assert.ok(
+          painted - 2 * METRICS.padX - markRoom(locked) - 12 >=
+            5 * METRICS.charWidth,
+          `at ${width}`,
+        );
+      }
+    }
+    assert.ok(kept > 100, "padlocks were drawn where they fit");
+  });
+
+  test("draws differently when a padlock comes or goes", () => {
+    const shown = marked(root, 600, 400, padlocks);
+    assert.equal(drawsTheSame(shown, marked(root, 600, 400, padlocks)), true);
+    assert.equal(
+      drawsTheSame(shown, marked(root, 600, 400, { icons: true })),
       false,
     );
   });

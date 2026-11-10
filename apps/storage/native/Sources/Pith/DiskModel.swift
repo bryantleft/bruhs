@@ -90,6 +90,8 @@ enum MapCommand: Equatable {
     /// Where the volume's space went, for a map of a whole volume.
     private(set) var accounting: DiskAccounting?
     private var accountedAt = Date.distantPast
+    /// Whether "Where the space is" is open: its link opens it, and so does a click on the map's Not measured block.
+    var showsWhereTheSpaceIs = false
     /// Shows items in Quick Look; the app delegate owns the panel.
     var showQuickLook: (([URL]) -> Void)?
     /// Who wrote to disk since a date, from Activity's history; the app delegate connects it.
@@ -164,63 +166,29 @@ enum MapCommand: Equatable {
     private var lastTree = Date.distantPast
     private var treeLater: Task<Void, Never>?
 
-    /// A figure in the caption under the path bar, such as "Files 123,697".
-    struct Figure: Hashable {
-        let label: String
-        let value: String
+    /// The caption under the path bar, one status at a time (`DiskCaption`): the live map's while the view shows it, and
+    /// otherwise a scan's.
+    var caption: DiskCaption? {
+        if let live, liveView != nil { return DiskCaption.live(live.caption) }
+        return DiskCaption.scan(scanCaption)
     }
 
-    /// The caption under the path bar: figures while scanning and for the map it holds, or a message about the map.
-    enum Caption: Equatable {
-        case message(String)
-        case figures([Figure])
-    }
-
-    var caption: Caption? {
-        if let live, liveView != nil {
-            // Ahead of everything else: only the person can bring these folders into the map.
-            if live.asking > 0, live.state.isMapped { return .message(Self.asking(live.asking)) }
-            switch live.state {
-            case .mapping(let progress?):
-                return .figures([Figure(label: "Mapped", value: bytes(progress.bytes)), Figure(label: "Files", value: monaspaced(progress.files.formatted()))])
-            case .mapping(nil): return .message("Starting the map…")
-            case .catchingUp(let waiting) where waiting > 0:
-                return .message("Catching up on \(waiting.formatted()) \(waiting == 1 ? "folder" : "folders") that changed while Pith was closed.")
-            case .catchingUp: return .message("Catching up on what changed while Pith was closed.")
-            // A busy Mac always has a few folders waiting their turn; the count matters only when many are.
-            case .live(let waiting) where waiting >= Self.catchingUpCount:
-                return .message("Catching up on \(waiting.formatted()) folders that changed.")
-            case .live:
-                return live.updatedAt.map { .figures([Figure(label: "Up to date", value: monaspaced(scanTime($0)))]) }
-            case .failed(let message): return .message(message)
-            case .off, .opening, .unmapped: return nil
-            }
-        }
-        if isScanning {
-            guard let progress else { return .message(rescanning == nil ? "Starting the scan…" : "Scanning \(URL(fileURLWithPath: rescanning ?? "").lastPathComponent) again…") }
-            return .figures([Figure(label: "Size", value: bytes(progress.bytes)), Figure(label: "Files", value: monaspaced(progress.files.formatted()))])
-        }
-        // The bar under the map gives the open folder's or the selection's size, so this line says when the scan was.
-        if result != nil, let scannedAt {
-            return .figures([Figure(label: edited ? "Scanned, then edited" : "Scanned", value: monaspaced(scanTime(scannedAt)))])
-        }
-        return note.map { .message($0) }
-    }
-
-    /// "Today 1:57 PM", "Yesterday 9:02 AM" or "Nov 3, 9:02 AM": a map can be days old, unlike Activity's ten minutes.
-    private func scanTime(_ date: Date) -> String {
-        let time = date.formatted(date: .omitted, time: .shortened)
-        if Calendar.current.isDateInToday(date) { return "Today \(time)" }
-        if Calendar.current.isDateInYesterday(date) { return "Yesterday \(time)" }
-        return date.formatted(.dateTime.month(.abbreviated).day().hour().minute())
+    /// What a scan is doing, or did, as the caption tells it.
+    private var scanCaption: DiskCaption.Scan {
+        if isScanning { return .scanning(found: progress.map { DiskCaption.Found(bytes: $0.bytes, files: $0.files) }, again: rescanning) }
+        if result != nil, let scannedAt { return .scanned(at: scannedAt, edited: edited) }
+        return note.map(DiskCaption.Scan.note) ?? .nothing
     }
 
     /// Folders the map couldn't read, so it leaves them out.
     var unreadableFolders: UInt64 { result?.summary.errors ?? 0 }
 
-    /// What to say while macOS asks the person whether Pith may read `folders` folders, which the map lacks until then.
-    static func asking(_ folders: Int) -> String {
-        "macOS is asking whether Pith may read \(folders.formatted()) \(folders == 1 ? "folder" : "folders"). They join the map once you answer."
+    /// How many folders macOS is asking the person whether Pith may read, while the view shows the live map it has
+    /// made: the map goes on without them until they answer, or give Pith Full Disk Access. Nil while macOS asks about
+    /// none of them.
+    var askingFolders: Int? {
+        guard let live, liveView != nil, live.state.isMapped, live.asking > 0 else { return nil }
+        return live.asking
     }
 
     // MARK: The path bar
@@ -304,10 +272,6 @@ enum MapCommand: Equatable {
     // MARK: The live map
 
     private var liveSnapshot: URL? { scansFolder?.appendingPathComponent("startup-disk.index") }
-
-    /// Folders waiting to be listed again before the caption says it's catching up. Following the development Mac's
-    /// whole disk, 0 to 30 were waiting at any moment, each listed within seconds.
-    static let catchingUpCount = 100
 
     /// Starts the live map of `root`, the startup disk unless a test gives a folder of its own, keeping it between
     /// launches as Settings says unless `keep` says otherwise.
@@ -667,6 +631,11 @@ enum MapCommand: Equatable {
     /// each item the key `iconKey(for:)` gives it.
     var iconRule: IconRule { Icons.places.iconRule(asking: macOSMayHoldFolders) }
 
+    /// The disk map's click hints the person has learned, kept in Pith's settings, which an automated run keeps in
+    /// memory (`Setting`), so they stay learned in the next window and at the next launch.
+    let mapHints = MapHints(read: { UserDefaults.standard.object(forKey: Setting.learnedMapHints.rawValue) },
+                            write: { UserDefaults.standard.set($0, for: .learnedMapHints) })
+
     /// The apps the page names under Wrote the most since, as native last sent them: the page may load the icons of
     /// their bundles.
     @ObservationIgnored var pageWriters: [DiskWriter] = [] {
@@ -828,29 +797,82 @@ enum MapCommand: Equatable {
         }
     }
 
+    // MARK: Where the space is
+
+    /// The used space the scan couldn't measure on the volume the map shows, which the map's page draws as its Not
+    /// measured block at `root`: the figure "Where the space is" gives as Not measured.
+    struct NotMeasured: Equatable {
+        let root: String
+        let bytes: UInt64
+    }
+
+    /// The accounting of the map shown: none for a map of a folder, which nothing can account for, nor while the
+    /// accounting there is is still the last map's.
+    private var shownAccounting: DiskAccounting? {
+        guard let accounting, accounting.root == result?.root.path else { return nil }
+        return accounting
+    }
+
+    /// What the map's page draws as Not measured, only for a map of a whole volume: the live map of the startup disk, or
+    /// a scan of a volume's root.
+    var notMeasured: NotMeasured? {
+        guard let accounting = shownAccounting, let bytes = accounting.notMeasuredBlock else { return nil }
+        return NotMeasured(root: accounting.root, bytes: bytes)
+    }
+
+    /// "Where the space is" for a map of a whole volume, row by row, the Trash's from the map when the map can read it.
+    var spaceRows: [SpaceRow]? {
+        shownAccounting?.rows(result: result, trash: trashOnMap)
+    }
+
+    /// The Trash's size as the map shows it, when the map can read the Trash: on the live map, the figure Places gives
+    /// it, from the map's tree or its index, and in a scan, its folder's in the tree. Nil when the map can't read it or
+    /// doesn't hold it. Pith never reads the Trash itself.
+    var trashOnMap: UInt64? {
+        guard let trash = sideColumn.places.place(id: "trash") else { return nil }
+        if let table = placesTable { return table.places.first { $0.id == trash.id }?.size }
+        // A folder the map couldn't read is no folder of the tree's.
+        return result?.root.folder(at: trash.path)?.size
+    }
+
+    /// The map's Not measured block was clicked: "Where the space is" says what it holds and why, while its link shows.
+    func explainNotMeasured() {
+        guard spaceRows != nil, !isScanning else { return }
+        showsWhereTheSpaceIs = true
+    }
+
+    /// Works out where a whole volume's space went for a map, off the main thread, or nil for a map of a folder. The
+    /// smoke test gives figures of its own, so its fixture stands in for a volume.
+    @ObservationIgnored var accounts: @Sendable (DiskResult) -> DiskAccounting? = DiskModel.account
+
     /// Works out where the space went for a map of a whole volume: what's on hidden volumes, what the map couldn't
     /// measure, local snapshots and purgeable space. Off the main thread: `tmutil` takes a moment.
-    private func refreshAccounting() {
+    func refreshAccounting() {
         guard let result else { accounting = nil; return }
         accountedAt = Date()
-        let root = result.root.path
+        let root = result.root.path, accounts = accounts
         Task {
-            let value = await Task.detached(priority: .utility) { () -> DiskAccounting? in
-                let url = URL(fileURLWithPath: root)
-                let keys: Set<URLResourceKey> = [.volumeURLKey, .volumeTotalCapacityKey, .volumeAvailableCapacityKey, .volumeAvailableCapacityForImportantUsageKey]
-                guard let values = try? url.resourceValues(forKeys: keys),
-                      let walked = DiskAccounting.walkedVolumes(root: root, mountPoint: values.volume?.path),
-                      let total = values.volumeTotalCapacity, let available = values.volumeAvailableCapacity else { return nil }
-                let volumes = walked.compactMap(VolumeSpace.used)
-                guard volumes.count == walked.count else { return nil }
-                let important = values.volumeAvailableCapacityForImportantUsage.map { UInt64(max(0, $0)) }
-                let purgeable = important.map { $0.saturatingSubtract(UInt64(max(0, available))) }
-                return DiskAccounting(used: UInt64(max(0, total - available)), walkedVolumes: volumes, result: result,
-                                      snapshots: Self.localSnapshots(root), purgeable: purgeable)
-            }.value
+            let value = await Task.detached(priority: .utility) { accounts(result) }.value
             guard self.result?.root.path == root else { return }
             accounting = value
         }
+    }
+
+    /// Where the space went for `result` when its root is a volume's: the volume's own figures, and `tmutil`'s count of
+    /// its local snapshots.
+    nonisolated private static func account(_ result: DiskResult) -> DiskAccounting? {
+        let root = result.root.path
+        let url = URL(fileURLWithPath: root)
+        let keys: Set<URLResourceKey> = [.volumeURLKey, .volumeTotalCapacityKey, .volumeAvailableCapacityKey, .volumeAvailableCapacityForImportantUsageKey]
+        guard let values = try? url.resourceValues(forKeys: keys),
+              let walked = DiskAccounting.walkedVolumes(root: root, mountPoint: values.volume?.path),
+              let total = values.volumeTotalCapacity, let available = values.volumeAvailableCapacity else { return nil }
+        let volumes = walked.compactMap(VolumeSpace.used)
+        guard volumes.count == walked.count else { return nil }
+        let important = values.volumeAvailableCapacityForImportantUsage.map { UInt64(max(0, $0)) }
+        let purgeable = important.map { $0.saturatingSubtract(UInt64(max(0, available))) }
+        return DiskAccounting(used: UInt64(max(0, total - available)), walkedVolumes: volumes, result: result,
+                              snapshots: localSnapshots(root), purgeable: purgeable)
     }
 
     /// Local Time Machine snapshots on a volume, from `tmutil`, which lists them without administrator access.
@@ -884,10 +906,4 @@ enum MapCommand: Equatable {
         let text = (error as NSError).localizedDescription
         return text.hasSuffix(".") ? text : text + "."
     }
-}
-
-/// Monaspace has no narrow no-break space, which the locale puts in times ("1:57 PM") and some locales' thousands. A
-/// fallback font would draw it at its own width, so use the font's no-break space instead.
-func monaspaced(_ text: String) -> String {
-    text.replacingOccurrences(of: "\u{202F}", with: "\u{00A0}")
 }

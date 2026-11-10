@@ -220,6 +220,83 @@ describe("nextStep", () => {
     assert.equal(nextStep(shown, grown, true), "wait");
     assert.equal(nextStep(shown, grown, false), "show");
   });
+
+  test("holds back the Not measured block coming, or a padlock, as any change it can see", () => {
+    const root = map(1_000_000);
+    const kinds = kindBytesByFolder(root);
+    const blocked = layoutTreemap(
+      root,
+      400,
+      300,
+      kinds,
+      undefined,
+      undefined,
+      2_000_000,
+    );
+    assert.equal(nextStep(shown, blocked, true), "wait");
+    assert.equal(nextStep(shown, blocked, false), "show");
+    assert.equal(
+      nextStep(
+        blocked,
+        layoutTreemap(root, 400, 300, kinds, undefined, undefined, 2_000_000),
+        true,
+      ),
+      "keep",
+    );
+    // A folder holding one the scan couldn't read: its header gains a padlock where Pith's page draws them.
+    const locked = dir("/r", [
+      dir("/r/a", [
+        file("/r/a/x.mov", 600_000),
+        file("/r/a/y.mov", 400_000),
+        {
+          kind: "unreadable",
+          name: "z",
+          path: "/r/a/z",
+          size: 0,
+          reason: "protected",
+        },
+      ]),
+      file("/r/notes.pdf", 500_000),
+    ]);
+    const marks = (padlocks: boolean) => ({
+      icons: true,
+      glyphs: false,
+      padlocks,
+      metrics: { charWidth: 6, lineHeight: 13, padX: 4, padY: 3 },
+    });
+    const plain = layoutTreemap(
+      locked,
+      400,
+      300,
+      kindBytesByFolder(locked),
+      undefined,
+      marks(false),
+    );
+    const padlocked = layoutTreemap(
+      locked,
+      400,
+      300,
+      kindBytesByFolder(locked),
+      undefined,
+      marks(true),
+    );
+    assert.equal(nextStep(plain, padlocked, true), "wait");
+    assert.equal(
+      nextStep(
+        padlocked,
+        layoutTreemap(
+          locked,
+          400,
+          300,
+          kindBytesByFolder(locked),
+          undefined,
+          marks(true),
+        ),
+        true,
+      ),
+      "keep",
+    );
+  });
 });
 
 /** A clock that moves only when the test moves it, running each timer that comes due on the way, in order. */

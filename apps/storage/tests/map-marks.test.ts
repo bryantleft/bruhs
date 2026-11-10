@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   drawMark,
+  drawPadlock,
   type Frames,
   iconArrivals,
   iconPaint,
   type MapIcons,
+  PADLOCK_PATH,
   paintArrived,
 } from "../src/components/map-marks.ts";
 import { KIND_GLYPHS } from "../src/lib/kind-glyphs.ts";
@@ -22,7 +24,7 @@ function testIcons(
   const listeners = new Set<() => void>();
   const icons: MapIcons = {
     url: (tile, points, ratio) =>
-      tile.kind === "group"
+      tile.kind === "group" || tile.kind === "unmeasured"
         ? null
         : `pith://app/icon/1/dark/${points}@${ratio}x/item/${tile.node.name}.png`,
     image: (url) =>
@@ -336,6 +338,48 @@ describe("drawing marks", () => {
     const { calls, context } = recordingContext();
     const { slot: _, ...plain } = clip;
     drawMark(context, plain as Tile, metrics, null, "ink");
+    assert.deepEqual(calls, []);
+  });
+
+  /** A depth-1 header strip with its 14 px icon, and a padlock unless told otherwise. */
+  const users = (padlock = true): Tile => ({
+    kind: "folder",
+    node: {
+      kind: "dir",
+      name: "Users",
+      path: "/r/Users",
+      size: 1,
+      files: 1,
+      children: [],
+    },
+    header: 18,
+    children: [],
+    depth: 1,
+    x0: 10,
+    y0: 20,
+    x1: 210,
+    y1: 120,
+    slot: 14,
+    ...(padlock ? { padlock } : {}),
+  });
+
+  test("draws a header's padlock after its name, centred on the strip, in the page's own padlock path", () => {
+    const { calls, context } = recordingContext();
+    // "Users" is 30 px wide in 6 px characters.
+    drawPadlock(context, users(), metrics, 30, "ink");
+    assert.deepEqual(calls, [
+      ["save"],
+      // 4 px of padding, the 14 px icon and its 4 px gap, the name, then 3 px; centred on the 18 px strip's middle.
+      ["translate", 65, 25],
+      ["scale", 10 / 12, 10 / 12],
+      ["fill", PADLOCK_PATH, "nonzero", "ink"],
+      ["restore"],
+    ]);
+  });
+
+  test("draws no padlock on a header its layout gave none", () => {
+    const { calls, context } = recordingContext();
+    drawPadlock(context, users(false), metrics, 30, "ink");
     assert.deepEqual(calls, []);
   });
 

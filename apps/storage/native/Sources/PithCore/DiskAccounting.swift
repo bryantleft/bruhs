@@ -19,6 +19,8 @@ public enum VolumeSpace {
 /// Where a volume's used space went, for a scan of a whole volume: what the map shows, what lies on volumes it
 /// can't show, and what the walk couldn't measure, with the reasons. It never guesses a number for the last part.
 public struct DiskAccounting: Equatable, Sendable {
+    /// The root of the map it accounts for: the volume's own, where it's mounted.
+    public let root: String
     /// The disk's used space: its total less what's available, across the APFS container.
     public let used: UInt64
     /// What the map holds.
@@ -46,6 +48,7 @@ public struct DiskAccounting: Equatable, Sendable {
         let volumeNodes = result.volumes.filter(\.sharesDisk).reduce(0) { $0 + $1.bytes }
         let walked = result.summary.bytes.saturatingSubtract(volumeNodes)
         let covered = walkedVolumes.reduce(0, +)
+        root = result.root.path
         self.used = used
         scanned = result.summary.bytes
         hiddenVolumes = used.saturatingSubtract(covered + volumeNodes)

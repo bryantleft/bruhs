@@ -151,8 +151,17 @@ struct LaunchAtLoginToggle: View {
     }
 }
 
-func openDiskAccess() {
-    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") { NSWorkspace.shared.open(url) }
+/// System Settings at Privacy & Security, Full Disk Access, where the person can let Pith read every folder.
+let fullDiskAccessPane = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
+
+/// Opens a pane of System Settings. The smoke test records each pane asked for instead, since no smoke check may open
+/// System Settings.
+@MainActor var openSystemSettings: (URL) -> Void = { NSWorkspace.shared.open($0) }
+
+/// Opens Full Disk Access in System Settings: Settings' and Disk's notices' Full Disk Access… buttons, and a click on a
+/// place the disk map's Places can't read.
+@MainActor func openDiskAccess() {
+    if let fullDiskAccessPane { openSystemSettings(fullDiskAccessPane) }
 }
 
 /// System Settings' Menu Bar pane, where macOS 26 lets each app's menu bar item be turned off.
