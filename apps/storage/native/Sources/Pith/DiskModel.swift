@@ -41,7 +41,7 @@ enum DiskWriters: Equatable {
 }
 
 /// A volume Pith can scan, for the disk menu and the list shown when the live map can't run.
-struct DiskVolumeChoice: Identifiable, Equatable {
+struct DiskVolumeChoice: Identifiable, Equatable, Sendable {
     let url: URL
     let name: String
     let total: UInt64?
@@ -162,7 +162,16 @@ enum MapCommand: Equatable {
     private(set) var choices: [DiskVolumeChoice] = [] {
         didSet { icons.volumes = Set(choices.map(\.url.path)) }
     }
-    @ObservationIgnored private var choicesTask: Task<Void, Never>?
+    /// Lists the volumes on a queue of its own, one listing at a time, however often they're asked for meanwhile
+    /// (`VolumeLister`): a network share that hangs holds that queue, and never Swift's shared pool.
+    @ObservationIgnored private lazy var volumeLister = VolumeLister(list: { DiskModel.mountedVolumes() }) { [weak self] found in
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                guard let self, found != self.choices else { return }
+                self.choices = found
+            }
+        }
+    }
     private let runner = ScannerRunner()
     private var operation: Task<Void, Never>?
     private var generation = UUID()
@@ -461,15 +470,11 @@ enum MapCommand: Equatable {
         if picker.runModal() == .OK, let root = picker.url { scan(root) }
     }
 
-    /// Lists the volumes again, off the main thread, since a network volume can be slow to answer: when Disk opens,
-    /// when a disk is mounted, unmounted or renamed, and when the disk menu opens, for the free space it shows next.
+    /// Lists the volumes again, off the main thread, since a network volume can be slow to answer or hang: when Disk
+    /// opens, when a disk is mounted, unmounted or renamed, and when the disk menu opens, for the free space it shows
+    /// next. A listing runs on a queue of its own, and refreshes asked for while one runs make one more after it.
     func refreshChoices() {
-        choicesTask?.cancel()
-        choicesTask = Task { [weak self] in
-            let found = await Task.detached(priority: .userInitiated) { DiskModel.mountedVolumes() }.value
-            guard !Task.isCancelled, let self, found != self.choices else { return }
-            self.choices = found
-        }
+        volumeLister.refresh()
     }
 
     /// The startup disk, then other volumes in Finder's sidebar, each with its capacity.
