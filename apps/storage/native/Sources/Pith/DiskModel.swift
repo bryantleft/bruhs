@@ -121,9 +121,17 @@ enum MapCommand: Equatable {
         }
     }
     /// How much items changed since the baseline, and when that was. The map's comparisons set them, and so does the
-    /// smoke test, in memory, since it never reads or writes the person's scans.
-    var growth: [String: Int64] = [:]
-    var growthSince: Date?
+    /// smoke test, in memory, since it never reads or writes the person's scans (`smokeTestShowsGrowth`).
+    private(set) var growth: [String: Int64] = [:]
+    private(set) var growthSince: Date?
+
+    /// The smoke test's growth, in memory: what grew and since when, which goes to the page with the next revision. Only
+    /// the smoke test sets growth from outside.
+    func smokeTestShowsGrowth(_ growth: [String: Int64], since: Date?) {
+        self.growth = growth
+        growthSince = since
+        revision = UUID()
+    }
     /// Folders FSEvents says changed since a scanned map's scan began. The live map follows changes itself.
     private(set) var changes = DiskChanges()
     private var watcher: DiskWatcher?

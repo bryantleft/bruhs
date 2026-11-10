@@ -408,10 +408,11 @@ extension AppDelegate {
         let lists = await pageAnswer(web, Self.sideListIcons, arguments: ["grewKey": IconKey.item(sub).string, "appKey": IconKey.item(app).string]) {
             (lists: [String: Bool]?) in
             // A newer map compares itself with the baseline again, which drops a growth put in memory, so it's put back.
-            if self.disk.growth != grown { self.disk.growth = grown; self.disk.growthSince = Date(); self.disk.revision = UUID() }
+            if self.disk.growth != grown { self.disk.smokeTestShowsGrowth(grown, since: Date()) }
             return lists?["grew"] == true && lists?["wrote"] == true && lists?["unreadable"] == true
         }
-        disk.writers = kept.writers; disk.growth = kept.growth; disk.growthSince = kept.since; disk.revision = UUID()
+        disk.writers = kept.writers
+        disk.smokeTestShowsGrowth(kept.growth, since: kept.since)
         print("side lists: grew \(lists?["grew"] ?? false), wrote \(lists?["wrote"] ?? false), couldn't read \(lists?["unreadable"] ?? false) "
               + "(the locked folder listed \(listed))")
         return [names[0]: lists?["grew"] == true, names[1]: lists?["wrote"] == true, names[2]: listed && lists?["unreadable"] == true]
