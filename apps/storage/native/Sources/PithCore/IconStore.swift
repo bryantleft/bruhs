@@ -114,27 +114,54 @@ public struct IconRequest: Hashable, Sendable {
     }
 }
 
-/// A drawn icon, in the two forms Pith shows: a bitmap for native views and PNG bytes for the disk map's page.
-public struct RenderedIcon: Sendable {
+/// A drawn icon, in the two forms Pith shows: a bitmap for native views, and PNG bytes for the disk map's page, which
+/// only the page's icon route asks for (`IconStore.png(for:)`). Encoding a drawing as PNG took 0.08 to 0.15 ms an icon
+/// on the development Mac (median, 16 to 64 px; 0.5 ms at most), and its PNG, 0.8 to 6.7 KB, can outweigh a small
+/// bitmap, so an icon only native views show is never encoded: the first caller that asks encodes it once, and every
+/// later one gets that PNG.
+public final class RenderedIcon: @unchecked Sendable {
     public let image: CGImage
-    public let png: Data
     public let size: IconSize
+    private let lock = NSLock()
+    /// The PNG once it's been encoded, or nil inside when it couldn't be; nil until then.
+    private var encoded: Data??
 
-    init?(image: CGImage, size: IconSize) {
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data as CFMutableData, UTType.png.identifier as CFString, 1, nil) else { return nil }
-        CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination) else { return nil }
+    init(image: CGImage, size: IconSize) {
         self.image = image
-        png = data as Data
         self.size = size
     }
 
     /// The icon at its point size, for AppKit.
     public var nsImage: NSImage { NSImage(cgImage: image, size: NSSize(width: size.points, height: size.points)) }
 
-    /// The memory it keeps: its bitmap and its PNG.
-    var bytes: Int { image.bytesPerRow * image.height + png.count }
+    /// The PNG, if it's been encoded.
+    var png: Data? {
+        lock.lock(); defer { lock.unlock() }
+        return encoded ?? nil
+    }
+
+    /// The PNG, encoded with `encode` the first time and kept, and whether this call is the one that encoded it. A call
+    /// made while another encodes waits for that encoding.
+    func encodePNG(with encode: (CGImage) -> Data?) -> (png: Data?, isNew: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        if let encoded { return (encoded, false) }
+        let png = encode(image)
+        encoded = .some(png)
+        return (png, true)
+    }
+
+    /// The memory it keeps: its bitmap, and its PNG once encoded.
+    var bytes: Int { bitmapBytes + (png?.count ?? 0) }
+
+    var bitmapBytes: Int { image.bytesPerRow * image.height }
+
+    /// `image` as PNG bytes, as the disk map's page loads an icon.
+    public static func png(of image: CGImage) -> Data? {
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data as CFMutableData, UTType.png.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, nil)
+        return CGImageDestinationFinalize(destination) ? data as Data : nil
+    }
 }
 
 /// Draws the icons a store asks for. The store calls it off the main thread only, a few at a time, with iCloud
@@ -148,20 +175,23 @@ public protocol IconRenderer: Sendable {
 /// Pith's icons, drawn once and kept. The first drawing of an icon at a size costs 6 to 35 ms, so the store never
 /// draws on its caller's thread: it draws on a queue of its own, a few at a time, and keeps each drawing by key,
 /// appearance and size, letting the least recently used go once it holds too many. Asking for an icon while it's being
-/// drawn waits for that drawing.
+/// drawn waits for that drawing. The disk map's page gets its icons as PNG, encoded on the same queue the first time it
+/// asks for each (`png(for:)`); native views never need one.
 public final class IconStore: @unchecked Sendable {
     /// Half the Mac's cores, from four to eight: the map's icons come quickly without crowding out everything else.
     public static let defaultConcurrency = min(8, max(4, ProcessInfo.processInfo.activeProcessorCount / 2))
 
     /// A kept drawing, linked to the drawings used just before and after it, so a use or an eviction costs the same
-    /// however many are kept.
+    /// however many are kept, with the bytes the budget counts for it: its bitmap, and its PNG once encoded.
     private struct Kept {
         let icon: RenderedIcon
+        var counted: Int
         var older: IconRequest?
         var newer: IconRequest?
     }
 
     private let renderer: any IconRenderer
+    private let encoder: @Sendable (CGImage) -> Data?
     private let queue = OperationQueue()
     /// How many bytes of drawings the store keeps. Past it the least recently used go first.
     private let budget: Int
@@ -174,8 +204,11 @@ public final class IconStore: @unchecked Sendable {
     /// Who's waiting for each icon being drawn.
     private var waiting: [IconRequest: [@Sendable (RenderedIcon?) -> Void]] = [:]
 
-    public init(renderer: any IconRenderer, concurrency: Int = IconStore.defaultConcurrency, budget: Int = 16 << 20) {
+    /// A store drawing with `renderer`, a few at a time, within `budget` bytes, encoding the page's PNGs with `encoder`.
+    public init(renderer: any IconRenderer, concurrency: Int = IconStore.defaultConcurrency, budget: Int = 16 << 20,
+                encoder: @escaping @Sendable (CGImage) -> Data? = RenderedIcon.png(of:)) {
         self.renderer = renderer
+        self.encoder = encoder
         self.budget = budget
         queue.name = "app.bruhs.pith.icons"
         queue.maxConcurrentOperationCount = max(1, concurrency)
@@ -186,6 +219,37 @@ public final class IconStore: @unchecked Sendable {
     public func cachedIcon(for request: IconRequest) -> RenderedIcon? {
         lock.lock(); defer { lock.unlock() }
         return use(request)
+    }
+
+    /// The icon's PNG if it's drawn and encoded already, from any thread, without waiting or encoding. Showing it counts
+    /// as a use.
+    public func cachedPNG(for request: IconRequest) -> Data? {
+        cachedIcon(for: request)?.png
+    }
+
+    /// The icon's PNG, for the disk map's page: drawn first unless it's kept, then encoded the first time the page asks,
+    /// on the store's queue, never on this thread, and kept with the drawing, counting in the budget from then on. Nil
+    /// when there's no such icon, or its PNG couldn't be made.
+    public func png(for request: IconRequest) async -> Data? {
+        guard let icon = await icon(for: request) else { return nil }
+        if let png = icon.png { return png }
+        return await withCheckedContinuation { continuation in
+            queue.addOperation { [self] in continuation.resume(returning: encode(icon, for: request)) }
+        }
+    }
+
+    /// Encodes `icon`'s PNG, drawn for `request`, once, and counts it while the store keeps that drawing.
+    private func encode(_ icon: RenderedIcon, for request: IconRequest) -> Data? {
+        let (png, isNew) = icon.encodePNG(with: encoder)
+        guard isNew, let png else { return png }
+        lock.lock()
+        if cache[request]?.icon === icon {
+            cache[request]?.counted += png.count
+            bytes += png.count
+            keepWithinBudget()
+        }
+        lock.unlock()
+        return png
     }
 
     /// The icon, drawn first unless it's kept. Nil when there's no such icon.
@@ -209,7 +273,7 @@ public final class IconStore: @unchecked Sendable {
     }
 
     private func draw(_ request: IconRequest) {
-        let icon = Self.withoutDownloads { renderer.render(request) }.flatMap { RenderedIcon(image: $0, size: request.size) }
+        let icon = Self.withoutDownloads { renderer.render(request) }.map { RenderedIcon(image: $0, size: request.size) }
         lock.lock()
         if let icon { keep(icon, for: request) }
         let waiters = waiting.removeValue(forKey: request) ?? []
@@ -232,7 +296,7 @@ public final class IconStore: @unchecked Sendable {
         guard let kept = cache[request] else { return nil }
         if request != mostRecent {
             unlink(kept)
-            append(kept.icon, for: request)
+            append(kept.icon, counted: kept.counted, for: request)
         }
         return kept.icon
     }
@@ -240,12 +304,19 @@ public final class IconStore: @unchecked Sendable {
     /// Keeps `icon` as the most recently used, letting the least recently used drawings go once the kept ones pass the
     /// budget. Called with the lock held.
     private func keep(_ icon: RenderedIcon, for request: IconRequest) {
-        if let earlier = cache[request] { unlink(earlier); bytes -= earlier.icon.bytes }
-        append(icon, for: request)
-        bytes += icon.bytes
+        if let earlier = cache[request] { unlink(earlier); bytes -= earlier.counted }
+        let counted = icon.bytes
+        append(icon, counted: counted, for: request)
+        bytes += counted
+        keepWithinBudget()
+    }
+
+    /// Lets the least recently used drawings go until the kept ones are within the budget, but for the last one. Called
+    /// with the lock held.
+    private func keepWithinBudget() {
         while bytes > budget, cache.count > 1, let oldest = leastRecent, let gone = cache.removeValue(forKey: oldest) {
             unlink(gone)
-            bytes -= gone.icon.bytes
+            bytes -= gone.counted
         }
     }
 
@@ -256,9 +327,9 @@ public final class IconStore: @unchecked Sendable {
         if let newer = kept.newer { cache[newer]?.older = kept.older } else { mostRecent = kept.older }
     }
 
-    /// Keeps `icon` at the most recent end of the order of use. Called with the lock held.
-    private func append(_ icon: RenderedIcon, for request: IconRequest) {
-        cache[request] = Kept(icon: icon, older: mostRecent, newer: nil)
+    /// Keeps `icon`, counted as `counted` bytes, at the most recent end of the order of use. Called with the lock held.
+    private func append(_ icon: RenderedIcon, counted: Int, for request: IconRequest) {
+        cache[request] = Kept(icon: icon, counted: counted, older: mostRecent, newer: nil)
         if let mostRecent { cache[mostRecent]?.newer = request } else { leastRecent = request }
         mostRecent = request
     }

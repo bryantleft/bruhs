@@ -44,18 +44,18 @@ import WebKit
         if waiting.remove(ObjectIdentifier(urlSchemeTask)) != nil { stoppedWhileDrawing += 1 }
     }
 
-    /// Answers with the icon `url` asks for, drawn off the main thread unless the store has it, or with a 404 when the
-    /// page may not have it or macOS has none.
+    /// Answers with the icon `url` asks for, drawn and encoded as PNG off the main thread unless the store has its PNG,
+    /// or with a 404 when the page may not have it or macOS has none.
     private func serveIcon(_ url: URL, to task: any WKURLSchemeTask) {
         guard let request = icons(url) else { Self.answer(task, url: url, png: nil); return }
-        if let icon = Icons.store.cachedIcon(for: request) { Self.answer(task, url: url, png: icon.png); return }
+        if let png = Icons.store.cachedPNG(for: request) { Self.answer(task, url: url, png: png); return }
         let id = ObjectIdentifier(task)
         waiting.insert(id)
         Task {
-            let icon = await Icons.store.icon(for: request)
+            let png = await Icons.store.png(for: request)
             // This closure holds the task, so no request WebKit starts meanwhile can share its identifier.
             guard waiting.remove(id) != nil else { drawnAfterStopping += 1; return }
-            Self.answer(task, url: url, png: icon?.png)
+            Self.answer(task, url: url, png: png)
         }
     }
 

@@ -98,6 +98,20 @@ final class IconStoreTests: XCTestCase {
         }
     }
 
+    /// Encodes PNGs as the store does by default, recording how many and whether any ran on the main thread.
+    private final class RecordingEncoder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var threads: [Bool] = []
+
+        var count: Int { lock.lock(); defer { lock.unlock() }; return threads.count }
+        var onMainThread: Bool { lock.lock(); defer { lock.unlock() }; return threads.contains(true) }
+
+        func encode(_ image: CGImage) -> Data? {
+            lock.lock(); threads.append(Thread.isMainThread); lock.unlock()
+            return RenderedIcon.png(of: image)
+        }
+    }
+
     /// The store's answers, which arrive on its threads.
     private final class Answers: @unchecked Sendable {
         private let lock = NSLock()
@@ -184,8 +198,8 @@ final class IconStoreTests: XCTestCase {
         let request = IconRequest(.item("/Applications"), size: small, appearance: .dark)
         let icons = draw([request, request, request], in: store)
         XCTAssertEqual(renderer.recorded.count, 1)
-        XCTAssertEqual(icons.compactMap { $0?.png }.count, 3)
-        XCTAssertEqual(Set(icons.compactMap { $0?.png }).count, 1, "every caller gets the one drawing")
+        XCTAssertEqual(icons.compactMap { $0 }.count, 3)
+        XCTAssertEqual(Set(icons.compactMap { $0.map { ObjectIdentifier($0.image) } }).count, 1, "every caller gets the one drawing")
     }
 
     func testItDrawsAFewAtATime() {
@@ -254,14 +268,70 @@ final class IconStoreTests: XCTestCase {
         XCTAssertEqual(Set((1...9).filter { store.cachedIcon(for: request($0)) != nil }), Set(kept))
     }
 
-    func testAnIconComesAsPNGAndAsAnImage() throws {
+    func testAnIconComesAsPNGAndAsAnImage() async throws {
         let store = IconStore(renderer: RecordingRenderer())
-        let icon = try XCTUnwrap(draw([IconRequest(.folder, size: small, appearance: .light)], in: store).first ?? nil)
+        let request = IconRequest(.folder, size: small, appearance: .light)
+        let drawn = await store.icon(for: request), png = await store.png(for: request)
+        let icon = try XCTUnwrap(drawn)
         XCTAssertEqual(icon.image.width, 32)
-        let decoded = try XCTUnwrap(NSBitmapImageRep(data: icon.png), "the PNG decodes")
+        let decoded = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(png)), "the PNG decodes")
         XCTAssertEqual(decoded.pixelsWide, 32)
         XCTAssertEqual(decoded.pixelsHigh, 32)
         XCTAssertEqual(icon.nsImage.size, NSSize(width: 16, height: 16), "an image of the icon's point size")
+    }
+
+    /// Native views show an icon's bitmap, so an icon only they ask for is never encoded as PNG: encoding costs about a
+    /// tenth of a millisecond an icon, and a PNG kept for nothing would count against the budget.
+    func testAnIconOnlyNativeViewsShowIsNeverEncoded() async throws {
+        let encoder = RecordingEncoder()
+        let store = IconStore(renderer: RecordingRenderer(), encoder: encoder.encode)
+        let request = IconRequest(.folder, size: small, appearance: .dark)
+        let drawn = await store.icon(for: request)
+        let icon = try XCTUnwrap(drawn)
+        XCTAssertEqual(icon.nsImage.size, NSSize(width: 16, height: 16))
+        XCTAssertEqual(icon.image.width, 32)
+        XCTAssertTrue(store.cachedIcon(for: request) === icon)
+        XCTAssertEqual(encoder.count, 0, "no PNG for a native view")
+        XCTAssertNil(store.cachedPNG(for: request), "none until the page asks for it")
+        XCTAssertEqual(icon.bytes, icon.image.bytesPerRow * icon.image.height, "it keeps its bitmap alone")
+    }
+
+    /// The page's icon route gets an icon's PNG encoded once, off the main thread, however many of its loads ask at once,
+    /// and kept with the drawing.
+    @MainActor func testThePageGetsEachPNGEncodedOnceOffTheMainThread() async throws {
+        let encoder = RecordingEncoder(), renderer = RecordingRenderer(delay: 0.05)
+        let store = IconStore(renderer: renderer, encoder: encoder.encode)
+        let request = IconRequest(.folder, size: small, appearance: .dark)
+        async let first = store.png(for: request), second = store.png(for: request), third = store.png(for: request)
+        let pngs = await [first, second, third]
+        let png = try XCTUnwrap(pngs[0])
+        XCTAssertEqual(pngs, [png, png, png])
+        XCTAssertEqual(renderer.recorded.count, 1)
+        XCTAssertEqual(encoder.count, 1, "encoded once")
+        XCTAssertFalse(encoder.onMainThread, "never on the caller's thread")
+        XCTAssertEqual(store.cachedPNG(for: request), png)
+        let again = await store.png(for: request)
+        XCTAssertEqual(again, png)
+        XCTAssertEqual(encoder.count, 1, "kept with the drawing")
+    }
+
+    /// The store counts a drawing's PNG in its budget once it's encoded, and not before.
+    func testAPNGCountsInTheBudgetOnceItsEncoded() async throws {
+        let request = { (n: Int) in IconRequest(.type("ext\(n)"), size: IconSize(pixels: 64, scale: 2), appearance: .light) }
+        let sample = await IconStore(renderer: RecordingRenderer()).icon(for: request(0))
+        let one = try XCTUnwrap(sample)
+        let png = try XCTUnwrap(RenderedIcon.png(of: one.image)).count
+        // Room for two bitmaps, but not for two bitmaps and a PNG.
+        let store = IconStore(renderer: RecordingRenderer(), budget: 2 * one.bitmapBytes + png / 2)
+        _ = await store.icon(for: request(1))
+        _ = await store.icon(for: request(2))
+        XCTAssertNotNil(store.cachedIcon(for: request(1)), "two bitmaps fit")
+        XCTAssertNotNil(store.cachedIcon(for: request(2)))
+        // The first, used least recently now, gets its PNG, which takes the store past its budget.
+        let encoded = await store.png(for: request(1))
+        XCTAssertEqual(encoded?.count, png)
+        XCTAssertNil(store.cachedIcon(for: request(2)), "the PNG counts, so the drawing used least recently went")
+        XCTAssertEqual(store.cachedPNG(for: request(1)), encoded)
     }
 
     func testSizesAndAppearances() {
