@@ -84,9 +84,13 @@ export function KindLegend({ bytes, glyphs, active, onToggle }: Props) {
                     : { background: `var(${CATEGORY_VAR[kind]})` }
                 }
               />
-              {glyphs && kind !== "grouped" && kind !== "volume" && (
-                <KindGlyph kind={kind} />
-              )}
+              {glyphs &&
+                (kind === "grouped" || kind === "volume" ? (
+                  // Their swatches are their cue; the room keeps their names in line with the rest.
+                  <span aria-hidden="true" className="size-4 shrink-0" />
+                ) : (
+                  <KindGlyph kind={kind} />
+                ))}
               <span className="text-label-sm min-w-0 flex-1 truncate">
                 {kindLabel(kind)}
               </span>
@@ -98,7 +102,7 @@ export function KindLegend({ bytes, glyphs, active, onToggle }: Props) {
         ))}
       </ul>
       <p className="text-label-sm text-pretty text-(--role-text-tertiary)">
-        Outlined blocks are folders.
+        Outlined blocks are folders, or packages such as apps.
       </p>
     </section>
   );

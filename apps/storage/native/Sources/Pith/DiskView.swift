@@ -582,7 +582,7 @@ struct DiskWebView: NSViewRepresentable {
         context.coordinator.iconAppearance = IconAppearance(colorScheme)
         context.coordinator.iconRule = model.iconRule
         context.coordinator.doubleClickInterval = NSEvent.doubleClickInterval
-        context.coordinator.differentiatesWithoutColor = NSWorkspace.shared.accessibilityDisplayShouldDifferentiateWithoutColor
+        context.coordinator.differentiatesWithoutColor = Coordinator.differentiateWithoutColor()
         context.coordinator.send(revision: model.revision)
     }
     static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) {
@@ -640,6 +640,10 @@ struct DiskWebView: NSViewRepresentable {
         var differentiatesWithoutColor: Bool? {
             didSet { if differentiatesWithoutColor != oldValue { sendDifferentiateWithoutColor() } }
         }
+        /// Reads Differentiate Without Color as macOS has it, for every update of the view and every notice of a change. The
+        /// smoke test reads a value of its own here instead, turning the setting for Pith alone, so no system setting
+        /// changes.
+        static var differentiateWithoutColor: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldDifferentiateWithoutColor }
         /// macOS posts display option changes, Differentiate Without Color's among them, without SwiftUI drawing the view
         /// again, so the coordinator listens for them while the page is there.
         private var displayOptions: NSObjectProtocol?
@@ -649,7 +653,7 @@ struct DiskWebView: NSViewRepresentable {
             guard displayOptions == nil else { return }
             displayOptions = NSWorkspace.shared.notificationCenter.addObserver(
                 forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.differentiatesWithoutColor = NSWorkspace.shared.accessibilityDisplayShouldDifferentiateWithoutColor }
+                Task { @MainActor in self?.differentiatesWithoutColor = Coordinator.differentiateWithoutColor() }
             }
         }
         func stopFollowingDisplayOptions() {

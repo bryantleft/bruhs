@@ -1,9 +1,32 @@
 /**
  * Each file kind's glyph: the cue that doesn't need colour, which the disk map draws on file blocks, and By kind beside
  * each kind, while macOS's Differentiate Without Color is on, so one glyph means one kind in both places. They're
- * Heroicons Micro, bruhs's icon set for app interfaces (packages/ui/AGENTS.md), solid, in a 16 px box: Heroicons is
- * MIT licensed, copyright Tailwind Labs, Inc.
+ * Heroicons Micro, bruhs's icon set for app interfaces (packages/ui/AGENTS.md), solid, in a 16 px box, from
+ * @heroicons/react 2.2.0. Its licence follows, and Pith.app carries it in ThirdPartyNotices.txt.
  */
+
+/*! Heroicons (https://heroicons.com), MIT License
+
+Copyright (c) Tailwind Labs, Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
 
 import type { Category } from "./format.ts";
 

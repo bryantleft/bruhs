@@ -5,6 +5,7 @@
  */
 
 import { LARGEST_FILES_SHOWN } from "../src/lib/largest-files.ts";
+import { GREW_SHOWN, UNREADABLE_SHOWN, WRITERS_SHOWN } from "./side-lists.ts";
 
 /** How many CSS pixels across the side lists and the hover card show icons. */
 export const ICON_POINTS = 16;
@@ -163,17 +164,23 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
 
 /**
  * How many loaded icons the page keeps: as many as the map, the lists and the hover card can show at once.
- * - The map shows an icon only on a header strip or on a block of 48 by 20 px or more, so each icon has a patch of
- *   the map to itself of at least 19 by 16 px, the narrowest depth-2 strip: at most 1,562 on the 776 by 612 px map of
- *   Disk's usual window. Real folders show far fewer. Of the 8,474 folders of three real maps (a startup disk, a
+ * - The map shows an icon only on a header strip or on a block with room for it and a name, so each icon has a patch
+ *   of the map to itself of at least 19 by 16 px, the narrowest depth-2 strip: at most 1,562 on the 776 by 612 px map
+ *   of Disk's usual window. Real folders show far fewer. Of the 8,474 folders of three real maps (a startup disk, a
  *   repository and a generated fixture), the most icons one showed was 152 at that size, and 271 on a 2,600 by
  *   1,500 px map, a full-screen window on a 6K display.
- * - The lists show at most 216: Largest files' rows, five of Grew since, five of Wrote the most since and six of
- *   Couldn't read. The hover card shows one.
- * At 3 to 4 KiB for an icon decoded at 2x, that's about 7 MiB at most.
+ * - The side lists show at most Largest files' rows and those of Grew since, Wrote the most since and Couldn't read
+ *   (side-lists.ts). The hover card shows one.
+ * An icon decoded at 2x takes 2.3 to 4 KiB (12 to 16 pt), and at 3x 5 to 9 KiB, so the cap holds at most about
+ * 7 MiB of them at 2x and 16 MiB at 3x.
  */
 export const PAGE_ICON_CAP =
-  Math.floor((776 * 612) / (19 * 16)) + LARGEST_FILES_SHOWN + 5 + 5 + 6 + 1;
+  Math.floor((776 * 612) / (19 * 16)) +
+  LARGEST_FILES_SHOWN +
+  GREW_SHOWN +
+  WRITERS_SHOWN +
+  UNREADABLE_SHOWN +
+  1;
 
 /** The page's icons. */
 export const pageIcons = new IconCache(loadImage, PAGE_ICON_CAP);

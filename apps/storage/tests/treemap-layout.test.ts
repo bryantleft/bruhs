@@ -12,8 +12,10 @@ import {
   headerLabel,
   kindBytesByFolder,
   type LabelMarks,
+  labelMiddle,
   layoutTreemap,
   MIN_TILE,
+  markPlace,
   type PackageTile,
   siblingOrder,
   type Tile,
@@ -692,7 +694,10 @@ describe("drawsTheSame", () => {
   });
 });
 
-/** `root` laid out for a host that draws `marks` at the start of labels: macOS's icons, and kinds' glyphs. */
+/** The labels' metrics the tests lay out and cut labels with: 6 px a character, as in the label tests above. */
+const METRICS = { charWidth: 6, lineHeight: 13, padX: 4, padY: 3 };
+
+/** `root` laid out for a host that draws `marks` at the start of labels, macOS's icons and kinds' glyphs, with `METRICS`. */
 function marked(
   root: DirNode,
   width: number,
@@ -705,11 +710,7 @@ function marked(
     height,
     kindBytesByFolder(root),
     undefined,
-    {
-      icons: false,
-      glyphs: false,
-      ...marks,
-    },
+    { icons: false, glyphs: false, metrics: METRICS, ...marks },
   );
 }
 
@@ -756,15 +757,15 @@ describe("packages", () => {
       ]),
     ]);
     const map = layout(root, 600, 400);
-    assert.equal(only(map, "package", "/r/Pictures.app").category, "binary");
-    assert.equal(
-      only(map, "package", "/r/Photos Library.photoslibrary").category,
-      "image",
+    const app = only(map, "package", "/r/Pictures.app");
+    const library = only(map, "package", "/r/Photos Library.photoslibrary");
+    const backup = only(map, "package", "/r/Backup.sparsebundle");
+    assert.deepEqual([app.category, app.kindFrom], ["binary", "name"]);
+    assert.deepEqual(
+      [library.category, library.kindFrom],
+      ["image", "contents"],
     );
-    assert.equal(
-      only(map, "package", "/r/Backup.sparsebundle").category,
-      "archive",
-    );
+    assert.deepEqual([backup.category, backup.kindFrom], ["archive", "name"]);
   });
 
   test("opens a package with a double-click, and finds what's inside it at its block", () => {
@@ -815,7 +816,7 @@ describe("packages", () => {
 });
 
 describe("icon slots", () => {
-  const metrics = { charWidth: 6, lineHeight: 13, padX: 4, padY: 3 };
+  const metrics = METRICS;
   const root = dir("/r", [
     dir("/r/Applications", [
       dir("/r/Applications/Utilities", [
@@ -828,6 +829,25 @@ describe("icon slots", () => {
     ]),
     file("/r/movie.mov", 60_000),
   ]);
+  const preboot: VolumeNode = {
+    kind: "volume",
+    name: "Preboot",
+    path: "/r/Preboot",
+    size: 1000,
+    sharesDisk: true,
+  };
+  /** What a tile's label says: a header strip's, or a block's. */
+  const labelOf = (tile: Tile) =>
+    tile.kind === "folder"
+      ? headerLabel(tile, metrics)
+      : tileLabel(tile, metrics);
+  /** `node` alone in a map `width` by `height`, which its block fills: its painted box is the map less the gap. */
+  const alone = (
+    node: TreeNode,
+    width: number,
+    height: number,
+    marks: Partial<LabelMarks> = { icons: true },
+  ) => marked(dir("/r", [node]), width, height, marks).tiles[0];
 
   test("keeps no room for icons or glyphs for a host that draws neither", () => {
     for (const tile of allTiles(layout(root, 600, 400).tiles)) {
@@ -841,49 +861,159 @@ describe("icon slots", () => {
     assert.equal(only(map, "folder", "/r/Applications/Utilities").slot, 12);
   });
 
-  test("gives package, volume and folder blocks of 48 by 20 px or more a 14 px icon", () => {
-    const preboot: VolumeNode = {
-      kind: "volume",
-      name: "Preboot",
-      path: "/r/Preboot",
-      size: 1000,
-      sharesDisk: true,
+  test("puts a header's icon only where the folder's name still fits after it", () => {
+    // The padding either side, the icon, its gap, and four characters and an ellipsis: 56 px painted after a 14 px
+    // icon, 54 after a 12 px one. A depth-2 folder's box is its parent's less 2 px each side.
+    const nested = dir("/r", [
+      dir("/r/outer", [
+        dir("/r/outer/inner", [
+          file("/r/outer/inner/a.mov", 3000),
+          file("/r/outer/inner/b.mov", 2000),
+        ]),
+      ]),
+    ]);
+    const slots = (width: number) => {
+      const map = marked(nested, width, 120, { icons: true });
+      return [
+        only(map, "folder", "/r/outer").slot,
+        only(map, "folder", "/r/outer/inner").slot,
+      ];
     };
-    const blocks: [TreeNode, Tile["kind"]][] = [
-      [dir("/r/Xcode.app", [file("/r/Xcode.app/Xcode", 1000)]), "package"],
-      [preboot, "volume"],
-      // Too low for a header and its contents, so one block.
-      [dir("/r/shots", [file("/r/shots/a.png", 1000)]), "collapsed"],
+    assert.deepEqual(slots(56), [undefined, undefined]);
+    assert.deepEqual(slots(57), [14, undefined]);
+    assert.deepEqual(slots(58), [14, undefined]);
+    assert.deepEqual(slots(59), [14, 12]);
+  });
+
+  test("gives package, volume and folder blocks a 14 px icon only where their name still fits after it", () => {
+    const blocks: [TreeNode, Tile["kind"], number][] = [
+      // Four characters and an ellipsis after the icon: 56 px painted.
+      [dir("/r/Xcode.app", [file("/r/Xcode.app/Xcode", 1000)]), "package", 57],
+      [preboot, "volume", 57],
+      // A folder block's name ends in its slash too: 62 px. Too low for a header and its contents, so one block.
+      [dir("/r/shots", [file("/r/shots/a.png", 1000)]), "collapsed", 63],
     ];
-    for (const [node, kind] of blocks) {
-      // Alone in the map, the block fills it: its painted box is the map less the gap.
-      const at = (width: number, height: number) =>
-        marked(dir("/r", [node]), width, height, { icons: true }).tiles[0];
-      assert.equal(at(49, 21).kind, kind);
-      assert.equal(at(49, 21).slot, 14, `${kind} painted 48 by 20`);
-      assert.equal(at(48, 21).slot, undefined, `${kind} painted 47 wide`);
-      assert.equal(at(49, 20).slot, undefined, `${kind} painted 19 high`);
+    for (const [node, kind, width] of blocks) {
+      assert.equal(alone(node, width, 21).kind, kind);
+      assert.equal(alone(node, width, 21).slot, 14, `${kind} at ${width}`);
+      assert.equal(
+        alone(node, width - 1, 21).slot,
+        undefined,
+        `${kind} at ${width - 1}`,
+      );
+      // 20 px painted holds the icon centred on the label's first line, with the label's padding below.
+      assert.equal(
+        alone(node, width, 20).slot,
+        undefined,
+        `${kind} painted 19 high`,
+      );
     }
   });
 
-  test("gives a file block no icon, and with glyphs on, its kind's glyph where an icon would fit", () => {
-    const clip = dir("/r", [file("/r/clip.mov", 1000)]);
-    assert.equal(
-      marked(clip, 49, 21, { icons: true }).tiles[0].slot,
-      undefined,
-    );
-    assert.equal(
-      marked(clip, 49, 21, { icons: true, glyphs: true }).tiles[0].slot,
-      14,
-    );
-    assert.equal(
-      marked(clip, 48, 21, { glyphs: true }).tiles[0].slot,
-      undefined,
-    );
-    // Glyphs alone mark files, never folders.
-    const glyphs = marked(root, 600, 400, { glyphs: true });
-    assert.equal(only(glyphs, "folder", "/r/Applications").slot, undefined);
-    assert.equal(only(glyphs, "file", "/r/movie.mov").slot, 14);
+  test("needs 61 px for a package's icon and 67 for a folder block's, in Monaspace at 11 px", () => {
+    // Monaspace's advance is 1,240 of 2,000 units to the em: 6.82 px at 11 px.
+    const monaspace = { ...METRICS, charWidth: (1240 / 2000) * 11 };
+    const xcode = dir("/r/Xcode.app", [file("/r/Xcode.app/Xcode", 1000)]);
+    const shots = dir("/r/shots", [file("/r/shots/a.png", 1000)]);
+    const slot = (node: TreeNode, painted: number) =>
+      alone(node, painted + 1, 21, { icons: true, metrics: monaspace }).slot;
+    assert.deepEqual([slot(xcode, 60), slot(xcode, 61)], [undefined, 14]);
+    assert.deepEqual([slot(shots, 66), slot(shots, 67)], [undefined, 14]);
+  });
+
+  /** Files, packages, folders and a volume, short and long named, which the properties below lay out at every size. */
+  const named: TreeNode[] = [
+    file("/r/clip.mov", 1000),
+    file("/r/a.js", 1000),
+    file("/r/before-app-review-screenshot.png", 1000),
+    dir("/r/Xcode.app", [file("/r/Xcode.app/Xcode", 1000)]),
+    dir("/r/Visual Studio Code.app", [
+      file("/r/Visual Studio Code.app/Code", 1000),
+    ]),
+    dir("/r/src", [file("/r/src/main.ts", 600), file("/r/src/lib.ts", 400)]),
+    dir("/r/node_modules", [
+      file("/r/node_modules/a.js", 600),
+      file("/r/node_modules/b.js", 400),
+    ]),
+    preboot,
+    file("/r/readme.pdf", 1000),
+    file("/r/Recording", 1000),
+  ];
+  /** Every tile of `named` laid out alone, without marks and with `marks`, at widths of 10 to 140 px and some heights. */
+  function* sizes(marks: Partial<LabelMarks>) {
+    for (const node of named) {
+      for (let width = 10; width <= 140; width += 1) {
+        for (const height of [15, 19, 20, 21, 26, 33, 40, 60]) {
+          yield {
+            plain: alone(node, width, height, {}),
+            tile: alone(node, width, height, marks),
+            at: `${node.name} at ${width} by ${height}`,
+          };
+        }
+      }
+    }
+  }
+
+  test("keeps every label a block or strip had: an icon goes only where the label still fits after it", () => {
+    let marks = 0;
+    for (const { plain, tile, at } of sizes({ icons: true })) {
+      if (tile.slot !== undefined) marks += 1;
+      if (labelOf(plain) !== null) assert.notEqual(labelOf(tile), null, at);
+    }
+    assert.ok(marks > 1000, "icons were kept where they fit");
+  });
+
+  test("with glyphs on, says every file block's kind without colour, giving way only a name cut short of its kind", () => {
+    let glyphs = 0;
+    for (const { plain, tile, at } of sizes({ glyphs: true })) {
+      if (tile.kind !== "file" || plain.kind !== "file") continue;
+      const label = tileLabel(tile, metrics);
+      const before = tileLabel(plain, metrics);
+      const whole = (shown: string) =>
+        shown === tile.node.name ||
+        (tile.node.name.includes(".") &&
+          shown.endsWith(
+            tile.node.name.slice(tile.node.name.lastIndexOf(".")),
+          ));
+      if (tile.slot !== undefined) glyphs += 1;
+      // A block with room for a glyph says its kind: with the glyph, or a label with its whole name or extension.
+      if (tile.x1 - tile.x0 - GAP >= 22 && tile.y1 - tile.y0 - GAP >= 20) {
+        assert.ok(
+          tile.slot !== undefined || (label !== null && whole(label.name)),
+          at,
+        );
+      }
+      // A label gives way only where it was cut short of the extension.
+      if (before !== null && label === null) assert.ok(!whole(before.name), at);
+    }
+    assert.ok(glyphs > 300, "glyphs were drawn where they fit");
+  });
+
+  test("with glyphs on, gives a file block its kind's glyph before its label, or alone where no label fits", () => {
+    const clip = file("/r/clip.mov", 1000);
+    const glyphs = { glyphs: true };
+    // Room for the glyph and four characters and an ellipsis after it.
+    assert.equal(alone(clip, 57, 21, glyphs).slot, 14);
+    assert.notEqual(labelOf(alone(clip, 57, 21, glyphs)), null);
+    // No label fits at all, so the glyph is the only cue but colour: it needs the padding either side, 22 px painted.
+    assert.equal(labelOf(alone(clip, 30, 21, {})), null);
+    assert.equal(alone(clip, 30, 21, glyphs).slot, 14);
+    assert.equal(alone(clip, 23, 21, glyphs).slot, 14);
+    assert.equal(alone(clip, 22, 21, glyphs).slot, undefined);
+    // A label that fits only without the glyph stays where it says the kind, with the whole name or its extension.
+    const script = file("/r/a.js", 1000);
+    assert.deepEqual(labelOf(alone(script, 40, 21, {}))?.name, "a.js");
+    assert.equal(alone(script, 40, 21, glyphs).slot, undefined);
+    // A name cut short of its extension doesn't, so it gives way to the glyph; the card still names it.
+    const readme = file("/r/readme.pdf", 1000);
+    assert.deepEqual(labelOf(alone(readme, 40, 21, {}))?.name, "read…");
+    assert.equal(alone(readme, 40, 21, glyphs).slot, 14);
+    assert.equal(labelOf(alone(readme, 40, 21, glyphs)), null);
+    // macOS's icons alone never mark a file, and glyphs never mark a folder.
+    assert.equal(alone(clip, 57, 21, { icons: true }).slot, undefined);
+    const map = marked(root, 600, 400, glyphs);
+    assert.equal(only(map, "folder", "/r/Applications").slot, undefined);
+    assert.equal(only(map, "file", "/r/movie.mov").slot, 14);
   });
 
   test("gives the group of smaller items no mark", () => {
@@ -895,15 +1025,45 @@ describe("icon slots", () => {
       dir("/r", [file("/r/big.mov", 1_000_000), ...tiny]),
       400,
       300,
-      {
-        icons: true,
-        glyphs: true,
-      },
+      { icons: true, glyphs: true },
     );
     const group = map.tiles.find((tile) => tile.kind === "group");
     assert.ok(group);
-    assert.ok(group.x1 - group.x0 > 48 && group.y1 - group.y0 > 20);
+    // Painted big enough for any block's mark: a folder block's needs 62 by 20 px with these metrics.
+    assert.ok(
+      group.x1 - group.x0 - GAP >= 62 && group.y1 - group.y0 - GAP >= 20,
+    );
     assert.equal(group.slot, undefined);
+  });
+
+  test("puts a mark at the start of its first label line, centred on the line's text", () => {
+    const map = marked(root, 600, 400, { icons: true, glyphs: true });
+    const outer = only(map, "folder", "/r/Applications");
+    const inner = only(map, "folder", "/r/Applications/Utilities");
+    const movie = only(map, "file", "/r/movie.mov");
+    // A header's text is centred on its strip, 9.5 px down an 18 px strip and 8.5 down a 16 px one; a block's first
+    // line, 10 px down, below its 3 px of padding.
+    assert.deepEqual(markPlace(outer, metrics), {
+      x: outer.x0 + 4,
+      y: outer.y0 + 3,
+      size: 14,
+    });
+    assert.deepEqual(markPlace(inner, metrics), {
+      x: inner.x0 + 4,
+      y: inner.y0 + 3,
+      size: 12,
+    });
+    assert.deepEqual(markPlace(movie, metrics), {
+      x: movie.x0 + 4,
+      y: movie.y0 + 3,
+      size: 14,
+    });
+    assert.equal(labelMiddle(outer, metrics), outer.y0 + 9.5);
+    assert.equal(labelMiddle(movie, metrics), movie.y0 + 10);
+    assert.equal(
+      markPlace(only(layout(root, 600, 400), "file", "/r/movie.mov"), metrics),
+      null,
+    );
   });
 
   test("starts a block's label after its mark, so the two never overlap", () => {
@@ -913,6 +1073,7 @@ describe("icon slots", () => {
         file("/r/Visual Studio Code.app/Code", 1_288_490_189),
       ]),
       category: "binary",
+      kindFrom: "name",
       depth: 1,
       x0: 0,
       y0: 0,

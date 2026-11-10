@@ -8,6 +8,7 @@ import {
 import { type Clock, steadyMap } from "~/lib/steady-map";
 import {
   kindBytesByFolder,
+  type LabelMarks,
   layoutTreemap,
   siblingOrder,
   type TreemapLayout,
@@ -40,8 +41,8 @@ const browserClock: Clock = {
 };
 
 /**
- * The layout a disk map shows: `root` laid out at `width` × `height` CSS pixels, once for each, with room for macOS's
- * `icons` and the kinds' `glyphs` when the host draws them. A `steady` map's newer layouts of the same folder keep its
+ * The layout a disk map shows: `root` laid out at `width` × `height` CSS pixels, once for each, with room for the
+ * `marks` the host draws at the start of labels, if any. A `steady` map's newer layouts of the same folder keep its
  * siblings' places within a margin, leave the layout shown as it is when they'd draw the same, and wait while the
  * person clicks or reads the hover card, a double-click lasting `doubleClick` ms (steady-map.ts). A root `atOnce`
  * answers the person's own action, and shows as it comes, as every layout of any other map does.
@@ -53,8 +54,7 @@ export function useShownLayout(
   steady: boolean,
   doubleClick: number,
   atOnce: boolean,
-  icons: boolean,
-  glyphs: boolean,
+  marks: LabelMarks | undefined,
 ): ShownLayout {
   const kinds = useMemo(() => kindBytesByFolder(root), [root]);
   const [layout, setLayout] = useState<TreemapLayout | null>(null);
@@ -72,13 +72,10 @@ export function useShownLayout(
       steady && before?.root.path === root.path
         ? siblingOrder(before)
         : undefined;
-    const next = layoutTreemap(root, width, height, kinds, order, {
-      icons,
-      glyphs,
-    });
+    const next = layoutTreemap(root, width, height, kinds, order, marks);
     if (steady && !atOnce) map.newer(next);
     else map.show(next);
-  }, [root, width, height, kinds, steady, atOnce, icons, glyphs, map]);
+  }, [root, width, height, kinds, steady, atOnce, marks, map]);
 
   const release = useCallback(
     () => map.release(doubleClick),

@@ -68,29 +68,24 @@ const HEADER_BY_DEPTH: readonly number[] = [0, 18, 16];
  */
 const HEADER_ICON_BY_DEPTH: readonly number[] = [0, 14, 12];
 
-/**
- * A block's mark, an icon or a file's glyph, at the start of its label line: 14 px, on a block painted at least
- * 48 by 20 px, the spec's "about 48 by 20". That height holds the mark with 3 px above and below, as the 13 px label
- * line keeps 3 px of padding. That width holds the label's padding on both sides, the mark and its gap, and three
- * characters, so on a block that narrow the mark alone says what it is, unless its name is that short.
- */
-const BLOCK_MARK = { size: 14, width: 48, height: 20 } as const;
+/** A block's mark, an icon or a file's glyph, at the start of its first label line. */
+const BLOCK_MARK = 14;
 
 /** The room between a mark and the label after it. */
 const MARK_GAP = 4;
 
 /**
- * What a host draws at the start of labels, which the layout keeps room for. `icons`: macOS's own, on depth-1 and
- * depth-2 header strips and on package, volume and folder blocks with room, as Pith's page draws them. `glyphs`: each
- * file block's kind as a glyph, the cue that doesn't need colour, which Pith's page draws while Differentiate Without
- * Color is on. The browser app draws neither.
+ * What a host draws at the start of labels, which the layout keeps room for, and the labels' `metrics`, which say
+ * where there's room: a mark goes only where the label still fits after it. `icons`: macOS's own, on depth-1 and
+ * depth-2 header strips and on package, volume and folder blocks, as Pith's page draws them. `glyphs`: each file
+ * block's kind as a glyph, the cue that doesn't need colour, which Pith's page draws while Differentiate Without Color
+ * is on. The browser app draws neither.
  */
 export interface LabelMarks {
   readonly icons: boolean;
   readonly glyphs: boolean;
+  readonly metrics: LabelMetrics;
 }
-
-const NO_MARKS: LabelMarks = { icons: false, glyphs: false };
 
 /** A container's 1 px outline, inside which its contents keep their own gap. */
 const OUTLINE = 1;
@@ -136,6 +131,8 @@ export interface PackageTile extends TileBase {
   readonly kind: "package";
   readonly node: DirNode;
   readonly category: Category;
+  /** Where its kind came from: its name, as an app's does, or what it holds most of. */
+  readonly kindFrom: "name" | "contents";
 }
 
 export interface FileTile extends TileBase {
@@ -266,7 +263,7 @@ function layoutItems(
   depth: number,
   kinds: ReadonlyMap<DirNode, KindBytes>,
   order: SiblingOrder | undefined,
-  marks: LabelMarks,
+  marks: LabelMarks | undefined,
 ): Tile[] {
   const items = folder.children
     .filter((child) => child.size > 0)
@@ -317,13 +314,93 @@ function layoutItems(
   return tiles.filter((tile) => !isEmpty(tile));
 }
 
-/** A block's mark, when the host draws it and the block's painted box has room for one, as `BLOCK_MARK` measures. */
-const blockMark = (box: Box, drawn: boolean): { slot?: number } =>
-  drawn &&
-  box.x1 - box.x0 - GAP >= BLOCK_MARK.width &&
-  box.y1 - box.y0 - GAP >= BLOCK_MARK.height
-    ? { slot: BLOCK_MARK.size }
+/**
+ * Whether a tile painted `width` px wide still has room for its name after a mark `size` px across: four of the name's
+ * characters and an ellipsis, and a folder block's slash, the least a cut name keeps (`fitName`). So a mark never
+ * takes the place of a label.
+ */
+function nameFitsAfter(
+  width: number,
+  size: number,
+  slash: boolean,
+  metrics: LabelMetrics,
+): boolean {
+  const characters = MIN_KEPT + 1 + (slash ? 1 : 0);
+  return (
+    width - 2 * metrics.padX - size - MARK_GAP >= characters * metrics.charWidth
+  );
+}
+
+/** How far below a block's top its first label line is centred, its text and its mark alike. */
+const firstLineMiddle = (metrics: LabelMetrics) =>
+  metrics.padY + metrics.lineHeight / 2 + 0.5;
+
+/** Whether a block painted `height` px high holds a mark centred on its first label line, with the label's padding below. */
+const markFitsHigh = (height: number, metrics: LabelMetrics) =>
+  Math.round(firstLineMiddle(metrics) - BLOCK_MARK / 2) +
+    BLOCK_MARK +
+    metrics.padY <=
+  height;
+
+/** A header strip's icon, at its depth's size, where the strip has room for it and its folder's name after it. */
+function headerMark(
+  box: Box,
+  depth: number,
+  marks: LabelMarks | undefined,
+): { slot?: number } {
+  const size = HEADER_ICON_BY_DEPTH[depth] ?? 0;
+  return marks?.icons &&
+    size > 0 &&
+    nameFitsAfter(box.x1 - box.x0 - GAP, size, false, marks.metrics)
+    ? { slot: size }
     : {};
+}
+
+/** A package, volume or folder block's icon, where the block has room for it and its name after it. */
+function iconMark(
+  box: Box,
+  slash: boolean,
+  marks: LabelMarks | undefined,
+): { slot?: number } {
+  return marks?.icons &&
+    markFitsHigh(box.y1 - box.y0 - GAP, marks.metrics) &&
+    nameFitsAfter(box.x1 - box.x0 - GAP, BLOCK_MARK, slash, marks.metrics)
+    ? { slot: BLOCK_MARK }
+    : {};
+}
+
+/**
+ * Whether a label that shows `shown` of a file named `name` says what kind of file it is as well as its name: it shows
+ * the whole name, or a cut that keeps the extension.
+ */
+function namesKind(name: string, shown: string): boolean {
+  const dot = name.lastIndexOf(".");
+  return shown === name || (dot > 0 && shown.endsWith(name.slice(dot)));
+}
+
+/**
+ * A file block's glyph while glyphs are drawn, the cue for its kind that doesn't need colour: before its label where
+ * the label still fits after it. Where it doesn't, the glyph shows alone, unless the block's label already says its
+ * kind, with its whole name or a cut that keeps the extension, which it keeps. A cut that loses the extension gives
+ * way to the glyph: it doesn't say the kind, and the hover card and the list of items still give the whole name.
+ */
+function glyphMark(
+  tile: FileTile,
+  marks: LabelMarks | undefined,
+): { slot?: number } {
+  if (!marks?.glyphs) return {};
+  const { metrics } = marks;
+  const width = tile.x1 - tile.x0 - GAP;
+  if (!markFitsHigh(tile.y1 - tile.y0 - GAP, metrics)) return {};
+  if (nameFitsAfter(width, BLOCK_MARK, false, metrics)) {
+    return { slot: BLOCK_MARK };
+  }
+  if (width < 2 * metrics.padX + BLOCK_MARK) return {};
+  const label = tileLabel(tile, metrics);
+  return label !== null && namesKind(tile.node.name, label.name)
+    ? {}
+    : { slot: BLOCK_MARK };
+}
 
 /** What `folder` holds, by kind. */
 function kindsOf(
@@ -345,17 +422,17 @@ function tileFor(
   depth: number,
   kinds: ReadonlyMap<DirNode, KindBytes>,
   order: SiblingOrder | undefined,
-  marks: LabelMarks,
+  marks: LabelMarks | undefined,
 ): Tile {
   if (item.kind === "file") {
-    return {
+    const tile: FileTile = {
       kind: "file",
       node: item,
       category: categoryForName(item.name),
       depth,
       ...box,
-      ...blockMark(box, marks.glyphs),
     };
+    return { ...tile, ...glyphMark(tile, marks) };
   }
   if (item.kind === "volume")
     return {
@@ -363,7 +440,7 @@ function tileFor(
       node: item,
       depth,
       ...box,
-      ...blockMark(box, marks.icons),
+      ...iconMark(box, false, marks),
     };
   if (isPackageName(item.name)) {
     // One thing, as Finder shows it, so its contents wait until it's opened.
@@ -373,9 +450,10 @@ function tileFor(
       node: item,
       category:
         named === "other" ? dominantCategory(kindsOf(item, kinds)) : named,
+      kindFrom: named === "other" ? "contents" : "name",
       depth,
       ...box,
-      ...blockMark(box, marks.icons),
+      ...iconMark(box, false, marks),
     };
   }
   const header = HEADER_BY_DEPTH[depth] ?? 0;
@@ -400,7 +478,7 @@ function tileFor(
         children,
         depth,
         ...box,
-        ...(marks.icons ? { slot: HEADER_ICON_BY_DEPTH[depth] } : {}),
+        ...headerMark(box, depth, marks),
       };
     }
   }
@@ -410,7 +488,7 @@ function tileFor(
     category: dominantCategory(kindsOf(item, kinds)),
     depth,
     ...box,
-    ...blockMark(box, marks.icons),
+    ...iconMark(box, true, marks),
   };
 }
 
@@ -426,7 +504,7 @@ export function layoutTreemap(
   height: number,
   kinds: ReadonlyMap<DirNode, KindBytes>,
   order?: SiblingOrder,
-  marks: LabelMarks = NO_MARKS,
+  marks?: LabelMarks,
 ): TreemapLayout {
   const box = { x0: 0, y0: 0, x1: Math.floor(width), y1: Math.floor(height) };
   return {
@@ -539,7 +617,7 @@ export const unreadableCount = (folder: DirNode) =>
   );
 
 /** Folders, folder blocks and packages: what a double-click opens, and what a card counts unreadable folders inside. */
-const isFolderLike = (
+export const isFolderLike = (
   tile: Tile,
 ): tile is FolderTile | CollapsedTile | PackageTile =>
   tile.kind === "folder" ||
@@ -720,6 +798,24 @@ const innerWidth = (tile: Tile, metrics: LabelMetrics) =>
 
 /** How far a tile's first label line starts after its padding: past its mark and the gap after it, if it has one. */
 export const markRoom = (tile: Tile) => (tile.slot ? tile.slot + MARK_GAP : 0);
+
+/** Where a tile's first label line is centred: the middle of a header strip, or of a block's first line. */
+export const labelMiddle = (tile: Tile, metrics: LabelMetrics) =>
+  tile.y0 +
+  (tile.kind === "folder" ? tile.header / 2 + 0.5 : firstLineMiddle(metrics));
+
+/** Where a tile's mark goes: the square its layout kept at the start of its first label line, centred on that line. */
+export function markPlace(
+  tile: Tile,
+  metrics: LabelMetrics,
+): { readonly x: number; readonly y: number; readonly size: number } | null {
+  if (!tile.slot) return null;
+  return {
+    x: tile.x0 + metrics.padX,
+    y: Math.round(labelMiddle(tile, metrics) - tile.slot / 2),
+    size: tile.slot,
+  };
+}
 
 /** What fits inside a block, or null when nothing legible does. */
 export function tileLabel(

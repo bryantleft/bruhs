@@ -72,6 +72,9 @@ try {
     if (!existsSync(path.join(resources, compiled))) throw new Error(`actool did not produce ${compiled} from native/Brand/AppIcon.icon.`);
   }
   cpSync(path.join(root, "native/Brand/StatusGlyph.svg"), path.join(resources, "StatusGlyph.svg"));
+  // The licences of the work by others that Pith ships: the Heroicons its disk map draws its kinds' glyphs from, and the
+  // Monaspace fonts. The page's minifier drops the source's legal comments, so this file is the notice the app carries.
+  cpSync(path.join(root, "native/ThirdPartyNotices.txt"), path.join(resources, "ThirdPartyNotices.txt"));
   // Sparkle compares CFBundleVersion, so it carries the changelog's version too. A release also names its feed and key,
   // and turns on both of Sparkle's stricter checks: the feed must be signed, and so must an archive before it's unpacked.
   // It records the commit it was built from, which publishing checks GitHub has, marked when the files Pith builds from

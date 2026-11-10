@@ -41,6 +41,9 @@ describe("isPackageName", () => {
       "Resources.bundle",
       "Backup.sparsebundle",
       "Music Library.musiclibrary",
+      "Pith.xcodeproj",
+      "Pith.xcworkspace",
+      "Shapes.playground",
     ]) {
       assert.equal(isPackageName(name), true, name);
     }

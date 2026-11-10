@@ -1,16 +1,23 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
+  drawMark,
   type Frames,
   iconArrivals,
   iconPaint,
   type MapIcons,
+  paintArrived,
 } from "../src/components/map-marks.ts";
+import { KIND_GLYPHS } from "../src/lib/kind-glyphs.ts";
 import type { Tile } from "../src/lib/treemap-layout.ts";
 
-/** Icons a test hands out: loaded ones, and the requests and listeners the map makes. */
-function testIcons(loaded: Record<string, string> = {}) {
+/** Icons a test hands out: loaded ones, failed ones, and the requests and listeners the map makes. */
+function testIcons(
+  loaded: Record<string, string> = {},
+  refused: readonly string[] = [],
+) {
   const images = new Map(Object.entries(loaded));
+  const failed = new Set(refused);
   const requested: string[] = [];
   const listeners = new Set<() => void>();
   const icons: MapIcons = {
@@ -20,6 +27,7 @@ function testIcons(loaded: Record<string, string> = {}) {
         : `pith://app/icon/1/dark/${points}@${ratio}x/item/${tile.node.name}.png`,
     image: (url) =>
       (images.get(url) as unknown as CanvasImageSource | undefined) ?? null,
+    failed: (url) => failed.has(url),
     request: (url) => {
       requested.push(url);
     },
@@ -28,9 +36,10 @@ function testIcons(loaded: Record<string, string> = {}) {
       return () => listeners.delete(listener);
     },
   };
-  /** An icon loads, or fails, and the cache tells its listeners. */
+  /** An icon loads, or fails without an image, and the cache tells its listeners. */
   const arrive = (url: string, image?: string) => {
-    if (image !== undefined) images.set(url, image);
+    if (image === undefined) failed.add(url);
+    else images.set(url, image);
     for (const listener of [...listeners]) listener();
   };
   return { icons, requested, listeners, arrive };
@@ -112,6 +121,16 @@ describe("iconPaint", () => {
     );
   });
 
+  test("leaves a refused icon's room empty, and neither waits for it nor asks again", () => {
+    const { icons, requested } = testIcons({}, [url("Refused")]);
+    const { context, drawn } = testContext();
+    const paint = iconPaint(icons, 2);
+    paint.draw(context, folder("Refused"), 4, 3, 14);
+    assert.deepEqual(paint.done(), []);
+    assert.deepEqual(requested, []);
+    assert.deepEqual(drawn, []);
+  });
+
   test("leaves a tile without an icon alone, and keeps the alpha its block was drawn at", () => {
     const { icons, requested } = testIcons();
     const { context } = testContext(0.2);
@@ -159,7 +178,7 @@ describe("iconArrivals", () => {
     assert.equal(painted.length, 3);
   });
 
-  test("stops listening once every icon has come, and leaves a failed one's room empty", () => {
+  test("leaves a failed icon's room empty, waits for it no more, and stops once the rest have come", () => {
     const { icons, arrive, listeners } = testIcons();
     const { frames, pending, run } = testFrames();
     const painted: string[] = [];
@@ -169,14 +188,13 @@ describe("iconArrivals", () => {
     arrive(left[1].url);
     run();
     assert.deepEqual(painted, []);
+    assert.equal(listeners.size, 1, "the other icon is still coming");
     arrive(left[0].url, "a");
     run();
     assert.deepEqual(painted, [left[0].url]);
-    assert.equal(
-      listeners.size,
-      1,
-      "the refused icon may come under a new rule",
-    );
+    // Later changes to the cache, as a list's icons loading, cost no frame.
+    assert.equal(listeners.size, 0);
+    arrive("pith://app/icon/1/dark/16@2x/type/pdf.png", "a list's icon");
     assert.equal(pending.size, 0);
   });
 
@@ -205,5 +223,138 @@ describe("iconArrivals", () => {
     assert.equal(listeners.size, 0);
     run();
     assert.deepEqual(painted, []);
+  });
+});
+
+/** A 2D context that records the calls drawing marks makes. */
+function recordingContext() {
+  const calls: unknown[][] = [];
+  const context = {
+    globalAlpha: 1,
+    fillStyle: "",
+    save: () => calls.push(["save"]),
+    restore: () => calls.push(["restore"]),
+    translate: (x: number, y: number) => calls.push(["translate", x, y]),
+    scale: (x: number, y: number) => calls.push(["scale", x, y]),
+    setTransform: (...matrix: number[]) =>
+      calls.push(["setTransform", ...matrix]),
+    fill: (path: { d: string }, rule: string) =>
+      calls.push(["fill", path.d, rule, context.fillStyle]),
+    drawImage: (image: unknown, ...box: number[]) =>
+      calls.push(["drawImage", image, ...box, context.globalAlpha]),
+  };
+  return { calls, context: context as unknown as CanvasRenderingContext2D };
+}
+
+describe("drawing marks", () => {
+  // Node has no canvas paths: a stand-in that keeps its path data, as the browser's would.
+  (globalThis as { Path2D?: unknown }).Path2D = class {
+    readonly d: string;
+    constructor(d: string) {
+      this.d = d;
+    }
+  };
+  const metrics = { charWidth: 6, lineHeight: 13, padX: 4, padY: 3 };
+  const at = <T extends Tile>(tile: T): T => ({
+    ...tile,
+    x0: 10,
+    y0: 20,
+    x1: 110,
+    y1: 60,
+  });
+  const clip: Tile = at({
+    kind: "file",
+    node: { kind: "file", name: "clip.mov", path: "/r/clip.mov", size: 1 },
+    category: "video",
+    depth: 1,
+    x0: 0,
+    y0: 0,
+    x1: 0,
+    y1: 0,
+    slot: 14,
+  });
+
+  test("draws a file's kind glyph in its label's ink, at the start of its first label line", () => {
+    const { calls, context } = recordingContext();
+    drawMark(context, clip, metrics, null, "ink");
+    assert.deepEqual(calls, [
+      ["save"],
+      // 4 px of padding in, and centred on the first line, 10 px down: the 14 px square's top is 3 px down.
+      ["translate", 14, 23],
+      ["scale", 14 / 16, 14 / 16],
+      ...KIND_GLYPHS.video.map(({ d, evenOdd }) => [
+        "fill",
+        d,
+        evenOdd ? "evenodd" : "nonzero",
+        "ink",
+      ]),
+      ["restore"],
+    ]);
+  });
+
+  test("draws any other tile's icon at the same place, through the paint's icons", () => {
+    const url = "pith://app/icon/1/dark/14@2x/item/shots.png";
+    const { icons } = testIcons({ [url]: "folder icon" });
+    const { calls, context } = recordingContext();
+    drawMark(context, at(folder("shots")), metrics, iconPaint(icons, 2), "ink");
+    assert.deepEqual(calls, [["drawImage", "folder icon", 14, 23, 14, 14, 1]]);
+    // A header's 12 px icon is centred on its 16 px strip.
+    const header: Tile = {
+      kind: "folder",
+      node: {
+        kind: "dir",
+        name: "src",
+        path: "/r/src",
+        size: 1,
+        files: 1,
+        children: [],
+      },
+      header: 16,
+      children: [],
+      depth: 2,
+      x0: 10,
+      y0: 20,
+      x1: 110,
+      y1: 60,
+      slot: 12,
+    };
+    const headerURL = "pith://app/icon/1/dark/12@2x/item/src.png";
+    const drawn = recordingContext();
+    drawMark(
+      drawn.context,
+      header,
+      metrics,
+      iconPaint(testIcons({ [headerURL]: "src icon" }).icons, 2),
+      "ink",
+    );
+    assert.deepEqual(drawn.calls, [
+      ["drawImage", "src icon", 14, 23, 12, 12, 1],
+    ]);
+  });
+
+  test("draws nothing for a tile its layout kept no room for", () => {
+    const { calls, context } = recordingContext();
+    const { slot: _, ...plain } = clip;
+    drawMark(context, plain as Tile, metrics, null, "ink");
+    assert.deepEqual(calls, []);
+  });
+
+  test("paints an icon that came late into its room, at its block's alpha and the canvas's scale", () => {
+    const { calls, context } = recordingContext();
+    const canvas = {
+      getContext: () => context,
+    } as unknown as HTMLCanvasElement;
+    paintArrived(
+      canvas,
+      2,
+      { url: "u", x: 14, y: 23, size: 14, alpha: 0.2 },
+      "icon" as unknown as CanvasImageSource,
+    );
+    assert.deepEqual(calls, [
+      ["save"],
+      ["setTransform", 2, 0, 0, 2, 0, 0],
+      ["drawImage", "icon", 14, 23, 14, 14, 0.2],
+      ["restore"],
+    ]);
   });
 });

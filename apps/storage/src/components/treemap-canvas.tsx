@@ -15,7 +15,6 @@ import {
   CATEGORY_LABEL,
   CATEGORY_VAR,
   type Category,
-  categoryForName,
   formatBytes,
 } from "~/lib/format";
 import {
@@ -29,12 +28,17 @@ import {
 } from "~/lib/map-colors";
 import {
   CATEGORIES,
+  type CollapsedTile,
   folderToOpenAt,
   GAP,
   headerLabel,
+  isFolderLike,
   type Kind,
+  type LabelMarks,
   type LabelMetrics,
+  labelMiddle,
   markRoom,
+  type PackageTile,
   type Tile,
   type TreemapLayout,
   tileAt,
@@ -47,7 +51,7 @@ import {
 import type { DirNode, TreeNode } from "~/lib/types";
 import {
   browserFrames,
-  drawGlyph,
+  drawMark,
   iconArrivals,
   iconPaint,
   type MapIcons,
@@ -220,17 +224,35 @@ export function useDevicePixelRatio() {
   return ratio;
 }
 
+/** The labels' metrics in `font`, which the map lays its labels and their marks out with and draws them with. */
+function labelMetrics(font: string): LabelMetrics {
+  const context = document.createElement("canvas").getContext("2d");
+  if (!context)
+    throw new Error("This browser couldn't create a canvas for the disk map.");
+  context.font = `500 ${LABEL.size}px ${font}`;
+  return {
+    charWidth: context.measureText("0").width,
+    lineHeight: LABEL.lineHeight,
+    padX: LABEL.padX,
+    padY: LABEL.padY,
+  };
+}
+
 /**
- * True once loading the label font has finished, so labels are measured and cut with its
- * real widths. If the font can't load they still appear, in the fallback monospace.
+ * The labels' metrics in `font`, and whether loading the font has finished, so labels are measured and cut with its
+ * real widths: measured at once, in whatever face stands in, and again once it has loaded. If the font can't load
+ * they still appear, in the fallback monospace.
  */
-function useFontSettled(font: string | null) {
-  const [settled, setSettled] = useState(false);
+function useLabelFont(font: string | null) {
+  const [state, setState] = useState(() => ({
+    metrics: font ? labelMetrics(font) : null,
+    settled: false,
+  }));
   useEffect(() => {
     if (!font) return;
     let live = true;
     const settle = () => {
-      if (live) setSettled(true);
+      if (live) setState({ metrics: labelMetrics(font), settled: true });
     };
     Promise.all([
       document.fonts.load(`500 ${LABEL.size}px ${font}`),
@@ -240,7 +262,7 @@ function useFontSettled(font: string | null) {
       live = false;
     };
   }, [font]);
-  return settled;
+  return state;
 }
 
 interface Drawn {
@@ -272,9 +294,9 @@ export function kindLabel(kind: Kind): string {
 }
 
 /**
- * Paints `layout`, its labels once their font has loaded, and its marks: each file block's kind glyph, and the icons
- * `icons` has loaded, from its cache. It asks for the icons it lacks, keeping their room empty, and returns those, for
- * painting as they come.
+ * Paints `layout`, its labels, once their font has loaded, with `metrics`, and its marks: each file block's kind
+ * glyph, and the icons `icons` has loaded, from its cache. It asks for the icons it lacks, keeping their room empty,
+ * and returns those, for painting as they come.
  */
 function drawMap(
   canvas: HTMLCanvasElement,
@@ -282,6 +304,7 @@ function drawMap(
   palette: Palette,
   highlight: Kind | null,
   ratio: number,
+  metrics: LabelMetrics,
   labels: boolean,
   icons: MapIcons | undefined,
 ): readonly WaitingIcon[] {
@@ -296,13 +319,6 @@ function drawMap(
   const fonts = {
     name: `500 ${LABEL.size}px ${palette.font}`,
     size: `400 ${LABEL.size}px ${palette.font}`,
-  };
-  ctx.font = fonts.name;
-  const metrics: LabelMetrics = {
-    charWidth: ctx.measureText("0").width,
-    lineHeight: LABEL.lineHeight,
-    padX: LABEL.padX,
-    padY: LABEL.padY,
   };
 
   const text = (
@@ -348,25 +364,14 @@ function drawMap(
   };
 
   const paint = icons ? iconPaint(icons, ratio) : null;
-  /** Where a mark `size` px across goes: at the start of a label line whose text is centred on `middle`. */
-  const markTop = (middle: number, size: number) =>
-    Math.round(middle - size / 2);
 
   const drawFolder = (tile: Extract<Tile, { kind: "folder" }>) => {
     const box = drawnBox(tile);
     ctx.fillStyle = palette.role.well;
     ctx.fillRect(box.x, box.y, box.w, box.h);
     outline(box, palette.role.hairline);
-    const middle = box.y + tile.header / 2 + 0.5;
-    if (tile.slot) {
-      paint?.draw(
-        ctx,
-        tile,
-        box.x + LABEL.padX,
-        markTop(middle, tile.slot),
-        tile.slot,
-      );
-    }
+    const middle = labelMiddle(tile, metrics);
+    drawMark(ctx, tile, metrics, paint, palette.role.text);
     const label = labels ? headerLabel(tile, metrics) : null;
     if (!label) return;
     clipTo({ ...box, h: tile.header }, () => {
@@ -416,17 +421,8 @@ function drawMap(
       ctx.fillRect(box.x, box.y, box.w, box.h);
       hatch(box);
     }
-    const first = box.y + LABEL.padY + LABEL.lineHeight / 2 + 0.5;
-    if (tile.slot) {
-      const x = box.x + LABEL.padX;
-      const y = markTop(first, tile.slot);
-      // A file's mark is its kind's glyph, in its label's ink; any other block's is its icon.
-      if (tile.kind === "file") {
-        drawGlyph(ctx, tile.category, x, y, tile.slot, ink);
-      } else {
-        paint?.draw(ctx, tile, x, y, tile.slot);
-      }
-    }
+    const first = labelMiddle(tile, metrics);
+    drawMark(ctx, tile, metrics, paint, ink);
     const label = labels ? tileLabel(tile, metrics) : null;
     if (label) {
       clipTo(box, () => {
@@ -504,6 +500,20 @@ interface Card {
   readonly change: string | null;
 }
 
+/**
+ * What a folder or package block holds, as its colour shows: "Folder, mostly images", or "Package" when nothing has
+ * the most. A package whose name has a kind, as an app's does, is that kind.
+ */
+function blockKind(tile: CollapsedTile | PackageTile): string {
+  if (tile.kind === "package" && tile.kindFrom === "name") {
+    return CATEGORY_LABEL[tile.category];
+  }
+  const noun = tile.kind === "package" ? "Package" : "Folder";
+  return tile.category === "other"
+    ? noun
+    : `${noun}, mostly ${CATEGORY_LABEL[tile.category].toLowerCase()}`;
+}
+
 /** "2 folders inside couldn't be read", or null when the scan read them all. */
 function unreadableInside(node: DirNode): string | null {
   const count = unreadableCount(node);
@@ -560,34 +570,10 @@ function describe(
         change,
       };
     case "collapsed":
-      return {
-        title,
-        kind: {
-          label:
-            tile.category === "other"
-              ? "Folder"
-              : `Folder, mostly ${CATEGORY_LABEL[tile.category].toLowerCase()}`,
-          fill: fill(tile.category),
-        },
-        size,
-        share,
-        hint: hint("Click to select. Double-click to open."),
-        unreadable: unreadableInside(tile.node),
-        change,
-      };
     case "package":
       return {
         title,
-        kind: {
-          // A package whose name has a kind, as an app's does, is that kind; any other is coloured by what it holds.
-          label:
-            categoryForName(tile.node.name) !== "other"
-              ? CATEGORY_LABEL[tile.category]
-              : tile.category === "other"
-                ? "Package"
-                : `Package, mostly ${CATEGORY_LABEL[tile.category].toLowerCase()}`,
-          fill: fill(tile.category),
-        },
+        kind: { label: blockKind(tile), fill: fill(tile.category) },
         size,
         share,
         hint: hint("Click to select. Double-click to open."),
@@ -684,6 +670,9 @@ function Ring({ tile, shadow }: { tile: Tile; shadow: string }) {
   );
 }
 
+/** A block with a fill of its own, unlike a folder drawn around its contents or the hatched group. */
+const filled = (tile: Tile) => tile.kind !== "folder" && tile.kind !== "group";
+
 const pathOf = (tile: Tile | null) =>
   tile && tile.kind !== "group" ? tile.node.path : null;
 
@@ -742,11 +731,20 @@ export function TreemapCanvas({
       return { error: error instanceof Error ? error.message : String(error) };
     }
   }, [appearance, increasedContrast]);
-  const fontSettled = useFontSettled(
+  const { metrics, settled: fontSettled } = useLabelFont(
     "palette" in colors ? colors.palette.font : null,
   );
+  // The marks drawn at the start of labels, which the layout keeps room for where the labels still fit after them.
+  const hasIcons = mapIcons !== undefined;
+  const marks = useMemo(
+    (): LabelMarks | undefined =>
+      metrics && (hasIcons || kindGlyphs)
+        ? { icons: hasIcons, glyphs: kindGlyphs, metrics }
+        : undefined,
+    [hasIcons, kindGlyphs, metrics],
+  );
 
-  // Layout once per folder, size and the marks drawn beside labels; hovering never lays out again.
+  // Layout once per folder, size and marks; hovering never lays out again.
   const shownLayout = useShownLayout(
     root,
     size.w,
@@ -754,8 +752,7 @@ export function TreemapCanvas({
     steady,
     doubleClickInterval,
     atOnce,
-    mapIcons !== undefined,
-    kindGlyphs,
+    marks,
   );
   const { layout, drew } = shownLayout;
 
@@ -763,13 +760,14 @@ export function TreemapCanvas({
   // layout: it's painted into the room the layout kept for it, without drawing the map again or holding it still.
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !layout || !("palette" in colors)) return;
+    if (!canvas || !layout || !("palette" in colors) || !metrics) return;
     const waiting = drawMap(
       canvas,
       layout,
       colors.palette,
       highlightKind,
       ratio,
+      metrics,
       fontSettled,
       mapIcons,
     );
@@ -779,7 +777,16 @@ export function TreemapCanvas({
     return iconArrivals(waiting, mapIcons, browserFrames, (icon, image) =>
       paintArrived(canvas, ratio, icon, image),
     );
-  }, [layout, colors, highlightKind, ratio, fontSettled, drew, mapIcons]);
+  }, [
+    layout,
+    colors,
+    highlightKind,
+    ratio,
+    metrics,
+    fontSettled,
+    drew,
+    mapIcons,
+  ]);
 
   // Tell the host what's under the pointer or keyboard focus, once per change.
   const report = useCallback(
@@ -911,13 +918,7 @@ export function TreemapCanvas({
       }
       case "Enter": {
         e.preventDefault();
-        if (
-          own &&
-          (own.kind === "folder" ||
-            own.kind === "collapsed" ||
-            own.kind === "package")
-        )
-          open(layout, own.node);
+        if (own && isFolderLike(own)) open(layout, own.node);
         return;
       }
       case " ": {
@@ -1027,12 +1028,7 @@ export function TreemapCanvas({
           tile={selected}
           // On a coloured block, a line of its label ink keeps the accent apart from the fill.
           shadow={`inset 0 0 0 2px ${colors.palette.role.accent}${
-            selected.kind === "file" ||
-            selected.kind === "collapsed" ||
-            selected.kind === "package" ||
-            selected.kind === "volume"
-              ? `, inset 0 0 0 3px ${ink(selected)}`
-              : ""
+            filled(selected) ? `, inset 0 0 0 3px ${ink(selected)}` : ""
           }`}
         />
       )}

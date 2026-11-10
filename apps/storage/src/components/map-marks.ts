@@ -7,7 +7,11 @@
 
 import type { Category } from "../lib/format.ts";
 import { GLYPH_BOX, KIND_GLYPHS } from "../lib/kind-glyphs.ts";
-import type { Tile } from "../lib/treemap-layout.ts";
+import {
+  type LabelMetrics,
+  markPlace,
+  type Tile,
+} from "../lib/treemap-layout.ts";
 
 /** macOS's icons for the map, for a host that has them: Pith's page loads them from its own scheme into its cache. */
 export interface MapIcons {
@@ -15,6 +19,8 @@ export interface MapIcons {
   url(tile: Tile, points: number, ratio: number): string | null;
   /** The icon at `url` once it has loaded, which counts as showing it. */
   image(url: string): CanvasImageSource | null;
+  /** Whether loading `url`'s icon failed, as when the route refused it: its room stays empty, and nothing waits for it. */
+  failed(url: string): boolean;
   /** Loads `url`'s icon, unless it's loading, loaded or failed already. */
   request(url: string): void;
   /** Calls `listener` whenever an icon loads or fails; what it returns stops that. */
@@ -35,8 +41,8 @@ type IconContext = Pick<CanvasRenderingContext2D, "drawImage" | "globalAlpha">;
 
 /**
  * The icons of one paint of the map, for a canvas at `ratio` pixels per CSS pixel. `draw` paints an icon that has
- * loaded at once, from the cache, and keeps one that hasn't for later; `done` then asks once for each icon the paint
- * found missing, however many blocks share it, and says which wait.
+ * loaded at once, from the cache, and keeps one that hasn't for later, unless it failed; `done` then asks once for
+ * each icon the paint found missing, however many blocks share it, and says which wait.
  */
 export function iconPaint(icons: MapIcons, ratio: number) {
   const waiting: WaitingIcon[] = [];
@@ -50,6 +56,8 @@ export function iconPaint(icons: MapIcons, ratio: number) {
         context.drawImage(image, x, y, size, size);
         return;
       }
+      // A refused icon stays refused until Pith's rule changes, which paints the map again.
+      if (icons.failed(url)) return;
       waiting.push({ url, x, y, size, alpha: context.globalAlpha });
       missing.add(url);
     },
@@ -73,8 +81,8 @@ export const browserFrames: Frames = {
 
 /**
  * Paints the icons in `waiting` with `paint` as they arrive: once on the next frame for every icon that arrived
- * before it, so many icons coming at once cost one paint. An icon that fails keeps its room empty. It stops once
- * every icon has come, or when what it returns is called, as the map paints again.
+ * before it, so many icons coming at once cost one paint. An icon that fails keeps its room empty and is waited for no
+ * more. It stops once every icon has come or failed, or when what it returns is called, as the map paints again.
  */
 export function iconArrivals(
   waiting: readonly WaitingIcon[],
@@ -96,8 +104,8 @@ export function iconArrivals(
     const still: WaitingIcon[] = [];
     for (const icon of left) {
       const image = icons.image(icon.url);
-      if (image === null) still.push(icon);
-      else paint(icon, image);
+      if (image !== null) paint(icon, image);
+      else if (!icons.failed(icon.url)) still.push(icon);
     }
     left = still;
     if (left.length === 0) stop();
@@ -127,6 +135,27 @@ export function paintArrived(
   context.globalAlpha = icon.alpha;
   context.drawImage(image, icon.x, icon.y, icon.size, icon.size);
   context.restore();
+}
+
+/**
+ * Draws `tile`'s mark, if its layout kept room for one, at the start of its first label line (`markPlace`): a file's
+ * kind glyph in its label's `ink`, or any other tile's icon, which `icons` draws from the page's cache or keeps
+ * waiting for. A host without icons draws only glyphs.
+ */
+export function drawMark(
+  context: CanvasRenderingContext2D,
+  tile: Tile,
+  metrics: LabelMetrics,
+  icons: ReturnType<typeof iconPaint> | null,
+  ink: string,
+): void {
+  const place = markPlace(tile, metrics);
+  if (place === null) return;
+  if (tile.kind === "file") {
+    drawGlyph(context, tile.category, place.x, place.y, place.size, ink);
+  } else {
+    icons?.draw(context, tile, place.x, place.y, place.size);
+  }
 }
 
 /** Each kind's glyph as canvas paths, made once each, when first drawn. */

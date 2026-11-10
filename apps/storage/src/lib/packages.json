@@ -1,9 +1,9 @@
 {
-  "about": "Folder extensions that macOS declares as package types, which Finder shows as one item and the disk map draws as one block (isPackageName in src/lib/format.ts). Each is declared by macOS itself (CoreTypes, Photos, Music, TV, Console or DiskImageMounter) or, for xcarchive, by Xcode. A framework is a bundle that Finder opens as a folder, so it isn't one. PackageExtensionsTests.swift checks every extension against the types this Mac declares, and format.test.ts reads the same list.",
+  "about": "Folder extensions that macOS declares as package types, which Finder shows as one item and the disk map draws as one block (isPackageName in src/lib/format.ts). Each is declared by macOS itself (CoreTypes, Photos, Music, TV, Console or DiskImageMounter) or, for xcarchive, xcodeproj, xcworkspace and playground, by Xcode. A framework is a bundle that Finder opens as a folder, so it isn't one. PackageExtensionsTests.swift checks every extension against the types this Mac declares, and format.test.ts reads the same list.",
   "extensions": [
+    "aplibrary",
     "app",
     "appex",
-    "aplibrary",
     "bundle",
     "dSYM",
     "imovielibrary",
@@ -13,6 +13,7 @@
     "musiclibrary",
     "photolibrary",
     "photoslibrary",
+    "playground",
     "plugin",
     "prefPane",
     "qlgenerator",
@@ -23,6 +24,8 @@
     "systemextension",
     "tvlibrary",
     "xcarchive",
+    "xcodeproj",
+    "xcworkspace",
     "xpc"
   ]
 }

@@ -18,6 +18,10 @@ extension AppDelegate {
         // The fallback symbol is a template image too, so the SVG itself has to decode.
         let glyph = Bundle.main.url(forResource: "StatusGlyph", withExtension: "svg").flatMap(NSImage.init(contentsOf:))
         checks["status_glyph_bundled"] = glyph?.isValid == true && statusItem?.image?.isTemplate == true
+        // The licences of the work by others that Pith ships go with it: Heroicons' and Monaspace's.
+        let notices = Bundle.main.url(forResource: "ThirdPartyNotices", withExtension: "txt").flatMap { try? String(contentsOf: $0, encoding: .utf8) }
+        checks["third_party_notices_bundled"] = notices?.contains("Copyright (c) Tailwind Labs, Inc.") == true
+            && notices?.contains("SIL Open Font License, Version 1.1") == true
         // The smoke test never starts Sparkle, so it can't go online, ask the permission question or change the person's
         // update settings. The bundle's setup is checked as it stands instead.
         checks["updater_idle_in_smoke_test"] = !updates.isAvailable
@@ -281,10 +285,10 @@ extension AppDelegate {
 
     /// The map draws macOS's icons on itself and, with Differentiate Without Color on, each file kind's glyph. The
     /// fixture's sub folder shows its icon at the start of its label line, in the room the map keeps for it, drawn on
-    /// the canvas from Pith's route. The setting reaches the page as the coordinator learns it: turned the other way
-    /// from this Mac's, By kind shows its glyphs, or stops, and the map draws again; then macOS's notice that display
-    /// options changed, posted in Pith alone, makes the coordinator read this Mac's setting again, and the page follows
-    /// it back. No system setting changes.
+    /// the canvas from Pith's route. The setting reaches the page as macOS's notice of a display option change makes
+    /// the coordinator read it again: Pith alone reads it turned the other way from this Mac's, so By kind shows its
+    /// glyphs, or stops, and the map draws again; then it reads this Mac's own once more, and the page follows it back.
+    /// Each notice is posted in Pith alone, and no system setting changes.
     private func checkMapMarks() async -> [String: Bool] {
         let names = ["map_shows_icons", "kind_glyphs_follow_differentiate_without_color"]
         guard let web = webView, let coordinator = web.navigationDelegate as? DiskWebView.Coordinator else {
@@ -293,13 +297,17 @@ extension AppDelegate {
         let painted = try? await web.callAsyncJavaScript(Self.mapIcon, arguments: ["name": "sub"], in: nil, contentWorld: .page) as? Double
 
         let system = NSWorkspace.shared.accessibilityDisplayShouldDifferentiateWithoutColor
-        defer { coordinator.differentiatesWithoutColor = NSWorkspace.shared.accessibilityDisplayShouldDifferentiateWithoutColor }
+        let reads = DiskWebView.Coordinator.differentiateWithoutColor
+        let changed = { NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: NSWorkspace.shared) }
+        defer { DiskWebView.Coordinator.differentiateWithoutColor = reads; changed() }
         let before = await pageAnswer(web, Self.mapMarks) { (marks: [String: Int]?) in marks != nil }
-        coordinator.differentiatesWithoutColor = !system
+        DiskWebView.Coordinator.differentiateWithoutColor = { !system }
+        changed()
         let turned = await pageAnswer(web, Self.mapMarks) { (marks: [String: Int]?) in
             ((marks?["glyphs"] ?? 0) > 0) == !system && marks?["print"] != nil && marks?["print"] != before?["print"]
         }
-        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: NSWorkspace.shared)
+        DiskWebView.Coordinator.differentiateWithoutColor = reads
+        changed()
         let back = await pageAnswer(web, Self.mapMarks) { (marks: [String: Int]?) in
             ((marks?["glyphs"] ?? 0) > 0) == system && marks?["print"] != nil && marks?["print"] != turned?["print"]
         }

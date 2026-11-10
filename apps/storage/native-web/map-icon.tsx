@@ -149,6 +149,7 @@ export function usePageIcons(): PageIcons | null {
                   iconKey(tile.node, sent.rule),
                 ),
           image: (url) => pageIcons.image(url),
+          failed: (url) => pageIcons.state(url) === "failed",
           request: (url) => pageIcons.request(url),
           subscribe: pageIcons.subscribe,
         },

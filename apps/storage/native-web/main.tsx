@@ -24,6 +24,7 @@ import { GROUP_KEY, itemAt, itemKey } from "./icon-rule";
 import { KindLegend } from "./kind-legend";
 import { MapIcon, useAnyIcon, usePageIcons } from "./map-icon";
 import { type NavigationAction, NO_MAP, navigate } from "./navigation";
+import { GREW_SHOWN, UNREADABLE_SHOWN, WRITERS_SHOWN } from "./side-lists";
 import "./styles.css";
 
 /**
@@ -71,10 +72,10 @@ interface GrowthMessage {
   writersHint?: unknown;
 }
 
-/** The writers Pith sent, each with a name and a byte count and maybe its app's bundle, or none. */
+/** The writers Pith sent, each with a name and a byte count and maybe its app's bundle, or none, as many as the list shows. */
 function parseWriters(value: unknown): Writer[] {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((item: unknown) => {
+  return value.slice(0, WRITERS_SHOWN).flatMap((item: unknown) => {
     if (typeof item !== "object" || item === null) return [];
     const { name, bytes, bundle } = item as Record<string, unknown>;
     return typeof name === "string" &&
@@ -376,7 +377,7 @@ function DiskMap() {
     ? [...growth.changes]
         .filter(([path, delta]) => delta > 0 && path.startsWith(prefix))
         .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
+        .slice(0, GREW_SHOWN)
     : [];
 
   return (
@@ -532,7 +533,7 @@ function DiskMap() {
                 Couldn’t read
               </h2>
               <ul className="space-y-0.5">
-                {unreadable.slice(0, 6).map((folder) => (
+                {unreadable.slice(0, UNREADABLE_SHOWN).map((folder) => (
                   <li
                     key={folder.path}
                     title={folder.path}
@@ -543,10 +544,10 @@ function DiskMap() {
                   </li>
                 ))}
               </ul>
-              {unreadable.length > 6 && (
+              {unreadable.length > UNREADABLE_SHOWN && (
                 <p className="text-label-sm text-(--role-text-tertiary)">
-                  And {unreadable.length - 6} more. Pith’s notice above lists
-                  them all.
+                  And {unreadable.length - UNREADABLE_SHOWN} more. Pith’s notice
+                  above lists them all.
                 </p>
               )}
             </section>
