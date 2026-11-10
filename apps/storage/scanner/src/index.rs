@@ -641,6 +641,9 @@ impl Index {
         let mut own = Totals::default();
         let mut removed = Totals::default();
         let mut moved_in = Totals::default();
+        // A subfolder that joined or left changes what the map shows, though it held nothing: an empty folder, or one
+        // the map couldn't read, counts for nothing in the totals.
+        let mut regrouped = false;
 
         match listing.outcome {
             Outcome::Missing | Outcome::Firmlinked => {
@@ -681,9 +684,10 @@ impl Index {
                 self.volumes.remove(&id);
                 self.set_status(id, Status::Listed);
                 let subfolders = self.count_files(id, gen, entries, &mut own, &mut applied.originals);
-                let (gone, arrived) = self.match_subfolders(id, path, subfolders, deep, walking, &mut applied.next);
+                let (gone, arrived, joined_or_left) = self.match_subfolders(id, path, subfolders, deep, walking, &mut applied.next);
                 removed.add(&gone);
                 moved_in.add(&arrived);
+                regrouped = joined_or_left;
             }
         }
 
@@ -692,7 +696,7 @@ impl Index {
         let mut minus = before;
         minus.add(&removed);
         self.change(id, &plus, &minus);
-        applied.changed = own != before || removed != Totals::default() || moved_in != Totals::default()
+        applied.changed = own != before || removed != Totals::default() || moved_in != Totals::default() || regrouped
             || self.folders[id as usize].status != status_before;
         applied.drift = own.size.abs_diff(before.size) + removed.size + moved_in.size;
         applied
@@ -840,8 +844,9 @@ impl Index {
     }
 
     /// Matches a listing's subfolders with the folder's children: the same name and inode stay, a folder that left
-    /// for limbo earlier comes back by inode, and the rest are new. Returns what left and what came back.
-    fn match_subfolders(&mut self, id: u32, path: &Path, subfolders: Vec<(String, u64)>, deep: bool, walking: bool, next: &mut Vec<(u32, PathBuf)>) -> (Totals, Totals) {
+    /// for limbo earlier comes back by inode, and the rest are new. Returns what left and what came back, and whether
+    /// any subfolder joined or left, which an empty one does with no totals to show it.
+    fn match_subfolders(&mut self, id: u32, path: &Path, subfolders: Vec<(String, u64)>, deep: bool, walking: bool, next: &mut Vec<(u32, PathBuf)>) -> (Totals, Totals, bool) {
         let mut existing: HashMap<String, u32> = self.children(id).map(|child| (self.name(child).to_string(), child)).collect();
         let mut kept = Vec::with_capacity(subfolders.len());
         let mut gone = Totals::default();
@@ -874,6 +879,7 @@ impl Index {
             }
         }
         leaving.extend(existing.into_values());
+        let joined_or_left = !leaving.is_empty() || !new.is_empty();
         for child in leaving {
             gone.add(&Totals::of(&self.folders[child as usize]));
             self.folders[child as usize].parent = NONE;
@@ -898,7 +904,7 @@ impl Index {
             }
         }
         self.relink(id, &kept);
-        (gone, arrived)
+        (gone, arrived, joined_or_left)
     }
 
     /// A copy stops holding its group's bytes: its folder counts them as a clone's.
@@ -1148,6 +1154,48 @@ impl Index {
                 Some(Place { path: path.clone(), size })
             })
             .collect()
+    }
+
+    /// Which of the person's own changes to the map this index doesn't show yet, from the same index as the map it goes
+    /// with: of the items Pith moved to the Trash (`gone`), those it still holds, and of those Undo put back (`back`),
+    /// those it hasn't listed whole. Pith has each one's folder listed at once, but a map can come from before that
+    /// listing lands, and on such a map Pith keeps the change itself. A folder is listed whole once it and every folder
+    /// inside it are, but those waiting on macOS's question about Pith (`asking`), which can wait for as long as the
+    /// person takes; a file, once its folder's listing names it among the files kept by name, the only files a map
+    /// shows on their own.
+    pub fn unlisted(&self, gone: &[String], back: &[String], asking: &dyn Fn(u32) -> bool) -> Vec<String> {
+        let held = gone.iter().filter(|path| self.holds(path, None));
+        let missing = back.iter().filter(|path| !self.holds(path, Some(asking)));
+        held.chain(missing).cloned().collect()
+    }
+
+    /// Whether the index holds an item at `path`: a folder, listed whole when `whole` says which folders may wait on
+    /// macOS, or a file kept by name in its folder's listing.
+    fn holds(&self, path: &str, whole: Option<&dyn Fn(u32) -> bool>) -> bool {
+        match self.find(path) {
+            Some((id, true)) => whole.is_none_or(|asking| self.listed_whole(id, asking)),
+            Some((folder, false)) => {
+                let Some((parent, name)) = path.rsplit_once('/') else { return false };
+                // Only a file right inside the deepest folder the index has on the path can be one it keeps.
+                let parent = if parent.is_empty() { "/" } else { parent };
+                self.folders[folder as usize].status == Status::Listed
+                    && self.path(folder) == parent
+                    && self.big.get(&folder).is_some_and(|files| files.iter().any(|file| &*file.name == name))
+            }
+            None => false,
+        }
+    }
+
+    /// Whether the folder and every folder inside it are listed, but those `asking` says wait on macOS.
+    fn listed_whole(&self, id: u32, asking: &dyn Fn(u32) -> bool) -> bool {
+        let mut waiting = vec![id];
+        while let Some(at) = waiting.pop() {
+            if self.folders[at as usize].status == Status::Pending && !asking(at) {
+                return false;
+            }
+            waiting.extend(self.children(at));
+        }
+        true
     }
 
     fn tree(&self, id: u32, path: String, shape: &Shape<'_>, min: u64) -> TreeNode {

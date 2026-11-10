@@ -13,9 +13,10 @@ public enum LiveReport: Sendable {
     case historyDone
     /// The index can't follow on from here, and only a new walk catches up.
     case rebuild(reason: String)
-    /// A map, decoded, with the scanner's own JSON of it, which the disk map's page takes as it is, and what its index
-    /// holds at each known place Pith asked about.
-    case tree(request: Int, result: DiskResult, json: String, places: [LivePlace])
+    /// A map, decoded, with the scanner's own JSON of it, which the disk map's page takes as it is, what its index holds
+    /// at each known place Pith asked about, and which of the person's changes Pith asked about its index doesn't show
+    /// yet (`LiveEdits`).
+    case tree(request: Int, result: DiskResult, json: String, places: [LivePlace], unlisted: [String])
     case saved(through: UInt64, bytes: UInt64, ms: UInt64)
     case checked(LiveCheck)
     case stats(String)
@@ -80,7 +81,7 @@ public struct LiveCheck: Sendable, Equatable {
 }
 
 public enum LiveDecoder {
-    /// The `result` object of a tree line as the scanner wrote it, `{"type":"tree","request":N,"places":[…],"result":{…}}`,
+    /// The `result` object of a tree line as the scanner wrote it, `{"type":"tree","request":N,"places":[…],"unlisted":[…],"result":{…}}`,
     /// so the page gets the scanner's own JSON rather than Pith encoding the map again: 48 ms on the main thread for the
     /// development Mac's whole disk.
     static func resultJSON(_ line: Data) throws -> String {
@@ -118,10 +119,10 @@ public enum LiveDecoder {
             struct Rebuild: Decodable { let reason: String }
             return .rebuild(reason: try decoder.decode(Rebuild.self, from: line).reason)
         case "tree":
-            struct Tree: Decodable { let request: Int; let result: DiskResult; let places: [LivePlace]? }
+            struct Tree: Decodable { let request: Int; let result: DiskResult; let places: [LivePlace]?; let unlisted: [String]? }
             let tree = try decoder.decode(Tree.self, from: line)
             try tree.result.validate()
-            return .tree(request: tree.request, result: tree.result, json: try resultJSON(line), places: tree.places ?? [])
+            return .tree(request: tree.request, result: tree.result, json: try resultJSON(line), places: tree.places ?? [], unlisted: tree.unlisted ?? [])
         case "saved":
             struct Saved: Decodable { let through: UInt64; let bytes: UInt64; let ms: UInt64 }
             let s = try decoder.decode(Saved.self, from: line)
@@ -210,10 +211,12 @@ public final class LiveProcess: @unchecked Sendable {
         send(["cmd": "open", "root": root, "snapshot": snapshot?.path ?? NSNull(), "volume": volume ?? NSNull()])
     }
     public func walk(since: UInt64) { send(["cmd": "walk", "since": since]) }
-    /// Asks for the map of `path`, with `focus` in finer detail, and what it holds at each of `places`.
-    public func tree(path: String, focus: String?, request: Int, places: [String] = []) {
-        send(["cmd": "tree", "path": path, "focus": focus ?? NSNull(), "request": request, "places": places])
+    /// Asks for the map of `path`, with `focus` in finer detail, what it holds at each of `places`, and which of the
+    /// items the person moved to the Trash (`gone`) or put back (`back`) its index doesn't show yet.
+    public func tree(path: String, focus: String?, request: Int, places: [String] = [], gone: [String] = [], back: [String] = []) {
+        send(["cmd": "tree", "path": path, "focus": focus ?? NSNull(), "request": request, "places": places, "gone": gone, "back": back])
     }
+    /// Lists a folder again now, past its cooldown too, and with `deep` everything in it.
     public func relist(path: String, deep: Bool) { send(["cmd": "relist", "path": path, "deep": deep]) }
     public func retryUnreadable() { send(["cmd": "retry"]) }
     public func save() { send(["cmd": "save"]) }

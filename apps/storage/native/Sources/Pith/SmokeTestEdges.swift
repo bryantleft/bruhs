@@ -189,14 +189,16 @@ extension AppDelegate {
                 && card?.hasPrefix("Not measured") == true && share.map { card?.contains($0) == true } == true && figure.map { card?.contains($0) == true } == true
                 && explains && presented && stayed && closed && fromTheList
 
-            // Move to Trash and Undo, as the person makes them.
+            // Move to Trash and Undo, as the person makes them. Each moves its items off the main thread, and the map
+            // and Not measured change together once they've moved.
             let size = disk.result?.item(at: item)?.size
             disk.requestTrash([item], undoManager: nil)
             let joined = block.flatMap { block in size.map { block + $0 } }
-            let trashed = disk.trashed != nil && !files.fileExists(atPath: item)
+            let trashed = await eventually { self.disk.trashed != nil } && !files.fileExists(atPath: item)
             let atOnce = disk.notMeasured?.bytes
             let onThePage = await pageAnswer(web, Self.notMeasuredItem) { (text: String?) in text == joined.map { "Not measured " + bytes($0) } }
             disk.undoTrash()
+            _ = await eventually { !self.disk.isTrashing && files.fileExists(atPath: item) }
             let undone = disk.notMeasured?.bytes
             let backOnThePage = await pageAnswer(web, Self.notMeasuredItem) { (text: String?) in text == figure.map { "Not measured " + $0 } }
             checks[names[2]] = joined != nil && trashed && atOnce == joined && onThePage == joined.map { "Not measured " + bytes($0) }

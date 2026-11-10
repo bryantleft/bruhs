@@ -55,9 +55,9 @@ import PithCore
     /// Folders the map lacks until the person answers macOS's question about Pith, as for iCloud Drive: opening one
     /// waits on that answer, and the map goes on without them meanwhile.
     private(set) var asking = 0
-    /// A tree arrived: the map for `path`, as asked for, with its JSON for the page and what its index holds at the
-    /// places asked about.
-    var received: ((DiskResult, String, [LivePlace]) -> Void)?
+    /// A tree arrived: the map for `path`, as asked for, with its JSON for the page, what its index holds at the places
+    /// asked about, and which of the person's changes asked about its index doesn't show yet.
+    var received: ((DiskResult, String, [LivePlace], LiveEdits.Answer) -> Void)?
     /// The map changed, so a view on screen should ask for its tree again.
     var changed: (() -> Void)?
     /// The tree asked for last couldn't be made, as for a folder the map lacks.
@@ -70,8 +70,10 @@ import PithCore
     private var historyDone = false
     private var pending = 0
     private var nextRequest = 0
-    /// The tree asked for last; older answers are dropped.
+    /// The tree asked for last; older answers are dropped. None once the person changed the map since (`dropTree`).
     private var wanted = 0
+    /// The person's changes the tree asked for last asked about.
+    private var askedEdits: Set<String> = []
     private var stopped: (@MainActor () -> Void)?
     private var checker: NSBackgroundActivityScheduler?
     /// Disk asked for the first map while the scanner was still opening.
@@ -135,17 +137,26 @@ import PithCore
         if stream == nil { state = .failed("FSEvents can’t watch \(root), so Pith can’t keep its map current.") }
     }
 
-    /// Asks for the map of `path`, with `focus` in finer detail, and what it holds at each of `places`, from the same
+    /// Asks for the map of `path`, with `focus` in finer detail, what it holds at each of `places`, and which of the
+    /// person's changes, the items moved to the Trash (`gone`) and put back (`back`), it doesn't show yet, from the same
     /// index. The answer goes to `received`; asking again first drops it.
-    func request(path: String, focus: String?, places: [String]) {
+    func request(path: String, focus: String?, places: [String], gone: [String] = [], back: [String] = []) {
         guard let process, state.isMapped else { return }
         nextRequest += 1
         wanted = nextRequest
+        askedEdits = Set(gone + back)
         changedSinceTree = false
-        process.tree(path: path, focus: focus, request: nextRequest, places: places)
+        process.tree(path: path, focus: focus, request: nextRequest, places: places, gone: gone, back: back)
     }
 
-    /// Lists a folder again now, everything in it with `deep`.
+    /// The person changed the map, as Move to Trash and Undo do: the tree asked for before is dropped when it comes, as
+    /// it was asked without the change, and the next refresh asks again.
+    func dropTree() {
+        wanted = 0
+        changedSinceTree = true
+    }
+
+    /// Lists a folder again now, past its cooldown too, everything in it with `deep`.
     func relist(_ path: String, deep: Bool) { process?.relist(path: path, deep: deep) }
 
     /// Lists the folders the map couldn't read again, as after Full Disk Access is granted.
@@ -256,9 +267,9 @@ import PithCore
             if case .catchingUp(let waiting) = state { state = .live(waiting) }
         case .rebuild(let reason):
             walk(reason: reason)
-        case .tree(let request, let result, let json, let places):
+        case .tree(let request, let result, let json, let places, let unlisted):
             guard request == wanted else { return }
-            received?(result, json, places)
+            received?(result, json, places, LiveEdits.Answer(asked: askedEdits, unlisted: Set(unlisted)))
         case .saved(let through, let bytes, let ms):
             NSLog("Pith: kept the disk map through event \(through): \(bytes) bytes in \(ms) ms.")
         case .checked(let check):

@@ -149,6 +149,7 @@ extension AppDelegate {
             let several = await checkSeveralSelected(fixture, picture: report.deletingLastPathComponent().appendingPathComponent("selection-bar.png"))
             checks["selection_bridge"] = checks["selection_bridge"] == true && several
             checks.merge(await checkSeveralTrashed(fixture), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkTrashHoldsThroughNewerMaps(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkOpenedFolderDetail(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(try await checkLiveFollows(disk, in: fixture, prefix: "live_map"), uniquingKeysWith: { _, new in new })
             checks.merge(try await checkLiveReopens(fixture), uniquingKeysWith: { _, new in new })
@@ -900,7 +901,7 @@ extension AppDelegate {
                                                           contentWorld: .page) as? [String: Any]
             undo?.undo()
             let named = try? await web.callAsyncJavaScript(Self.cardNames, arguments: ["name": name], in: nil, contentWorld: .page) as? [String: Any]
-            let restored = files.fileExists(atPath: item)
+            let restored = await eventually { files.fileExists(atPath: item) }
             if restored { inTrash = nil }
             let took = named?["after"] as? Double
             back = action == "Move to Trash" && rest?["resting"] as? Bool == true && rest?["waited"] as? Bool == true
@@ -1136,7 +1137,7 @@ extension AppDelegate {
         """)
 
     /// Writes `mebibytes` of zeros to `path` from another process, as most large files come.
-    private static func fill(_ path: String, mebibytes: Int) -> Bool {
+    static func fill(_ path: String, mebibytes: Int) -> Bool {
         let write = Process()
         write.executableURL = URL(fileURLWithPath: "/bin/dd")
         write.arguments = ["if=/dev/zero", "of=\(path)", "bs=1048576", "count=\(mebibytes)"]

@@ -182,18 +182,54 @@ public struct DiskResult: Codable, Sendable {
     }
 
     /// The scan with the item at `path` gone, as after moving it to the Trash: every folder above it shrinks by its size
-    /// and files. Nil when the tree doesn't hold the item.
-    public func removing(_ path: String) -> DiskResult? {
+    /// and files. An item the tree folds into its folder's smaller items, `folded`, as the map had it, comes out of them,
+    /// for a tree known to count it there. Nil when the tree doesn't hold the item.
+    public func removing(_ path: String, folded: DiskNode? = nil) -> DiskResult? {
+        let inside = { (other: String) in other == path || other.hasPrefix(path + "/") }
         guard path != root.path, let (tree, removed) = Self.remove(path, from: root) else {
             // A file shown only in the largest-files list lies inside an aggregate, which already counts it.
-            guard let file = topFiles.first(where: { $0.path == path }), let tree = Self.shrink(root, toward: path, size: file.size, files: 1) else { return nil }
-            return DiskResult(root: tree, topFiles: topFiles.filter { $0.path != path }, volumes: volumes, unreadableFolders: unreadableFolders,
-                              summary: summary.with(bytes: tree.size, files: summary.files.saturatingSubtract(1)))
+            if let file = topFiles.first(where: { $0.path == path }), let tree = Self.shrink(root, toward: path, size: file.size, files: 1) {
+                return DiskResult(root: tree, topFiles: topFiles.filter { $0.path != path }, volumes: volumes, unreadableFolders: unreadableFolders,
+                                  summary: summary.with(bytes: tree.size, files: summary.files.saturatingSubtract(1)))
+            }
+            guard path != root.path, let folded, folded.path == path, folded.isItem,
+                  let tree = Self.shrink(root, toward: path, size: folded.size, files: folded.fileCount) else { return nil }
+            return DiskResult(root: tree, topFiles: topFiles.filter { !inside($0.path) }, volumes: volumes, unreadableFolders: unreadableFolders.filter { !inside($0.path) },
+                              summary: summary.with(bytes: tree.size, files: summary.files.saturatingSubtract(folded.fileCount)))
         }
-        let inside = { (other: String) in other == path || other.hasPrefix(path + "/") }
         let unreadable = unreadableFolders.filter { !inside($0.path) }
         return DiskResult(root: tree, topFiles: topFiles.filter { !inside($0.path) }, volumes: volumes.filter { !inside($0.path) }, unreadableFolders: unreadable,
                           summary: summary.with(bytes: tree.size, files: summary.files.saturatingSubtract(removed.fileCount)))
+    }
+
+    /// The map with `item` back where it was, as after Undo put it back, for a tree whose index hasn't listed it again:
+    /// in place of what the tree shows at its path, as the empty folder an index shows once it has found a folder in its
+    /// parent's listing and not listed it yet, or beside what's in its folder. Every folder above it grows by the
+    /// difference, and its largest files, `topFiles`, go back in the largest-files list. Nil when the tree doesn't show
+    /// the folder it goes in.
+    public func restoring(_ item: DiskNode, topFiles restored: [DiskFile]) -> DiskResult? {
+        guard item.path != root.path, item.isItem else { return nil }
+        let old = root.node(at: item.path)
+        guard let tree = old?.isItem == true ? Self.replace(item.path, in: root, with: item) : Self.insert(item, into: root) else { return nil }
+        let shown = Set(topFiles.map(\.path))
+        let top = (topFiles + restored.filter { !shown.contains($0.path) }).sorted { $0.size > $1.size }
+        let files = summary.files.saturatingSubtract(old?.fileCount ?? 0) + item.fileCount
+        return DiskResult(root: tree, topFiles: top, volumes: volumes, unreadableFolders: unreadableFolders, summary: summary.with(bytes: tree.size, files: files))
+    }
+
+    /// `node` with `item` among the children of the folder it goes in, and every folder on the way grown by it.
+    private static func insert(_ item: DiskNode, into node: DiskNode) -> DiskNode? {
+        guard let children = node.children, node.kind == .dir else { return nil }
+        let grown = { (children: [DiskNode]) in
+            node.with(size: node.size + item.size, files: node.files.map { $0 + item.fileCount }, clones: (node.clones ?? 0) + (item.clones ?? 0), children: children)
+        }
+        if (item.path as NSString).deletingLastPathComponent == node.path {
+            return grown((children + [item]).sorted { $0.size > $1.size })
+        }
+        guard let index = children.firstIndex(where: { item.path.hasPrefix($0.path + "/") && $0.kind == .dir }),
+              let child = insert(item, into: children[index]) else { return nil }
+        var updated = children; updated[index] = child
+        return grown(updated)
     }
 
     /// The scan with the folder at `path` replaced by a newer scan of that folder, whose detail is finer: the scanner

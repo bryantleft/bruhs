@@ -36,6 +36,8 @@ struct Pending {
     /// Inodes of items the events named in it. A folder can move off before it's listed, as when files are written
     /// into a folder that's then moved: the path is gone, and an item's inode finds where the folder went.
     items: Vec<u64>,
+    /// Pith asked for it (`ask`): it's listed past its folder's cooldown too.
+    asked: bool,
 }
 
 /// Items kept per path to find a moved folder by: any one still there is enough, and a burst of thousands of files
@@ -167,13 +169,23 @@ impl Scheduler {
                 }
             }
             None => {
-                self.pending.insert(path.clone(), Pending { first, noted, deep, through: None, waiting: false, items: item.into_iter().collect() });
+                self.pending.insert(path.clone(), Pending { first, noted, deep, through: None, waiting: false, items: item.into_iter().collect(), asked: false });
                 if at_once {
                     self.retry.push(path);
                 } else {
                     self.queue.push_back(path);
                 }
             }
+        }
+    }
+
+    /// A folder Pith asks to have listed again now: one the person moved an item out of or put one back in, or asked to
+    /// have checked. It's listed at once, past the cooldown a slow listing put it in too, since the person waits on it;
+    /// the cooldown keeps following a busy folder cheap, and the person asks rarely.
+    pub fn ask(&mut self, path: String, deep: bool, now: Instant) {
+        self.note(path.clone(), None, deep, now, true);
+        if let Some(pending) = self.pending.get_mut(&path) {
+            pending.asked = true;
         }
     }
 
@@ -258,7 +270,8 @@ impl Scheduler {
                 }
                 continue;
             }
-            if self.flights.contains_key(&folder) || self.cooldown.get(&folder).is_some_and(|&until| now < until) {
+            let cooling = !pending.asked && self.cooldown.get(&folder).is_some_and(|&until| now < until);
+            if self.flights.contains_key(&folder) || cooling {
                 self.retry.push(path);
                 continue;
             }

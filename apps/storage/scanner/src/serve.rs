@@ -83,16 +83,21 @@ enum Command {
     Walk { since: u64 },
     /// FSEvents events: ID, flags, path and the item's inode, or 0 when FSEvents didn't give one.
     Events { events: Vec<(u64, u32, String, u64)> },
-    /// The map of the folder at `path`, with `focus` in finer detail, and what it holds at each of `places`, the known
-    /// places Pith names beside it.
+    /// The map of the folder at `path`, with `focus` in finer detail, what it holds at each of `places`, the known
+    /// places Pith names beside it, and which of the items the person moved to the Trash (`gone`) or put back with Undo
+    /// (`back`) it doesn't show yet.
     Tree {
         path: String,
         focus: Option<String>,
         request: u64,
         #[serde(default)]
         places: Vec<String>,
+        #[serde(default)]
+        gone: Vec<String>,
+        #[serde(default)]
+        back: Vec<String>,
     },
-    /// Lists a folder again now, and with `deep` everything in it.
+    /// Lists a folder again now, and with `deep` everything in it: Pith asks, past the folder's cooldown too.
     Relist { path: String, deep: bool },
     /// Lists the folders it couldn't read again, as after Full Disk Access is granted.
     Retry,
@@ -247,12 +252,13 @@ impl Server {
             Command::Open { root, snapshot, volume } => self.open(root, snapshot, volume),
             Command::Walk { since } => self.walk(since),
             Command::Events { events } => self.events(events),
-            Command::Tree { path, focus, request, places } => {
+            Command::Tree { path, focus, request, places, gone, back } => {
                 match self.index.as_ref().map(|index| index.result(&path, focus.as_deref())) {
-                    // The places come first: Pith hands the page everything after `,"result":` as the map.
+                    // The places and the changes the map doesn't show yet come first: Pith hands the page everything after
+                    // `,"result":` as the map.
                     Some(Ok(result)) => {
-                        let places = self.places(&places);
-                        send(&format!(r#"{{"type":"tree","request":{request},"places":{places},"result":{result}}}"#));
+                        let (places, unlisted) = self.places(&places, &gone, &back);
+                        send(&format!(r#"{{"type":"tree","request":{request},"places":{places},"unlisted":{unlisted},"result":{result}}}"#));
                     }
                     Some(Err(reason)) => error(Some(request), &reason),
                     None => error(Some(request), "The map hasn't been made yet."),
@@ -263,7 +269,7 @@ impl Server {
                     self.last_relief = Instant::now();
                 }
             }
-            Command::Relist { path, deep } => self.sched.note(path, None, deep, Instant::now(), true),
+            Command::Relist { path, deep } => self.sched.ask(path, deep, Instant::now()),
             Command::Retry => {
                 let folders = self.index.as_ref().map(Index::unreadable_ids).unwrap_or_default();
                 for (_, path) in folders {
@@ -529,13 +535,16 @@ impl Server {
         self.pool.as_ref().map(Pool::stalled).unwrap_or_default().into_iter().collect()
     }
 
-    /// What the index holds at each of `paths`, as JSON, from the index the map that goes with it comes from. Which
-    /// folders wait on macOS is asked of the listing threads only when a place hasn't been listed.
-    fn places(&self, paths: &[String]) -> String {
-        let Some(index) = &self.index else { return "[]".into() };
+    /// What the index holds at each of `paths`, and which of the person's changes `gone` and `back` it doesn't show yet
+    /// (`Index::unlisted`), as JSON, from the index the map that goes with them comes from. Which folders wait on macOS
+    /// is asked of the listing threads only when a place hasn't been listed, or a folder put back isn't.
+    fn places(&self, paths: &[String], gone: &[String], back: &[String]) -> (String, String) {
+        let Some(index) = &self.index else { return ("[]".into(), "[]".into()) };
         let asking = std::cell::OnceCell::new();
         let waits = |id: u32| asking.get_or_init(|| self.asking()).contains(&id);
-        serde_json::to_string(&index.places(paths, &waits)).unwrap_or_else(|_| "[]".into())
+        let places = serde_json::to_string(&index.places(paths, &waits)).unwrap_or_else(|_| "[]".into());
+        let unlisted = serde_json::to_string(&index.unlisted(gone, back, &waits)).unwrap_or_else(|_| "[]".into());
+        (places, unlisted)
     }
 
     fn save(&mut self) -> Result<String, String> {

@@ -141,7 +141,7 @@ extension AppDelegate {
         let undo = web.window?.undoManager
         let action = undo?.undoActionName ?? ""
         undo?.undo()
-        let restored = items.allSatisfy { files.fileExists(atPath: $0) }
+        let restored = await eventually { items.allSatisfy { files.fileExists(atPath: $0) } }
         if restored { inTrash = [] }
         let back = await eventually { items.allSatisfy { self.disk.result?.item(at: $0) != nil } } && disk.selection.paths == items
         let onThePage = await pageAnswer(web, Self.shownSelected) { (page: [String: Any]?) in Self.shows(page, items) }
@@ -170,7 +170,7 @@ extension AppDelegate {
         let partwayUndo = web.window?.undoManager
         let partwayAction = partwayUndo?.undoActionName ?? ""
         partwayUndo?.undo()
-        let firstBack = files.fileExists(atPath: items[0])
+        let firstBack = await eventually { files.fileExists(atPath: items[0]) }
         if firstBack { inTrash = [] }
         let reselected = await eventually { self.disk.result?.item(at: items[0]) != nil && self.disk.selection.paths == [items[0]] }
         print("several trashed partway: one Undo (\(partwayAction)) put \(file[0]) back \(firstBack), on the map and selected \(reselected)")
@@ -184,6 +184,85 @@ extension AppDelegate {
         return [names[0]: whole && gone && settled,
                 names[1]: locked && repicked && stopped && firstOnly && noted && said && stayed && partwayAction == "Move to Trash" && firstBack
                     && reselected && clearedAgain && gone && settled]
+    }
+
+    /// Move to Trash and Undo hold through the live map's newer maps, which come from its index and can still have the
+    /// item as it was: the scanner lists a folder FSEvents names only once it has settled, seconds later, and the
+    /// folder Pith asks it to list again at once still waits for the scanner's next turn. A file of the check's own goes
+    /// to the run's own folder, and in the very turn the map changes, right after Pith asked for the folder to be listed
+    /// again, the live map gets the status line the scanner sends once it lists a change, so a newer map is asked for
+    /// at once. Another file in the fixture changes too, from another process. For five seconds, past FSEvents' second
+    /// and the scanner's three, the item stays off every map that comes, and off the page. Then one Undo puts it back,
+    /// in the same way, and the item stays on every map that comes.
+    func checkTrashHoldsThroughNewerMaps(_ fixture: String) async -> [String: Bool] {
+        let name = "trash_and_undo_hold_through_newer_maps"
+        let files = FileManager.default, mark = UUID().uuidString.prefix(8).lowercased()
+        let item = (fixture as NSString).appendingPathComponent("pith-held-\(mark).bin")
+        let other = (fixture as NSString).appendingPathComponent("sub/pith-other-\(mark).bin")
+        let itemName = (item as NSString).lastPathComponent
+        var inTrash: URL?
+        defer {
+            for path in [item, other] { try? files.removeItem(atPath: path) }
+            if let inTrash { try? files.removeItem(at: inTrash) }
+            disk.dismissTrashNote()
+        }
+        // 1 MiB, the least the live map lists by name, so the item has a block of its own. Two seconds with no map, so
+        // the next one is asked for at once, not after the wait between maps.
+        guard let web = webView, files.createFile(atPath: item, contents: Data(count: 1 << 20)),
+              await eventually({ self.disk.result?.item(at: item) != nil }), await mapSettles(quiet: 2.2) else {
+            print("trash holds: the check's file never reached the map")
+            return [name: false]
+        }
+        /// As the map next changes, in that very turn: the status line the scanner sends once it lists a change.
+        func askAsTheMapChanges() {
+            withObservationTracking { _ = self.disk.result } onChange: {
+                MainActor.assumeIsolated {
+                    self.disk.live?.handle(.status(LiveStatus(through: 0, pending: 0, changed: true, checking: false, historyDone: true, asking: 0)))
+                }
+            }
+        }
+        /// Changes the other file from another process, then for five seconds checks the map: whether it had the item as
+        /// `present` says every time, how many live maps were shown since `shown` and how many of those came from an
+        /// index that didn't show the change yet, and whether the page's list of items agreed at the end.
+        func newerMaps(keep present: Bool, megabytes: Int, since shown: (maps: Int, changed: Int)) async -> (held: Bool, maps: Int, changed: Int, page: Bool) {
+            _ = Self.fill(other, mebibytes: megabytes)
+            var held = true
+            let end = Date().addingTimeInterval(5)
+            while Date() < end {
+                if (disk.result?.item(at: item) != nil) != present { held = false }
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            let rows = await pageAnswer(web, Self.listedItems) { (rows: [String]?) in rows != nil }
+            let page = rows.map { rows in rows.contains { $0.hasPrefix(itemName + " ") } == present } ?? false
+            return (held, disk.liveMapsShown - shown.maps, disk.mapsShowingChanges - shown.changed, page)
+        }
+        let none = (held: false, maps: 0, changed: 0, page: false)
+        let undo = web.window?.undoManager
+        let before = (disk.liveMapsShown, disk.mapsShowingChanges)
+        askAsTheMapChanges()
+        disk.requestTrash([item], undoManager: undo)
+        let moved = await eventually { self.disk.trashed != nil && !files.fileExists(atPath: item) }
+        inTrash = disk.trashed?.moves.first?.trashed
+        let gone = moved ? await newerMaps(keep: false, megabytes: 1, since: before) : none
+        print("trash holds: moved \(moved); \(gone.maps) newer maps in five seconds, \(gone.changed) from an index that still had it, the item off every "
+              + "one \(gone.held), off the page \(gone.page)")
+
+        let quiet = await mapSettles(quiet: 2.2)
+        let action = undo?.undoActionName ?? ""
+        let beforeUndo = (disk.liveMapsShown, disk.mapsShowingChanges)
+        askAsTheMapChanges()
+        undo?.undo()
+        let restored = await eventually { files.fileExists(atPath: item) && self.disk.result?.item(at: item) != nil }
+        if restored { inTrash = nil }
+        let back = restored ? await newerMaps(keep: true, megabytes: 2, since: beforeUndo) : none
+        print("trash holds: one Undo (\(action)) put it back \(restored); \(back.maps) newer maps in five seconds, \(back.changed) from an index that "
+              + "didn't have it yet, the item on every one \(back.held), on the page \(back.page)")
+        try? files.removeItem(atPath: item)
+        try? files.removeItem(atPath: other)
+        let cleared = await eventually { self.disk.result?.item(at: item) == nil && self.disk.result?.item(at: other) == nil }
+        let settled = await mapSettles()
+        return [name: moved && gone.held && gone.maps > 0 && gone.page && quiet && action == "Move to Trash" && restored && back.held && back.maps > 0
+                && back.page && cleared && settled]
     }
 
     /// Whether the page shows `selected` as Pith holds it: a block outlined for each, each on a block of its own here,

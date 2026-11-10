@@ -903,3 +903,155 @@ fn a_walk_keeps_no_folders_in_mind_as_moves() {
     assert_eq!(live.index.stats().recent, 1, "a folder made since may be a move");
     remove(&root);
 }
+
+/// Review finding: a subfolder with nothing in its totals, empty or unreadable, left its parent without the listing
+/// that dropped it counting as a change, so the live map kept it on screen until something else changed. Joining
+/// counts too, so the map shows a new folder with its parent's listing.
+#[test]
+fn a_subfolder_joining_or_leaving_is_a_change_though_it_holds_nothing() {
+    let root = fixture("a_subfolder_joining_or_leaving_is_a_change_though_it_holds_nothing");
+    fs::create_dir_all(root.join("empty")).unwrap();
+    fs::create_dir_all(root.join("locked")).unwrap();
+    fs::write(root.join("kept.bin"), vec![b'k'; 10_000]).unwrap();
+    fs::set_permissions(root.join("locked"), fs::Permissions::from_mode(0o000)).unwrap();
+    let mut live = Live::build(&root);
+    let locked = live.index.find(root.join("locked").to_str().unwrap()).unwrap().0;
+    assert_eq!(live.index.status(locked), Status::Unreadable);
+    // The root listed again on its own, as a folder FSEvents names is: whether its listing changed what the map shows.
+    let relisted = |live: &mut Live| {
+        let request = live.sched.submit(ROOT, root.clone(), Purpose::Relist, false, None).unwrap();
+        let listing = list(&request.path, &live.cx);
+        live.sched.landed(&mut live.index, &request, listing, Duration::ZERO, Instant::now()).1.changed
+    };
+    assert!(!relisted(&mut live), "nothing changed yet");
+    fs::remove_dir(root.join("empty")).unwrap();
+    assert!(relisted(&mut live), "an empty folder left");
+    fs::set_permissions(root.join("locked"), fs::Permissions::from_mode(0o755)).unwrap();
+    fs::remove_dir(root.join("locked")).unwrap();
+    assert!(relisted(&mut live), "a folder the map couldn't read left");
+    fs::create_dir(root.join("new")).unwrap();
+    assert!(relisted(&mut live), "an empty folder joined");
+    assert!(!relisted(&mut live), "and nothing since");
+    remove(&root);
+}
+
+/// A folder Pith asks to have listed again, as after the person moved an item out of it to the Trash, is listed at once,
+/// though its last listing took long enough to put it in a cooldown: the person waits on it. A change FSEvents names
+/// still waits the cooldown out.
+#[test]
+fn a_relist_pith_asks_for_skips_the_folders_cooldown() {
+    let root = fixture("a_relist_pith_asks_for_skips_the_folders_cooldown");
+    seeded(&root);
+    let mut live = Live::build(&root);
+    let mut sched = Scheduler::new(Duration::ZERO, 200);
+    let a = root.join("a");
+    let id = live.index.find(a.to_str().unwrap()).unwrap().0;
+    let request = sched.submit(id, a.clone(), Purpose::Relist, false, None).unwrap();
+    let listing = list(&a, &live.cx);
+    // A listing that took a second: the folder waits 200 seconds before its next.
+    sched.landed(&mut live.index, &request, listing, Duration::from_secs(1), Instant::now());
+    sched.note(a.to_string_lossy().into_owned(), None, false, Instant::now(), true);
+    assert!(sched.due(&live.index, Instant::now()).is_empty(), "a change waits out the cooldown");
+    sched.ask(a.to_string_lossy().into_owned(), false, Instant::now());
+    let due: Vec<u32> = sched.due(&live.index, Instant::now()).iter().map(|request| request.folder).collect();
+    assert_eq!(due, vec![id], "Pith's own relist comes at once");
+    remove(&root);
+}
+
+/// Which of the person's own changes the index doesn't show yet: an item moved to the Trash while the index still holds
+/// it, and one put back until the index has listed it, a folder with everything inside it but what waits on macOS.
+#[test]
+fn the_index_says_which_of_pith_s_own_changes_it_doesnt_show_yet() {
+    let root = fixture("the_index_says_which_of_pith_s_own_changes_it_doesnt_show_yet");
+    seeded(&root);
+    let mut live = Live::build(&root);
+    let at = |relative: &str| root.join(relative).to_string_lossy().into_owned();
+    let unlisted = |live: &Live, gone: &[String], back: &[String], asking: &dyn Fn(u32) -> bool| live.index.unlisted(gone, back, asking);
+    let (photo, folder) = (at("a/b/photo.png"), at("d/e"));
+    let away = root.with_extension("trash");
+    remove(&away);
+    fs::create_dir_all(&away).unwrap();
+    // Moved out of the map: the index still holds both until their folders are listed again.
+    fs::rename(&photo, away.join("photo.png")).unwrap();
+    fs::rename(&folder, away.join("e")).unwrap();
+    let both = vec![photo.clone(), folder.clone()];
+    assert_eq!(unlisted(&live, &both, &[], &|_| false), both, "still held");
+    assert_eq!(unlisted(&live, &[], &both, &|_| false), Vec::<String>::new(), "a change the other way is shown");
+    live.listed(&[root.join("a/b"), root.join("d")], &mut Rng(11));
+    assert_eq!(unlisted(&live, &both, &[], &|_| false), Vec::<String>::new(), "listed without them");
+    // Put back: missing until their folders are listed again.
+    fs::rename(away.join("photo.png"), &photo).unwrap();
+    fs::rename(away.join("e"), &folder).unwrap();
+    assert_eq!(unlisted(&live, &[], &both, &|_| false), both);
+    live.listed(&[root.join("a/b"), root.join("d")], &mut Rng(12));
+    assert_eq!(unlisted(&live, &[], &both, &|_| false), Vec::<String>::new(), "listed again, the folder whole, as it came back from limbo");
+    // A folder found in its parent's listing but not listed itself, nor what's inside it, isn't listed whole, unless it
+    // waits on macOS, which can take as long as the person takes to answer.
+    fs::create_dir_all(root.join("new/inner")).unwrap();
+    fs::write(root.join("new/inner/x.bin"), vec![b'x'; 10_000]).unwrap();
+    let new = at("new");
+    let request = live.sched.submit(ROOT, root.clone(), Purpose::Relist, false, None).unwrap();
+    let listing = list(&request.path, &live.cx);
+    let (next, _) = live.sched.landed(&mut live.index, &request, listing, Duration::ZERO, Instant::now());
+    let id = live.index.find(&new).unwrap().0;
+    assert_eq!(unlisted(&live, &[], &[new.clone()], &|_| false), vec![new.clone()], "found, not listed");
+    assert_eq!(unlisted(&live, &[], &[new.clone()], &|folder| folder == id), Vec::<String>::new(), "waiting on macOS");
+    live.drain(next, &mut Rng(13));
+    assert_eq!(unlisted(&live, &[], &[new.clone()], &|_| false), Vec::<String>::new(), "listed whole");
+    assert_eq!(unlisted(&live, &[at("nowhere"), "/elsewhere".into()], &[], &|_| false), Vec::<String>::new(), "nothing held there");
+    remove(&away);
+    remove(&root);
+}
+
+/// `serve` answers a map with which of the person's own changes its index doesn't show yet, before the map itself, and
+/// Pith's relist of the folder brings them in at once.
+#[test]
+fn serve_says_which_of_pith_s_own_changes_its_map_doesnt_show_yet() {
+    let root = fixture("serve_says_which_of_pith_s_own_changes_its_map_doesnt_show_yet");
+    seeded(&root);
+    // Over a mebibyte, so the index keeps the file by name, as a map shows it on its own.
+    fs::write(root.join("d/movie.mov"), vec![b'm'; 2_000_000]).unwrap();
+    let mut serve = Serve::start();
+    serve.send(serde_json::json!({ "cmd": "open", "root": root, "snapshot": null, "volume": "V" }));
+    serve.until("opened");
+    serve.send(serde_json::json!({ "cmd": "walk", "since": 100 }));
+    serve.until("walked");
+    let at = |relative: &str| root.join(relative).to_string_lossy().into_owned();
+    let both = vec![at("d/movie.mov"), at("d/e")];
+    let mut request = 0;
+    let mut ask = |serve: &mut Serve, gone: &[String], back: &[String]| -> (String, Vec<String>) {
+        request += 1;
+        serve.send(serde_json::json!({ "cmd": "tree", "path": root, "focus": null, "request": request, "gone": gone, "back": back }));
+        let line = serve.line_where("tree", |tree| tree["request"] == request);
+        let tree: serde_json::Value = serde_json::from_str(&line).unwrap();
+        let unlisted = tree["unlisted"].as_array().unwrap_or_else(|| panic!("no unlisted in {line}")).iter().map(|p| p.as_str().unwrap().to_string()).collect();
+        (line, unlisted)
+    };
+    let away = root.with_extension("trash");
+    remove(&away);
+    fs::create_dir_all(&away).unwrap();
+    fs::rename(root.join("d/movie.mov"), away.join("movie.mov")).unwrap();
+    fs::rename(root.join("d/e"), away.join("e")).unwrap();
+    let (line, held) = ask(&mut serve, &both, &[]);
+    assert_eq!(held, both, "the index has both until d is listed again");
+    assert!(line.find(r#","unlisted":"#).is_some_and(|unlisted| line.find(r#","result":"#).is_some_and(|result| unlisted < result)), "{line}");
+    serve.send(serde_json::json!({ "cmd": "relist", "path": at("d"), "deep": false }));
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !ask(&mut serve, &both, &[]).1.is_empty() {
+        assert!(Instant::now() < deadline, "d was never listed again");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    fs::rename(away.join("movie.mov"), root.join("d/movie.mov")).unwrap();
+    fs::rename(away.join("e"), root.join("d/e")).unwrap();
+    assert_eq!(ask(&mut serve, &[], &both).1, both, "put back, missing until d is listed again");
+    serve.send(serde_json::json!({ "cmd": "relist", "path": at("d"), "deep": false }));
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !ask(&mut serve, &[], &both).1.is_empty() {
+        assert!(Instant::now() < deadline, "d was never listed again");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert_eq!(ask(&mut serve, &[], &[]).1, Vec::<String>::new(), "a map asked for without changes says nothing of any");
+    serve.close();
+    remove(&away);
+    remove(&root);
+}

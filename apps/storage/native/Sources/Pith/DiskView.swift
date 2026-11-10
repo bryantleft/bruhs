@@ -723,12 +723,21 @@ struct DiskWebView: NSViewRepresentable {
         }
 
         /// The item's actions at the pointer, as Finder offers them: on an item selected among several, they act on every
-        /// item selected. WebKit's own menu would offer Reload, which empties the map.
+        /// item selected. WebKit's own menu would offer Reload, which empties the map. Whether Move to Trash asks first
+        /// comes from the items' plan, which the selection has in hand or is making off the main thread.
         private func showMenu(for path: String?) {
-            guard let web, let window = web.window, let result = model.result else { return }
+            guard let result = model.result else { return }
             let target = path.flatMap { result.item(at: $0) }
-            let folder = target?.kind == .dir ? target?.path : nil
             let targets = target.map { model.selection.paths.contains($0.path) ? model.selection.paths : [$0.path] } ?? []
+            Task {
+                let plan = targets.isEmpty ? nil : try? await model.trashPlan(forSelected: targets).get()
+                showMenu(target: target, targets: targets, plan: plan)
+            }
+        }
+
+        private func showMenu(target: DiskNode?, targets: [String], plan: TrashBatch?) {
+            guard let web, let window = web.window, let result = model.result else { return }
+            let folder = target?.kind == .dir ? target?.path : nil
             let menu = DiskItemMenu()
             if !targets.isEmpty {
                 menu.add("Quick Look") { [model] in model.quickLook(targets) }
@@ -744,7 +753,6 @@ struct DiskWebView: NSViewRepresentable {
             }
             if !targets.isEmpty {
                 menu.separator()
-                let plan = try? model.trashPlan(targets).get()
                 menu.add(plan?.asks == true ? "Move to Trash…" : "Move to Trash", enabled: plan != nil && !model.isScanning) { [model, weak window] in
                     model.requestTrash(targets, undoManager: window?.undoManager)
                 }
