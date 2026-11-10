@@ -569,9 +569,13 @@ public enum BridgePolicy {
 /// `pith://app/icon/<generation>/<appearance>/<points>@<scale>x/<key>.png`. The route shares the page's scheme and host,
 /// so its images are the page's own and a canvas that draws them can read their pixels back.
 ///
-/// It keeps the map, the disks and the apps as they're set. The page asks for an icon for each row and block it shows,
-/// so the map's folders and volumes are found by path once for each map, at the first request that needs them, and a
-/// request costs a lookup however wide the map is. Nothing found in one map outlasts it.
+/// It keeps the map, the disks and the apps as they're set, and judges each request by the map as it is then. The page
+/// asks for icons as each map comes, on the main thread, so a request finds its folder by following its path down the
+/// map, as `DiskResult.item(at:)` finds an item: it costs the folder's depth, not the map's size. Indexing every folder
+/// at the first request after each map took 2.8 ms on the development Mac for the whole disk's map of 14,019 nodes (77 ms
+/// for one of 177,001), against the 2 ms a map that comes every two seconds may cost, a tenth of a percent of a core
+/// within Pith's 3.4% with Disk on screen (VERIFICATION.md). A lookup takes 3 µs (median, 66 µs at most) there, and
+/// 4 µs (0.14 ms at most) in the larger map.
 public final class IconPolicy {
     /// The start of every icon's URL, up to its size: `pith://app/icon/<generation>/<appearance>/`. WebKit keeps an
     /// image from Pith's scheme for as long as its URL stays the same, so a new generation loads every icon again.
@@ -581,18 +585,14 @@ public final class IconPolicy {
 
     /// The known places, whose ids the page may ask for and which Pith's icon rule needs.
     private let places: KnownPlaces
-    /// The tree of the map the page shows. A new one, or none, drops the folders found in the last.
-    public var map: DiskNode? {
-        didSet { items = nil }
-    }
+    /// The tree of the map the page shows, or none.
+    public var map: DiskNode?
     /// The roots of the disks the disk menu lists.
     public var volumes: Set<String>
     /// The bundles of the apps the page names: under Wrote the most since, from Activity's history, and as the owners of
     /// folders the map couldn't read. One Pith may not look up (`KnownPlaces.mayShowApp`), where macOS guards or on
     /// another disk, loads no icon.
     public var apps: Set<String>
-    /// The map's folders and volumes by path, found at the first request since the map was set.
-    private var items: [String: DiskNode]?
 
     public init(places: KnownPlaces, map: DiskNode? = nil, volumes: Set<String> = [], apps: Set<String> = []) {
         self.places = places; self.map = map; self.volumes = volumes; self.apps = apps
@@ -627,22 +627,20 @@ public final class IconPolicy {
         }
     }
 
-    /// The map's folder or volume at `path`.
+    /// The map's folder or volume at `path`: only those can show an icon of their own.
     private func item(at path: String) -> DiskNode? {
-        if items == nil { items = map.map { Self.foldersAndVolumes(in: $0) } ?? [:] }
-        return items?[path]
+        map.flatMap { Self.folderOrVolume(at: path, in: $0) }
     }
 
-    /// Every folder and volume in `tree` by its path: only those can show an icon of their own. Of two at one path,
-    /// the first is kept, as following the path down from the root would find.
-    private static func foldersAndVolumes(in tree: DiskNode) -> [String: DiskNode] {
-        var items: [String: DiskNode] = [:]
-        func add(_ node: DiskNode) {
-            if node.kind == .dir || node.kind == .volume, items[node.path] == nil { items[node.path] = node }
-            node.children?.forEach(add)
+    /// The first folder or volume at `path` in `tree`, down the folders that hold it, as a walk of the whole tree in
+    /// order would find it first.
+    private static func folderOrVolume(at path: String, in tree: DiskNode) -> DiskNode? {
+        if tree.path == path { return tree.kind == .dir || tree.kind == .volume ? tree : nil }
+        guard tree.kind == .dir, let children = tree.children, DiskChanges.isInside(path, tree.path) else { return nil }
+        for child in children where DiskChanges.isInside(path, child.path) {
+            if let found = folderOrVolume(at: path, in: child) { return found }
         }
-        add(tree)
-        return items
+        return nil
     }
 
     /// A size as `<points>@<scale>x`, such as `16@2x`, when the store draws it as it is.

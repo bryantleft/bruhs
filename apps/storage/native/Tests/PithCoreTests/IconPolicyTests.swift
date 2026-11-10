@@ -198,6 +198,33 @@ final class IconPolicyTests: XCTestCase {
         XCTAssertFalse(try loads(.item("/Applications/Safari.app"), policy), "an app the page no longer names")
     }
 
+    /// The page asks for icons as each map comes, on the main thread, so a request finds its folder by following its path
+    /// down the map rather than by indexing the whole map first: on the development Mac, indexing the whole disk's map of
+    /// 14,019 nodes took 2.8 ms at the first request after each map, and a map of 177,001 nodes 77 ms. A map of 67,863
+    /// nodes here, set again before each request as each live map is, answers its first request in well under 5 ms.
+    func testARequestCostsItsOwnLookupNotTheMapsSize() throws {
+        func folder(_ path: String, depth: Int) -> DiskNode {
+            let below = depth == 4 ? [] : (0..<12).map { folder(path + "/Folder \($0)", depth: depth + 1) }
+            return DiskNode(kind: .dir, name: (path as NSString).lastPathComponent, path: path, size: 3, files: 2, children: below + [
+                DiskNode(kind: .file, name: "big.mov", path: path + "/big.mov", size: 2, children: nil),
+                DiskNode(kind: .aggregate, name: "(smaller items)", path: path + "/__other__", size: 1, files: 1, children: nil),
+            ])
+        }
+        let tree = folder(home + "/Projects", depth: 0)
+        XCTAssertEqual(tree.entries.count, 67_863)
+        let deepest = home + "/Projects/Folder 11/Folder 11/Folder 11/Folder 11"
+        let policy = policy(nil)
+        var fastest = TimeInterval.infinity
+        for _ in 0..<5 {
+            policy.map = tree
+            let start = DispatchTime.now().uptimeNanoseconds
+            XCTAssertTrue(try loads(.item(deepest), policy))
+            fastest = min(fastest, TimeInterval(DispatchTime.now().uptimeNanoseconds - start) / 1e9)
+        }
+        XCTAssertLessThan(fastest, 0.005, "the first request after a map took \(fastest * 1000) ms")
+        XCTAssertFalse(try loads(.item(home + "/Projects/Folder 11/Folder 12"), policy), "a folder the map doesn't have")
+    }
+
     /// A `..` in an item's path, written out or escaped, would reach a folder of the map if the path were resolved, so
     /// it must be refused as it stands. Dot segments between the URL's own slashes never make an icon's URL either.
     func testEncodedClimbsAreRefused() throws {
