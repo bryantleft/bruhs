@@ -79,6 +79,10 @@ pub(crate) struct Folder {
     pub(crate) clone_files: u32,
     pub(crate) name_len: u16,
     pub(crate) status: Status,
+    /// Its last listing had an entry its totals leave out: neither a file they count nor a folder, as a symbolic link
+    /// is, or a hard link counted at another link. Kept in the byte the struct has spare, and not saved with the map, so
+    /// a folder restored from it says nothing of them until it's listed again.
+    pub(crate) uncounted: bool,
     pub(crate) inode: u64,
     pub(crate) size: u64,
     /// Bytes of clone copies that `size` leaves out, because another copy holds them.
@@ -434,6 +438,7 @@ impl Index {
             clone_files: 0,
             name_len,
             status: Status::Pending,
+            uncounted: false,
             inode,
             size: 0,
             clones: 0,
@@ -779,6 +784,7 @@ impl Index {
         let mut big = Vec::new();
         let mut cloud = Cloud::default();
         let mut errors = 0u32;
+        let mut uncounted = false;
         for entry in entries {
             if entry.error != 0 {
                 // One entry macOS wouldn't describe; the rest of the folder still counts.
@@ -796,12 +802,16 @@ impl Index {
                 continue;
             }
             if !entry.is_file {
+                uncounted = true;
                 continue;
             }
             if entry.nlink > 1 {
                 match self.links.get(&entry.inode) {
                     // Counted at another link, or at an earlier one in this listing.
-                    Some(link) if self.current(link.folder, link.gen) => continue,
+                    Some(link) if self.current(link.folder, link.gen) => {
+                        uncounted = true;
+                        continue;
+                    }
                     _ => {
                         self.links.insert(entry.inode, Link { folder: id, gen });
                     }
@@ -840,6 +850,7 @@ impl Index {
         } else {
             self.entry_errors.insert(id, errors);
         }
+        self.folders[id as usize].uncounted = uncounted;
         subfolders
     }
 
@@ -958,6 +969,7 @@ impl Index {
         self.big.remove(&id);
         self.cloud.remove(&id);
         self.entry_errors.remove(&id);
+        self.folders[id as usize].uncounted = false;
     }
 
     /// Takes a folder out of its parent's children, and its totals out of every folder above.
@@ -1155,12 +1167,14 @@ impl Index {
                     _ => return None,
                 };
                 let listed = exact && folder.status == Status::Listed;
-                let subfolders = || self.children(id).next().is_some() || self.cloud.get(&id).is_some_and(|cloud| cloud.folders > 0);
+                let subfolders = listed && (self.children(id).next().is_some() || self.cloud.get(&id).is_some_and(|cloud| cloud.folders > 0));
+                let entries = folder.files > 0 || subfolders || folder.uncounted || self.entry_errors.contains_key(&id);
                 Some(Place {
                     path: path.clone(),
                     size,
                     files: listed.then(|| u64::from(folder.files)),
-                    subfolders: listed.then(subfolders),
+                    subfolders: listed.then_some(subfolders),
+                    entries: listed.then_some(entries),
                     asking: waits,
                 })
             })
@@ -1582,6 +1596,7 @@ impl Folder {
             clone_files: u32::try_from(own.clone_files).unwrap_or(u32::MAX),
             name_len,
             status,
+            uncounted: false,
             inode,
             size: own.size,
             clones: own.clones,
@@ -1604,6 +1619,10 @@ pub struct Place {
     /// Whether it holds a folder, an empty one, one not listed yet or one only in the cloud included.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub subfolders: Option<bool>,
+    /// Whether its listing had any entry at all, those its totals leave out included: a symbolic link, a hard link
+    /// counted at another link, or one macOS wouldn't describe.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entries: Option<bool>,
     /// It, or a folder above it, waits on macOS's question about Pith, which the person's answer settles: sent only
     /// when it does.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
@@ -1819,6 +1838,32 @@ mod tests {
         let json = serde_json::to_value(&found).unwrap();
         let locked = json.as_array().unwrap().iter().find(|place| place["path"] == "/x/Locked").unwrap();
         assert!(locked.get("files").is_none() && locked.get("subfolders").is_none(), "{locked}");
+    }
+
+    /// A place the map has listed says whether its listing had any entry at all, which its files and folders can't say
+    /// of an entry its totals leave out: a symbolic link, a hard link counted at another link, or one macOS wouldn't
+    /// describe. A folder listed before a launch, restored from the saved map, says nothing of them until it's listed again.
+    #[test]
+    fn a_place_says_whether_its_listing_had_any_entry() {
+        let mut index = Index::new("/x", HashMap::new());
+        list(&mut index, "/x", 2, vec![folder("Kept", 3), folder("Linked", 4), folder("Symlinked", 5), folder("Odd", 6), folder("Nothing", 7)]);
+        let link = |name: &str| crate::walk::Entry { nlink: 2, ..file(name, 70, 2_000_000) };
+        list(&mut index, "/x/Kept", 3, vec![link("original.bin")]);
+        list(&mut index, "/x/Linked", 4, vec![link("duplicate.bin")]);
+        list(&mut index, "/x/Symlinked", 5, vec![crate::walk::Entry { is_dir: false, is_file: false, ..folder("shortcut", 71) }]);
+        list(&mut index, "/x/Odd", 6, vec![crate::walk::Entry { error: libc::EIO as u32, ..file("broken", 72, 0) }]);
+        list(&mut index, "/x/Nothing", 7, vec![]);
+        let paths = ["Kept", "Linked", "Symlinked", "Odd", "Nothing"].map(|name| format!("/x/{name}"));
+        let found = index.places(&paths, &|_| false);
+        let held: HashMap<&str, (Option<u64>, Option<bool>)> = found.iter().map(|place| (place.path.trim_start_matches("/x/"), (place.files, place.entries))).collect();
+        assert_eq!(held["Kept"], (Some(1), Some(true)));
+        assert_eq!(held["Linked"], (Some(0), Some(true)), "a hard link counted at another link");
+        assert_eq!(held["Symlinked"], (Some(0), Some(true)), "a symbolic link");
+        assert_eq!(held["Odd"], (Some(0), Some(true)), "an entry macOS wouldn't describe");
+        assert_eq!(held["Nothing"], (Some(0), Some(false)), "nothing at all");
+        // Listed again without the link, it holds nothing.
+        list(&mut index, "/x/Symlinked", 5, vec![]);
+        assert_eq!(index.places(&[format!("/x/Symlinked")], &|_| false)[0].entries, Some(false));
     }
 
     #[test]

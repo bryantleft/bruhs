@@ -157,12 +157,16 @@ final class KnownPlacesTests: XCTestCase {
         let emptyFiles = inHome([DiskNode(kind: .dir, name: ".Trash", path: trash, size: 0, files: 2, children: [
             DiskNode(kind: .aggregate, name: "(smaller items)", path: trash + "/__other__", size: 0, files: 2, children: nil),
         ])])
-        let holdsNothing = LivePlace(path: trash, size: 0, files: 0, subfolders: false)
+        let holdsNothing = LivePlace(path: trash, size: 0, files: 0, subfolders: false, entries: false)
         XCTAssertTrue(table.trashHoldsNothing(in: folded, scan: nil, live: [holdsNothing]), "listed, holding nothing, folded away")
         XCTAssertTrue(table.trashHoldsNothing(in: drawn, scan: nil, live: [holdsNothing]), "listed, drawn holding nothing")
         XCTAssertFalse(table.trashHoldsNothing(in: folded, scan: nil, live: [LivePlace(path: trash, size: 0, files: 1, subfolders: false)]),
                        "a Finder copy whose bytes its original holds, or an empty file")
         XCTAssertFalse(table.trashHoldsNothing(in: folded, scan: nil, live: [LivePlace(path: trash, size: 0, files: 0, subfolders: true)]), "empty folders")
+        XCTAssertFalse(table.trashHoldsNothing(in: folded, scan: nil, live: [LivePlace(path: trash, size: 0, files: 0, subfolders: false, entries: true)]),
+                       "a symbolic link, or a hard link counted at another link")
+        XCTAssertFalse(table.trashHoldsNothing(in: folded, scan: nil, live: [LivePlace(path: trash, size: 0, files: 0, subfolders: false)]),
+                       "a place that doesn't say whether its listing had any entry")
         XCTAssertFalse(table.trashHoldsNothing(in: folded, scan: nil, live: [LivePlace(path: trash, size: 0)]), "a place that doesn't say what it holds")
         XCTAssertFalse(table.trashHoldsNothing(in: drawn, scan: nil, live: []), "found and not listed yet: the scanner names no such place")
         XCTAssertFalse(table.trashHoldsNothing(in: folded, scan: nil, live: [LivePlace(path: trash, size: nil)]), "the map can't read it")
@@ -178,14 +182,16 @@ final class KnownPlacesTests: XCTestCase {
     /// away, or couldn't read it, says nothing of it.
     func testAScanSaysTheTrashHoldsNothingByItsOwnFolder() {
         let table = places(), trash = path(".Trash")
-        func scan(dirs: UInt64, cloudFolders: UInt64 = 0) -> DiskSummary {
-            DiskSummary(dirs: dirs, files: 0, bytes: 0, errors: 0, unreadable: .init(protected: 0, denied: 0, other: 0), entryErrors: 0,
+        func scan(dirs: UInt64, files: UInt64 = 0, entryErrors: UInt64 = 0, cloudFolders: UInt64 = 0) -> DiskSummary {
+            DiskSummary(dirs: dirs, files: files, bytes: 0, errors: 0, unreadable: .init(protected: 0, denied: 0, other: 0), entryErrors: entryErrors,
                         cloudOnly: .init(files: 0, bytes: 0, folders: cloudFolders), elapsedMs: 1, engine: "bulk")
         }
         let own = DiskNode(kind: .dir, name: ".Trash", path: trash, size: 0, files: 0, children: nil)
         XCTAssertTrue(table.trashHoldsNothing(in: own, scan: scan(dirs: 1), live: []), "the scan's own folder, holding nothing")
         XCTAssertFalse(table.trashHoldsNothing(in: own, scan: scan(dirs: 3), live: []), "it listed empty folders in it")
         XCTAssertFalse(table.trashHoldsNothing(in: own, scan: scan(dirs: 1, cloudFolders: 1), live: []), "a folder only in the cloud")
+        XCTAssertFalse(table.trashHoldsNothing(in: own, scan: scan(dirs: 1, entryErrors: 1), live: []), "an entry macOS wouldn't describe")
+        XCTAssertFalse(table.trashHoldsNothing(in: own, scan: scan(dirs: 1, files: 1), live: []), "a file it counted")
         let copy = DiskNode(kind: .dir, name: ".Trash", path: trash, size: 0, files: 1, children: [
             DiskNode(kind: .aggregate, name: "(smaller items)", path: trash + "/__other__", size: 0, files: 1, clones: 4096, children: nil),
         ])
@@ -265,11 +271,12 @@ final class KnownPlacesTests: XCTestCase {
         let open = DiskNode(kind: .dir, name: home.lastPathComponent, path: home.path, size: 1, files: 1, children: [
             DiskNode(kind: .dir, name: ".Trash", path: trash, size: 0, files: 0, children: nil),
         ])
-        let holdsNothing = LivePlace(path: trash, size: 0, files: 0, subfolders: false)
+        let holdsNothing = LivePlace(path: trash, size: 0, files: 0, subfolders: false, entries: false)
         XCTAssertEqual(key(homeMap, [holdsNothing]), "place/trash-empty", "folded into the smaller items")
         XCTAssertEqual(key(open, [holdsNothing]), "place/trash-empty", "the folder open, holding nothing")
         XCTAssertEqual(key(homeMap, [LivePlace(path: trash, size: 0, files: 1, subfolders: false)]), "place/trash", "a copy whose bytes another holds")
         XCTAssertEqual(key(homeMap, [LivePlace(path: trash, size: 0, files: 0, subfolders: true)]), "place/trash", "empty folders")
+        XCTAssertEqual(key(homeMap, [LivePlace(path: trash, size: 0, files: 0, subfolders: false, entries: true)]), "place/trash", "a symbolic link")
         XCTAssertEqual(key(homeMap, [LivePlace(path: trash, size: 2_000_000_000, files: 3, subfolders: false)]), "place/trash")
         XCTAssertEqual(key(homeMap, [LivePlace(path: trash, size: nil)]), "place/trash", "the map can't read it")
         XCTAssertNil(key(homeMap, []), "found and not listed yet")

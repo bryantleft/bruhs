@@ -263,15 +263,20 @@ public struct KnownPlaces: Sendable {
         folder.kind == .dir && folder.size == 0 && (folder.children ?? []).isEmpty
     }
 
-    /// Whether the Trash holds nothing, by what the scanner says of it with the map `tree`. A map a scan made, `scan` its
-    /// summary, lists every folder it can read and folds one too small for a block into its folder's smaller items, and
-    /// an empty folder into nothing, so only a scan of the Trash itself draws it with nothing in it: it holds nothing when
-    /// that scan's own folder draws nothing and the scan listed no folder below it, nor found one only in the cloud. A
-    /// live map's tree draws a Trash found and not listed yet as one holding nothing, so for any other map its index
-    /// says: it has listed the Trash and holds no bytes, files or folders there (its place in `live`, the places that came
-    /// with the tree, which name no Trash found and not listed yet), and the tree, where it draws the Trash, draws nothing
-    /// in it. Bytes alone can't say so: the index counts a clone copy whose bytes another copy holds, and an empty file,
-    /// in its files and not its bytes. With no places, as before a live map's first tree, or a place that doesn't say
+    /// Whether the Trash holds nothing, by what the scanner says of it with the map `tree`.
+    ///
+    /// A map a scan made, `scan` its summary, lists every folder it can read and folds one too small for a block into its
+    /// folder's smaller items, and an empty folder into nothing, so only a scan of the Trash itself draws it with nothing
+    /// in it. It holds nothing when that scan's own folder draws nothing and the scan listed no folder or file below it,
+    /// nor found a folder only in the cloud or an entry macOS wouldn't describe. A scan counts a symbolic link nowhere, so
+    /// a scanned Trash holding only one shows empty.
+    ///
+    /// A live map's tree draws a Trash found and not listed yet as one holding nothing, so for any other map its index
+    /// says: it has listed the Trash and holds no bytes, files or folders there, and its listing had no entry at all (its
+    /// place in `live`, the places that came with the tree, which name no Trash found and not listed yet), and the tree,
+    /// where it draws the Trash, draws nothing in it. Bytes alone can't say so: the index counts a clone copy whose bytes
+    /// another copy holds, and an empty file, in its files and not its bytes, and counts a symbolic link, or a hard link
+    /// counted at another link, nowhere. With no places, as before a live map's first tree, or a place that doesn't say
     /// what it holds, nothing says so. The Trash's icon shows this state wherever it shows
     /// (`iconKey(for:asking:trashIsEmpty:)`, `placesTable`, and the page's rule, which gets it with `iconRule`).
     public func trashHoldsNothing(in tree: DiskNode?, scan: DiskSummary?, live: [LivePlace]) -> Bool {
@@ -279,7 +284,9 @@ public struct KnownPlaces: Sendable {
         let node = tree?.node(at: trash.path)
         if let node, !Self.drawsNothing(node) { return false }
         // A scan's count of the folders it listed includes its own.
-        if let scan { return node != nil && tree?.path == trash.path && scan.dirs <= 1 && scan.cloudOnly.folders == 0 }
+        if let scan {
+            return node != nil && tree?.path == trash.path && scan.dirs <= 1 && scan.files == 0 && scan.entryErrors == 0 && scan.cloudOnly.folders == 0
+        }
         return live.first { $0.path == trash.path }?.holdsNothing ?? false
     }
 

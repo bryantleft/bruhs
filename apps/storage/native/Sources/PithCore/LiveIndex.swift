@@ -76,18 +76,21 @@ public struct LivePlace: Decodable, Sendable, Equatable {
     public let files: UInt64?
     /// Whether it holds a folder, an empty one included. Nil where the scanner doesn't say.
     public let subfolders: Bool?
+    /// Whether its listing had any entry at all, those no total counts included: a symbolic link, a hard link counted at
+    /// another link, or one macOS wouldn't describe. Nil where the scanner doesn't say.
+    public let entries: Bool?
     /// It, or a folder above it, waits on the person's answer to macOS's question about Pith, which is all it takes.
     public let asking: Bool
 
-    public init(path: String, size: UInt64?, files: UInt64? = nil, subfolders: Bool? = nil, asking: Bool = false) {
-        self.path = path; self.size = size; self.files = files; self.subfolders = subfolders; self.asking = asking
+    public init(path: String, size: UInt64?, files: UInt64? = nil, subfolders: Bool? = nil, entries: Bool? = nil, asking: Bool = false) {
+        self.path = path; self.size = size; self.files = files; self.subfolders = subfolders; self.entries = entries; self.asking = asking
     }
 
-    /// The scanner has listed it and says it holds nothing: no bytes, files or folders. One that doesn't say what it holds
-    /// holds something, as far as Pith knows.
-    public var holdsNothing: Bool { size == 0 && files == 0 && subfolders == false }
+    /// The scanner has listed it and says it holds nothing: no bytes, files or folders, and its listing had no entry at
+    /// all. One that doesn't say what it holds holds something, as far as Pith knows.
+    public var holdsNothing: Bool { size == 0 && files == 0 && subfolders == false && entries == false }
 
-    enum CodingKeys: String, CodingKey { case path, size, files, subfolders, asking }
+    enum CodingKeys: String, CodingKey { case path, size, files, subfolders, entries, asking }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -95,6 +98,7 @@ public struct LivePlace: Decodable, Sendable, Equatable {
         size = try container.decodeIfPresent(UInt64.self, forKey: .size)
         files = try container.decodeIfPresent(UInt64.self, forKey: .files)
         subfolders = try container.decodeIfPresent(Bool.self, forKey: .subfolders)
+        entries = try container.decodeIfPresent(Bool.self, forKey: .entries)
         // The scanner says it only of a place that waits.
         asking = try container.decodeIfPresent(Bool.self, forKey: .asking) ?? false
     }

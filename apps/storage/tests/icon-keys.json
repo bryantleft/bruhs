@@ -660,7 +660,7 @@
       "key": "place/trash-empty"
     },
     {
-      "why": "A Trash the map doesn't draw, as a map folds a Trash of no bytes into its folder's smaller items, shows empty when the scanner's place for it says it holds no bytes, files or folders.",
+      "why": "A Trash the map doesn't draw, as a map folds a Trash of no bytes into its folder's smaller items, shows empty when the scanner's place for it says it holds no bytes, files or folders, and its listing had no entry at all.",
       "node": {
         "kind": "dir",
         "name": ".Trash",
@@ -669,7 +669,7 @@
         "files": 0,
         "children": []
       },
-      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 0, "subfolders": false },
+      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 0, "subfolders": false, "entries": false },
       "asking": false,
       "emptyTrash": true,
       "key": "place/trash-empty"
@@ -684,7 +684,7 @@
         "files": 0,
         "children": []
       },
-      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 1, "subfolders": false },
+      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 1, "subfolders": false, "entries": true },
       "asking": false,
       "emptyTrash": false,
       "key": "place/trash"
@@ -699,7 +699,7 @@
         "files": 0,
         "children": []
       },
-      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 2, "subfolders": false },
+      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 2, "subfolders": false, "entries": true },
       "asking": false,
       "emptyTrash": false,
       "key": "place/trash"
@@ -714,7 +714,22 @@
         "files": 0,
         "children": []
       },
-      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 0, "subfolders": true },
+      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 0, "subfolders": true, "entries": true },
+      "asking": false,
+      "emptyTrash": false,
+      "key": "place/trash"
+    },
+    {
+      "why": "A Trash the map doesn't draw that holds only a symbolic link, or a hard link counted at another link, has no bytes, files or folders, but its listing had an entry, so it shows full.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 0,
+        "files": 0,
+        "children": []
+      },
+      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 0, "subfolders": false, "entries": true },
       "asking": false,
       "emptyTrash": false,
       "key": "place/trash"

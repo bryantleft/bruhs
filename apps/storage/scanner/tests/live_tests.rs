@@ -761,20 +761,21 @@ fn serve_gives_each_place_its_size_in_the_map_it_answers_with() {
 #[test]
 fn serve_says_what_each_place_holds_beside_its_size() {
     let root = fixture("serve_says_what_each_place_holds_beside_its_size");
-    for folder in ["kept", "empty", "copies", "blank", "folders/inner"] {
+    for folder in ["kept", "empty", "copies", "blank", "folders/inner", "pointing"] {
         fs::create_dir_all(root.join(folder)).unwrap();
     }
     fs::write(root.join("kept/original.bin"), vec![b'o'; 70_000]).unwrap();
     // The copy is made after the original, so the original, the lower inode, holds the bytes.
     assert!(clone_file(&root.join("kept/original.bin"), &root.join("copies/duplicate.bin")));
     fs::write(root.join("blank/empty.txt"), b"").unwrap();
+    std::os::unix::fs::symlink(root.join("kept/original.bin"), root.join("pointing/shortcut")).unwrap();
     let mut serve = Serve::start();
     serve.send(serde_json::json!({ "cmd": "open", "root": root, "snapshot": null, "volume": "V" }));
     serve.until("opened");
     serve.send(serde_json::json!({ "cmd": "walk", "since": 100 }));
     serve.until("walked");
     let at = |path: &str| root.join(path).to_string_lossy().into_owned();
-    let places = [at("kept"), at("empty"), at("copies"), at("blank"), at("folders")];
+    let places = [at("kept"), at("empty"), at("copies"), at("blank"), at("folders"), at("pointing")];
     serve.send(serde_json::json!({ "cmd": "tree", "path": root, "focus": null, "request": 3, "places": places }));
     let tree = serve.until("tree");
     let answered: HashMap<String, serde_json::Value> =
@@ -790,6 +791,10 @@ fn serve_says_what_each_place_holds_beside_its_size() {
     assert_eq!(held("copies"), (Some(0), Some(1), Some(false)), "a copy whose bytes the original holds");
     assert_eq!(held("blank"), (Some(0), Some(1), Some(false)), "an empty file");
     assert_eq!(held("folders"), (Some(0), Some(0), Some(true)), "an empty folder");
+    assert_eq!(held("pointing"), (Some(0), Some(0), Some(false)), "a symbolic link, which no total counts");
+    let entries = |path: &str| answered[&at(path)]["entries"].as_bool();
+    assert_eq!(["kept", "empty", "copies", "blank", "folders", "pointing"].map(entries), [true, false, true, true, true, true].map(Some),
+               "whether each listing had any entry at all");
     serve.close();
     remove(&root);
 }
