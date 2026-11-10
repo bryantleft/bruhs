@@ -272,6 +272,15 @@ final class KnownPlacesTests: XCTestCase {
         let owners = table.owners(in: tree) { $0 == "com.apple.Notes" ? URL(fileURLWithPath: "/Test Apps/Notes.app") : nil }
         // Mail shows its place's icon by the rule, and Safari's folder has no owner Pith can tell: a plain folder.
         XCTAssertEqual(owners, [devices: .item("/Test Apps/Xcode.app"), notes: .item("/Test Apps/Notes.app")])
+        // A map of a folder inside a container or a place, as when the person chose one, names its owners too.
+        let container = folder("Library/Containers/com.apple.Notes", size: 1, children: [
+            DiskNode(kind: .unreadable, name: "Data", path: notes, size: 0, reason: .protected, children: nil),
+        ])
+        XCTAssertEqual(table.owners(in: container) { _ in URL(fileURLWithPath: "/Test Apps/Notes.app") }, [notes: .item("/Test Apps/Notes.app")])
+        let developer = folder("Library/Developer", size: 1, children: [
+            DiskNode(kind: .unreadable, name: "Devices", path: devices, size: 0, reason: .denied, children: nil),
+        ])
+        XCTAssertEqual(table.owners(in: developer) { _ in nil }, [devices: .item("/Test Apps/Xcode.app")])
     }
 
     func testTheIconRuleForItemsOfTheMap() {

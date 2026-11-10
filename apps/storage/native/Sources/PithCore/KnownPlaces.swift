@@ -206,11 +206,12 @@ public struct KnownPlaces: Sendable {
     /// The apps the folders `tree` couldn't read belong to, by folder, as `ownerKey` finds them, for the disk map's
     /// Couldn't read rows. A known place is left out, since the icon rule gives it its own icon already, and so is a
     /// folder whose owner Pith can't tell, which keeps the rule's plain folder. Only a folder inside a place with an app
-    /// of its own, or in other apps' containers, can have an owner, so only those folders are gone through.
+    /// of its own, or in other apps' containers, can have an owner, so only those folders are gone through, or the whole
+    /// tree when it's a map of a folder inside one.
     public func owners(in tree: DiskNode, application: (String) -> URL?) -> [String: IconKey] {
         var owners: [String: IconKey] = [:]
         let owned = places.filter { if case .app = $0.icon { true } else { false } }.map(\.path) + [containers]
-        var waiting = owned.compactMap { tree.folder(at: $0) }
+        var waiting = owned.contains { DiskChanges.isInside(tree.path, $0) } ? [tree] : owned.compactMap { tree.folder(at: $0) }
         while let node = waiting.popLast() {
             if node.kind == .unreadable {
                 let key = ownerKey(for: node.path, application: application)
