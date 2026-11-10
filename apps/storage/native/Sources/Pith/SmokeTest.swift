@@ -151,6 +151,7 @@ extension AppDelegate {
             checks.merge(await checkIconsReachEveryPage(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkIconRoute(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkPathBar(fixture, in: main), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkDiskMenuShowsFresherFigures(in: main), uniquingKeysWith: { _, new in new })
             checks.merge(await checkMapHoldsStill(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkOwnChangesShowAtOnce(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkCheckAgainShowsAtOnce(fixture), uniquingKeysWith: { _, new in new })
@@ -808,6 +809,29 @@ extension AppDelegate {
         return ["path_bar_names_the_disk": named, "disk_menu_lists_disks": menu, "disk_menu_draws_missing_icons": missing > 0 && arrive,
                 "path_bar_opens_a_folder": opened && enclosing == fixture && up,
                 "go_back_and_forward": nowhere && focused && canGoBack && back && canGoForward && forward && end]
+    }
+
+    /// The disk menu's free space is fresh when it opens: a listing of the volumes begins as the pointer reaches the
+    /// disk's part of the path bar, and figures that land once the menu is made, as while it's open, retitle its items in
+    /// place. Figures of the smoke test's own stand for a fresher listing, 7 GB more free on the first disk, and the real
+    /// listing comes back after.
+    private func checkDiskMenuShowsFresherFigures(in main: MainWindowController) async -> [String: Bool] {
+        let name = "disk_menu_shows_fresher_figures_in_place"
+        let appearance = IconAppearance(main.window.effectiveAppearance), scale = main.window.backingScaleFactor
+        guard let volume = disk.choices.first, let available = volume.available else { return [name: false] }
+        let menu = disk.diskMenu(appearance: appearance, scale: scale)
+        guard let item = menu.menu.items.first, item.title == volume.name + "\tFree " + bytes(available) else { return [name: false] }
+        // The menu lists the volumes again as it's made: that listing lands first.
+        try? await Task.sleep(for: .milliseconds(500))
+        let fresher = available + 7_000_000_000
+        let fresh = DiskVolumeChoice(url: volume.url, name: volume.name, total: volume.total, available: fresher, isStartup: volume.isStartup)
+        disk.smokeTestListsVolumes([fresh] + disk.choices.dropFirst())
+        let shown = await eventually { item.title == volume.name + "\tFree " + bytes(fresher) }
+        let inPlace = menu.menu.items.first === item
+        disk.refreshChoices()
+        let back = await eventually { self.disk.choices.first?.available != fresher }
+        print("disk menu: \(item.title.replacingOccurrences(of: "\t", with: " ")) once fresher figures landed \(shown), the same item \(inPlace); the real listing back \(back)")
+        return [name: shown && inPlace && back]
     }
 
     /// The live map holds still. A double-click opens the folder its first click was aimed at, though a newer map

@@ -905,9 +905,11 @@ struct DiskWebView: NSViewRepresentable {
     }
 }
 
-/// An NSMenu whose items run closures, for the map's context menu.
+/// An NSMenu whose items run closures, for the map's context menu and the disk menu.
 @MainActor final class DiskItemMenu: NSObject {
     let menu = NSMenu()
+    /// The disk menu's items, by the root of the disk each names, which fresher figures retitle in place.
+    var disks: [String: NSMenuItem] = [:]
     private var actions: [() -> Void] = []
 
     @discardableResult func add(_ title: String, enabled: Bool = true, action: @escaping () -> Void) -> NSMenuItem {

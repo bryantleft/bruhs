@@ -102,6 +102,9 @@ private struct DiskMenuButton: View {
         }
         .buttonStyle(BruhsButtonStyle(tone: .ghost, padding: partPadding))
         .background(MenuAnchorView(anchor: anchor))
+        // The volumes are listed again as the pointer reaches the disk, off the main thread, so the free space is fresh
+        // by the time the menu opens.
+        .onHover { inside in if inside { model.refreshChoices() } }
         .help(model.liveMapRuns ? "Choose a disk or a folder to show. The startup disk shows at once; another disk is scanned." : "Choose a disk or a folder to scan.")
         .accessibilityHint("Shows the disks and Choose Folder")
     }
@@ -206,14 +209,13 @@ extension DiskModel {
     }
 
     /// The disk menu: each disk Disk lists, with its icon and free space, then Choose Folder. The startup disk shows
-    /// from the live map; another disk is scanned, as Choose Folder scans a folder on one.
+    /// from the live map; another disk is scanned, as Choose Folder scans a folder on one. The volumes are listed again
+    /// as it opens, as when the pointer reached the disk's part of the path bar, and fresher figures that land while it's
+    /// open retitle its disks in place (`showFigures`).
     func diskMenu(appearance: IconAppearance, scale: CGFloat) -> DiskItemMenu {
         let menu = DiskItemMenu()
         let busy = isScanning || isTrashing
         let shown = folderPath?.volume.path
-        let font = NSFont.menuFont(ofSize: 0)
-        // The free space lines up in a column after the longest name.
-        let column = (choices.map { ($0.name as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0) + 24
         for volume in choices {
             let item = menu.add(volume.name, enabled: !busy) { [weak self] in self?.show(volume.url.path) }
             let icon = Self.menuIconRequest(volume.url.path, appearance: appearance, scale: scale)
@@ -225,17 +227,41 @@ extension DiskModel {
                 Task { item.image = await Icons.store.icon(for: icon)?.nsImage }
             }
             item.state = volume.url.path == shown ? .on : .off
-            if let available = volume.available {
-                item.attributedTitle = Self.menuTitle(volume.name, free: bytes(available), column: column, font: font)
-            }
+            menu.disks[volume.url.path] = item
         }
+        showFigures(in: menu)
+        followFigures(in: menu)
         menu.separator()
         let choose = menu.add("Choose Folder…", enabled: !busy) { [weak self] in self?.chooseFolder() }
         // ⌘O, as the File menu's Choose Folder.
         choose.keyEquivalent = "o"
-        // The free space the menu shows next time is as of now.
+        // The free space it shows is as of now, or as of the listing begun as the pointer reached the disk.
         refreshChoices()
         return menu
+    }
+
+    /// Titles each of `menu`'s disks with its name and free space as the volumes are listed now, the free space lined up
+    /// in a column after the longest name. NSMenu redraws an item whose title changes, open or not, so each is retitled
+    /// in place. A disk mounted since the menu was made isn't added to it, and one ejected keeps the figure it had.
+    private func showFigures(in menu: DiskItemMenu) {
+        let font = NSFont.menuFont(ofSize: 0)
+        let listed = choices.filter { menu.disks[$0.url.path] != nil }
+        let column = (listed.map { ($0.name as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0) + 24
+        for volume in listed {
+            guard let item = menu.disks[volume.url.path], let available = volume.available else { continue }
+            item.attributedTitle = Self.menuTitle(volume.name, free: bytes(available), column: column, font: font)
+        }
+    }
+
+    /// Retitles `menu`'s disks as each fresher listing lands, for as long as the menu is kept, as it is while it shows.
+    private func followFigures(in menu: DiskItemMenu) {
+        withObservationTracking { _ = self.choices } onChange: { [weak self, weak menu] in
+            Task { @MainActor in
+                guard let self, let menu else { return }
+                self.showFigures(in: menu)
+                self.followFigures(in: menu)
+            }
+        }
     }
 
     /// "Macintosh HD", then its free space as a figure led by its name, "Free 245 GB", at `column`.

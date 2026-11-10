@@ -168,6 +168,11 @@ enum MapCommand: Equatable {
     private(set) var choices: [DiskVolumeChoice] = [] {
         didSet { icons.volumes = Set(choices.map(\.url.path)) }
     }
+
+    /// The smoke test's listing of the volumes, landed as a listing does: figures of its own, fresher than the last.
+    func smokeTestListsVolumes(_ volumes: [DiskVolumeChoice]) {
+        choices = volumes
+    }
     /// Lists the volumes on a queue of its own, one listing at a time, however often they're asked for meanwhile
     /// (`VolumeLister`): a network share that hangs holds that queue, and never Swift's shared pool.
     @ObservationIgnored private lazy var volumeLister = VolumeLister(list: { DiskModel.mountedVolumes() }) { [weak self] found in
