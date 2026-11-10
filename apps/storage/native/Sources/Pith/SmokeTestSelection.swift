@@ -361,6 +361,50 @@ extension AppDelegate {
                 waits: menuWaits && noteWaits && pressed && thenLanded && held]
     }
 
+    /// Undo onto a scanned map newer than the move marks it edited, as the move did the map before it: the map has an item
+    /// its scan didn't. The check scans a folder of its own outside the live map, moves its file to the run's own Trash
+    /// folder, scans the folder again, and puts the file back with Undo, then shows the live map again.
+    func checkUndoMarksAScannedMapEdited(_ fixture: String) async -> [String: Bool] {
+        let name = "undo_marks_a_newer_scanned_map_edited"
+        let files = FileManager.default
+        // As `scan` has it, symbolic links resolved: the temporary folder is under /var, which is /private/var.
+        let root = files.temporaryDirectory.appendingPathComponent("pith-smoke-scanned-\(UUID().uuidString)").resolvingSymlinksInPath()
+        let item = root.appendingPathComponent("x.bin").path
+        var inTrash: [URL] = []
+        defer {
+            try? files.removeItem(at: root)
+            for url in inTrash { try? files.removeItem(at: url) }
+            disk.dismissTrashNote()
+        }
+        guard let undo = webView?.window?.undoManager, (try? files.createDirectory(at: root, withIntermediateDirectories: true)) != nil,
+              files.createFile(atPath: item, contents: Data(count: 1 << 20)) else { return [name: false] }
+        /// Whether a scan of the check's folder made the map, after the one made at `earlier`.
+        func scanned(after earlier: Date?) async -> Bool {
+            await eventually { !self.disk.isScanning && self.disk.result?.root.path == root.path && self.disk.scannedAt.map { $0 != earlier } == true }
+        }
+        disk.scan(root)
+        let first = await scanned(after: nil)
+        disk.requestTrash([item], undoManager: undo)
+        let moved = await eventually { !self.disk.isTrashing && self.disk.result?.item(at: item) == nil && !files.fileExists(atPath: item) }
+        inTrash += disk.trashed?.moves.compactMap(\.trashed) ?? []
+        let markedByMove = disk.edited
+        let at = disk.scannedAt
+        disk.scan(root)
+        let again = await scanned(after: at)
+        let unmarked = !disk.edited
+        undo.undo()
+        let back = await eventually { !self.disk.isTrashing && self.disk.result?.item(at: item) != nil && files.fileExists(atPath: item) }
+        if back { inTrash = [] }
+        let marked = disk.edited
+        // The live map again, for the checks after.
+        disk.scan(URL(fileURLWithPath: fixture))
+        let live = await eventually { self.disk.liveView == fixture && self.disk.result?.root.path == fixture }
+        let settled = await mapSettles()
+        print("scanned map: scanned \(first), the move marked it edited \(moved && markedByMove); scanned again \(again), unmarked \(unmarked); Undo put "
+              + "the file back \(back) and marked the newer map edited \(marked); the live map again \(live && settled)")
+        return [name: first && moved && markedByMove && again && unmarked && back && marked && live && settled]
+    }
+
     /// Whether the page shows `selected` as Pith holds it: a block outlined for each, each on a block of its own here,
     /// and in the map's list of items and in Largest files, the rows of the items selected shown selected, and saying so
     /// after their names, and no others. No row is a toggle, since pressing one selects its item alone.

@@ -1098,7 +1098,14 @@ enum MapCommand: Equatable {
             followChange(moved)
         }
         if let current = result {
-            result = items.reduce(current) { map, item in map.puttingBack(item) ?? map }
+            var changed = false
+            result = items.reduce(current) { map, item in
+                guard let with = map.puttingBack(item) else { return map }
+                changed = true
+                return with
+            }
+            // A scanned map has items its scan didn't now, as Move to Trash left it without them.
+            if changed, liveView == nil { edited = true }
         }
         for item in items { sideColumn.putBack(item.places) }
         mapAnswersPerson = true
