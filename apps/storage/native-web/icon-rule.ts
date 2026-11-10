@@ -26,8 +26,8 @@ export interface IconRule {
   /** Whether macOS may be holding some of the map's folders: it's asking about some, or the map is catching up. */
   readonly asking: boolean;
   /**
-   * Whether the Trash holds nothing, by the scanner's word: it has listed the Trash and counts no bytes in it
-   * (`KnownPlaces.trashHoldsNothing`). A Trash found and not listed yet looks empty too, and isn't.
+   * Whether the Trash holds nothing, by the scanner's word: it has listed the Trash and holds no bytes, files or
+   * folders there (`KnownPlaces.trashHoldsNothing`). A Trash found and not listed yet looks empty too, and isn't.
    */
   readonly emptyTrash: boolean;
 }

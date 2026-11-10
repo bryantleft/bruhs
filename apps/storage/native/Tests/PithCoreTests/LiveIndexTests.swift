@@ -98,13 +98,18 @@ final class LiveIndexTests: XCTestCase {
     }
 
     /// The scanner answers for the known places Pith names beside the map they go with, ahead of the map, which the page
-    /// still gets exactly as the scanner wrote it.
+    /// still gets exactly as the scanner wrote it. A place it has listed says how many files it holds and whether it holds
+    /// folders; one that doesn't say, as from a scanner from before it did, holds something as far as Pith knows.
     func testATreeSaysWhatItsIndexHoldsAtEachPlace() throws {
         let result = #"{"type":"result","version":4,"root":{"name":"x","path":"/x","size":10,"kind":"dir","files":1,"children":[]},"topFiles":[],"volumes":[],"unreadableFolders":[],"summary":{"dirs":1,"files":1,"bytes":10,"errors":0,"unreadable":{"protected":0,"denied":0,"other":0},"entryErrors":0,"cloudOnly":{"files":0,"bytes":0,"folders":0},"clones":{"files":0,"bytes":0},"elapsedMs":5,"engine":"bulk"}}"#
-        let line = #"{"type":"tree","request":3,"places":[{"path":"/x/Library/Mail","size":null},{"path":"/x/Library/Developer","size":4096},{"path":"/x/Library/Mobile Documents","size":null,"asking":true}],"unlisted":["/x/a.bin"],"result":"# + result + "}"
+        let line = #"{"type":"tree","request":3,"places":[{"path":"/x/Library/Mail","size":null},{"path":"/x/Library/Developer","size":4096,"files":2,"subfolders":true},{"path":"/x/Library/Mobile Documents","size":null,"asking":true},{"path":"/x/.Trash","size":0,"files":1,"subfolders":false},{"path":"/x/Old","size":0}],"unlisted":["/x/a.bin"],"result":"# + result + "}"
         guard case .tree(_, _, let json, let places, let unlisted) = try LiveDecoder.decode(Data(line.utf8)) else { return XCTFail("not a tree") }
-        XCTAssertEqual(places, [LivePlace(path: "/x/Library/Mail", size: nil), LivePlace(path: "/x/Library/Developer", size: 4096),
-                                LivePlace(path: "/x/Library/Mobile Documents", size: nil, asking: true)], "a place waiting on macOS says so")
+        XCTAssertEqual(places, [LivePlace(path: "/x/Library/Mail", size: nil), LivePlace(path: "/x/Library/Developer", size: 4096, files: 2, subfolders: true),
+                                LivePlace(path: "/x/Library/Mobile Documents", size: nil, asking: true),
+                                LivePlace(path: "/x/.Trash", size: 0, files: 1, subfolders: false), LivePlace(path: "/x/Old", size: 0)],
+                       "a place waiting on macOS says so")
+        XCTAssertEqual(places.map(\.holdsNothing), [false, false, false, false, false], "a file, or nothing said of what it holds")
+        XCTAssertTrue(LivePlace(path: "/x/.Trash", size: 0, files: 0, subfolders: false).holdsNothing)
         XCTAssertEqual(unlisted, ["/x/a.bin"], "the person's changes its index doesn't show yet")
         XCTAssertEqual(json, result)
     }
@@ -273,8 +278,8 @@ final class LiveIndexTests: XCTestCase {
         var answer: (DiskResult, [LivePlace], [String])?
         XCTAssertTrue(waitFor(reports) { if case .tree(1, let result, _, let places, let unlisted) = $0 { answer = (result, places, unlisted); return true }; return false })
         let (map, places, unlisted) = try XCTUnwrap(answer)
-        XCTAssertEqual(places, [LivePlace(path: developer, size: map.item(at: developer)?.size), LivePlace(path: locked.path, size: nil),
-                                LivePlace(path: inside, size: nil)])
+        XCTAssertEqual(places, [LivePlace(path: developer, size: map.item(at: developer)?.size, files: 1, subfolders: false),
+                                LivePlace(path: locked.path, size: nil), LivePlace(path: inside, size: nil)])
         XCTAssertNotNil(map.item(at: developer)?.size)
         // Developer is in the index, listed, and nothing is at Gone: of the changes asked about, the index doesn't show
         // Developer moved to the Trash, nor Gone put back.

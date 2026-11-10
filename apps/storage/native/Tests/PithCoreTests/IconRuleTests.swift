@@ -13,6 +13,8 @@ final class IconRuleTests: XCTestCase {
             let asking: Bool
             /// Whether the Trash holds nothing, by the scanner's word, which the rule carries (`KnownPlaces.trashHoldsNothing`).
             let emptyTrash: Bool?
+            /// What the scanner says of the Trash beside a map that doesn't draw it, from which Pith's rule finds `emptyTrash`.
+            let place: LivePlace?
             let key: String
         }
 
@@ -66,6 +68,21 @@ final class IconRuleTests: XCTestCase {
         XCTAssertGreaterThan(fixture.cases.count, 30)
         for item in fixture.cases {
             XCTAssertEqual(places.iconKey(for: item.node, asking: item.asking, trashIsEmpty: item.emptyTrash ?? false).string, item.key, item.why)
+        }
+    }
+
+    /// The cases that give the Trash's place: beside a map that folds the Trash into the home folder's smaller items, the
+    /// state Pith's rule finds from what the scanner says of it is the one the case gives the page's rule.
+    func testTheTrashsStateComesFromWhatTheScannerSaysOfIt() throws {
+        let fixture = try fixture()
+        let places = places(home: fixture.home)
+        let folded = DiskNode(kind: .dir, name: "zo\u{eb}", path: fixture.home, size: 1, files: 1, children: [
+            DiskNode(kind: .aggregate, name: "(smaller items)", path: fixture.home + "/__other__", size: 1, files: 1, children: nil),
+        ])
+        let given = fixture.cases.filter { $0.place != nil }
+        XCTAssertGreaterThanOrEqual(given.count, 5)
+        for item in given {
+            XCTAssertEqual(places.trashHoldsNothing(in: folded, scan: nil, live: item.place.map { [$0] } ?? []), item.emptyTrash ?? false, item.why)
         }
     }
 

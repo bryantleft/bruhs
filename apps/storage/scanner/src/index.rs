@@ -1139,19 +1139,30 @@ impl Index {
     /// a folder's size, the figure its map shows, or none when the map can't read it. It can't when its listing failed,
     /// when the folder waits on macOS's question about Pith (`asking`), which the place then says, or when a folder above
     /// it did either, so the map can't tell whether it's there. A path its listed parent doesn't have isn't there, and
-    /// gives nothing; so does a path outside the index, or one found but waiting its turn to be listed.
+    /// gives nothing; so does a path outside the index, or one found but waiting its turn to be listed. A folder listed
+    /// says too how many files it holds and whether it holds folders, which its size alone doesn't, as the Trash's icon
+    /// needs to show it empty only when it holds nothing.
     pub fn places(&self, paths: &[String], asking: &dyn Fn(u32) -> bool) -> Vec<Place> {
         paths
             .iter()
             .filter_map(|path| {
                 let (id, exact) = self.find(path)?;
-                let (size, waits) = match self.folders[id as usize].status {
-                    Status::Listed | Status::Volume if exact => (Some(self.folders[id as usize].size), false),
+                let folder = &self.folders[id as usize];
+                let (size, waits) = match folder.status {
+                    Status::Listed | Status::Volume if exact => (Some(folder.size), false),
                     Status::Unreadable => (None, false),
                     Status::Pending if asking(id) => (None, true),
                     _ => return None,
                 };
-                Some(Place { path: path.clone(), size, asking: waits })
+                let listed = exact && folder.status == Status::Listed;
+                let subfolders = || self.children(id).next().is_some() || self.cloud.get(&id).is_some_and(|cloud| cloud.folders > 0);
+                Some(Place {
+                    path: path.clone(),
+                    size,
+                    files: listed.then(|| u64::from(folder.files)),
+                    subfolders: listed.then(subfolders),
+                    asking: waits,
+                })
             })
             .collect()
     }
@@ -1586,6 +1597,13 @@ pub struct Place {
     pub path: String,
     /// The folder's size as its map shows it, or none when the map can't read it.
     pub size: Option<u64>,
+    /// The files in it, each counted once, which `size` can't say: a clone copy whose bytes another copy holds, and an
+    /// empty file, add a file and no bytes. Sent for a folder the map has listed, as `subfolders` is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub files: Option<u64>,
+    /// Whether it holds a folder, an empty one, one not listed yet or one only in the cloud included.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subfolders: Option<bool>,
     /// It, or a folder above it, waits on macOS's question about Pith, which the person's answer settles: sent only
     /// when it does.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
@@ -1776,6 +1794,31 @@ mod tests {
         assert_eq!(places.len(), 6);
         // Once macOS has answered, a folder that still waits only waits its turn.
         assert_eq!(places_of(&index, &[]).get("Library/Mobile Documents"), None);
+    }
+
+    /// A place the map has listed says how many files it holds and whether it holds folders, as its size can't: an empty
+    /// file adds a file and no bytes. A place the map can't read, or a volume mounted there, says neither.
+    #[test]
+    fn a_place_says_how_many_files_it_holds_and_whether_it_holds_folders() {
+        let mut index = Index::new("/x", HashMap::new());
+        list(&mut index, "/x", 2, vec![folder("Blank", 3), folder("Full", 4), folder("Nested", 5), folder("Locked", 6), folder("Nothing", 8)]);
+        list(&mut index, "/x/Blank", 3, vec![file("empty.txt", 30, 0)]);
+        list(&mut index, "/x/Full", 4, vec![file("big.bin", 31, 2_000_000)]);
+        list(&mut index, "/x/Nested", 5, vec![folder("inner", 7)]);
+        list(&mut index, "/x/Nothing", 8, vec![]);
+        unreadable(&mut index, "/x/Locked");
+        let paths = ["Blank", "Full", "Nested", "Locked", "Nothing"].map(|name| format!("/x/{name}"));
+        let found = index.places(&paths, &|_| false);
+        let held: HashMap<&str, (Option<u64>, Option<u64>, Option<bool>)> =
+            found.iter().map(|place| (place.path.trim_start_matches("/x/"), (place.size, place.files, place.subfolders))).collect();
+        assert_eq!(held["Blank"], (Some(0), Some(1), Some(false)), "an empty file");
+        assert_eq!(held["Full"], (Some(2_000_000), Some(1), Some(false)));
+        assert_eq!(held["Nested"], (Some(0), Some(0), Some(true)), "a folder, found and not listed yet");
+        assert_eq!(held["Nothing"], (Some(0), Some(0), Some(false)), "nothing at all");
+        assert_eq!(held["Locked"], (None, None, None), "the map can't read it");
+        let json = serde_json::to_value(&found).unwrap();
+        let locked = json.as_array().unwrap().iter().find(|place| place["path"] == "/x/Locked").unwrap();
+        assert!(locked.get("files").is_none() && locked.get("subfolders").is_none(), "{locked}");
     }
 
     #[test]

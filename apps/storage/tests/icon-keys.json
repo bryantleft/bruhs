@@ -1,5 +1,5 @@
 {
-  "about": "Pith's icon rule, KnownPlaces.iconKey(for:asking:trashIsEmpty:) in native/Sources/PithCore/KnownPlaces.swift, and the disk map page's copy of it, iconKey in native-web/icon-rule.ts, both give each of these items its key, with asking, and emptyTrash where a case gives it, in the rule. The rule is the table native sends the page for a test home, /Users/zo\u00eb, with the places' paths as URL spells them, decomposed. IconRuleTests.swift and icon-rule.test.ts read this file.",
+  "about": "Pith's icon rule, KnownPlaces.iconKey(for:asking:trashIsEmpty:) in native/Sources/PithCore/KnownPlaces.swift, and the disk map page's copy of it, iconKey in native-web/icon-rule.ts, both give each of these items its key, with asking, and emptyTrash where a case gives it, in the rule. The rule is the table native sends the page for a test home, /Users/zo\u00eb, with the places' paths as URL spells them, decomposed. A case with a place gives what the scanner says of the Trash beside a map that doesn't draw it, from which Swift's rule finds emptyTrash (KnownPlaces.trashHoldsNothing). IconRuleTests.swift and icon-rule.test.ts read this file.",
   "home": "/Users/zo\u00eb",
   "rule": {
     "places": [
@@ -658,6 +658,81 @@
       "asking": false,
       "emptyTrash": true,
       "key": "place/trash-empty"
+    },
+    {
+      "why": "A Trash the map doesn't draw, as a map folds a Trash of no bytes into its folder's smaller items, shows empty when the scanner's place for it says it holds no bytes, files or folders.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 0,
+        "files": 0,
+        "children": []
+      },
+      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 0, "subfolders": false },
+      "asking": false,
+      "emptyTrash": true,
+      "key": "place/trash-empty"
+    },
+    {
+      "why": "A Trash the map doesn't draw that holds only a Finder copy, whose bytes its original holds, has no bytes but a file, so it shows full.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 0,
+        "files": 0,
+        "children": []
+      },
+      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 1, "subfolders": false },
+      "asking": false,
+      "emptyTrash": false,
+      "key": "place/trash"
+    },
+    {
+      "why": "A Trash the map doesn't draw that holds only empty files has no bytes but files, so it shows full.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 0,
+        "files": 0,
+        "children": []
+      },
+      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 2, "subfolders": false },
+      "asking": false,
+      "emptyTrash": false,
+      "key": "place/trash"
+    },
+    {
+      "why": "A Trash the map doesn't draw that holds only empty folders has no bytes or files but folders, so it shows full.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 0,
+        "files": 0,
+        "children": []
+      },
+      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 0, "subfolders": true },
+      "asking": false,
+      "emptyTrash": false,
+      "key": "place/trash"
+    },
+    {
+      "why": "A Trash the map doesn't draw whose place doesn't say what it holds, as from a scanner from before it did, isn't known to be empty, so it shows full.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 0,
+        "files": 0,
+        "children": []
+      },
+      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0 },
+      "asking": false,
+      "emptyTrash": false,
+      "key": "place/trash"
     },
     {
       "why": "Only the Trash has an empty state: another place holding nothing keeps its own icon.",

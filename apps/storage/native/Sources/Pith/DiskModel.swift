@@ -878,10 +878,10 @@ enum MapCommand: Equatable {
     }
 
     /// Whether the Trash holds nothing, by what the scanner says of it with the map shown (`KnownPlaces.trashHoldsNothing`):
-    /// its icon shows macOS's empty Trash then, everywhere it shows. A map a scan made says so by its tree, and a live
-    /// map's by the places that came with it.
+    /// its icon shows macOS's empty Trash then, everywhere it shows. A map a scan made says so by its tree and the folders
+    /// its scan listed, and a live map's by the places that came with it.
     private var trashIsEmpty: Bool {
-        Icons.places.trashHoldsNothing(in: result?.root, scanned: scannedAt != nil, live: sideColumn.livePlaces ?? [])
+        Icons.places.trashHoldsNothing(in: result?.root, scan: scannedAt == nil ? nil : result?.summary, live: sideColumn.livePlaces ?? [])
     }
 
     /// What the map's page may load from Pith's icon route, by the same rule: an item's own icon only for what the map

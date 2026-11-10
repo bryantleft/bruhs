@@ -755,6 +755,45 @@ fn serve_gives_each_place_its_size_in_the_map_it_answers_with() {
     remove(&root);
 }
 
+/// Each place says how many files it holds and whether it holds folders, beside its size: the index counts a clone copy
+/// whose bytes another copy holds, and an empty file, in its files and not its bytes, so a Trash holding only those, or
+/// only empty folders, has no bytes and isn't empty.
+#[test]
+fn serve_says_what_each_place_holds_beside_its_size() {
+    let root = fixture("serve_says_what_each_place_holds_beside_its_size");
+    for folder in ["kept", "empty", "copies", "blank", "folders/inner"] {
+        fs::create_dir_all(root.join(folder)).unwrap();
+    }
+    fs::write(root.join("kept/original.bin"), vec![b'o'; 70_000]).unwrap();
+    // The copy is made after the original, so the original, the lower inode, holds the bytes.
+    assert!(clone_file(&root.join("kept/original.bin"), &root.join("copies/duplicate.bin")));
+    fs::write(root.join("blank/empty.txt"), b"").unwrap();
+    let mut serve = Serve::start();
+    serve.send(serde_json::json!({ "cmd": "open", "root": root, "snapshot": null, "volume": "V" }));
+    serve.until("opened");
+    serve.send(serde_json::json!({ "cmd": "walk", "since": 100 }));
+    serve.until("walked");
+    let at = |path: &str| root.join(path).to_string_lossy().into_owned();
+    let places = [at("kept"), at("empty"), at("copies"), at("blank"), at("folders")];
+    serve.send(serde_json::json!({ "cmd": "tree", "path": root, "focus": null, "request": 3, "places": places }));
+    let tree = serve.until("tree");
+    let answered: HashMap<String, serde_json::Value> =
+        tree["places"].as_array().unwrap().iter().map(|place| (place["path"].as_str().unwrap().to_string(), place.clone())).collect();
+    let held = |path: &str| {
+        let place = &answered[&at(path)];
+        (place["size"].as_u64(), place["files"].as_u64(), place["subfolders"].as_bool())
+    };
+    let (kept, files, subfolders) = held("kept");
+    assert!(kept.is_some_and(|size| size >= 70_000), "the original holds the bytes: {kept:?}");
+    assert_eq!((files, subfolders), (Some(1), Some(false)));
+    assert_eq!(held("empty"), (Some(0), Some(0), Some(false)), "nothing at all");
+    assert_eq!(held("copies"), (Some(0), Some(1), Some(false)), "a copy whose bytes the original holds");
+    assert_eq!(held("blank"), (Some(0), Some(1), Some(false)), "an empty file");
+    assert_eq!(held("folders"), (Some(0), Some(0), Some(true)), "an empty folder");
+    serve.close();
+    remove(&root);
+}
+
 struct Serve {
     child: std::process::Child,
     lines: mpsc::Receiver<String>,

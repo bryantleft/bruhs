@@ -250,19 +250,24 @@ public struct KnownPlaces: Sendable {
         folder.kind == .dir && folder.size == 0 && (folder.children ?? []).isEmpty
     }
 
-    /// Whether the Trash holds nothing, by what the scanner says of it with the map `tree`. A `scanned` map lists every
-    /// folder it can read, so it says so by drawing the Trash with nothing in it. A live map's tree draws a Trash found
-    /// and not listed yet the same way, so for any other map its index says: it has listed the Trash and counts no bytes
-    /// in it (its place in `live`, the places that came with the tree, which name no Trash found and not listed yet),
-    /// and the tree, where it draws the Trash, draws nothing in it. With no places, as before a live map's first tree,
-    /// nothing says so. The Trash's icon shows this state wherever it shows (`iconKey(for:asking:trashIsEmpty:)`,
-    /// `placesTable`, and the page's rule, which gets it with `iconRule`).
-    public func trashHoldsNothing(in tree: DiskNode?, scanned: Bool, live: [LivePlace]) -> Bool {
+    /// Whether the Trash holds nothing, by what the scanner says of it with the map `tree`. A map a scan made, `scan` its
+    /// summary, lists every folder it can read and folds one too small for a block into its folder's smaller items, and
+    /// an empty folder into nothing, so only a scan of the Trash itself draws it with nothing in it: it holds nothing when
+    /// that scan's own folder draws nothing and the scan listed no folder below it, nor found one only in the cloud. A
+    /// live map's tree draws a Trash found and not listed yet as one holding nothing, so for any other map its index
+    /// says: it has listed the Trash and holds no bytes, files or folders there (its place in `live`, the places that came
+    /// with the tree, which name no Trash found and not listed yet), and the tree, where it draws the Trash, draws nothing
+    /// in it. Bytes alone can't say so: the index counts a clone copy whose bytes another copy holds, and an empty file,
+    /// in its files and not its bytes. With no places, as before a live map's first tree, or a place that doesn't say
+    /// what it holds, nothing says so. The Trash's icon shows this state wherever it shows
+    /// (`iconKey(for:asking:trashIsEmpty:)`, `placesTable`, and the page's rule, which gets it with `iconRule`).
+    public func trashHoldsNothing(in tree: DiskNode?, scan: DiskSummary?, live: [LivePlace]) -> Bool {
         guard let trash = place(id: Self.trashID) else { return false }
         let node = tree?.node(at: trash.path)
         if let node, !Self.drawsNothing(node) { return false }
-        if scanned { return node != nil }
-        return live.first { $0.path == trash.path }?.size == 0
+        // A scan's count of the folders it listed includes its own.
+        if let scan { return node != nil && tree?.path == trash.path && scan.dirs <= 1 && scan.cloudOnly.folders == 0 }
+        return live.first { $0.path == trash.path }?.holdsNothing ?? false
     }
 
     /// The disk map's Places section's table for a live map, whose tree the page shows (`tree`), from what its index
@@ -275,7 +280,7 @@ public struct KnownPlaces: Sendable {
     /// root, the startup disk's, and at the home folder.
     public func placesTable(for tree: DiskNode, mapRoot: String, live: [LivePlace]) -> PlacesTable {
         let held = Dictionary(live.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
-        let empty = trashHoldsNothing(in: tree, scanned: false, live: live)
+        let empty = trashHoldsNothing(in: tree, scan: nil, live: live)
         let places = shortcuts.compactMap { place -> PlacesTable.Place? in
             guard let found = held[place.path] else { return nil }
             let size = found.size.map { tree.folder(at: place.path)?.size ?? $0 }

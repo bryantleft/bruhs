@@ -70,17 +70,31 @@ public struct LivePlace: Decodable, Sendable, Equatable {
     /// As Pith asked for it.
     public let path: String
     public let size: UInt64?
+    /// The files in it, each counted once, which `size` can't say: a clone copy whose bytes another copy holds, and an
+    /// empty file, add a file and no bytes. Nil where the scanner doesn't say, as for a folder it hasn't read, or from a
+    /// scanner from before it said.
+    public let files: UInt64?
+    /// Whether it holds a folder, an empty one included. Nil where the scanner doesn't say.
+    public let subfolders: Bool?
     /// It, or a folder above it, waits on the person's answer to macOS's question about Pith, which is all it takes.
     public let asking: Bool
 
-    public init(path: String, size: UInt64?, asking: Bool = false) { self.path = path; self.size = size; self.asking = asking }
+    public init(path: String, size: UInt64?, files: UInt64? = nil, subfolders: Bool? = nil, asking: Bool = false) {
+        self.path = path; self.size = size; self.files = files; self.subfolders = subfolders; self.asking = asking
+    }
 
-    enum CodingKeys: String, CodingKey { case path, size, asking }
+    /// The scanner has listed it and says it holds nothing: no bytes, files or folders. One that doesn't say what it holds
+    /// holds something, as far as Pith knows.
+    public var holdsNothing: Bool { size == 0 && files == 0 && subfolders == false }
+
+    enum CodingKeys: String, CodingKey { case path, size, files, subfolders, asking }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         path = try container.decode(String.self, forKey: .path)
         size = try container.decodeIfPresent(UInt64.self, forKey: .size)
+        files = try container.decodeIfPresent(UInt64.self, forKey: .files)
+        subfolders = try container.decodeIfPresent(Bool.self, forKey: .subfolders)
         // The scanner says it only of a place that waits.
         asking = try container.decodeIfPresent(Bool.self, forKey: .asking) ?? false
     }
