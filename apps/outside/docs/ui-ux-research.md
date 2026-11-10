@@ -1963,3 +1963,9 @@ Pace: at 8,000 steps a day on one skill with no bonuses, level 50 took about 25 
 The survey also flagged the white item in the starting bag as an unreadable sprite. It is linen, drawn as a roll of cloth on purpose; no change.
 
 Lint, typecheck, 210 tests (one new) and the landing page build pass. Not checked on a device.
+
+## The you tab splits into you, collection log and settings (November 10, 2026)
+
+The you tab ran 3.8 screens at 390×844 across eight sections: who you are, what you've done, and settings. It now keeps the portrait, stats, outfits, the week and the links. The 117-slot collection log moved to its own screen (`/collection`), grouped as wood, ore and bars; fish and food; fruit, fibre and cloth; gems and treasures; tools; gear, each with a found count, and reached from a "collection log · 7 of 117 items found" row. The nine lifetime counters fold behind "show lifetime records" inside stats. The daily goal moved to settings, which now shows for the browser demo too, and the "steps" panel (a health card linking to settings, which the settings row already did) is gone. The demo's "walk · +500 steps" button stays on the you tab, since it is the demo's only way to get steps, and also sits in the settings footer.
+
+Lengths at 390×844 in an early demo save: you 2.0 screens (was 3.8; the demo button and reset add about 150 px a phone won't have), collection log 1.7, settings 1.3. At 320×640: 2.8, 2.8 and 1.9. Opening and closing the collection log and settings by keyboard returns focus to the you heading, as the walk link already did. Item sheets open from the log. No console errors. Not checked on a device.

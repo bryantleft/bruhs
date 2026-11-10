@@ -10,7 +10,7 @@ import {
 import { Platform, type Pressable, type View } from 'react-native';
 import { keepFocusVisible, keepFocusVisibleOnFocus } from '../components/keepFocusVisible';
 
-type DetailRoute = '/explore' | '/health' | '/party';
+type DetailRoute = '/collection' | '/explore' | '/health' | '/party';
 type ScreenLinkRoute = DetailRoute;
 type ScreenLinkOwner = Readonly<{ openerId: string; sourcePath: string }>;
 

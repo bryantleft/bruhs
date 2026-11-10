@@ -1,12 +1,14 @@
 import { Linking, Platform, StyleSheet, View } from 'react-native';
 import { Bruh } from '../components/Bruh';
 import { ConfirmAction } from '../components/ConfirmAction';
+import { GoalPicker } from '../components/GoalPicker';
 import { Icon, type IconName } from '../components/Icon';
 import { TrackingControl } from '../components/TrackingControl';
 import { Button, Copy, IconButton, Screen, SectionTitle } from '../components/ui';
 import { useParty } from '../friends/PartyProvider';
 import { useGame } from '../game/GameProvider';
 import { backToAdventure, useScreenFocus } from '../navigation/useScreenFocus';
+import { Panel } from '../pixel/chrome';
 import { color, radius, space } from '../theme/theme';
 
 // The policy both stores link to. Health Connect's privacy action opens this screen
@@ -15,12 +17,12 @@ const PRIVACY_POLICY = 'https://outside.bruhs.app/privacy/#app';
 
 export default function HealthScreen(): React.JSX.Element {
   const screen = useScreenFocus();
-  const { demo, game, pauseHealth, healthSettings, reset, resetting, resetError } = useGame();
+  const { demo, game, setGoal, pauseHealth, healthSettings, reset, resetting, resetError } = useGame();
   const provider = Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect';
   const active = game.health?.enabled === true;
   const { available: hasParties } = useParty();
   return (
-    <Screen rootRef={screen} bottomSafeArea footer={demo ? undefined : <TrackingControl />}>
+    <Screen rootRef={screen} bottomSafeArea footer={<TrackingControl />}>
       <View style={styles.navigation}>
         <IconButton icon="back" label="Back to your adventure" onPress={() => backToAdventure('/health')} />
       </View>
@@ -35,6 +37,9 @@ export default function HealthScreen(): React.JSX.Element {
           settings
         </Copy>
       </View>
+      <Panel title="daily goal" aside="changes apply from today">
+        <GoalPicker value={game.goal} onChange={setGoal} />
+      </Panel>
       <View style={styles.permissions}>
         {(
           [

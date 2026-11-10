@@ -2,10 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Bruh } from '../../components/Bruh';
 import { ConfirmAction } from '../../components/ConfirmAction';
-import { GoalPicker } from '../../components/GoalPicker';
-import { HealthSummary } from '../../components/HealthSummary';
 import { Icon } from '../../components/Icon';
-import { ItemSheet } from '../../components/ItemSheet';
 import { TrackingControl } from '../../components/TrackingControl';
 import { Screen } from '../../components/ui';
 import { WeekHistory } from '../../components/WeekHistory';
@@ -14,8 +11,7 @@ import { ITEMS, SKINS } from '../../game/content';
 import { useGame } from '../../game/GameProvider';
 import { getSkin, questPoints, streak, totalLevel, totalSteps, totalXp } from '../../game/game';
 import { useScreenFocus, useScreenLink } from '../../navigation/useScreenFocus';
-import { ghost, itemArt } from '../../pixel/art';
-import { bevel, Panel, Slot } from '../../pixel/chrome';
+import { bevel, Panel } from '../../pixel/chrome';
 import { color, font, shadow, space } from '../../theme/theme';
 
 function LinkRow({
@@ -24,7 +20,7 @@ function LinkRow({
   detail,
   link,
 }: Readonly<{
-  icon: 'party' | 'map' | 'health';
+  icon: 'chest' | 'party' | 'map' | 'settings';
   label: string;
   detail: string;
   link: ReturnType<typeof useScreenLink>;
@@ -50,11 +46,12 @@ function LinkRow({
 
 export default function YouScreen(): React.JSX.Element {
   const screen = useScreenFocus();
-  const { game, today, demo, equip, setGoal, reset, resetting, resetError } = useGame();
+  const { game, today, demo, equip, reset, resetting, resetError } = useGame();
   const { available: hasParties } = useParty();
   const partyLink = useScreenLink('/party');
   const walkLink = useScreenLink('/explore');
   const healthLink = useScreenLink('/health');
+  const collectionLink = useScreenLink('/collection');
   const total = totalLevel(game);
   const stats = [
     ['total level', total.toLocaleString()],
@@ -64,8 +61,10 @@ export default function YouScreen(): React.JSX.Element {
     ['actions done', game.actions.toLocaleString()],
     ['goal streak', `${streak(game, today)} days`],
   ] as const;
-  const [inspect, setInspect] = useState<string | null>(null);
+  // Lifetime counters fold away; the headline stats stay in view.
+  const [records, setRecords] = useState(false);
   const seen = new Set(game.seen);
+  const found = ITEMS.filter((item) => seen.has(item.id)).length;
   const counters = [
     ['chests found while working', game.stats.chestsFound ?? 0],
     ['chests opened', game.stats.chestsOpened ?? 0],
@@ -99,38 +98,33 @@ export default function YouScreen(): React.JSX.Element {
             </View>
           ))}
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: records }}
+          aria-expanded={records}
+          onPress={() => setRecords(!records)}
+          style={({ pressed }) => [styles.toggle, bevel('well', pressed)]}
+        >
+          <Text style={styles.toggleText}>{records ? 'hide' : 'show'} lifetime records</Text>
+          <Icon name={records ? 'close' : 'plus'} tint={color.muted} size={14} />
+        </Pressable>
+        {records ? (
+          <View style={styles.stats}>
+            {counters.map(([label, value]) => (
+              <View key={label} style={styles.stat}>
+                <Text style={styles.small}>{label}</Text>
+                <Text style={styles.value}>{value.toLocaleString()}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
       </Panel>
-      <Panel title="lifetime">
-        <View style={styles.stats}>
-          {counters.map(([label, value]) => (
-            <View key={label} style={styles.stat}>
-              <Text style={styles.small}>{label}</Text>
-              <Text style={styles.value}>{value.toLocaleString()}</Text>
-            </View>
-          ))}
-        </View>
-      </Panel>
-      <Panel
-        title="collection log"
-        aside={`${ITEMS.filter((item) => seen.has(item.id)).length}/${ITEMS.length} found`}
-      >
-        <View style={styles.log}>
-          {ITEMS.map((item) => {
-            const found = seen.has(item.id);
-            return (
-              <Pressable
-                key={item.id}
-                accessibilityRole="button"
-                accessibilityLabel={found ? item.name : 'Not found yet'}
-                disabled={!found}
-                onPress={() => setInspect(item.id)}
-              >
-                <Slot art={found ? itemArt(item.id) : ghost(itemArt(item.id))} size={40} />
-              </Pressable>
-            );
-          })}
-        </View>
-      </Panel>
+      <LinkRow
+        icon="chest"
+        label="collection log"
+        detail={`${found} of ${ITEMS.length} items found`}
+        link={collectionLink}
+      />
       <Panel title="outfits" aside="unlock with total level">
         <View style={styles.outfits} accessibilityRole="radiogroup" accessibilityLabel="Outfits">
           {SKINS.map((skin) => {
@@ -162,13 +156,8 @@ export default function YouScreen(): React.JSX.Element {
         </View>
       </Panel>
       <WeekHistory />
-      <Panel title="daily goal" aside="changes apply from today">
-        <GoalPicker value={game.goal} onChange={setGoal} />
-      </Panel>
-      <Panel title="steps">
-        <HealthSummary />
-        {demo ? <TrackingControl /> : null}
-      </Panel>
+      {/* The browser demo's only way to get steps. */}
+      {demo ? <TrackingControl /> : null}
       <View style={styles.links}>
         {hasParties ? (
           <LinkRow
@@ -179,14 +168,16 @@ export default function YouScreen(): React.JSX.Element {
           />
         ) : null}
         <LinkRow icon="map" label="real-world walk" detail="map a gps walk and earn stamps" link={walkLink} />
-        {demo ? null : (
-          <LinkRow
-            icon="health"
-            label="settings"
-            detail="step sync, privacy and erasing your journey"
-            link={healthLink}
-          />
-        )}
+        <LinkRow
+          icon="settings"
+          label="settings"
+          detail={
+            demo
+              ? 'daily goal, sample steps and privacy'
+              : 'daily goal, step sync, privacy and erasing your journey'
+          }
+          link={healthLink}
+        />
       </View>
       <Text style={styles.small}>
         {demo ? 'adventure saved in this browser.' : 'adventure saved on this device.'}
@@ -207,9 +198,6 @@ export default function YouScreen(): React.JSX.Element {
           {resetError}
         </Text>
       ) : null}
-      {inspect ? (
-        <ItemSheet itemKey={inspect} origin={{ from: 'inventory' }} onClose={() => setInspect(null)} />
-      ) : null}
     </Screen>
   );
 }
@@ -222,8 +210,15 @@ const styles = StyleSheet.create({
   small: { fontFamily: font.label, fontSize: 10, lineHeight: 14, color: color.muted, ...shadow },
   stats: { flexDirection: 'row', flexWrap: 'wrap', rowGap: space.related },
   stat: { width: '50%', gap: 2 },
+  toggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: space.related,
+    minHeight: 48,
+  },
+  toggleText: { fontFamily: font.label, fontSize: 11, lineHeight: 15, color: color.secondary, ...shadow },
   value: { fontFamily: font.labelBold, fontSize: 15, lineHeight: 19, color: color.text, ...shadow },
-  log: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   outfits: { flexDirection: 'row', flexWrap: 'wrap', gap: space.tight },
   outfit: { width: '31%', flexGrow: 1, alignItems: 'center', gap: space.micro, padding: space.tight },
   locked: { opacity: 0.35 },
