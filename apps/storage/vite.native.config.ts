@@ -1,10 +1,19 @@
 import { mkdirSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
 const build = path.resolve(import.meta.dirname, "native/.build");
+const require = createRequire(import.meta.url);
+
+/**
+ * Packages whose code reaches the page's stylesheet rather than a chunk, by the banner each leaves in it: Tailwind
+ * writes its preflight into pith.css under `/*! tailwindcss v4… *\/`, though no module of it is in a chunk. Each one
+ * whose banner is there is listed by its package.json, so the notices carry its licence too.
+ */
+const STYLESHEET_PACKAGES = ["tailwindcss"];
 
 /**
  * Writes the modules the page's bundle holds code from to native/.build/web-modules.json, beside the page rather than
@@ -15,18 +24,32 @@ function bundledModules(): Plugin {
   return {
     name: "pith-bundled-modules",
     apply: "build",
-    generateBundle(_, bundle) {
-      const modules = Object.values(bundle).flatMap((item) =>
+    // Once everything is written, so the stylesheet Vite emits late is in the bundle too.
+    writeBundle(_, bundle) {
+      const items = Object.values(bundle);
+      const modules = items.flatMap((item) =>
         item.type === "chunk"
           ? Object.entries(item.modules)
               .filter(([, module]) => module.renderedLength > 0)
               .map(([id]) => id)
           : [],
       );
+      const styles = items.flatMap((item) =>
+        item.type === "asset" && item.fileName.endsWith(".css")
+          ? [
+              typeof item.source === "string"
+                ? item.source
+                : new TextDecoder().decode(item.source),
+            ]
+          : [],
+      );
+      const styled = STYLESHEET_PACKAGES.filter((name) =>
+        styles.some((css) => css.includes(`/*! ${name} v`)),
+      ).map((name) => require.resolve(`${name}/package.json`));
       mkdirSync(build, { recursive: true });
       writeFileSync(
         path.join(build, "web-modules.json"),
-        `${JSON.stringify(modules.sort(), null, 2)}\n`,
+        `${JSON.stringify([...modules, ...styled].sort(), null, 2)}\n`,
       );
     },
   };

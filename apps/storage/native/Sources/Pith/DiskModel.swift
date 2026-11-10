@@ -797,10 +797,12 @@ enum MapCommand: Equatable {
                 // The items may have moved while they were measured.
                 self.follow(self.frees.landed(self.selectedSizes, at: Date(), took: Date().timeIntervalSince(began)))
             } catch {
-                guard !Task.isCancelled else { return }
-                self?.freesTask = nil
-                self?.frees.failed(at: Date(), took: Date().timeIntervalSince(began))
+                guard !Task.isCancelled, let self, self.selection.paths == paths else { return }
+                self.freesTask = nil
                 NSLog("Pith: couldn't measure what deleting \(paths.joined(separator: ", ")) frees: \(error.localizedDescription)")
+                // The figure in hand, if any, says again how old it is: the schedule judges the items by what it was
+                // measured of, not by what this measurement began with.
+                self.follow(self.frees.failed(self.selectedSizes, at: Date(), took: Date().timeIntervalSince(began)))
             }
         }
     }

@@ -69,10 +69,25 @@ final class FreesScheduleTests: XCTestCase {
     func testAFailedMeasurementRestsAndWaitsForTheNextMove() {
         var schedule = FreesSchedule(cores: 1)
         XCTAssertEqual(schedule.selected(["/r/a": 10_000_000]), .measure)
-        schedule.failed(at: at(1), took: 1)
+        XCTAssertEqual(schedule.failed(["/r/a": 10_000_000], at: at(1), took: 1), .keep)
         XCTAssertEqual(schedule.mapChanged(["/r/a": 10_000_000], at: at(1_000)), .keep, "trying again unmoved would fail again")
         XCTAssertEqual(schedule.mapChanged(["/r/a": 12_000_000], at: at(10)), .wait(until: at(201)))
         XCTAssertEqual(schedule.mapChanged(["/r/a": 12_000_000], at: at(201)), .measure)
+    }
+
+    /// A failed measurement leaves the figure in hand, which is of the sizes its own measurement began with, so the items
+    /// are judged by those again, not by the sizes the failed one began with: otherwise a figure from before the items
+    /// moved would read as what they free now.
+    func testAFailedMeasurementJudgesTheItemsByTheFigureInHand() {
+        var schedule = FreesSchedule(cores: 1)
+        XCTAssertEqual(schedule.selected(["/r/a": 10_000_000]), .measure)
+        XCTAssertEqual(schedule.landed(["/r/a": 10_000_000], at: at(1), took: 0.001), .keep)
+        XCTAssertEqual(schedule.mapChanged(["/r/a": 12_000_000], at: at(10)), .measure)
+        XCTAssertEqual(schedule.failed(["/r/a": 12_000_000], at: at(11), took: 1), .wait(until: at(211)),
+                       "the figure in hand is of 10 MB, so the items still differ from it")
+        XCTAssertEqual(schedule.mapChanged(["/r/a": 12_000_000], at: at(211)), .measure)
+        XCTAssertEqual(schedule.failed(["/r/a": 10_500_000], at: at(212), took: 1), .keep,
+                       "back within a megabyte of what the figure in hand was measured of")
     }
 
     func testNothingSelectedIsNeverMeasured() {

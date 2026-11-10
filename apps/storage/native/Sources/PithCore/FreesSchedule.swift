@@ -34,6 +34,8 @@ public struct FreesSchedule: Sendable {
     private let restFactor: Double
     /// The selected items' sizes, by path, when the measurement under way or the last one began; nil with nothing selected.
     private var basis: [String: UInt64]?
+    /// The sizes the figure in hand was measured of, when its measurement began; nil until one of this selection lands.
+    private var measuredBasis: [String: UInt64]?
     private var measuring = false
     /// When the rest after the last measurement ends.
     private var restsUntil: Date?
@@ -57,6 +59,7 @@ public struct FreesSchedule: Sendable {
     /// it's the person's own choice. A measurement of the last one is the last one's, and is dropped.
     public mutating func selected(_ sizes: [String: UInt64]) -> Step {
         restsUntil = nil
+        measuredBasis = nil
         guard !sizes.isEmpty else { basis = nil; measuring = false; return .keep }
         basis = sizes
         measuring = true
@@ -75,13 +78,20 @@ public struct FreesSchedule: Sendable {
     /// The measurement under way came at `time`, after `took` seconds, when the items are `sizes`: it rests, and they're
     /// measured again after its rest if they moved meanwhile.
     public mutating func landed(_ sizes: [String: UInt64], at time: Date, took: TimeInterval) -> Step {
+        measuredBasis = basis
         rest(from: time, took: took)
         return mapChanged(sizes, at: time)
     }
 
-    /// The measurement under way failed at `time`, after `took` seconds. It rests too, and the next map whose items moved
-    /// measures again: trying again unmoved would likely fail again.
-    public mutating func failed(at time: Date, took: TimeInterval) { rest(from: time, took: took) }
+    /// The measurement under way failed at `time`, after `took` seconds, when the items are `sizes`. It rests too. The
+    /// figure in hand, if there is one, is still of the sizes its own measurement began with, so the items are judged by
+    /// those again: they're measured after the rest if they differ from them, and the figure stands if they don't. With
+    /// no figure in hand, the next map whose items moved measures again: trying again unmoved would likely fail again.
+    public mutating func failed(_ sizes: [String: UInt64], at time: Date, took: TimeInterval) -> Step {
+        rest(from: time, took: took)
+        if let measuredBasis { basis = measuredBasis }
+        return mapChanged(sizes, at: time)
+    }
 
     private mutating func rest(from time: Date, took: TimeInterval) {
         measuring = false

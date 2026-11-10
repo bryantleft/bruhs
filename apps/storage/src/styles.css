@@ -5,3 +5,14 @@
 :root {
   --kind-other: var(--color-longan-600);
 }
+
+/* A selected row of the map's lists reads as bruhs's pressed rows do (`.menu-item[aria-pressed="true"]` in
+   @bruhs/theme): it isn't a toggle, so it carries `data-selected` rather than `aria-pressed`. bruhs's rows are dark
+   only; the disk map's page restyles them for light mode (native-web/styles.css). */
+@layer components {
+  @media not (prefers-color-scheme: light) {
+    .menu-item[data-selected] {
+      color: var(--color-rambutan-50);
+    }
+  }
+}
