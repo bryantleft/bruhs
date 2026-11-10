@@ -300,7 +300,8 @@ public struct PlacesTable: Encodable, Equatable, Sendable {
         /// As `KnownPlaces` names it.
         public let name: String
         public let path: String
-        /// Its icon's key, `place/<id>`, or the empty Trash's, `place/trash-empty`, while the map shows the Trash holding nothing.
+        /// Its icon's key, `place/<id>`, or the empty Trash's, `place/trash-empty`, while the map shows the Trash holding
+        /// nothing.
         public let key: String
         /// Its size as the map shows it, or nil where Pith can't read it, which travels as null.
         public let size: UInt64?
