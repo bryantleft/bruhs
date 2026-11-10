@@ -97,7 +97,9 @@ public struct KnownPlaces: Sendable {
             // read from their signatures and binaries on macOS 26.3, never from their data. Books' library agent,
             // BookKit's sandboxed com.apple.BKAgentService, registers its Documents folder's iBooks as the default
             // library (BKBookLibraryPath) and keeps the books in the library's Books, beside Books.plist; the person
-            // can move the library elsewhere, which this path then misses. Podcasts' one app group is
+            // can move the library elsewhere, which this path then misses. Books also declares the iCloud container
+            // iCloud.com.apple.iBooks, so with Books in iCloud Drive turned on its books may sit under iCloud Drive's
+            // place instead, which Pith doesn't look inside for them. Podcasts' one app group is
             // 243LU875E5.groups.com.apple.podcasts, and its downloads are that group's Library/Cache
             // (MTConstants.sharedCacheDirectory), which its Storage extension measures. Both lie in other apps'
             // data, which macOS guards.
