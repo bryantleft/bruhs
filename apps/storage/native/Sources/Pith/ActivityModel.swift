@@ -125,10 +125,10 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
 
     /// The apps that wrote the most to disk since `date`, from the kept week of history, each app with its bundle.
     /// Without history kept there's nothing to say; with it, the stretch covered can begin after `date`, when history
-    /// began later.
+    /// began later. A `date` after now, as when the clock went back, asks for now alone.
     func writers(since date: Date) -> DiskWriters {
         guard keepsHistory else { return .historyOff }
-        guard let found = longHistory.writers(in: date...Date(), limit: 5), !found.writers.isEmpty else { return .empty }
+        guard let found = longHistory.writers(since: date, now: Date(), limit: 5), !found.writers.isEmpty else { return .empty }
         return .apps(found.writers, since: found.from)
     }
 

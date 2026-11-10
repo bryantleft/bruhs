@@ -113,6 +113,22 @@ final class LongHistoryTests: XCTestCase {
         XCTAssertNil(history.writers(in: base.addingTimeInterval(-7200)...base.addingTimeInterval(-3600), limit: 5), "nothing kept from before")
     }
 
+    /// Disk asks who wrote since its baseline's date. One kept before the clock went back is dated after now, and a range
+    /// from it to now would end before it began, which traps: Pith asks for now alone instead, when nothing was written.
+    func testWritersSinceADateAfterNowAskForNowAlone() throws {
+        var history = LongHistory()
+        let apps = [AppSample(id: "/Applications/Xcode.app:1:1", name: "Xcode", executable: "/Applications/Xcode.app", members: [], cpu: 1, memory: 100,
+                              read: nil, written: 3_000_000, restricted: false)]
+        for second in stride(from: 0.0, to: 62, by: 2) {
+            history.record(ActivitySnapshot(date: base.addingTimeInterval(second), uptime: second, cpu: 10, pressure: .normal, apps: apps, error: nil,
+                                            memory: MemoryUse(physical: 1000, used: 500, app: 400, wired: 50, compressed: 50, cached: 100, swapUsed: 10, swapTotal: 100)))
+        }
+        let now = base.addingTimeInterval(60)
+        XCTAssertEqual(history.writers(since: base, now: now, limit: 5)?.writers.map(\.name), ["Xcode"])
+        XCTAssertNil(history.writers(since: now.addingTimeInterval(3600), now: now, limit: 5), "an hour ahead of now")
+        XCTAssertNil(history.writers(since: now, now: now, limit: 5))
+    }
+
     func testAHistoryKeptBeforeWritesWereCountedStillLoads() throws {
         var history = LongHistory()
         for second in stride(from: 0.0, to: 62, by: 2) { history.record(writing(second, [(id: "a", cpu: 5, written: 1000)])) }

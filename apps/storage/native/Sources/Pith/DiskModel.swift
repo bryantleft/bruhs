@@ -414,16 +414,16 @@ enum MapCommand: Equatable {
     }
 
     /// The live map's folder sizes against a baseline kept from up to a day before, so the map shows what grew. A day
-    /// old, the baseline is replaced by the map as it is then. A map in finer detail around the open folder holds items
-    /// the baseline never could, so only items the baseline has are compared, and a baseline is only ever taken from
-    /// a map without that detail.
+    /// old, the baseline is replaced by the map as it is then, and so is one dated after now, as when the clock went
+    /// back. A map in finer detail around the open folder holds items the baseline never could, so only items the
+    /// baseline has are compared, and a baseline is only ever taken from a map without that detail.
     private func compareWithBaseline(_ value: DiskResult) {
         guard remembersScans, let folder = scansFolder, let live, value.root.path == live.root else { return }
         let file = ScanMemory.file(for: value.root.path, in: folder)
         if baseline?.root != value.root.path {
             baseline = (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode(ScanMemory.self, from: $0) }
         }
-        if let kept = baseline, kept.comparable(to: value), Date().timeIntervalSince(kept.date) < 24 * 60 * 60 {
+        if let kept = baseline, kept.isBaseline(of: value, at: Date(), within: 24 * 60 * 60) {
             growth = kept.changes(to: value, countingNew: false)
             growthSince = kept.date
             return
@@ -863,12 +863,13 @@ enum MapCommand: Equatable {
         NSPasteboard.general.setString(paths.joined(separator: "\n"), forType: .string)
     }
 
-    /// Compares a finished scan with the last one of the same folder, then keeps this one for next time.
+    /// Compares a finished scan with the last one of the same folder, then keeps this one for next time. A last scan
+    /// dated after this one, as when the clock went back, isn't compared.
     private func compareWithLastScan(_ value: DiskResult) {
         growth = [:]; growthSince = nil
         guard remembersScans, let folder = scansFolder, let date = scannedAt else { return }
         let file = ScanMemory.file(for: value.root.path, in: folder)
-        if let data = try? Data(contentsOf: file), let last = try? JSONDecoder().decode(ScanMemory.self, from: data), last.comparable(to: value) {
+        if let data = try? Data(contentsOf: file), let last = try? JSONDecoder().decode(ScanMemory.self, from: data), last.isBaseline(of: value, at: date) {
             growth = last.changes(to: value)
             growthSince = last.date
         }

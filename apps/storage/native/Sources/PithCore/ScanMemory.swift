@@ -25,6 +25,13 @@ public struct ScanMemory: Codable, Sendable, Equatable {
     /// Whether this kept scan counted sizes the same way as `result`, so their differences are real changes.
     public func comparable(to result: DiskResult) -> Bool { version == result.version && root == result.root.path }
 
+    /// Whether `result`, made at `now`, is compared with this kept map: it counted sizes the same way, and it was kept
+    /// before `now`, less than `age` before. One dated after `now`, as one kept before the clock went back, is no
+    /// baseline: nothing grew since a time still to come, and the stretch from it to now would end before it began.
+    public func isBaseline(of result: DiskResult, at now: Date, within age: TimeInterval = .infinity) -> Bool {
+        comparable(to: result) && date <= now && now.timeIntervalSince(date) < age
+    }
+
     /// How much each item changed since this scan, largest change first, at most `limit` of them and none under
     /// `threshold` bytes either way. Items new since then count from zero, unless `countingNew` is off, as for the live
     /// map, whose finer detail around the open folder holds items this one never could; items gone count down to zero.

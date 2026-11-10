@@ -61,6 +61,26 @@ final class ScanMemoryTests: XCTestCase {
         XCTAssertEqual(baseline.changes(to: grown, countingNew: false)["/r/lib"], 30_000_000)
     }
 
+    /// Disk compares the live map with a baseline under a day old, and a scan with the last scan of its folder. One kept
+    /// before the clock went back is dated after now: it's no baseline, since what grew since a time still to come is
+    /// nothing, and the range from it to now would end before it began.
+    func testABaselineDatedAfterNowIsDropped() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000), map = result([])
+        let day: TimeInterval = 24 * 60 * 60
+        func kept(_ seconds: TimeInterval) -> ScanMemory { ScanMemory(map, date: now.addingTimeInterval(seconds)) }
+        XCTAssertTrue(kept(-60).isBaseline(of: map, at: now, within: day))
+        XCTAssertTrue(kept(0).isBaseline(of: map, at: now, within: day), "taken as the map was")
+        XCTAssertFalse(kept(-day).isBaseline(of: map, at: now, within: day), "a day old")
+        XCTAssertFalse(kept(60).isBaseline(of: map, at: now, within: day), "dated after now")
+        XCTAssertFalse(kept(3 * day).isBaseline(of: map, at: now, within: day))
+        // A scan's last scan can be any age, but never from after it.
+        XCTAssertTrue(kept(-30 * day).isBaseline(of: map, at: now))
+        XCTAssertFalse(kept(60).isBaseline(of: map, at: now))
+        // Counted another way, it's no baseline at any date.
+        let older = ScanMemory(root: "/r", date: now.addingTimeInterval(-60), sizes: [:], version: 3)
+        XCTAssertFalse(older.isBaseline(of: map, at: now, within: day))
+    }
+
     func testEachFolderHasItsOwnFile() {
         let folder = URL(fileURLWithPath: "/tmp")
         XCTAssertNotEqual(ScanMemory.file(for: "/Users/me", in: folder), ScanMemory.file(for: "/", in: folder))

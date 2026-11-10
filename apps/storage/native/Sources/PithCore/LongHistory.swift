@@ -147,6 +147,13 @@ public struct LongHistory: Codable, Sendable {
         return (Array(writers), written.from)
     }
 
+    /// The apps that wrote the most from `date` to `now`, as `writers(in:limit:)` finds them. A `date` after `now`, as a
+    /// baseline's kept before the clock went back, asks for the stretch at `now` alone: a range from it to `now` would
+    /// end before it began, which traps.
+    public func writers(since date: Date, now: Date, limit: Int) -> (writers: [DiskWriter], from: Date)? {
+        writers(in: min(date, now)...now, limit: limit)
+    }
+
     /// Buckets inside the span ending at `now`, oldest first: 30-second ones for six hours, 5-minute ones beyond.
     public func buckets(_ span: HistorySpan, now: Date) -> [HistoryBucket] {
         let from = now.addingTimeInterval(-span.seconds)
