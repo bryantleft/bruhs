@@ -29,7 +29,7 @@ final class IconKeyTests: XCTestCase {
             XCTAssertTrue(string.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "-._~%/".contains($0)) }, string)
             XCTAssertNotNil(URL(string: "pith://app/icon/1/dark/32/\(string).png"), string)
         }
-        // The two spellings of é are different file names, and stay different spellings.
+        // The two spellings of é name one item, and each key keeps its own spelling.
         XCTAssertEqual(IconKey.item("/Users/me/Cafe\u{301}").string, "item/%2FUsers%2Fme%2FCafe%CC%81")
         XCTAssertEqual(IconKey.item("/Users/me/Caf\u{e9}").string, "item/%2FUsers%2Fme%2FCaf%C3%A9")
         XCTAssertEqual(IconKey.item("/Users/me/My Folder").string, "item/%2FUsers%2Fme%2FMy%20Folder")
@@ -158,6 +158,24 @@ final class IconStoreTests: XCTestCase {
         _ = draw(others, in: store)
         XCTAssertEqual(renderer.recorded.count, 5)
         XCTAssertEqual(Set(renderer.recorded.map(\.request)), Set([first] + others))
+    }
+
+    /// A path spelled composed and decomposed is one item on APFS and HFS+, so its two keys are one key: the store draws
+    /// and keeps it once, under either spelling. Each key's URL keeps its own spelling.
+    func testBothSpellingsOfAPathShareOneDrawing() throws {
+        let composed = IconKey.item("/Users/me/Caf\u{e9}"), decomposed = IconKey.item("/Users/me/Cafe\u{301}")
+        XCTAssertEqual(composed, decomposed)
+        XCTAssertEqual(composed.hashValue, decomposed.hashValue)
+        XCTAssertEqual(composed.string, "item/%2FUsers%2Fme%2FCaf%C3%A9")
+        XCTAssertEqual(decomposed.string, "item/%2FUsers%2Fme%2FCafe%CC%81")
+        XCTAssertEqual(IconKey(string: decomposed.string), composed, "a URL in either spelling reads back as the one key")
+        let renderer = RecordingRenderer()
+        let store = IconStore(renderer: renderer)
+        let drawn = try XCTUnwrap(draw([IconRequest(composed, size: small, appearance: .dark)], in: store).first ?? nil)
+        let kept = try XCTUnwrap(store.cachedIcon(for: IconRequest(decomposed, size: small, appearance: .dark)), "kept under the other spelling")
+        XCTAssertTrue(kept.image === drawn.image)
+        _ = draw([IconRequest(decomposed, size: small, appearance: .dark)], in: store)
+        XCTAssertEqual(renderer.recorded.count, 1, "drawn once for both spellings")
     }
 
     func testAskingAgainWhileAnIconDrawsWaitsForThatDrawing() {

@@ -10,6 +10,11 @@ import UniformTypeIdentifiers
 /// `string` is how a key travels in a URL's path. Its payload is percent-encoded, everything but ASCII letters, digits
 /// and `-._~`, an item path's slashes included, so a key stays whole: WebKit can't resolve a `..` out of it on the way.
 /// Read a key from a URL's percent-encoded path, since `URL.path` decodes it.
+///
+/// Keys compare and hash as their strings do, by canonical equivalence, so a path spelled composed (NFC) and decomposed
+/// (NFD) is one key, and the store keeps one drawing for it. That's right for the disks Pith maps: APFS and HFS+ don't
+/// let two names in a folder differ only by normalization, so both spellings name one item. `string` keeps the key's own
+/// spelling, so an icon's URL spells the item as whoever made the key did, the scanner's spelling for the map's items.
 public enum IconKey: Hashable, Sendable {
     case type(String)
     case item(String)
