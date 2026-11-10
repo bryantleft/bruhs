@@ -407,7 +407,7 @@ function Here({
         <Button
           label={`${ready} ${ready === 1 ? 'mission' : 'missions'} ready to collect`}
           icon="chest"
-          onPress={() => router.navigate('/quests')}
+          onPress={() => router.navigate({ pathname: '/quests', params: { view: 'missions' } })}
         />
       ) : null}
       {!traveling ? (

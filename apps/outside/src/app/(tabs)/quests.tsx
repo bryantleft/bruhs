@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { type ComponentRef, useEffect, useRef, useState } from 'react';
+import { Pressable, type ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '../../components/Icon';
 import { PageTitle, useTabStat } from '../../components/PageTitle';
 import { Button, Screen } from '../../components/ui';
@@ -72,7 +73,7 @@ function Missions(): React.JSX.Element {
   const ready = (option: MissionPeriod): number =>
     readyMissions(game, today).filter((mission) => mission.period === option).length;
   return (
-    <Panel title="missions" aside={resetLabel(period, today)}>
+    <Panel title={`${period} missions`} aside={resetLabel(period, today)}>
       <Segments
         value={period}
         options={MISSION_PERIODS}
@@ -292,9 +293,30 @@ function QuestRow({
   );
 }
 
+// Two views, so neither long list pushes the other below the fold: the journal of quests, and the
+// daily, weekly and monthly missions. The world tab's "missions ready" button opens the second.
+const VIEWS = ['journal', 'missions'] as const;
+type QuestView = (typeof VIEWS)[number];
+
 export default function QuestsScreen(): React.JSX.Element {
-  const { game } = useGame();
+  const { game, today } = useGame();
   const screen = useScreenFocus();
+  const { view: asked } = useLocalSearchParams<{ view?: string }>();
+  const [view, setView] = useState<QuestView>(asked === 'missions' ? 'missions' : 'journal');
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  const show = (next: QuestView): void => {
+    setView(next);
+    scroll.current?.scrollTo({ y: 0, animated: false });
+  };
+  // A link that asks for a view opens it once; the param is cleared so a later tab tap keeps the
+  // view you last chose.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when a link asks for a view.
+  useEffect(() => {
+    if (asked !== 'missions' && asked !== 'journal') return;
+    show(asked);
+    router.setParams({ view: undefined });
+  }, [asked]);
+  const ready = readyMissions(game, today).length;
   const [open, setOpen] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
   const toggle = (id: string): void => setOpen(open === id ? null : id);
@@ -311,33 +333,42 @@ export default function QuestsScreen(): React.JSX.Element {
   const done = finished.length;
   const points = useTabStat('quest-points');
   return (
-    <Screen rootRef={screen}>
+    <Screen rootRef={screen} scrollRef={scroll}>
       {/* Quest points sit beside the title and progress in the journal's header. */}
       <PageTitle title="quests" stat={points} />
-      <Missions />
-      <Panel title="quest journal" aside={`${QUESTS.length - done} to go`}>
-        {active.map((quest) => (
-          <QuestRow key={quest.id} quest={quest} open={open === quest.id} onToggle={toggle} />
-        ))}
-        {done > 0 ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ expanded: showDone }}
-            onPress={() => setShowDone(!showDone)}
-            style={({ pressed }) => [styles.doneToggle, bevel('well', pressed)]}
-          >
-            <Text style={styles.doneText}>
-              {showDone ? 'hide' : 'show'} {done} completed {done === 1 ? 'quest' : 'quests'}
-            </Text>
-            <Icon name={showDone ? 'close' : 'plus'} tint={color.muted} size={14} />
-          </Pressable>
-        ) : null}
-        {showDone
-          ? finished.map((quest) => (
-              <QuestRow key={quest.id} quest={quest} open={open === quest.id} onToggle={toggle} />
-            ))
-          : null}
-      </Panel>
+      <Segments
+        value={view}
+        options={VIEWS}
+        onChange={show}
+        label={(option) => (option === 'missions' && ready ? `missions · ${ready}` : option)}
+      />
+      {view === 'missions' ? (
+        <Missions />
+      ) : (
+        <Panel title="open quests" aside={`${QUESTS.length - done} to go`}>
+          {active.map((quest) => (
+            <QuestRow key={quest.id} quest={quest} open={open === quest.id} onToggle={toggle} />
+          ))}
+          {done > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: showDone }}
+              onPress={() => setShowDone(!showDone)}
+              style={({ pressed }) => [styles.doneToggle, bevel('well', pressed)]}
+            >
+              <Text style={styles.doneText}>
+                {showDone ? 'hide' : 'show'} {done} completed {done === 1 ? 'quest' : 'quests'}
+              </Text>
+              <Icon name={showDone ? 'close' : 'plus'} tint={color.muted} size={14} />
+            </Pressable>
+          ) : null}
+          {showDone
+            ? finished.map((quest) => (
+                <QuestRow key={quest.id} quest={quest} open={open === quest.id} onToggle={toggle} />
+              ))
+            : null}
+        </Panel>
+      )}
     </Screen>
   );
 }
