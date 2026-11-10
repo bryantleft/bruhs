@@ -44,6 +44,10 @@ public struct KnownPlaces: Sendable {
     }
 
     public let places: [Place]
+    /// The Trash as its icon shows it while the map shows it holding nothing: macOS's empty Trash, under a key of its own,
+    /// `place/trash-empty`, so each key always draws the same art (`iconKey(for:asking:)`). It's the Trash's state, not
+    /// a place: `place(id:)` finds it, and no list of places names it. Nil without a Trash.
+    public let emptyTrash: Place?
     /// The locations macOS guards: the protected places, then other apps' containers and the cloud storage folders. A
     /// Photos library is guarded wherever it is, which `isProtected` knows by its extension.
     public let guarded: [String]
@@ -61,10 +65,10 @@ public struct KnownPlaces: Sendable {
                                                    "applications", "trash", "backups"]
 
     /// The places in `home`, and at `searchPaths` as `FileManager.urls(for:in:)` gives them, with each owning app
-    /// that `application` finds by its bundle ID. A place whose search path is missing is left out. The Trash's icon
-    /// shows it full unless `trashIsEmpty`: Pith names the Trash as a place only while it holds something. `mounts`
-    /// gives the file systems mounted when an app's icon is asked for: this Mac's own, or a test's.
-    public init(home: URL, searchPaths: [FileManager.SearchPathDirectory: URL], trashIsEmpty: Bool = false,
+    /// that `application` finds by its bundle ID. A place whose search path is missing is left out. The Trash's own icon
+    /// is macOS's full Trash, and `emptyTrash` has the empty one. `mounts` gives the file systems mounted when an app's
+    /// icon is asked for: this Mac's own, or a test's.
+    public init(home: URL, searchPaths: [FileManager.SearchPathDirectory: URL],
                 mounts: @escaping @Sendable () -> MountTable = MountTable.current, application: (String) -> URL?) {
         let library = home.appendingPathComponent("Library")
         func folder(_ directory: FileManager.SearchPathDirectory, _ inside: String? = nil) -> URL? {
@@ -84,7 +88,7 @@ public struct KnownPlaces: Sendable {
             ("documents", "Documents", folder(.documentDirectory), [.type("com.apple.documents-folder")], true),
             ("desktop", "Desktop", folder(.desktopDirectory), [.type("com.apple.desktop-folder")], true),
             ("applications", "Applications", folder(.applicationDirectory), [.type("com.apple.applications-folder")], false),
-            ("trash", "Trash", folder(.trashDirectory), [.type(trashIsEmpty ? "com.apple.trash-empty" : "com.apple.trash-full")], true),
+            ("trash", "Trash", folder(.trashDirectory), [.type("com.apple.trash-full")], true),
             ("backups", "iPhone and iPad backups", library.appendingPathComponent("Application Support/MobileSync/Backup"), [], true),
             // The Music and TV apps keep their libraries and media in these folders unless the person moves them.
             ("music", "Music", folder(.musicDirectory, "Music"), [.app("com.apple.Music")], false),
@@ -106,6 +110,10 @@ public struct KnownPlaces: Sendable {
             Place(id: entry.id, path: path, name: entry.name, icon: Self.icon(choosing: entry.icons, application: application, mayShow: mayShow),
                   isProtected: entry.isProtected, fallback: Self.icon(choosing: entry.icons.filter(\.isntApp), application: application))
         }
+        emptyTrash = places.first { $0.id == Self.trashID }.map { trash in
+            let icon = Self.icon(choosing: [.type("com.apple.trash-empty")], application: application)
+            return Place(id: Self.emptyTrashID, path: trash.path, name: trash.name, icon: icon, isProtected: trash.isProtected, fallback: icon)
+        }
         self.guarded = guarded
         self.home = home.path
         containers = library.appendingPathComponent("Containers").path
@@ -114,7 +122,7 @@ public struct KnownPlaces: Sendable {
 
     /// This Mac's places: the home folder, the search paths, and the apps LaunchServices finds. Applications is the
     /// Mac's own folder, not the one in the home folder.
-    public static func current(trashIsEmpty: Bool = false) -> KnownPlaces {
+    public static func current() -> KnownPlaces {
         let files = FileManager.default
         var searchPaths: [FileManager.SearchPathDirectory: URL] = [:]
         for directory: FileManager.SearchPathDirectory in [.desktopDirectory, .documentDirectory, .downloadsDirectory, .moviesDirectory, .musicDirectory,
@@ -122,7 +130,7 @@ public struct KnownPlaces: Sendable {
             searchPaths[directory] = files.urls(for: directory, in: .userDomainMask).first
         }
         searchPaths[.applicationDirectory] = files.urls(for: .applicationDirectory, in: .localDomainMask).first
-        return KnownPlaces(home: files.homeDirectoryForCurrentUser, searchPaths: searchPaths, trashIsEmpty: trashIsEmpty) {
+        return KnownPlaces(home: files.homeDirectoryForCurrentUser, searchPaths: searchPaths) {
             NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0)
         }
     }
@@ -152,7 +160,11 @@ public struct KnownPlaces: Sendable {
         return place.icon
     }
 
-    public func place(id: String) -> Place? { places.first { $0.id == id } }
+    /// The place whose icon key has `id`: a place of the table, or the empty Trash.
+    public func place(id: String) -> Place? { places.first { $0.id == id } ?? emptyTrash.flatMap { $0.id == id ? $0 : nil } }
+
+    /// The Trash's id, and the one its key has while the map shows it holding nothing (`emptyTrash`).
+    static let trashID = "trash", emptyTrashID = "trash-empty"
 
     public func place(at path: String) -> Place? { places.first { $0.path == path } }
 
@@ -191,9 +203,12 @@ public struct KnownPlaces: Sendable {
     /// holding any of the map's folders. The live map shows a folder it has found in its parent's listing, but not yet
     /// listed itself, as empty, and macOS may be holding that listing, which a lookup by its path could wait on too.
     /// Such a folder, an empty one, and a folder the map couldn't read show a plain folder, and the map's smaller items
-    /// show a group.
+    /// show a group. The Trash shows macOS's empty Trash while the map can read it and shows it holding nothing, and the
+    /// full Trash otherwise, as when the map couldn't read it or has no listing of it.
     public func iconKey(for item: DiskNode, asking: Bool) -> IconKey {
-        if let place = place(at: item.path) { return .place(place.id) }
+        if let place = place(at: item.path) {
+            return .place(place.id == Self.trashID && Self.holdsNothing(item) ? emptyTrash?.id ?? place.id : place.id)
+        }
         switch item.kind {
         case .file: return .type((item.path as NSString).pathExtension.lowercased())
         case .unreadable: return .folder
@@ -209,20 +224,30 @@ public struct KnownPlaces: Sendable {
         folder.size > 0 || (folder.files ?? 0) > 0 || !(folder.children ?? []).isEmpty
     }
 
+    /// Whether the map can read `folder` and shows it holding nothing: no size, no files and no children, as the scanner
+    /// writes an empty folder. One with no count of its files at all is a folder the map has no listing of, as above a
+    /// map's root (`FolderPath.nodes`), which says nothing of what it holds.
+    private static func holdsNothing(_ folder: DiskNode) -> Bool {
+        folder.kind == .dir && folder.size == 0 && folder.files == 0 && (folder.children ?? []).isEmpty
+    }
+
     /// The disk map's Places section's table for a live map, whose tree the page shows (`tree`), from what its index
     /// holds at each place (`live`, which came with that tree): each place the section offers that the index names, in
     /// the table's order, with its size as the map shows it, or none where Pith can't read it. A place the tree shows has
     /// the tree's figure, the one its block shows, which is newer than the index's when the map changed since, as when
     /// Move to Trash took an item out of the place. One the tree folds into smaller items has the index's, the figure its
     /// own map shows once it's opened. A place Move to Trash took off the map leaves `live` with it (`SideColumnFeed`).
-    /// The section shows at the live map's root, the startup disk's, and at the home folder.
+    /// Each place's icon is the one the icon rule gives the tree's own block of it, so the Trash shows the state the map
+    /// shows it in, and the place's own where the tree folds it away. The section shows at the live map's root, the
+    /// startup disk's, and at the home folder.
     public func placesTable(for tree: DiskNode, mapRoot: String, live: [LivePlace]) -> PlacesTable {
         let held = Dictionary(live.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
         let places = shortcuts.compactMap { place -> PlacesTable.Place? in
             guard let found = held[place.path] else { return nil }
-            let size = found.size.map { tree.folder(at: place.path)?.size ?? $0 }
-            return PlacesTable.Place(id: place.id, name: place.name, path: place.path, key: IconKey.place(place.id).string, size: size,
-                                     asking: size == nil && found.asking)
+            let shown = tree.folder(at: place.path)
+            let size = found.size.map { shown?.size ?? $0 }
+            let key = shown.map { iconKey(for: $0, asking: false) } ?? .place(place.id)
+            return PlacesTable.Place(id: place.id, name: place.name, path: place.path, key: key.string, size: size, asking: size == nil && found.asking)
         }
         return PlacesTable(shownAt: [mapRoot, home], places: places)
     }
@@ -275,7 +300,7 @@ public struct PlacesTable: Encodable, Equatable, Sendable {
         /// As `KnownPlaces` names it.
         public let name: String
         public let path: String
-        /// Its icon's key, `place/<id>`.
+        /// Its icon's key, `place/<id>`, or the empty Trash's, `place/trash-empty`, while the map shows the Trash holding nothing.
         public let key: String
         /// Its size as the map shows it, or nil where Pith can't read it, which travels as null.
         public let size: UInt64?

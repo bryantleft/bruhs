@@ -152,6 +152,22 @@ describe("itemAt", () => {
       "place/documents",
     );
   });
+
+  test("never takes a Trash the map doesn't show for one it shows holding nothing", () => {
+    assert.equal(
+      iconKey(itemAt(map, `${home}/.Trash`, []), rule),
+      "place/trash",
+    );
+    const empty = dir(`${home}/.Trash`);
+    const shown = {
+      ...map,
+      children: [...map.children, { ...empty, size: 0 }],
+    };
+    assert.equal(
+      iconKey(itemAt(shown, empty.path, []), rule),
+      "place/trash-empty",
+    );
+  });
 });
 
 describe("readOwners", () => {

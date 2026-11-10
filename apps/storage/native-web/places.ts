@@ -16,7 +16,10 @@ export interface Place {
   /** Its name, as KnownPlaces names it. */
   readonly name: string;
   readonly path: string;
-  /** Its icon's key, `place/<id>`. */
+  /**
+   * Its icon's key, `place/<id>`, or the empty Trash's, `place/trash-empty`, while the map shows the Trash holding
+   * nothing.
+   */
   readonly key: string;
   /** Its size as the map shows it, or null where Pith can't read it. */
   readonly size: number | null;

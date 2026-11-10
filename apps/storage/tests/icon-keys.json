@@ -556,6 +556,103 @@
       "key": "place/trash"
     },
     {
+      "why": "A Trash the map can read and shows holding nothing, no size and no children, shows macOS's empty Trash.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 0,
+        "files": 0,
+        "children": []
+      },
+      "asking": false,
+      "key": "place/trash-empty"
+    },
+    {
+      "why": "The empty Trash is a place's icon too, asking or not, and its path matches in either normalization.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 0,
+        "files": 0,
+        "children": []
+      },
+      "asking": true,
+      "key": "place/trash-empty"
+    },
+    {
+      "why": "A Trash with no size that holds something, as empty files in its smaller items, shows full.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 0,
+        "files": 2,
+        "children": [
+          {
+            "kind": "aggregate",
+            "name": "(smaller items)",
+            "path": "/Users/zoë/.Trash/__other__",
+            "size": 0,
+            "files": 2
+          }
+        ]
+      },
+      "asking": false,
+      "key": "place/trash"
+    },
+    {
+      "why": "A Trash with a size shows full, though the map lists nothing in it on its own.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 4096,
+        "files": 1,
+        "children": []
+      },
+      "asking": false,
+      "key": "place/trash"
+    },
+    {
+      "why": "A Trash the map couldn't read shows full, as it always did: nothing says it's empty.",
+      "node": {
+        "kind": "unreadable",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 0,
+        "reason": "protected"
+      },
+      "asking": false,
+      "key": "place/trash"
+    },
+    {
+      "why": "A Trash the map has no listing of, with no count of its files, as above a map's root, shows full.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 0,
+        "children": []
+      },
+      "asking": false,
+      "key": "place/trash"
+    },
+    {
+      "why": "Only the Trash has an empty state: another place holding nothing keeps its own icon.",
+      "node": {
+        "kind": "dir",
+        "name": "Downloads",
+        "path": "/Users/zoë/Downloads",
+        "size": 0,
+        "files": 0,
+        "children": []
+      },
+      "asking": false,
+      "key": "place/downloads"
+    },
+    {
       "why": "iCloud Drive is a place.",
       "node": {
         "kind": "dir",

@@ -300,6 +300,19 @@ final class SystemIconTests: XCTestCase {
         }
     }
 
+    /// Each of the Trash's keys draws one state of macOS's Trash, the same art every time, so the store can keep it by its
+    /// key: a full Trash never draws as an empty one, nor the other way round.
+    func testEachOfTheTrashsKeysDrawsItsOwnState() async throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("pith-test-home")
+        let places = KnownPlaces(home: home, searchPaths: [.trashDirectory: home.appendingPathComponent(".Trash")]) { _ in nil }
+        let full = await draw(.place("trash"), .dark, places: places), empty = await draw(.place("trash-empty"), .dark, places: places)
+        let fullAgain = await draw(.place("trash"), .dark, places: places), emptyAgain = await draw(.place("trash-empty"), .dark, places: places)
+        let drawnFull = try XCTUnwrap(full), drawnEmpty = try XCTUnwrap(empty)
+        XCTAssertNotEqual(pixels(drawnFull.image), pixels(drawnEmpty.image), "the full and empty Trash look different")
+        XCTAssertEqual(pixels(drawnFull.image), fullAgain.flatMap { pixels($0.image) })
+        XCTAssertEqual(pixels(drawnEmpty.image), emptyAgain.flatMap { pixels($0.image) })
+    }
+
     func testASymbolStandsInWhereMacOSHasNoIcon() async throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent("pith-test-home")
         let places = KnownPlaces(home: home, searchPaths: [:]) { _ in nil }

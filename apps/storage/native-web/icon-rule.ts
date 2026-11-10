@@ -27,17 +27,27 @@ export interface IconRule {
   readonly asking: boolean;
 }
 
-/** What the rule reads of an item: its kind and path, and of a folder whether the map has listed it. */
+/**
+ * What the rule reads of an item: its kind and path, and of a folder whether the map has listed it. A folder with no
+ * count of its files is one the map has no listing of at all, as a path the map doesn't show (`itemAt`).
+ */
 export type IconItem =
   | Pick<
       FileNode | AggregateNode | UnreadableNode | VolumeNode,
       "kind" | "path"
     >
-  | Pick<DirNode, "kind" | "path" | "size" | "files" | "children">;
+  | (Pick<DirNode, "kind" | "path" | "size" | "children"> &
+      Partial<Pick<DirNode, "files">>);
 
 const FOLDER_KEY = "folder";
 /** The key of the map's smaller items, which show a group. */
 export const GROUP_KEY = "group";
+/**
+ * The Trash's place id, and the one its key has while the map shows it holding nothing: macOS's empty Trash, under a
+ * key of its own so each key always draws the same art (`KnownPlaces.emptyTrash`).
+ */
+const TRASH = "trash";
+const EMPTY_TRASH = "trash-empty";
 
 /** Each byte as `IconKey.string` writes it: ASCII letters, digits and `-._~` as they are, any other byte escaped. */
 const SPELLED = Array.from({ length: 256 }, (_, byte) => {
@@ -94,20 +104,36 @@ function isGuarded(path: string, rule: IconRule): boolean {
 }
 
 /** Whether the map has listed `folder`: it has a size, files or contents. */
-const isListed = (folder: Pick<DirNode, "size" | "files" | "children">) =>
-  folder.size > 0 || folder.files > 0 || folder.children.length > 0;
+const isListed = (
+  folder: Pick<DirNode, "size" | "children"> & Partial<Pick<DirNode, "files">>,
+) => folder.size > 0 || (folder.files ?? 0) > 0 || folder.children.length > 0;
+
+/**
+ * Whether the map can read `item` and shows it holding nothing: a folder with no size, no files and no children, as the
+ * scanner writes an empty one. One with no count of its files is a folder the map has no listing of.
+ */
+const holdsNothing = (item: IconItem) =>
+  item.kind === "dir" &&
+  item.size === 0 &&
+  item.files === 0 &&
+  item.children.length === 0;
 
 /**
  * `item`'s icon key by Pith's icon rule, as `KnownPlaces.iconKey(for:asking:)` gives it, so the page asks the route
  * for no icon it would refuse. A known place shows its own icon, read or not, and a file its type's. A volume shows
  * its own, and so does a folder, package or app outside the locations macOS guards. Inside one, a folder shows its own
  * only once the map has listed it and while macOS can't be holding it; otherwise, as for a folder the map couldn't
- * read, a plain folder. The map's smaller items show a group.
+ * read, a plain folder. The map's smaller items show a group. The Trash shows macOS's empty Trash while the map can
+ * read it and shows it holding nothing, and the full Trash otherwise.
  */
 export function iconKey(item: IconItem, rule: IconRule): string {
   const path = item.path.normalize("NFC");
   const place = rule.places.get(path);
-  if (place !== undefined) return placeKey(place);
+  if (place !== undefined) {
+    return placeKey(
+      place === TRASH && holdsNothing(item) ? EMPTY_TRASH : place,
+    );
+  }
   switch (item.kind) {
     case "file":
       return typeKey(lowercased(pathExtension(item.path)));
@@ -201,7 +227,8 @@ export function unreadableKey(
 /**
  * The item a list names by its path alone, as Grew since does, for its icon: the map's node at `path`, found by
  * following the path down from `folder`, or else a file the map lists among the largest. Anything else is a path the
- * map doesn't show, which the rule can only take for a folder it hasn't listed.
+ * map doesn't show, which the rule can only take for a folder it has no listing of: no count of its files, so not
+ * even the Trash's empty state.
  */
 export function itemAt(
   folder: DirNode,
@@ -221,7 +248,7 @@ export function itemAt(
     if (!next) {
       return files.some((file) => file.path === path)
         ? { kind: "file", path }
-        : { kind: "dir", path, size: 0, files: 0, children: [] };
+        : { kind: "dir", path, size: 0, children: [] };
     }
     node = next;
   }

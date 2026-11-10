@@ -91,7 +91,18 @@ final class IconPolicyTests: XCTestCase {
         XCTAssertTrue(try loads(.place("documents"), policy))
         XCTAssertTrue(try loads(.place("mail"), policy))
         XCTAssertFalse(try loads(.place("trash"), policy), "this table has no Trash")
+        XCTAssertFalse(try loads(.place("trash-empty"), policy), "nor an empty one")
         XCTAssertFalse(try loads(.place("nowhere"), policy))
+    }
+
+    /// The empty Trash's key needs no path, as the full one's doesn't, so the page may load either wherever the Trash is.
+    func testBothOfTheTrashsIconsLoad() throws {
+        let folder = { (path: String) in URL(fileURLWithPath: path, isDirectory: true) }
+        let places = KnownPlaces(home: folder(home), searchPaths: [.trashDirectory: folder(home + "/.Trash")]) { _ in nil }
+        let policy = IconPolicy(places: places)
+        XCTAssertTrue(try loads(.place("trash"), policy))
+        XCTAssertTrue(try loads(.place("trash-empty"), policy))
+        XCTAssertEqual(try request(url("place/trash-empty"), policy)?.key, .place("trash-empty"))
     }
 
     func testTheMapsFoldersAppsAndVolumesLoadByTheirPaths() throws {

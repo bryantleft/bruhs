@@ -33,7 +33,7 @@ final class KnownPlacesTests: XCTestCase {
     private func path(_ relative: String) -> String { home.appendingPathComponent(relative).path }
 
     /// The table for the test home, as `FileManager.urls(for:in:)` lays a home out, with the apps not in `missing`.
-    private func places(missing: Set<String> = [], trashIsEmpty: Bool = false) -> KnownPlaces {
+    private func places(missing: Set<String> = []) -> KnownPlaces {
         let searchPaths: [FileManager.SearchPathDirectory: URL] = [
             .applicationDirectory: URL(fileURLWithPath: "/Applications"),
             .desktopDirectory: home.appendingPathComponent("Desktop"),
@@ -44,7 +44,7 @@ final class KnownPlacesTests: XCTestCase {
             .picturesDirectory: home.appendingPathComponent("Pictures"),
             .trashDirectory: home.appendingPathComponent(".Trash"),
         ]
-        return KnownPlaces(home: home, searchPaths: searchPaths, trashIsEmpty: trashIsEmpty) { missing.contains($0) ? nil : self.apps[$0] }
+        return KnownPlaces(home: home, searchPaths: searchPaths) { missing.contains($0) ? nil : self.apps[$0] }
     }
 
     func testPlacesSitWhereTheTestHomeKeepsThem() {
@@ -124,9 +124,56 @@ final class KnownPlacesTests: XCTestCase {
         XCTAssertEqual(KnownPlaces.icon(choosing: []) { _ in nil }, .type("public.folder"))
     }
 
-    func testTheTrashShowsWhetherItHoldsAnything() {
-        XCTAssertEqual(places().place(id: "trash")?.icon, .type("com.apple.trash-full"))
-        XCTAssertEqual(places(trashIsEmpty: true).place(id: "trash")?.icon, .type("com.apple.trash-empty"))
+    /// The Trash has two icons, macOS's full and empty Trash, each under a key of its own, so a key always draws the same
+    /// art and the icon store can keep it. The empty one is the Trash's state, not a place of its own: it's at the same
+    /// path, and no list of places names it.
+    func testTheTrashHasAnIconForEachState() throws {
+        let table = places()
+        let trash = try XCTUnwrap(table.place(id: "trash")), empty = try XCTUnwrap(table.place(id: "trash-empty"))
+        XCTAssertEqual(trash.icon, .type("com.apple.trash-full"))
+        XCTAssertEqual(empty.icon, .type("com.apple.trash-empty"))
+        XCTAssertEqual(table.drawnIcon(of: empty), .type("com.apple.trash-empty"))
+        XCTAssertEqual([empty.path, empty.name], [trash.path, trash.name])
+        XCTAssertTrue(empty.isProtected)
+        XCTAssertEqual(table.place(at: trash.path)?.id, "trash")
+        XCTAssertFalse(table.places.contains { $0.id == "trash-empty" })
+        XCTAssertFalse(table.iconRule(asking: false).places.contains { $0.id == "trash-empty" }, "the page's rule finds the Trash by its path")
+        XCTAssertNil(KnownPlaces(home: home, searchPaths: [:]) { _ in nil }.place(id: "trash-empty"), "no Trash, no empty Trash")
+    }
+
+    /// The Trash shows macOS's empty Trash while the map can read it and shows it holding nothing, no size and no
+    /// children, and the full Trash otherwise, as when the map couldn't read it or has no listing of it.
+    func testTheTrashsIconSaysWhetherTheMapShowsItHoldingAnything() {
+        let table = places()
+        func trash(_ kind: DiskNode.Kind = .dir, size: UInt64 = 0, files: UInt64? = 0, children: [DiskNode]? = nil) -> DiskNode {
+            DiskNode(kind: kind, name: ".Trash", path: path(".Trash"), size: size, reason: kind == .unreadable ? .protected : nil, files: files, children: children)
+        }
+        let emptyFiles = DiskNode(kind: .aggregate, name: "(smaller items)", path: path(".Trash/__other__"), size: 0, files: 2, children: nil)
+        XCTAssertEqual(table.iconKey(for: trash(), asking: false), .place("trash-empty"), "the scanner leaves an empty folder's children out")
+        XCTAssertEqual(table.iconKey(for: trash(children: []), asking: true), .place("trash-empty"))
+        XCTAssertEqual(table.iconKey(for: trash(size: 4096, files: 1), asking: false), .place("trash"))
+        XCTAssertEqual(table.iconKey(for: trash(files: 2, children: [emptyFiles]), asking: false), .place("trash"), "empty files are something")
+        XCTAssertEqual(table.iconKey(for: trash(.unreadable, files: nil), asking: false), .place("trash"), "the map can't read it")
+        XCTAssertEqual(table.iconKey(for: trash(files: nil), asking: false), .place("trash"), "a folder the map has no listing of")
+        XCTAssertEqual(table.ownerKey(for: path(".Trash")) { _ in nil }, .place("trash"), "a Trash the map couldn't read, in the unreadable list")
+        let downloads = DiskNode(kind: .dir, name: "Downloads", path: path("Downloads"), size: 0, files: 0, children: nil)
+        XCTAssertEqual(table.iconKey(for: downloads, asking: false), .place("downloads"), "only the Trash has an empty state")
+    }
+
+    /// Places shows the Trash with the icon the map's own block of it has, by the same rule, or the full Trash when the
+    /// map folds it into the home folder's smaller items.
+    func testPlacesShowsTheTrashInTheStateTheMapShows() {
+        let table = places()
+        let live = [LivePlace(path: path(".Trash"), size: 0)]
+        func key(_ tree: DiskNode) -> String? { table.placesTable(for: tree, mapRoot: "/", live: live).places.first { $0.id == "trash" }?.key }
+        let empty = DiskNode(kind: .dir, name: ".Trash", path: path(".Trash"), size: 0, files: 0, children: nil)
+        let full = DiskNode(kind: .dir, name: ".Trash", path: path(".Trash"), size: 2_000_000_000, files: 3, children: [])
+        func inHome(_ trash: DiskNode) -> DiskNode {
+            DiskNode(kind: .dir, name: home.lastPathComponent, path: home.path, size: trash.size, files: trash.files, children: [trash])
+        }
+        XCTAssertEqual(key(inHome(empty)), "place/trash-empty")
+        XCTAssertEqual(key(inHome(full)), "place/trash")
+        XCTAssertEqual(key(homeMap), "place/trash", "folded into the smaller items")
     }
 
     func testPlacesAreFoundByIDAndByPath() {
