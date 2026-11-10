@@ -120,6 +120,31 @@ final class DiskTests: XCTestCase {
                      "an item outside the map")
     }
 
+    /// An item put back into a folder the map draws with nothing in it, as a scan made after the move writes the folder it
+    /// left, leaving an empty folder's children out, gets a block of its own there, and every folder above it grows by it.
+    /// A folder drawn with a size but no detail doesn't take it as its only block.
+    func testAnItemPutBackIntoAFolderTheMapDrawsEmptyHasABlockThere() throws {
+        let empty = DiskResult(root: DiskNode(kind: .dir, name: "r", path: "/r", size: 0, files: 0, children: [
+            DiskNode(kind: .dir, name: "a", path: "/r/a", size: 0, files: 0, children: nil),
+        ]), topFiles: [], summary: summary(bytes: 0, files: 0, errors: 0))
+        let file = DiskNode(kind: .file, name: "x.bin", path: "/r/a/x.bin", size: 6, children: nil)
+        let back = try XCTUnwrap(empty.restoring(file, topFiles: [DiskFile(name: "x.bin", path: "/r/a/x.bin", size: 6)]))
+        XCTAssertEqual(back.item(at: file.path), file)
+        XCTAssertEqual(back.item(at: "/r/a")?.size, 6)
+        XCTAssertEqual(back.item(at: "/r/a")?.files, 1)
+        XCTAssertEqual(back.root.size, 6)
+        XCTAssertEqual(back.summary.files, 1)
+        XCTAssertEqual(back.topFiles.map(\.path), [file.path])
+        let bare = DiskResult(root: DiskNode(kind: .dir, name: "r", path: "/r", size: 0, files: 0, children: nil), topFiles: [],
+                              summary: summary(bytes: 0, files: 0, errors: 0))
+        let atRoot = DiskNode(kind: .file, name: "x.bin", path: "/r/x.bin", size: 6, children: nil)
+        XCTAssertEqual(try XCTUnwrap(bare.restoring(atRoot, topFiles: [])).root.children, [atRoot], "the scanned folder itself, empty")
+        let undetailed = DiskResult(root: DiskNode(kind: .dir, name: "r", path: "/r", size: 10, files: 2, children: [
+            DiskNode(kind: .dir, name: "a", path: "/r/a", size: 10, files: 2, children: nil),
+        ]), topFiles: [], summary: summary(bytes: 10, files: 2, errors: 0))
+        XCTAssertNil(undetailed.restoring(file, topFiles: []), "a folder drawn without its detail")
+    }
+
     /// A folder put back brings the folders inside it that the map couldn't read back to the map's list of them, as its
     /// move took them off it.
     func testAFolderPutBackBringsItsUnreadableFoldersBack() throws {

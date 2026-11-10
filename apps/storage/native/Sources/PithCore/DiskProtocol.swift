@@ -225,9 +225,11 @@ public struct DiskResult: Codable, Sendable {
         return DiskResult(root: tree, topFiles: top, volumes: volumes, unreadableFolders: unreadableFolders, summary: summary.with(bytes: tree.size, files: files))
     }
 
-    /// `node` with `item` among the children of the folder it goes in, and every folder on the way grown by it.
+    /// `node` with `item` among the children of the folder it goes in, and every folder on the way grown by it. A folder
+    /// drawn with nothing in it has no children to hold it, as the scanner writes an empty folder, and takes it as its
+    /// only one; a folder drawn with a size but no detail doesn't.
     private static func insert(_ item: DiskNode, into node: DiskNode) -> DiskNode? {
-        guard let children = node.children, node.kind == .dir else { return nil }
+        guard node.kind == .dir, let children = node.children ?? (node.size == 0 ? [] : nil) else { return nil }
         let grown = { (children: [DiskNode]) in
             node.with(size: node.size + item.size, files: node.files.map { $0 + item.fileCount }, clones: (node.clones ?? 0) + (item.clones ?? 0), children: children)
         }
