@@ -16,10 +16,23 @@ public enum VolumeSpace {
     }
 }
 
-/// A whole volume's own figures, which a map of it is accounted with (`DiskAccounting.init(_:result:)`). They come from
-/// the file system and `tmutil`, so they're measured now and then, off the main thread, while the map they're set
-/// against changes every few seconds. A move within the volume, as to its Trash and back, changes none of them.
+/// A whole volume's own figures, which a map of it is accounted with (`DiskAccounting.init(_:result:)`). The file system
+/// gives its space (`Space`) at once, so the live map measures that again with every map it shows. The snapshots, from
+/// `tmutil`, and what's purgeable take longer to learn, so they're measured now and then, off the main thread. A move
+/// within the volume, as to its Trash and back, changes none of them.
 public struct VolumeUse: Equatable, Sendable {
+    /// A volume's space, which `statfs` and `getattrlist` give at once.
+    public struct Space: Equatable, Sendable {
+        /// The container's used space: its total less what's available.
+        public let used: UInt64
+        /// The used space of each volume a walk of the root enters (`DiskAccounting.walkedVolumes`).
+        public let walkedVolumes: [UInt64]
+
+        public init(used: UInt64, walkedVolumes: [UInt64]) {
+            self.used = used; self.walkedVolumes = walkedVolumes
+        }
+    }
+
     /// The container's used space: its total less what's available.
     public let used: UInt64
     /// The used space of each volume a walk of the root enters (`DiskAccounting.walkedVolumes`).
@@ -31,6 +44,17 @@ public struct VolumeUse: Equatable, Sendable {
 
     public init(used: UInt64, walkedVolumes: [UInt64], snapshots: Int?, purgeable: UInt64?) {
         self.used = used; self.walkedVolumes = walkedVolumes; self.snapshots = snapshots; self.purgeable = purgeable
+    }
+
+    public init(_ space: Space, snapshots: Int?, purgeable: UInt64?) {
+        self.init(used: space.used, walkedVolumes: space.walkedVolumes, snapshots: snapshots, purgeable: purgeable)
+    }
+
+    /// These figures with the volume's space measured again: what's written or deleted outside Pith moves the used
+    /// space with the map, and leaves Not measured to what the map can't see. The snapshots and what's purgeable wait
+    /// for their own next measure.
+    public func with(_ space: Space) -> VolumeUse {
+        VolumeUse(space, snapshots: snapshots, purgeable: purgeable)
     }
 }
 

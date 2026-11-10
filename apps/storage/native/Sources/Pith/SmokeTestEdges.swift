@@ -109,27 +109,32 @@ extension AppDelegate {
     ///   row in the map's list of items opens "Where the space is" too, and so does a click while a scan runs.
     /// - Move to Trash, into the run's own folder, takes a file off the map, and its bytes join Not measured at once, on
     ///   the page too, as the volume still holds them; Undo puts them back at once.
+    /// - A file written outside Pith, as a download is, shows on the live map by itself, and the volume's space, measured
+    ///   again with that map, holds it too: Used on this disk grows by it and Not measured holds still, on the page too.
+    ///   Once the file is deleted, Used on this disk goes back, and Not measured still holds.
     /// - "Where the space is" has an In the Trash row of the map's figure for the Trash, and every row leads with its
     ///   icon, drawn as the popover draws them in a window of its own off screen, in the appearance the main window
     ///   doesn't have, the disk's and the Trash's by the icon store.
     /// Once the volume's figures go, the block goes too.
     func checkNotMeasured(_ fixture: String, report: URL) async -> [String: Bool] {
         let names = ["not_measured_block_matches_the_popover", "where_the_space_is_shows_icons", "not_measured_follows_trash_and_undo",
-                     "not_measured_explains_itself_while_scanning"]
+                     "not_measured_explains_itself_while_scanning", "not_measured_holds_as_files_change_outside_pith"]
         let files = FileManager.default, mark = UUID().uuidString.prefix(8).lowercased()
         let trash = (fixture as NSString).appendingPathComponent("pith-smoke-trash-\(mark)")
         let item = (fixture as NSString).appendingPathComponent("pith-smoke-gone-\(mark).bin")
+        let outside = (fixture as NSString).appendingPathComponent("pith-smoke-download-\(mark).bin")
         guard let web = webView else { return Dictionary(uniqueKeysWithValues: names.map { ($0, false) }) }
         var checks: [String: Bool] = [:]
         do {
-            let kept = (measures: disk.measures, places: disk.sideColumn.places, scanning: disk.isScanning)
+            let kept = (measures: disk.measures, measuresSpace: disk.measuresSpace, places: disk.sideColumn.places, scanning: disk.isScanning)
             defer {
                 disk.measures = kept.measures
+                disk.measuresSpace = kept.measuresSpace
                 disk.sideColumn.places = kept.places
                 disk.isScanning = kept.scanning
                 disk.showsWhereTheSpaceIs = false
                 disk.refreshAccounting()
-                for path in [trash, item] { try? files.removeItem(atPath: path) }
+                for path in [trash, item, outside] { try? files.removeItem(atPath: path) }
             }
             // The Trash first, so the live map's tree for the new folder asks after it.
             disk.sideColumn.places = KnownPlaces(home: URL(fileURLWithPath: fixture), searchPaths: [.trashDirectory: URL(fileURLWithPath: trash)]) { _ in nil }
@@ -143,6 +148,13 @@ extension AppDelegate {
             }
             disk.measures = { root in
                 root == fixture ? VolumeUse(used: walked * 2, walkedVolumes: [walked + walked / 2], snapshots: 2, purgeable: walked / 4) : nil
+            }
+            // Its space, as the live map measures it again with every map: what's written to the fixture outside Pith is
+            // on the volume too.
+            disk.measuresSpace = { root in
+                guard root == fixture else { return nil }
+                let written = ((try? FileManager.default.attributesOfItem(atPath: outside))?[.size] as? NSNumber)?.uint64Value ?? 0
+                return VolumeUse.Space(used: walked * 2 + written, walkedVolumes: [walked + walked / 2 + written])
             }
             disk.refreshAccounting()
             let accounted = await eventually { self.disk.notMeasured != nil }
@@ -184,10 +196,31 @@ extension AppDelegate {
             disk.undoTrash()
             let undone = disk.notMeasured?.bytes
             let backOnThePage = await pageAnswer(web, Self.notMeasuredItem) { (text: String?) in text == figure.map { "Not measured " + $0 } }
-            checks[names[2]] = size != nil && trashed && atOnce == joined && onThePage == joined.map { "Not measured " + bytes($0) }
+            checks[names[2]] = joined != nil && trashed && atOnce == joined && onThePage == joined.map { "Not measured " + bytes($0) }
                 && files.fileExists(atPath: item) && undone == block && backOnThePage == figure.map { "Not measured " + $0 }
             print("not measured after Move to Trash: \(atOnce.map(String.init) ?? "none") bytes for \(joined.map(String.init) ?? "none"), the page's "
                   + "\(onThePage ?? "nothing"); after Undo \(undone.map(String.init) ?? "none"), the page's \(backOnThePage ?? "nothing")")
+
+            // A file written outside Pith, as a download is, and then deleted: the live map follows it by itself, and the
+            // volume's space, measured again with each map, with it.
+            let written = files.createFile(atPath: outside, contents: Data(count: 1 << 20))
+            let grown = used.map { $0 + (1 << 20) }
+            let onTheMap = await eventually { self.disk.result?.item(at: outside) != nil }
+            let grew = await eventually { self.disk.notMeasured?.used == grown }
+            let usedWhileWritten = disk.notMeasured?.used, held = disk.notMeasured?.bytes
+            let heldOnThePage = await pageAnswer(web, Self.notMeasuredItem) { (text: String?) in text == figure.map { "Not measured " + $0 } }
+            let deleted = (try? files.removeItem(atPath: outside)) != nil
+            let offTheMap = await eventually { self.disk.result != nil && self.disk.result?.item(at: outside) == nil }
+            let shrank = await eventually { self.disk.notMeasured?.used == used }
+            let heldAfter = disk.notMeasured?.bytes
+            let heldAfterOnThePage = await pageAnswer(web, Self.notMeasuredItem) { (text: String?) in text == figure.map { "Not measured " + $0 } }
+            checks[names[4]] = block != nil && grown != nil && written && onTheMap && grew && held == block
+                && heldOnThePage == figure.map { "Not measured " + $0 } && deleted && offTheMap && shrank && heldAfter == block
+                && heldAfterOnThePage == figure.map { "Not measured " + $0 }
+            print("not measured with a file written outside Pith: on the map \(onTheMap), used \(usedWhileWritten.map(String.init) ?? "none") for "
+                  + "\(grown.map(String.init) ?? "none"), Not measured \(held.map(String.init) ?? "none"), the page's \(heldOnThePage ?? "nothing"); "
+                  + "once deleted, off the map \(offTheMap), used back \(shrank), Not measured \(heldAfter.map(String.init) ?? "none"), the page's "
+                  + "\(heldAfterOnThePage ?? "nothing"), for \(block.map(String.init) ?? "none")")
 
             // A scan under way leaves the map it was drawn from, dimmed, and its explanation with it.
             disk.isScanning = true
@@ -216,8 +249,11 @@ extension AppDelegate {
         }
         // The volume's figures went with the defer above, and the block goes with them.
         let gone = await pageAnswer(web, Self.notMeasuredItem) { (text: String?) in text == nil } == nil
+        // The run's own files went too. Once the live map has listed the fixture without them, no status line about them
+        // is still to come, to take the place of the one the next check hands the live map.
+        let cleared = await eventually { self.disk.result != nil && [trash, item, outside].allSatisfy { self.disk.result?.item(at: $0) == nil } }
         let settled = await mapSettles()
-        print("not measured once the volume's figures went: gone \(gone), settled \(settled)")
+        print("not measured once the volume's figures went: gone \(gone), the run's files off the map \(cleared), settled \(settled)")
         checks[names[0]] = checks[names[0]] == true && gone && settled
         return checks
     }
@@ -375,6 +411,8 @@ extension AppDelegate {
             try? await Task.sleep(for: .milliseconds(20))
         }
         let asked = panes.asked.count == before + 1 && panes.asked.last == .fullDiskAccess
+        // A status line of the scanner's own, come meanwhile, would have taken the notice away.
+        let stillAsked = disk.askingFolders == 12
         live.handle(status(asking: 0))
         let gone = disk.askingFolders == nil
         window.orderOut(nil)
@@ -385,8 +423,8 @@ extension AppDelegate {
         let ruleBack = await eventually { self.disk.iconRule.asking == false && coordinator?.iconRule == self.disk.iconRule }
         print("asking notice: \(disk.askingFolders.map(String.init) ?? "none") folders once macOS asks about none, \(named ? 12 : 0) while it asked; "
               + "the caption \(caption == captionBefore ? "kept" : "changed") its status, up to date \(upToDate); the button, found after \(clicks) clicks "
-              + "along the notice, asked for \(panes.asked.last?.url?.absoluteString ?? "no pane") \(asked); the notice gone again \(gone), "
-              + "the icons' rule back \(ruleBack)")
+              + "along the notice, asked for \(panes.asked.last?.url?.absoluteString ?? "no pane") \(asked), the notice still up by then \(stillAsked); "
+              + "the notice gone again \(gone), the icons' rule back \(ruleBack)")
         return [check: named && caption == captionBefore && upToDate && asked && gone && ruleBack]
     }
 }

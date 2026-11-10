@@ -93,7 +93,7 @@ enum MapCommand: Equatable {
     /// now (`account`), so what the map gains or loses, as by Move to Trash and Undo, moves Not measured at once.
     private(set) var accounting: DiskAccounting?
     /// The volume's own figures, and the map's root they're of (`VolumeUse`), measured off the main thread when the
-    /// map's root changes and every five minutes on the live map.
+    /// map's root changes and every five minutes on the live map, and its space again with every live map.
     @ObservationIgnored private var volumeUse: (root: String, use: VolumeUse)? {
         didSet { account() }
     }
@@ -369,7 +369,7 @@ enum MapCommand: Equatable {
         resultJSON = json
         settingLive = false
         scope = value.root.path
-        if rootChanged || Date().timeIntervalSince(accountedAt) > 300 { refreshAccounting() }
+        if rootChanged || Date().timeIntervalSince(accountedAt) > 300 { refreshAccounting() } else { measureSpaceAgain() }
         compareWithBaseline(value)
         keepSelection()
         revision = UUID()
@@ -848,6 +848,10 @@ enum MapCommand: Equatable {
     /// nothing can account for. The smoke test gives figures of its own, so its fixture stands in for a volume.
     @ObservationIgnored var measures: @Sendable (String) -> VolumeUse? = DiskModel.measure
 
+    /// Measures a whole volume's space alone for a map of `root`, off the main thread: its used space and that of the
+    /// volumes a walk enters, or nil for a map of a folder. The smoke test gives figures of its own.
+    @ObservationIgnored var measuresSpace: @Sendable (String) -> VolumeUse.Space? = DiskModel.measureSpace
+
     /// Measures the volume's own figures for the map shown: what's used, on the volumes the map walks and in local
     /// snapshots, and what's purgeable. Off the main thread: `tmutil` takes a moment.
     func refreshAccounting() {
@@ -858,6 +862,19 @@ enum MapCommand: Equatable {
             let use = await Task.detached(priority: .utility) { measures(root) }.value
             guard self.result?.root.path == root else { return }
             volumeUse = use.map { (root, $0) }
+        }
+    }
+
+    /// Measures the volume's space again for the live map just shown, which the file system gives at once: what changed
+    /// outside Pith, as a download, then moves Used on this disk with the map, and Not measured only by what the map can't
+    /// see. The snapshots and what's purgeable wait for the next full measure.
+    private func measureSpaceAgain() {
+        guard let volumeUse, volumeUse.root == result?.root.path else { return }
+        let root = volumeUse.root, measuresSpace = measuresSpace
+        Task {
+            let space = await Task.detached(priority: .utility) { measuresSpace(root) }.value
+            guard let space, let current = self.volumeUse, current.root == root, self.result?.root.path == root else { return }
+            self.volumeUse = (root, current.use.with(space))
         }
     }
 
@@ -875,16 +892,25 @@ enum MapCommand: Equatable {
     /// The figures of the volume at `root` when `root` is a volume's root: its used space and that of the volumes a walk
     /// enters, what's purgeable, and `tmutil`'s count of its local snapshots.
     nonisolated private static func measure(_ root: String) -> VolumeUse? {
-        let url = URL(fileURLWithPath: root)
-        let keys: Set<URLResourceKey> = [.volumeURLKey, .volumeTotalCapacityKey, .volumeAvailableCapacityKey, .volumeAvailableCapacityForImportantUsageKey]
-        guard let values = try? url.resourceValues(forKeys: keys),
+        guard let space = measureSpace(root) else { return nil }
+        let keys: Set<URLResourceKey> = [.volumeAvailableCapacityKey, .volumeAvailableCapacityForImportantUsageKey]
+        let values = try? URL(fileURLWithPath: root).resourceValues(forKeys: keys)
+        let available = values?.volumeAvailableCapacity.map { UInt64(max(0, $0)) }
+        let important = values?.volumeAvailableCapacityForImportantUsage.map { UInt64(max(0, $0)) }
+        let purgeable = important.flatMap { important in available.map { important.saturatingSubtract($0) } }
+        return VolumeUse(space, snapshots: localSnapshots(root), purgeable: purgeable)
+    }
+
+    /// The space of the volume at `root` when `root` is a volume's root, which `statfs` and `getattrlist` give at once:
+    /// its container's used space and that of the volumes a walk enters.
+    nonisolated private static func measureSpace(_ root: String) -> VolumeUse.Space? {
+        let keys: Set<URLResourceKey> = [.volumeURLKey, .volumeTotalCapacityKey, .volumeAvailableCapacityKey]
+        guard let values = try? URL(fileURLWithPath: root).resourceValues(forKeys: keys),
               let walked = DiskAccounting.walkedVolumes(root: root, mountPoint: values.volume?.path),
               let total = values.volumeTotalCapacity, let available = values.volumeAvailableCapacity else { return nil }
         let volumes = walked.compactMap(VolumeSpace.used)
         guard volumes.count == walked.count else { return nil }
-        let important = values.volumeAvailableCapacityForImportantUsage.map { UInt64(max(0, $0)) }
-        let purgeable = important.map { $0.saturatingSubtract(UInt64(max(0, available))) }
-        return VolumeUse(used: UInt64(max(0, total - available)), walkedVolumes: volumes, snapshots: localSnapshots(root), purgeable: purgeable)
+        return VolumeUse.Space(used: UInt64(max(0, total - available)), walkedVolumes: volumes)
     }
 
     /// Local Time Machine snapshots on a volume, from `tmutil`, which lists them without administrator access.

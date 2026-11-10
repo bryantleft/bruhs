@@ -9,10 +9,10 @@ final class WhereTheSpaceIsTests: XCTestCase {
 
     /// The startup disk's map: 870 GB found, with Preboot's 10 GB, 12 folders Pith couldn't read, 4 GB of clones counted
     /// once and 3 GB of files only in iCloud.
-    private func map(errors: UInt64 = 12, clones: UInt64 = 4_000_000_000, cloud: UInt64 = 3_000_000_000) -> DiskResult {
-        DiskResult(root: DiskNode(kind: .dir, name: "/", path: "/", size: 870 * gb, files: 9, children: []), topFiles: [],
+    private func map(errors: UInt64 = 12, clones: UInt64 = 4_000_000_000, cloud: UInt64 = 3_000_000_000, found: UInt64 = 870_000_000_000) -> DiskResult {
+        DiskResult(root: DiskNode(kind: .dir, name: "/", path: "/", size: found, files: 9, children: []), topFiles: [],
                    volumes: [DiskVolume(path: "/System/Volumes/Preboot", name: "Preboot", bytes: 10 * gb, sharesDisk: true)],
-                   summary: DiskSummary(dirs: 1, files: 9, bytes: 870 * gb, errors: errors, unreadable: .init(protected: errors, denied: 0, other: 0),
+                   summary: DiskSummary(dirs: 1, files: 9, bytes: found, errors: errors, unreadable: .init(protected: errors, denied: 0, other: 0),
                                         entryErrors: 0, cloudOnly: .init(files: cloud > 0 ? 2 : 0, bytes: cloud, folders: 0), elapsedMs: 1, engine: "bulk",
                                         clones: .init(files: 3, bytes: clones)))
     }
@@ -56,6 +56,23 @@ final class WhereTheSpaceIsTests: XCTestCase {
         XCTAssertEqual(after.used, 904 * gb, "the volume's used space doesn't move")
         // Undo puts the map from before back, and Not measured with it.
         XCTAssertEqual(DiskAccounting(use, result: before).notMeasuredBlock, 31 * gb)
+    }
+
+    func testAChangeOutsidePithMovesUsedSpaceAndLeavesNotMeasured() {
+        // A 10 GB download outside Pith: the live map shows it, and the volume's space, measured again with that map,
+        // holds it too.
+        let use = VolumeUse(used: 904 * gb, walkedVolumes: [12 * gb, 879 * gb], snapshots: 2, purgeable: 12 * gb)
+        let grown = map(found: 880 * gb)
+        let measuredAgain = use.with(VolumeUse.Space(used: 914 * gb, walkedVolumes: [12 * gb, 889 * gb]))
+        XCTAssertEqual(DiskAccounting(measuredAgain, result: grown).notMeasuredBlock, 31 * gb, "what the map can't see is as it was")
+        XCTAssertEqual(DiskAccounting(measuredAgain, result: grown).used, 904 * gb + 10 * gb)
+        // The figures from before, set against the grown map, would take the download out of Not measured.
+        XCTAssertEqual(DiskAccounting(use, result: grown).notMeasuredBlock, 21 * gb)
+        // The snapshots and what's purgeable, which take longer to learn, wait for the next full measure.
+        XCTAssertEqual(measuredAgain.snapshots, 2)
+        XCTAssertEqual(measuredAgain.purgeable, 12 * gb)
+        XCTAssertEqual(VolumeUse(VolumeUse.Space(used: 1, walkedVolumes: [1]), snapshots: nil, purgeable: nil),
+                       VolumeUse(used: 1, walkedVolumes: [1], snapshots: nil, purgeable: nil))
     }
 
     func testTheRowsAccountForTheDiskInOrder() {
