@@ -291,8 +291,8 @@ extension AppDelegate {
             print("each undo: the check's files never reached the map")
             return [name: false]
         }
-        func on(_ path: String) -> Bool { files.fileExists(atPath: path) && disk.result?.item(at: path) != nil }
-        func off(_ path: String) -> Bool { !files.fileExists(atPath: path) && disk.result?.item(at: path) == nil }
+        func on(_ path: String) -> Bool { FileManager.default.fileExists(atPath: path) && disk.result?.item(at: path) != nil }
+        func off(_ path: String) -> Bool { !FileManager.default.fileExists(atPath: path) && disk.result?.item(at: path) == nil }
         /// Moves `path` to the Trash as the person does, in a move of its own: whether it left the disk and the map.
         func move(_ path: String) async -> Bool {
             disk.requestTrash([path], undoManager: undo)

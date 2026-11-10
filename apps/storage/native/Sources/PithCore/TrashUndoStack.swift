@@ -44,10 +44,23 @@ public final class TrashRecord: Sendable {
     public func moved(_ record: TrashRecord, undoManager: UndoManager?) {
         held.removeAll { $0.undoManager == nil }
         held.append(Held(record: record, undoManager: undoManager))
-        undoManager?.registerUndo(withTarget: record) { [weak self] record in
+        guard let undoManager else { return }
+        // A move lands after the event that asked for it, in a task of its own. A window's undo manager groups by event,
+        // and a group opened outside one stays open until the next, so every move landing before then joined it, for
+        // one ⌘Z to undo them all: each move is a group of its own. One registered inside a group already open joins it.
+        let own = undoManager.groupingLevel == 0, byEvent = undoManager.groupsByEvent
+        if own {
+            undoManager.groupsByEvent = false
+            undoManager.beginUndoGrouping()
+        }
+        undoManager.registerUndo(withTarget: record) { [weak self] record in
             MainActor.assumeIsolated { self?.take(record, unregistering: false) }
         }
-        undoManager?.setActionName("Move to Trash")
+        undoManager.setActionName("Move to Trash")
+        if own {
+            undoManager.endUndoGrouping()
+            undoManager.groupsByEvent = byEvent
+        }
     }
 
     /// The note's Undo of `record`, the latest move: out of its undo manager first, so ⌘Z next undoes the one before.

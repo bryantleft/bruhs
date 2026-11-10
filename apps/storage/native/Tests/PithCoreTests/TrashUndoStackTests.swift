@@ -11,18 +11,13 @@ import XCTest
         return TrashRecord(moves: [TrashMove(plan: plan, trashed: URL(fileURLWithPath: "/trash/\(name)"))], note: "Moved \(name)", items: [:])
     }
 
-    /// An undo manager that groups as the app's windows do, each move in a group of its own, as each move lands in a run
-    /// loop turn of its own.
-    private func manager() -> UndoManager {
-        let manager = UndoManager()
-        manager.groupsByEvent = false
-        return manager
-    }
+    /// An undo manager as a window's is, grouping what's registered by event. A move lands after the event that asked for
+    /// it, in a task of its own, and no event comes between the moves here, as none needs to in the app: the smoke test's
+    /// moves come one after another with nothing in between, and so can the person's.
+    private func manager() -> UndoManager { UndoManager() }
 
     private func move(_ record: TrashRecord, on stack: TrashUndoStack, with manager: UndoManager?) {
-        manager?.beginUndoGrouping()
         stack.moved(record, undoManager: manager)
-        manager?.endUndoGrouping()
     }
 
     func testEachUndoUndoesItsOwnMoveTheLatestFirst() {
@@ -31,6 +26,8 @@ import XCTest
         let window = manager()
         for name in ["a", "b", "c"] { move(record(name), on: stack, with: window) }
         XCTAssertEqual(window.undoActionName, "Move to Trash")
+        XCTAssertTrue(window.groupsByEvent, "left grouping by event, for whatever else registers with it")
+        XCTAssertEqual(window.groupingLevel, 0, "no group left open for the next move to join")
         window.undo()
         window.undo()
         XCTAssertEqual(undone, ["Moved c", "Moved b"], "the second ⌘Z undoes the move before the last")
