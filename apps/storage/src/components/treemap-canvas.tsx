@@ -65,6 +65,7 @@ import {
   paintArrived,
   type WaitingIcon,
 } from "./map-marks";
+import { arrowStep, selectable } from "./map-selection";
 import { TreemapItems } from "./treemap-items";
 
 interface Props {
@@ -526,42 +527,6 @@ function drawMap(
   return paint?.done() ?? [];
 }
 
-/** The tile nearest `from` in an arrow key's direction, among the open folder's own items. */
-function tileInDirection(
-  tiles: readonly Tile[],
-  from: Tile,
-  key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
-): Tile | null {
-  const center = (t: Tile) => ({ x: (t.x0 + t.x1) / 2, y: (t.y0 + t.y1) / 2 });
-  const origin = center(from);
-  let best: Tile | null = null;
-  let bestScore = Number.POSITIVE_INFINITY;
-  for (const tile of tiles) {
-    if (tile === from) continue;
-    const c = center(tile);
-    const dx = c.x - origin.x;
-    const dy = c.y - origin.y;
-    const along =
-      key === "ArrowLeft"
-        ? -dx
-        : key === "ArrowRight"
-          ? dx
-          : key === "ArrowUp"
-            ? -dy
-            : dy;
-    const across =
-      key === "ArrowLeft" || key === "ArrowRight" ? Math.abs(dy) : Math.abs(dx);
-    if (along <= 0) continue;
-    // Straight ahead beats diagonal: sideways distance counts double.
-    const score = along + 2 * across;
-    if (score < bestScore) {
-      bestScore = score;
-      best = tile;
-    }
-  }
-  return best;
-}
-
 /** A ring drawn over the canvas, so hover and selection never repaint the map. */
 function Ring({ tile, shadow }: { tile: Tile; shadow: string }) {
   const box = drawnBox(tile);
@@ -586,13 +551,6 @@ const filled = (tile: Tile) =>
 
 /** The item a tile shows, by path, for linking other views: none for the group or the Not measured block. */
 const pathOf = (tile: Tile | null) => (tile && nodeOf(tile)?.path) ?? null;
-
-/**
- * A selectable item: a file or folder. Groups and volumes can't be moved to the Trash or revealed, and the Not measured
- * block is no item at all.
- */
-const selectable = (tile: Tile | null): TreeNode | null =>
-  tile && tile.kind !== "volume" ? nodeOf(tile) : null;
 
 export function TreemapCanvas({
   root,
@@ -774,15 +732,30 @@ export function TreemapCanvas({
     report(focusPath);
   };
 
-  const learn = (step: HintStep) => {
-    if (learned[step]) return;
-    if (hints) {
-      hints.learn(step);
-      return;
-    }
-    storeHint(step);
-    setStored((current) => ({ ...current, [step]: true }));
-  };
+  const learn = useCallback(
+    (step: HintStep) => {
+      if (learned[step]) return;
+      if (hints) {
+        hints.learn(step);
+        return;
+      }
+      storeHint(step);
+      setStored((current) => ({ ...current, [step]: true }));
+    },
+    [learned, hints],
+  );
+  // A ⌘-click, or the add button in the list of items, adds an item to the selection or takes it out, and the card
+  // stops saying a ⌘-click selects several. It's the same function while the pointer moves, so hovering doesn't render
+  // the list again.
+  const toggle = useMemo(
+    () =>
+      onToggle &&
+      ((node: TreeNode) => {
+        learn("several");
+        onToggle(node);
+      }),
+    [onToggle, learn],
+  );
 
   const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (e.button === 0) shownLayout.press(e.detail);
@@ -803,8 +776,8 @@ export function TreemapCanvas({
     const node = selectable(tile);
     if (node) learn("selected");
     // A ⌘-click on what's no item, such as the smaller items, leaves the selection as it was.
-    if (e.metaKey && onToggle) {
-      if (node) onToggle(node);
+    if (e.metaKey && toggle) {
+      if (node) toggle(node);
       return;
     }
     onSelect(node);
@@ -840,8 +813,8 @@ export function TreemapCanvas({
 
   /**
    * One tab stop for the whole map: arrows move the selection to the nearest item in that direction from the item
-   * picked last, Return opens it when it's a folder, Space previews the selection, Command-Delete trashes it, and
-   * Escape deselects.
+   * picked last, and Shift-arrows add it to the selection where the host keeps several (map-selection.ts). Return opens
+   * it when it's a folder, Space previews the selection, Command-Delete trashes it, and Escape deselects.
    */
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!layout || e.target !== e.currentTarget) return;
@@ -859,14 +832,14 @@ export function TreemapCanvas({
       case "ArrowDown": {
         if (e.metaKey) return;
         e.preventDefault();
-        const next = own
-          ? tileInDirection(items, own, e.key)
-          : (items.find((tile) => selectable(tile)) ?? null);
-        const node = selectable(next);
-        if (node) {
-          onSelect(node);
-          report(node.path);
-        }
+        const extend = e.shiftKey && onToggle !== undefined;
+        const step = arrowStep(items, own, e.key, extend, selected);
+        if (!step) return;
+        const node = "add" in step ? step.add : step.select;
+        // Pith adds it as a ⌘-click would, through the same toggle: it isn't selected yet.
+        if ("add" in step) onToggle?.(node);
+        else onSelect(node);
+        report(node.path);
         return;
       }
       case "Enter": {
@@ -915,9 +888,12 @@ export function TreemapCanvas({
     usedSpace !== undefined && usedSpace.unmeasured > 0
       ? ` ${formatBytes(usedSpace.unmeasured)} more is used space the scan couldn’t measure.`
       : "";
+  const keys = onToggle
+    ? "Arrow keys select items, Shift and an arrow key add one to the selection, Return opens a folder and Space previews."
+    : "Arrow keys select items, Return opens a folder and Space previews.";
   const summary = `Treemap of ${root.path}, ${formatBytes(root.size)} in ${
     root.children.length
-  } items.${notMeasured}${highlightLabel} Arrow keys select items, Return opens a folder and Space previews. The list after it names every item.`;
+  } items.${notMeasured}${highlightLabel} ${keys} The list after it names every item.`;
 
   const pointedNode = pointed && nodeOf(pointed);
   const delta = pointedNode ? growth?.get(pointedNode.path) : undefined;
@@ -933,7 +909,7 @@ export function TreemapCanvas({
           layout,
           hints: !(learned.selected && learned.opened),
           clicks: !scanning,
-          several: onToggle !== undefined,
+          several: onToggle !== undefined && !learned.several,
           change,
         })
       : null;
@@ -1072,7 +1048,7 @@ export function TreemapCanvas({
         root={root}
         selectedPaths={selectedPaths}
         onSelect={onSelect}
-        onToggle={onToggle}
+        onToggle={toggle}
         onEnterDir={onEnterDir}
         onFocusItem={focusItem}
         unmeasured={usedSpace?.unmeasured}

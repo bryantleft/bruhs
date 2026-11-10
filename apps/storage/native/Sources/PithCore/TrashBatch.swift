@@ -26,12 +26,14 @@ public struct TrashBatch: Sendable, Equatable {
             }
         }
         if paths.count == 1, let only = refused.first { return .failure(DiskFailure(only.refusal.message)) }
-        guard refused.isEmpty else { return .failure(DiskFailure(refusal(refused))) }
+        guard refused.isEmpty else { return .failure(DiskFailure(refusal(refused, others: !plans.isEmpty))) }
         return .success(TrashBatch(plans: plans))
     }
 
-    /// The sentence refusing the move: the items that can't go, those refused alike named together, each group with why.
-    private static func refusal(_ refused: [(name: String, refusal: TrashRefusal)]) -> String {
+    /// The sentence refusing the move: the items that can't go, those refused alike named together, each group with why,
+    /// and, when `others` could go, how to move those. It names no gesture, since a click, a key and VoiceOver all take an
+    /// item out of the selection.
+    private static func refusal(_ refused: [(name: String, refusal: TrashRefusal)], others: Bool) -> String {
         var groups: [(refusal: TrashRefusal, names: [String])] = []
         for item in refused {
             let alike = { (group: (refusal: TrashRefusal, names: [String])) in group.refusal.reason(several: false) == item.refusal.reason(several: false) }
@@ -41,8 +43,9 @@ public struct TrashBatch: Sendable, Equatable {
             let because = "because \(group.refusal.reason(several: group.names.count > 1))"
             return index == 0 ? "\(names(group.names)) can’t go to the Trash \(because)" : "\(names(group.names)) \(because)"
         }
-        let them = refused.count == 1 ? "it" : "them"
-        return clauses.joined(separator: ", and ") + ", so ⌘-click \(them) to leave \(them) out and move the rest."
+        let reasons = clauses.joined(separator: ", and ")
+        guard others else { return reasons + "." }
+        return reasons + ", so take \(refused.count == 1 ? "it" : "them") out of the selection and move the rest."
     }
 
     /// Items' names as a sentence lists them: "a", "a and b", "a, b, and c", or the first three and how many more.
@@ -98,6 +101,46 @@ public struct TrashBatch: Sendable, Equatable {
     }
 }
 
+/// Why an item can't go to the Trash (`TrashPolicy.check`).
+public enum TrashRefusal: Error, Equatable, Sendable {
+    /// Not an absolute path.
+    case notAPath
+    /// Not a real file or folder of the map, such as its smaller items.
+    case notInMap
+    case outsideMap
+    /// It isn't on the disk any more, or can't be looked at.
+    case gone
+    /// A folder macOS or the person's account needs, by its name: a top-level folder of the system, the home folder,
+    /// a folder above it or one of its vital folders.
+    case needed(String)
+    /// A volume mounted here, by its name, which ejecting removes instead.
+    case volume(String)
+
+    /// What Pith says when the item is the only one to go.
+    public var message: String {
+        switch self {
+        case .notAPath: "Select an absolute path from the current scan."
+        case .notInMap: "This item isn’t a real entry in the current scan. Scan again before moving it to the Trash."
+        case .outsideMap: "This item is outside the scanned folder."
+        case .gone: "The item no longer exists or can’t be read. Scan again and try again."
+        case .needed(let name): "macOS or your account needs \(name), so Pith won’t move it to the Trash. You can still move items inside it."
+        case .volume(let name): "\(name) is a volume. Eject it in Finder instead."
+        }
+    }
+
+    /// Why it can't go, said after "because" in a sentence that names the item, or several refused alike.
+    public func reason(several: Bool) -> String {
+        switch self {
+        case .notAPath: several ? "they aren’t paths from the current scan" : "it isn’t a path from the current scan"
+        case .notInMap: several ? "they aren’t real entries in the current scan" : "it isn’t a real entry in the current scan"
+        case .outsideMap: several ? "they’re outside the scanned folder" : "it’s outside the scanned folder"
+        case .gone: several ? "they no longer exist or can’t be read" : "it no longer exists or can’t be read"
+        case .needed: several ? "macOS or your account needs them" : "macOS or your account needs it"
+        case .volume: several ? "they’re volumes" : "it’s a volume"
+        }
+    }
+}
+
 /// An item moved to the Trash: its plan, which says where it was, and where it went, which Undo moves it back from. Nil
 /// when the Trash didn't say, and then Undo can't.
 public struct TrashMove: Sendable, Equatable {
@@ -128,12 +171,13 @@ public struct TrashOutcome: Sendable, Equatable {
         return "Moved \(TrashBatch.names(moved.map(\.plan.name))) to the Trash. \(moved.count == 1 ? "Its" : "Their") \(size) comes back when you empty the Trash."
     }
 
-    /// What went wrong when the move stopped at an item: which, what stayed where it was with it, and why.
+    /// What went wrong when the move stopped at an item: which, what stayed where it was with it, and why, each item named
+    /// once.
     public var problem: String? {
         guard let failure else { return nil }
         let name = failure.plan.name
         guard !untried.isEmpty else { return "Pith couldn’t move \(name) to the Trash. \(failure.reason)" }
-        return "Pith couldn’t move \(name) to the Trash, so \(TrashBatch.names([name] + untried.map(\.name))) stayed where they were. \(failure.reason)"
+        return "Pith couldn’t move \(name) to the Trash, so \(TrashBatch.names(["it"] + untried.map(\.name))) stayed where they were. \(failure.reason)"
     }
 }
 

@@ -120,9 +120,10 @@ final class DiskTests: XCTestCase {
         try Data("test".utf8).write(to: file)
         let result = fixture(root: folder.resolvingSymlinksInPath().path, children: [DiskNode(kind: .file, name: "sample.txt", path: file.resolvingSymlinksInPath().path, size: 4, children: nil)])
         let home = URL(fileURLWithPath: NSHomeDirectory())
-        XCTAssertThrowsError(try TrashPolicy.plan(folder.path, result: result, home: home))
-        XCTAssertThrowsError(try TrashPolicy.plan(folder.appendingPathComponent("unscanned").path, result: result, home: home))
-        let plan = try TrashPolicy.plan(file.resolvingSymlinksInPath().path, result: result, home: home)
+        XCTAssertEqual(refusal(folder.resolvingSymlinksInPath().path, in: result, home: home), .outsideMap, "the map's own folder")
+        XCTAssertEqual(refusal(folder.resolvingSymlinksInPath().appendingPathComponent("unscanned").path, in: result, home: home), .notInMap,
+                       "a path the map doesn't list")
+        let plan = try check(file.resolvingSymlinksInPath().path, in: result, home: home).get()
         XCTAssertEqual(plan.target.path, file.resolvingSymlinksInPath().path)
         XCTAssertEqual(plan.size, 4)
         XCTAssertEqual(plan.consequences, [])
@@ -133,25 +134,26 @@ final class DiskTests: XCTestCase {
         let outside = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         for url in [folder, outside] { try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true) }
         defer { for url in [folder, outside] { try? FileManager.default.removeItem(at: url) } }
-        let link = folder.appendingPathComponent("link")
-        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
-        let escaped = link.appendingPathComponent("escape").path
+        try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("link"), withDestinationURL: outside)
+        // A map lists its items under its own folder's path, as a scan finds them.
         let canonicalLink = folder.resolvingSymlinksInPath().appendingPathComponent("link").path
+        let escaped = canonicalLink + "/escape"
         let result = fixture(root: folder.resolvingSymlinksInPath().path, children: [
             DiskNode(kind: .file, name: "link", path: canonicalLink, size: 0, children: nil),
             DiskNode(kind: .file, name: "escape", path: escaped, size: 0, children: nil)
         ])
         let home = URL(fileURLWithPath: NSHomeDirectory())
-        XCTAssertThrowsError(try TrashPolicy.plan(escaped, result: result, home: home))
-        XCTAssertEqual(try TrashPolicy.plan(canonicalLink, result: result, home: home).target.path, canonicalLink)
+        XCTAssertEqual(refusal(escaped, in: result, home: home), .outsideMap, "the link above it leads out of the map")
+        XCTAssertEqual(try check(canonicalLink, in: result, home: home).get().target.path, canonicalLink)
     }
 
     func testWholeDiskScanStillProtectsHomeTopLevelAndSyntheticNodes() throws {
         let home = FileManager.default.homeDirectoryForCurrentUser.resolvingSymlinksInPath()
         let paths = [home.path, home.deletingLastPathComponent().path, "/System", "/__other__", home.appendingPathComponent("Library").path]
         let result = fixture(root: "/", children: paths.map { DiskNode(kind: $0 == "/__other__" ? .aggregate : .dir, name: "protected", path: $0, size: 0, children: nil) })
-        for path in paths { XCTAssertThrowsError(try TrashPolicy.plan(path, result: result, home: home), path) }
-        XCTAssertThrowsError(try TrashPolicy.plan("relative", result: result, home: home))
+        XCTAssertEqual(paths.map { refusal($0, in: result, home: home) },
+                       [.needed(home.lastPathComponent), .needed(home.deletingLastPathComponent().lastPathComponent), .needed("System"), .notInMap, .needed("Library")])
+        XCTAssertEqual(refusal("relative", in: result, home: home), .notAPath)
     }
 
     /// `/System/Volumes/Data/Users/<you>` is the home folder at its data-volume path: a path check passes it.
@@ -161,10 +163,9 @@ final class DiskTests: XCTestCase {
         guard FileManager.default.fileExists(atPath: twin) else { throw XCTSkip("No data volume at /System/Volumes/Data") }
         let result = fixture(root: "/", children: [DiskNode(kind: .dir, name: home.lastPathComponent, path: twin, size: 0, children: nil),
                                                    DiskNode(kind: .dir, name: "Library", path: twin + "/Library", size: 0, children: nil)])
-        XCTAssertThrowsError(try TrashPolicy.plan(twin, result: result, home: home)) { error in
-            XCTAssertTrue(error.localizedDescription.contains("won’t move it"), error.localizedDescription)
-        }
-        XCTAssertThrowsError(try TrashPolicy.plan(twin + "/Library", result: result, home: home))
+        XCTAssertEqual(refusal(twin, in: result, home: home), .needed(home.lastPathComponent))
+        XCTAssertEqual(refusal(twin, in: result, home: home)?.message.contains("won’t move it"), true)
+        XCTAssertEqual(refusal(twin + "/Library", in: result, home: home), .needed("Library"))
     }
 
     func testSyncedItemsSayWhatTheTrashDoesToThem() {
@@ -240,5 +241,16 @@ final class DiskTests: XCTestCase {
 
     private func fixture(root: String, children: [DiskNode]) -> DiskResult {
         DiskResult(root: DiskNode(kind: .dir, name: "test", path: root, size: 4, children: children), topFiles: [], summary: summary(bytes: 4, files: 1, errors: 0))
+    }
+
+    /// What `TrashPolicy` says of moving `path` to the Trash, with the folders `home` keeps protected.
+    private func check(_ path: String, in result: DiskResult, home: URL) -> Result<TrashPlan, TrashRefusal> {
+        TrashPolicy.check(path, result: result, home: home, protected: TrashPolicy.protectedIdentities(home: home))
+    }
+
+    /// Why `TrashPolicy` won't move `path` to the Trash, or nil when it would.
+    private func refusal(_ path: String, in result: DiskResult, home: URL) -> TrashRefusal? {
+        if case .failure(let refusal) = check(path, in: result, home: home) { return refusal }
+        return nil
     }
 }

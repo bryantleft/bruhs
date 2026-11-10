@@ -120,19 +120,29 @@ describe("the hover card's clicks", () => {
         "Too small to show one by one. Double-click to open Users/.",
       ],
     );
-    // Neither once the person has learned the clicks, nor while the map takes none.
+    // Nothing of clicks while the map takes none.
     for (const tile of blocks) {
-      assert.doesNotMatch(
-        hintOf(tile, true, false, true) ?? "",
-        /⌘/,
-        tile.kind,
-      );
       assert.doesNotMatch(
         hintOf(tile, false, true, true) ?? "",
         /click/i,
         tile.kind,
       );
     }
+  });
+
+  test("keeps saying a ⌘-click selects several to someone who learned the other clicks, until they've used it", () => {
+    assert.deepEqual(
+      blocks.map((tile) => hintOf(tile, true, false, true)),
+      [
+        "Space the scan couldn’t see. Click to see why.",
+        "⌘-click to select several.",
+        "⌘-click to select several.",
+        "⌘-click to select several.",
+        "⌘-click to select several.",
+        "Measured, not scanned: macOS keeps this volume apart from your files.",
+        null,
+      ],
+    );
   });
 
   test("offers no click while the host takes none, as Pith while a scan runs, and says the rest", () => {

@@ -86,8 +86,8 @@ export interface CardContext {
    */
   readonly clicks: boolean;
   /**
-   * Whether a ⌘-click adds an item to the selection, or takes it out, for a host that keeps several, as Pith does: the
-   * card's click hint says so.
+   * Whether to say that a ⌘-click selects several, for a host that keeps several, as Pith does: until the person has
+   * added an item that way. It's learned apart from the other clicks, so someone who learned those still hears it.
    */
   readonly several?: boolean;
   /** How much the block changed since the last scan, e.g. "+12.3 GB since Nov 3". */
@@ -106,12 +106,17 @@ export function describe(
   const share = shareOf(tile, layout);
   const openFolder =
     open && clicks ? ` Double-click to open ${open.name}/.` : "";
-  const select = several
-    ? "Click to select, or ⌘-click to select several."
-    : "Click to select.";
   const title = middleTruncate(tileName(tile), 34);
   const fill = (category: Category) => `var(${CATEGORY_VAR[category]})`;
-  const hint = (text: string) => (hints && clicks ? text : null);
+  // An item's hint: how to select it, then `after`, while the clicks are unlearned, and that a ⌘-click selects several,
+  // until that's learned, each said once.
+  const selectHint = (after: string) => {
+    if (!clicks) return null;
+    if (hints) {
+      return `${several ? "Click to select, or ⌘-click to select several." : "Click to select."}${after}`;
+    }
+    return several ? "⌘-click to select several." : null;
+  };
   switch (tile.kind) {
     case "unmeasured":
       return {
@@ -135,7 +140,7 @@ export function describe(
         },
         size,
         share,
-        hint: hint(`${select}${openFolder}`),
+        hint: selectHint(openFolder),
         unreadable: null,
         change,
       };
@@ -167,7 +172,7 @@ export function describe(
         kind: { label: blockKind(tile), fill: fill(tile.category) },
         size,
         share,
-        hint: hint(`${select} Double-click to open.`),
+        hint: selectHint(" Double-click to open."),
         unreadable: unreadableInside(tile.node),
         change,
       };
@@ -178,7 +183,7 @@ export function describe(
         kind: { label: "Folder", fill: null },
         size,
         share,
-        hint: hint(`${select} Double-click to open.`),
+        hint: selectHint(" Double-click to open."),
         unreadable: unreadableInside(tile.node),
         change,
       };

@@ -1,20 +1,33 @@
 /**
  * The disk map's click hints: its hover card says how to select and open an item until the person has selected and
- * opened something on the map once. A host can keep which they've learned, as Pith keeps them in its settings;
- * otherwise the map keeps them in the page's own storage.
+ * opened something on the map once, and, where the host keeps several items selected, that a ⌘-click selects several
+ * until they've first added an item that way. A host can keep which they've learned, as Pith keeps them in its
+ * settings; otherwise the map keeps them in the page's own storage.
  */
 
-/** A hint the map learns: the person selected something on the map, or opened it. */
-export type HintStep = "selected" | "opened";
+/**
+ * A hint the map learns: the person selected something on the map, opened it, or added an item to the selection with a
+ * ⌘-click or the add button in the map's list of items.
+ */
+export type HintStep = "selected" | "opened" | "several";
 
-export const HINT_STEPS: readonly HintStep[] = ["selected", "opened"];
+export const HINT_STEPS: readonly HintStep[] = [
+  "selected",
+  "opened",
+  "several",
+];
 
 export interface LearnedHints {
   readonly selected: boolean;
   readonly opened: boolean;
+  readonly several: boolean;
 }
 
-export const NOTHING_LEARNED: LearnedHints = { selected: false, opened: false };
+export const NOTHING_LEARNED: LearnedHints = {
+  selected: false,
+  opened: false,
+  several: false,
+};
 
 /** The hints a host keeps for the map: which it has learned, and what to do when it learns one. */
 export interface MapHints {
@@ -29,7 +42,11 @@ const HINTS_KEY = "pith.mapHintsLearned";
 export function storedHints(): LearnedHints {
   try {
     const saved = JSON.parse(localStorage.getItem(HINTS_KEY) ?? "{}");
-    return { selected: saved.selected === true, opened: saved.opened === true };
+    return {
+      selected: saved.selected === true,
+      opened: saved.opened === true,
+      several: saved.several === true,
+    };
   } catch {
     return NOTHING_LEARNED;
   }

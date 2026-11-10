@@ -37,7 +37,9 @@ final class ScannerTests: XCTestCase {
         let result = try await ScannerRunner().scan(binary: binary, root: folder) { _ in }
         XCTAssertEqual(result.summary.files, 1)
         XCTAssertTrue(result.root.entries.contains { $0.path == file.path })
-        XCTAssertEqual(try TrashPolicy.plan(file.path, result: result, home: FileManager.default.homeDirectoryForCurrentUser).target.path, file.path)
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let plan = TrashPolicy.check(file.path, result: result, home: home, protected: TrashPolicy.protectedIdentities(home: home))
+        XCTAssertEqual(try plan.get().target.path, file.path)
     }
 
     func testRealScannerCountsClonesOnceAndMeasuresWhatDeletingFrees() async throws {

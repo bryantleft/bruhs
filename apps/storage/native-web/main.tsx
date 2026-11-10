@@ -338,9 +338,17 @@ function DiskMap() {
     (file: FileEntry) => select(file.path),
     [select],
   );
+  // A ⌘-click in the side lists adds an item as one on the map does, and the map's card stops saying how.
+  const toggleClicked = useCallback(
+    (path: string) => {
+      if (!hints.learned.several) hints.learn("several");
+      toggle(path);
+    },
+    [hints, toggle],
+  );
   const toggleFile = useCallback(
-    (file: FileEntry) => toggle(file.path),
-    [toggle],
+    (file: FileEntry) => toggleClicked(file.path),
+    [toggleClicked],
   );
 
   /**
@@ -544,7 +552,7 @@ function DiskMap() {
                       type="button"
                       title={path}
                       onClick={(event) =>
-                        event.metaKey ? toggle(path) : select(path)
+                        event.metaKey ? toggleClicked(path) : select(path)
                       }
                       onMouseEnter={() => setHovered(path)}
                       onMouseLeave={() => setHovered(null)}

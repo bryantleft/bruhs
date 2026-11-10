@@ -90,6 +90,8 @@ enum MapCommand: Equatable {
     private(set) var selectedFrees: DiskFrees?
     @ObservationIgnored private var frees = FreesSchedule()
     private var freesTask: Task<Void, Never>?
+    /// A measurement of the same selection held back until the last one's rest ends (`FreesSchedule`), and when.
+    @ObservationIgnored private var freesLater: (task: Task<Void, Never>, until: Date)?
     /// A move to the Trash waiting for the person to confirm what it does to a synced item or a Photos library.
     var confirming: TrashBatch?
     /// Where the volume's space went, for a map of a whole volume: the volume's own figures set against the map as it is
@@ -400,15 +402,15 @@ enum MapCommand: Equatable {
 
     /// The selection as a newer map has it: an item the map no longer holds leaves it. What deleting the rest frees is
     /// measured again only once an item's size has moved by more than a megabyte since it was last measured, one
-    /// measurement at a time (`FreesSchedule`): a busy folder changes with every map, and measuring it each time would
-    /// never finish.
+    /// measurement at a time and each after the last one's rest (`FreesSchedule`): a busy folder changes with every map,
+    /// and measuring it each time would never stop.
     private func keepSelection() {
         guard !selection.isEmpty else { return }
         var kept = selection
         kept.keep { self.result?.item(at: $0) != nil }
         if kept != selection { setSelection(kept); return }
         refreshSelected()
-        if frees.mapChanged(selectedSizes) { measureFrees() }
+        follow(frees.mapChanged(selectedSizes, at: Date()))
     }
 
     /// The live map's folder sizes against a baseline kept from up to a day before, so the map shows what grew. A day
@@ -650,7 +652,7 @@ enum MapCommand: Equatable {
         guard changed else { return }
         freesTask?.cancel(); freesTask = nil
         selectedFrees = nil
-        if frees.selected(selectedSizes) { measureFrees() }
+        follow(frees.selected(selectedSizes))
     }
 
     /// The selected items and their plan, from the map shown.
@@ -664,25 +666,46 @@ enum MapCommand: Equatable {
         Dictionary(selectedItems.map { ($0.path, $0.size) }) { first, _ in first }
     }
 
+    /// Does what the schedule says of what deleting the selection frees: measure now, keep the figure in hand, or measure
+    /// once the last measurement's rest ends, if the items still differ then.
+    private func follow(_ step: FreesSchedule.Step) {
+        if case .wait(let until) = step, freesLater?.until == until { return }
+        freesLater?.task.cancel(); freesLater = nil
+        switch step {
+        case .keep: break
+        case .measure: measureFrees()
+        case .wait(let until):
+            let task = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(max(0, until.timeIntervalSinceNow)))
+                guard let self, !Task.isCancelled else { return }
+                self.freesLater = nil
+                self.follow(self.frees.mapChanged(self.selectedSizes, at: Date()))
+            }
+            freesLater = (task, until)
+        }
+    }
+
     /// Asks the scanner what deleting the selected items frees, in one measurement of them all, so clone groups and
     /// hard links shared among them count once. It waits a moment first, so arrowing across the map doesn't start a walk
-    /// for every item passed. One that lands once the selection has changed is dropped.
+    /// for every item passed. One that lands once the selection has changed is dropped. How long it took sets the rest
+    /// before the next.
     private func measureFrees() {
         let binary = binary, paths = selection.paths
         freesTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
+            let began = Date()
             do {
                 let measured = try await ScannerRunner.frees(binary: binary, paths: paths)
                 guard !Task.isCancelled, let self, self.selection.paths == paths else { return }
                 self.freesTask = nil
                 self.selectedFrees = measured
-                // The items moved while they were measured.
-                if self.frees.landed(now: self.selectedSizes) { self.measureFrees() }
+                // The items may have moved while they were measured.
+                self.follow(self.frees.landed(self.selectedSizes, at: Date(), took: Date().timeIntervalSince(began)))
             } catch {
                 guard !Task.isCancelled else { return }
                 self?.freesTask = nil
-                self?.frees.failed()
+                self?.frees.failed(at: Date(), took: Date().timeIntervalSince(began))
                 NSLog("Pith: couldn't measure what deleting \(paths.joined(separator: ", ")) frees: \(error.localizedDescription)")
             }
         }

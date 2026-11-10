@@ -37,11 +37,17 @@ final class TrashBatchTests: XCTestCase {
         let gone = folder.appendingPathComponent("gone.bin"), lost = folder.appendingPathComponent("lost.bin")
         let result = map([a, gone, lost])
         XCTAssertEqual(refusal([a, gone], in: result),
-                       "gone.bin can’t go to the Trash because it no longer exists or can’t be read, so ⌘-click it to leave it out and move the rest.")
+                       "gone.bin can’t go to the Trash because it no longer exists or can’t be read, so take it out of the selection and move the rest.")
         XCTAssertEqual(refusal([gone, lost, a], in: result),
-                       "gone.bin and lost.bin can’t go to the Trash because they no longer exist or can’t be read, so ⌘-click them to leave them out and move the rest.")
+                       "gone.bin and lost.bin can’t go to the Trash because they no longer exist or can’t be read, so take them out of the selection and move the rest.")
         XCTAssertEqual(refusal([gone], in: result), "The item no longer exists or can’t be read. Scan again and try again.",
                        "an item alone says what it always said")
+    }
+
+    func testWhenNoItemCanGoTheRefusalOnlySaysWhy() throws {
+        let gone = folder.appendingPathComponent("gone.bin"), lost = folder.appendingPathComponent("lost.bin")
+        XCTAssertEqual(refusal([gone, lost], in: map([gone, lost])),
+                       "gone.bin and lost.bin can’t go to the Trash because they no longer exist or can’t be read.", "there's no rest to move")
     }
 
     func testItemsRefusedForDifferentReasonsAreNamedWithEach() throws {
@@ -51,7 +57,9 @@ final class TrashBatchTests: XCTestCase {
         let a = try file("a.bin"), gone = folder.appendingPathComponent("gone.bin")
         let result = map([a, gone], folders: [home, library])
         XCTAssertEqual(refusal([library, gone, a], in: result, home: home),
-                       "Library can’t go to the Trash because macOS or your account needs it, and gone.bin because it no longer exists or can’t be read, so ⌘-click them to leave them out and move the rest.")
+                       "Library can’t go to the Trash because macOS or your account needs it, and gone.bin because it no longer exists or can’t be read, so take them out of the selection and move the rest.")
+        XCTAssertEqual(refusal([library, gone], in: result, home: home),
+                       "Library can’t go to the Trash because macOS or your account needs it, and gone.bin because it no longer exists or can’t be read.")
     }
 
     func testANamesListStaysShort() {
@@ -116,7 +124,8 @@ final class TrashBatchTests: XCTestCase {
         XCTAssertEqual(outcome.failure?.plan.name, "b.bin")
         XCTAssertEqual(outcome.untried.map(\.name), ["c.bin"], "nothing after the failure is tried")
         XCTAssertEqual(outcome.note, "Moved a.bin to the Trash. Its 4 B comes back when you empty the Trash.", "it says which moved")
-        XCTAssertEqual(outcome.problem, "Pith couldn’t move b.bin to the Trash, so b.bin and c.bin stayed where they were. The file is locked.")
+        XCTAssertEqual(outcome.problem, "Pith couldn’t move b.bin to the Trash, so it and c.bin stayed where they were. The file is locked.",
+                       "each item named once")
         XCTAssertEqual(items.map(exists), [false, true, true])
 
         let undone = TrashUndo.putBack(outcome.moved, with: moveBack)
@@ -130,7 +139,7 @@ final class TrashBatchTests: XCTestCase {
         let first = batch.move(with: refusing("a.bin"))
         XCTAssertTrue(first.moved.isEmpty)
         XCTAssertNil(first.note, "nothing moved, so there's nothing to undo")
-        XCTAssertEqual(first.problem, "Pith couldn’t move a.bin to the Trash, so a.bin, b.bin, and c.bin stayed where they were. The file is locked.")
+        XCTAssertEqual(first.problem, "Pith couldn’t move a.bin to the Trash, so it, b.bin, and c.bin stayed where they were. The file is locked.")
         let last = batch.move(with: refusing("c.bin"))
         XCTAssertEqual(last.moved.map(\.plan.name), ["a.bin", "b.bin"])
         XCTAssertEqual(last.problem, "Pith couldn’t move c.bin to the Trash. The file is locked.")

@@ -8,10 +8,17 @@ describe("learnedFrom", () => {
     assert.deepEqual(learnedFrom(["selected"], NOTHING_LEARNED), {
       selected: true,
       opened: false,
+      several: false,
     });
     assert.deepEqual(learnedFrom(["opened", "selected"], NOTHING_LEARNED), {
       selected: true,
       opened: true,
+      several: false,
+    });
+    assert.deepEqual(learnedFrom(["several"], NOTHING_LEARNED), {
+      selected: false,
+      opened: false,
+      several: true,
     });
   });
 
@@ -26,13 +33,12 @@ describe("learnedFrom", () => {
   });
 
   test("never forgets a hint the page learned before Pith's list came", () => {
-    assert.deepEqual(learnedFrom([], { selected: true, opened: false }), {
+    const page = { selected: true, opened: false, several: false };
+    assert.deepEqual(learnedFrom([], page), page);
+    assert.deepEqual(learnedFrom(["opened"], page), {
       selected: true,
-      opened: false,
+      opened: true,
+      several: false,
     });
-    assert.deepEqual(
-      learnedFrom(["opened"], { selected: true, opened: false }),
-      { selected: true, opened: true },
-    );
   });
 });

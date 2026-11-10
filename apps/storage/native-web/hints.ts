@@ -29,7 +29,11 @@ export function learnedFrom(
 ): LearnedHints {
   const sent = new Set(Array.isArray(names) ? names : []);
   const has = (step: HintStep) => learned[step] || sent.has(step);
-  return { selected: has("selected"), opened: has("opened") };
+  return {
+    selected: has("selected"),
+    opened: has("opened"),
+    several: has("several"),
+  };
 }
 
 /**

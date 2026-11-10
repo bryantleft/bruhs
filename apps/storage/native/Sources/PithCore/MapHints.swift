@@ -1,11 +1,13 @@
 import Foundation
 
 /// The disk map's click hints the person has learned: the hover card says how to select and open an item until they've
-/// done each once on the map. Pith keeps them in its settings, through `read` and `write`, so they stay learned when
-/// the window closes and when Pith opens again. The page gets them once it's ready, and says when it learns one.
+/// done each once on the map, and that a ⌘-click selects several until they've first added an item that way, or with
+/// the add button in the map's list of items. Pith keeps them in its settings, through `read` and `write`, so they stay
+/// learned when the window closes and when Pith opens again. The page gets them once it's ready, and says when it
+/// learns one.
 public struct MapHints {
     /// The hints the map learns, by the names the page gives them (`HintStep` in src/lib/map-hints.ts), in order.
-    public static let all = ["opened", "selected"]
+    public static let all = ["opened", "selected", "several"]
 
     private let read: () -> Any?
     private let write: ([String]) -> Void

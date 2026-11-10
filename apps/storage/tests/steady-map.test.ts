@@ -23,7 +23,7 @@ import {
   layoutTreemap,
   type TreemapLayout,
 } from "../src/lib/treemap-layout.ts";
-import type { DirNode, FileNode } from "../src/lib/types.ts";
+import type { DirNode, FileNode, TreeNode } from "../src/lib/types.ts";
 
 /** The hold after each event in turn, each at its time in milliseconds. */
 function after(...steps: [number, HoldEvent][]): Hold {
@@ -174,13 +174,19 @@ describe("the hold", () => {
   });
 });
 
-function dir(path: string, children: FileNode[]): DirNode {
+/** A folder of `children`, which can be folders and folders the scan couldn't read too, counting the files inside. */
+function dir(path: string, children: TreeNode[]): DirNode {
   return {
     kind: "dir",
     name: path.slice(path.lastIndexOf("/") + 1),
     path,
     size: children.reduce((sum, child) => sum + child.size, 0),
-    files: children.length,
+    files: children.reduce(
+      (sum, child) =>
+        sum +
+        (child.kind === "file" ? 1 : child.kind === "dir" ? child.files : 0),
+      0,
+    ),
     children,
   };
 }

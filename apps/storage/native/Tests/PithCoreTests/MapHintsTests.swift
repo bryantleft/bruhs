@@ -23,6 +23,18 @@ final class MapHintsTests: XCTestCase {
         XCTAssertEqual(hints(stored).learned, ["opened", "selected"])
     }
 
+    /// The ⌘-click hint is learned apart from the click hints: someone who learned those before still sees it.
+    func testTheCommandClickHintIsLearnedOnItsOwn() {
+        let stored = Stored()
+        stored.value = ["opened", "selected"]
+        XCTAssertFalse(hints(stored).learned.contains("several"))
+        hints(stored).learn("several")
+        XCTAssertEqual(hints(stored).learned, ["opened", "selected", "several"])
+        let fresh = Stored()
+        hints(fresh).learn("several")
+        XCTAssertEqual(fresh.value as? [String], ["several"])
+    }
+
     func testOnlyTheHintsTheMapLearnsAreKept() {
         let stored = Stored()
         hints(stored).learn("hovered")
