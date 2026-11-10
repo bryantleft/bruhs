@@ -370,7 +370,7 @@ public struct SystemIconRenderer: IconRenderer {
 
     public func render(_ request: IconRequest) -> CGImage? {
         guard let image = Self.image(for: request.key, places: places) else { return nil }
-        return Self.draw(image, size: request.size, appearance: request.appearance, tint: image.isTemplate ? symbolColor : nil)
+        return Self.draw(image, size: request.size, appearance: request.appearance.name, tint: image.isTemplate ? symbolColor : nil)
     }
 
     /// macOS's icon for `key`, not drawn yet. NSWorkspace's image picks its light or dark artwork as it's drawn, so a
@@ -399,9 +399,10 @@ public struct SystemIconRenderer: IconRenderer {
         }
     }
 
-    /// Draws `image` into a bitmap of `size` in `appearance`, which is when macOS picks its light or dark artwork. A
-    /// symbol is fitted inside the square and filled with `tint`.
-    static func draw(_ image: NSImage, size: IconSize, appearance: IconAppearance, tint: NSColor?) -> CGImage? {
+    /// Draws `image` into a bitmap of `size` in the appearance named `appearance`, which is when macOS picks its light or
+    /// dark artwork: an icon request's (`IconAppearance.name`), or any other, as the test of the high-contrast ones draws
+    /// in. A symbol is fitted inside the square and filled with `tint`.
+    static func draw(_ image: NSImage, size: IconSize, appearance: NSAppearance.Name, tint: NSColor?) -> CGImage? {
         guard let space = CGColorSpace(name: CGColorSpace.displayP3),
               let context = CGContext(data: nil, width: size.pixels, height: size.pixels, bitsPerComponent: 8, bytesPerRow: 0, space: space,
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
@@ -418,7 +419,7 @@ public struct SystemIconRenderer: IconRenderer {
         graphics.imageInterpolation = .high
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = graphics
-        NSAppearance(named: appearance.name)?.performAsCurrentDrawingAppearance {
+        NSAppearance(named: appearance)?.performAsCurrentDrawingAppearance {
             image.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1)
             if let tint {
                 tint.setFill()
