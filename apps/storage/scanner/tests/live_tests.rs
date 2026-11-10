@@ -711,6 +711,38 @@ fn serve_keeps_a_map_current_over_its_pipes() {
     remove(&root);
 }
 
+/// `serve` says with each map how many folders wait to be listed for a change, the count its status gives, from the
+/// same index: a folder FSEvents named waits its settle before it's listed, and the map that comes meanwhile doesn't
+/// have the change yet. It comes before the map itself, which Pith hands the page as the scanner wrote it.
+#[test]
+fn serve_says_with_each_map_how_many_folders_wait_to_be_listed() {
+    let root = fixture("serve_says_with_each_map_how_many_folders_wait_to_be_listed");
+    seeded(&root);
+    let mut serve = Serve::start();
+    serve.send(serde_json::json!({ "cmd": "open", "root": root, "snapshot": null, "volume": "V" }));
+    serve.until("opened");
+    serve.send(serde_json::json!({ "cmd": "walk", "since": 100 }));
+    serve.until("walked");
+    serve.send(serde_json::json!({ "cmd": "tree", "path": root, "focus": null, "request": 1 }));
+    assert_eq!(serve.until("tree")["pending"], 0, "nothing waits after the walk");
+    fs::write(root.join("d/fresh.mov"), vec![b'm'; 200_000]).unwrap();
+    serve.send(serde_json::json!({ "cmd": "events", "events": [[101, 0, format!("{}/d/", root.display()), 0]] }));
+    serve.send(serde_json::json!({ "cmd": "tree", "path": root, "focus": null, "request": 2 }));
+    let line = serve.line_where("tree", |tree| tree["request"] == 2);
+    let waiting: serde_json::Value = serde_json::from_str(&line).unwrap();
+    assert_eq!(waiting["pending"], 1, "d waits its settle");
+    let before = Live::build(&root).index.totals(ROOT).size;
+    assert!(waiting["result"]["root"]["size"].as_u64() < Some(before), "and the map doesn't have the file yet");
+    assert!(line.find(r#","pending":"#).is_some_and(|pending| line.find(r#","result":"#).is_some_and(|result| pending < result)), "{line}");
+    serve.until_where("status", |status| status["pending"] == 0 && status["through"] == 101);
+    serve.send(serde_json::json!({ "cmd": "tree", "path": root, "focus": null, "request": 3 }));
+    let listed = serve.until("tree");
+    assert_eq!(listed["pending"], 0, "listed");
+    assert_eq!(listed["result"]["root"]["size"], before);
+    serve.close();
+    remove(&root);
+}
+
 /// `serve` answers for the known places Pith names with the map they go with, from the same index: each folder's size
 /// as that map shows it, or none where the map can't read it, and nothing for a place that isn't there.
 #[test]

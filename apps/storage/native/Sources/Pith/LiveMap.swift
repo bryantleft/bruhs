@@ -56,8 +56,9 @@ import PithCore
     /// waits on that answer, and the map goes on without them meanwhile.
     private(set) var asking = 0
     /// A tree arrived: the map for `path`, as asked for, with its JSON for the page, what its index holds at the places
-    /// asked about, and which of the person's changes asked about its index doesn't show yet.
-    var received: ((DiskResult, String, [LivePlace], LiveEdits.Answer) -> Void)?
+    /// asked about, which of the person's changes asked about its index doesn't show yet, and how many folders wait to be
+    /// listed for a change, or nil when the scanner didn't say.
+    var received: ((DiskResult, String, [LivePlace], LiveEdits.Answer, Int?) -> Void)?
     /// The map changed, so a view on screen should ask for its tree again.
     var changed: (() -> Void)?
     /// The tree asked for last couldn't be made, as for a folder the map lacks.
@@ -286,9 +287,9 @@ import PithCore
             if case .catchingUp(let waiting) = state { state = .live(waiting) }
         case .rebuild(let reason):
             walk(reason: reason)
-        case .tree(let request, let result, let json, let places, let unlisted):
+        case .tree(let request, let result, let json, let places, let unlisted, let pending):
             guard request == wanted else { return }
-            received?(result, json, places, LiveEdits.Answer(asked: askedEdits, unlisted: Set(unlisted)))
+            received?(result, json, places, LiveEdits.Answer(asked: askedEdits, unlisted: Set(unlisted)), pending)
         case .relisted(let request):
             if checksAsked.remove(request) != nil { checkedAgain?() }
         case .saved(let through, let bytes, let ms):

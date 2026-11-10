@@ -260,11 +260,15 @@ impl Server {
             Command::Events { events } => self.events(events),
             Command::Tree { path, focus, request, places, gone, back } => {
                 match self.index.as_ref().map(|index| index.result(&path, focus.as_deref())) {
-                    // The places and the changes the map doesn't show yet come first: Pith hands the page everything after
-                    // `,"result":` as the map.
+                    // The places, the changes the map doesn't show yet and the folders waiting to be listed come first:
+                    // Pith hands the page everything after `,"result":` as the map. What waits is the status's own count,
+                    // so Pith can tell whether the index holds changes this map doesn't have yet.
                     Some(Ok(result)) => {
                         let (places, unlisted) = self.places(&places, &gone, &back);
-                        send(&format!(r#"{{"type":"tree","request":{request},"places":{places},"unlisted":{unlisted},"result":{result}}}"#));
+                        let pending = self.sched.waiting();
+                        send(&format!(
+                            r#"{{"type":"tree","request":{request},"pending":{pending},"places":{places},"unlisted":{unlisted},"result":{result}}}"#
+                        ));
                     }
                     Some(Err(reason)) => error(Some(request), &reason),
                     None => error(Some(request), "The map hasn't been made yet."),

@@ -87,7 +87,8 @@ enum MapCommand: Equatable {
     /// now (`account`), so what the map gains or loses, as by Move to Trash and Undo, moves Not measured at once.
     private(set) var accounting: DiskAccounting?
     /// The volume's own figures for the map shown (`figures(for:full:)`), measured before the map went out and set
-    /// against it with it.
+    /// against it with it, or, for a live map from an index with changes it hasn't listed yet, those measured with an
+    /// earlier one (`SpaceHold`).
     @ObservationIgnored private var volumeUse: VolumeFigures? {
         didSet { account() }
     }
@@ -309,7 +310,9 @@ enum MapCommand: Equatable {
     func startLive(root: String = "/", keep: Bool? = nil) {
         guard live == nil else { return }
         let live = LiveMap(root: root)
-        live.received = { [weak self] value, json, places, answer in self?.liveTreeArrived(value, json: json, places: places, answer: answer) }
+        live.received = { [weak self] value, json, places, answer, pending in
+            self?.liveTreeArrived(value, json: json, places: places, answer: answer, pending: pending)
+        }
         live.treeFailed = { [weak self] reason in self?.liveTreeFailed(reason) }
         live.changed = { [weak self] in self?.refreshLive() }
         // Check Again's map comes at once, past the wait between refreshes, and shows at once, as Refresh's does.
@@ -405,9 +408,10 @@ enum MapCommand: Equatable {
     @ObservationIgnored private(set) var liveMapsShown = 0
     @ObservationIgnored private(set) var mapsShowingChanges = 0
 
-    /// A live map came. Its volume's figures are measured off the main thread first, and whether the items the person
-    /// changed are on the disk, and then the map goes out with its figures, as the person's changes have it.
-    private func liveTreeArrived(_ value: DiskResult, json: String, places: [LivePlace], answer: LiveEdits.Answer) {
+    /// A live map came, from an index with `pending` folders waiting to be listed. Its volume's figures are measured off
+    /// the main thread first, unless the last ones stand for it (`SpaceHold`), and whether the items the person changed
+    /// are on the disk, and then the map goes out with its figures, as the person's changes have it.
+    private func liveTreeArrived(_ value: DiskResult, json: String, places: [LivePlace], answer: LiveEdits.Answer, pending: Int?) {
         guard value.root.path == liveView else { return }
         liveMaps += 1
         let number = liveMaps
@@ -417,15 +421,23 @@ enum MapCommand: Equatable {
             NSLog("Pith: the live map’s index didn’t show the change to \(edit.path) within \(Int(LiveEdits.longestHold)) s, so the maps after it no longer hold it.")
         }
         let changed = Set(liveEdits.gone + liveEdits.back)
+        // While folders wait to be listed, the map lacks changes the volume's space already has: the figures measured with
+        // the last map that had none stand, for a minute at most (`SpaceHold`).
+        let root = value.root.path, held = volumeUse.flatMap { $0.root == root ? $0 : nil }
+        let measures = spaceHold.measures(root: root, pending: pending, holding: held != nil, at: Date())
         Task {
-            async let figures = self.figures(for: value.root.path)
+            async let figures = measures ? self.figures(for: root) : held
             let onDisk = changed.isEmpty ? [] : await Task.detached(priority: .utility) { Set(changed.filter(Self.exists)) }.value
             let measured = await figures
             guard number == liveMaps else { return }
+            if measures, measured != nil { spaceHold.measured(root: root, at: Date()) }
             liveEdits.keep(onDisk: onDisk, of: changed)
             showLive(value, json: json, places: places, answer: answer, figures: measured)
         }
     }
+
+    /// When the live map's maps measure the volume's space again.
+    @ObservationIgnored private var spaceHold = SpaceHold()
 
     /// Whether something is at `path`, without following a symbolic link there.
     nonisolated private static func exists(_ path: String) -> Bool {
