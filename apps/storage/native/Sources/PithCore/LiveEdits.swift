@@ -43,33 +43,56 @@ public struct LiveEdits: Sendable, Equatable {
         public init(asked: Set<String>, unlisted: Set<String>) { self.asked = asked; self.unlisted = unlisted }
     }
 
-    public private(set) var edits: [Edit] = []
+    /// The longest a change is held: the live map shows a change 4.5 to 5.7 s after it's made, FSEvents' second of latency
+    /// and the scanner's three of settling (`SETTLE` in scanner/src/serve.rs) included (native/VERIFICATION.md,
+    /// "Following the disk"), so a minute is about ten times the slowest. A change the index never lists, as a hard-linked
+    /// file put back whose bytes it counts at another link, is dropped then.
+    public static let longestHold: TimeInterval = 60
+
+    /// Each change, with when the person made it.
+    private var held: [(edit: Edit, made: Date)] = []
 
     public init() {}
 
-    public var isEmpty: Bool { edits.isEmpty }
+    public static func == (lhs: LiveEdits, rhs: LiveEdits) -> Bool {
+        lhs.held.map(\.edit) == rhs.held.map(\.edit) && lhs.held.map(\.made) == rhs.held.map(\.made)
+    }
+
+    /// The person's changes held, oldest first.
+    public var edits: [Edit] { held.map(\.edit) }
+
+    public var isEmpty: Bool { held.isEmpty }
 
     /// The items moved to the Trash, and those put back, to ask the scanner about with each map.
     public var gone: [String] { edits.compactMap { if case .gone(let node) = $0 { node.path } else { nil } } }
     public var back: [String] { edits.compactMap { if case .back(let restored) = $0 { restored.node.path } else { nil } } }
 
-    /// Move to Trash took `items` off the map. Each replaces any change to the same item before it.
-    public mutating func trashed(_ items: [DiskNode]) { replace(items.map(Edit.gone)) }
+    /// Move to Trash took `items` off the map at `time`. Each replaces any change to the same item before it.
+    public mutating func trashed(_ items: [DiskNode], at time: Date = Date()) { replace(items.map(Edit.gone), at: time) }
 
-    /// Undo put `items` back.
-    public mutating func putBack(_ items: [Restored]) { replace(items.map(Edit.back)) }
+    /// Undo put `items` back at `time`.
+    public mutating func putBack(_ items: [Restored], at time: Date = Date()) { replace(items.map(Edit.back), at: time) }
 
-    private mutating func replace(_ new: [Edit]) {
+    private mutating func replace(_ new: [Edit], at time: Date) {
         let paths = Set(new.map(\.path))
-        edits.removeAll { paths.contains($0.path) }
-        edits += new
+        held.removeAll { paths.contains($0.edit.path) }
+        held += new.map { ($0, time) }
+    }
+
+    /// Drops each change held longer than `longestHold` at `now`, and says which, in the order they were made.
+    public mutating func expire(at now: Date) -> [Edit] {
+        let expired = { (change: (edit: Edit, made: Date)) in now.timeIntervalSince(change.made) > Self.longestHold }
+        let dropped = held.filter(expired).map(\.edit)
+        held.removeAll(where: expired)
+        return dropped
     }
 
     /// Drops each change the disk contradicts, of those whose paths were looked at (`checked`): an item moved to the
     /// Trash that's there again, as after Finder's Put Back, or one put back that's gone again. The index could take
     /// either for a change it hasn't listed yet. `onDisk` holds those of `checked` that are there.
     public mutating func keep(onDisk: Set<String>, of checked: Set<String>) {
-        edits.removeAll { edit in
+        held.removeAll { change in
+            let edit = change.edit
             guard checked.contains(edit.path) else { return false }
             switch edit {
             case .gone: return onDisk.contains(edit.path)
@@ -85,7 +108,7 @@ public struct LiveEdits: Sendable, Equatable {
     /// map when the map shows it.
     public mutating func apply(to map: DiskResult, places: [LivePlace], answer: Answer) -> (map: DiskResult, places: [LivePlace], changed: Bool) {
         var map = map, places = places, changed = false
-        edits.removeAll { edit in answer.asked.contains(edit.path) && !answer.unlisted.contains(edit.path) }
+        held.removeAll { answer.asked.contains($0.edit.path) && !answer.unlisted.contains($0.edit.path) }
         for edit in edits {
             let unlisted = answer.unlisted.contains(edit.path)
             switch edit {

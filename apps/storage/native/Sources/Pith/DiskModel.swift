@@ -408,6 +408,11 @@ enum MapCommand: Equatable {
         guard value.root.path == liveView else { return }
         liveMaps += 1
         let number = liveMaps
+        // A change the index never shows, as a hard-linked file put back whose bytes it counts at another link, is held
+        // for a minute at most (`LiveEdits.longestHold`).
+        for edit in liveEdits.expire(at: Date()) {
+            NSLog("Pith: the live map’s index didn’t show the change to \(edit.path) within \(Int(LiveEdits.longestHold)) s, so the maps after it no longer hold it.")
+        }
         let changed = Set(liveEdits.gone + liveEdits.back)
         Task {
             async let figures = self.figures(for: value.root.path)

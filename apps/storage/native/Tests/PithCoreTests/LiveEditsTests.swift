@@ -126,6 +126,32 @@ final class LiveEditsTests: XCTestCase {
         XCTAssertEqual(back.back, ["/r/a/big.bin"])
     }
 
+    /// A change is held for a minute at most: a hard-linked file put back, whose bytes the index counts at another link,
+    /// is never listed by name, so the scanner says of every map that its index doesn't show it, and without a bound the
+    /// map would count it twice for as long as Pith runs. A change made again starts its minute again.
+    func testAChangeIsHeldForAMinuteAtMost() throws {
+        let made = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let linked = DiskNode(kind: .file, name: "linked.mov", path: "/r/a/linked.mov", size: 30, children: nil)
+        var edits = LiveEdits()
+        edits.trashed([big], at: made)
+        edits.putBack([.init(node: linked, topFiles: [], places: [])], at: made)
+        // The trashed item is put back later on, which holds it from then.
+        edits.putBack([.init(node: big, topFiles: [], places: [])], at: made.addingTimeInterval(20))
+        edits.trashed([DiskNode(kind: .dir, name: "later", path: "/r/later", size: 1, files: 0, children: [])], at: made.addingTimeInterval(30))
+        XCTAssertEqual(edits.expire(at: made.addingTimeInterval(LiveEdits.longestHold - 1)), [], "within the minute")
+        XCTAssertEqual(edits.back, ["/r/a/linked.mov", "/r/a/big.bin"])
+        let dropped = edits.expire(at: made.addingTimeInterval(LiveEdits.longestHold + 1))
+        XCTAssertEqual(dropped.map(\.path), ["/r/a/linked.mov"], "past it, only the change made first")
+        XCTAssertEqual(edits.back, ["/r/a/big.bin"])
+        XCTAssertEqual(edits.gone, ["/r/later"])
+        // The maps after it are as the index has them, however often the scanner says it doesn't show the file.
+        let shown = edits.apply(to: map(withoutBig: true), places: places, answer: .init(asked: ["/r/a/linked.mov"], unlisted: ["/r/a/linked.mov"]))
+        XCTAssertNil(shown.map.item(at: "/r/a/linked.mov"))
+        XCTAssertEqual(edits.expire(at: made.addingTimeInterval(LiveEdits.longestHold + 31)).map(\.path), ["/r/a/big.bin", "/r/later"])
+        XCTAssertEqual(edits.expire(at: made.addingTimeInterval(LiveEdits.longestHold + 32)), [], "each is dropped once")
+        XCTAssertTrue(edits.isEmpty)
+    }
+
     /// A change the disk itself contradicts is done with: an item moved to the Trash that's there again, as after Finder's
     /// Put Back, or one put back that's gone again.
     func testAChangeTheDiskContradictsIsDoneWith() {
