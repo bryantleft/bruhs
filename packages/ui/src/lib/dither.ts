@@ -45,7 +45,10 @@ export interface Dot {
   readonly x: number;
   readonly y: number;
   readonly radius: number;
+  /** `mouth` once the dot is at least half mouth. */
   readonly kind: DotKind;
+  /** How much of the mouth's red it takes, 0 to 1. */
+  readonly mix: number;
   /** Grid position, for `revealNoise` or `ditherThreshold`. */
   readonly col: number;
   readonly row: number;
@@ -104,18 +107,28 @@ export function bruhDots(width: number, height: number, face: BrailleBruh): Dot[
   const pitch = pitchFor(r);
   const rowH = (pitch * Math.sqrt(3)) / 2;
   const head = rotation(lookX * MAX_YAW, lookY * MAX_PITCH);
-  // Where each feature lands once the head turns. Eyes and mouth are exactly
-  // one row each, the row nearest where they land: an oval hole cut across
-  // staggered rows comes out ▽ on one eye and △ on the other.
-  const land = (at: Point) => {
+  // Features are anti-aliased: each dot shrinks (eyes) or reddens (mouth) by
+  // how much of the feature covers it, so a turning face glides through the
+  // grid instead of jumping a dot at a time. Vertically a feature is a line
+  // shared between the two rows around it; at rest that line sits exactly on
+  // a row, so a face looking ahead keeps crisp one-row slits. (A hard oval
+  // cut across staggered rows came out ▽ on one eye and △ on the other.)
+  const soft = (pitch * 0.6) / r;
+  const land = (at: Point, rx: number) => {
     const seen = head.toScreen(lift(at));
-    return { at, row: Math.round((seen.y * r) / rowH), visible: seen.z > 0.15 };
+    const restLine = (Math.round((at.y * r) / rowH) * rowH) / r;
+    // Fade a feature out as it turns round the rim rather than popping.
+    return { at, rx, line: seen.y + restLine - at.y, fade: smoothstep(0.05, 0.3, seen.z) };
   };
-  const leftEye = land(LEFT_EYE);
-  const rightEye = land(RIGHT_EYE);
-  const m = land(MOUTH_AT);
-  const on = (feature: ReturnType<typeof land>, row: number, local: Point, rx: number) =>
-    feature.visible && row === feature.row && Math.abs(local.x - feature.at.x) <= rx && Math.abs(local.y - feature.at.y) < 0.2;
+  const leftEye = land(LEFT_EYE, EYE_RX);
+  const rightEye = land(RIGHT_EYE, EYE_RX);
+  const m = land(MOUTH_AT, MOUTH_RX);
+  // How much of a feature covers the dot at screen height `dy` whose point on the head is `local`.
+  const cover = (f: ReturnType<typeof land>, dy: number, local: Point) => {
+    const across = Math.max(0, 1 - (Math.abs(dy - f.line) * r) / rowH);
+    if (across === 0 || Math.abs(local.y - f.at.y) > 0.2) return 0;
+    return across * (1 - smoothstep(f.rx, f.rx + soft, Math.abs(local.x - f.at.x))) * f.fade;
+  };
 
   const dots: Dot[] = [];
   const rows = Math.ceil(r / rowH) + 1;
@@ -135,12 +148,12 @@ export function bruhDots(width: number, height: number, face: BrailleBruh): Dot[
       if (value === null) continue;
       // The point of the head's own (unturned) surface now under this dot.
       const local = head.toLocal(dx, dy, Math.sqrt(Math.max(0, 1 - dx * dx - dy * dy)));
-      if (on(leftEye, row, local, EYE_RX) || on(rightEye, row, local, EYE_RX)) continue;
-      const isMouth = on(m, row, local, MOUTH_RX);
-      if (isMouth) value = Math.max(value, 0.75);
-      const radius = (pitch / 2) * 0.92 * Math.sqrt(value);
+      const eyeCover = Math.max(cover(leftEye, dy, local), cover(rightEye, dy, local));
+      const mix = cover(m, dy, local);
+      value += (Math.max(value, 0.75) - value) * mix;
+      const radius = (pitch / 2) * 0.92 * Math.sqrt(value) * (1 - eyeCover);
       if (radius < pitch * 0.07) continue;
-      dots.push({ x, y, radius, kind: isMouth ? "mouth" : "face", col, row });
+      dots.push({ x, y, radius, kind: mix >= 0.5 ? "mouth" : "face", mix, col, row });
     }
   }
   return dots;
@@ -160,6 +173,7 @@ export interface DotContext {
   arc(x: number, y: number, r: number, start: number, end: number): void;
   fill(): void;
   fillStyle: string | CanvasGradient | CanvasPattern;
+  globalAlpha: number;
 }
 
 /**
@@ -177,16 +191,31 @@ export function drawDots(
   reveal = 1,
 ): void {
   ctx.clearRect(0, 0, width, height);
-  for (const kind of ["face", "mouth"] as const) {
+  // The mouth blends from face to mouth color in five steps: each step's dots
+  // are filled in the face color, then the mouth color at that step's
+  // opacity, which works for any CSS color the caller resolved.
+  for (const step of [0, 1, 2, 3, 4]) {
     ctx.beginPath();
     for (const d of dots) {
-      if (d.kind !== kind || (reveal < 1 && revealNoise(d.col, d.row) > reveal)) continue;
+      if (Math.round(d.mix * 4) !== step || (reveal < 1 && revealNoise(d.col, d.row) > reveal)) continue;
       ctx.moveTo(d.x + d.radius, d.y);
       ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2);
     }
-    ctx.fillStyle = colors[kind];
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = colors.face;
+    ctx.fill();
+    if (step === 0) continue;
+    ctx.globalAlpha = step / 4;
+    ctx.fillStyle = colors.mouth;
     ctx.fill();
   }
+  ctx.globalAlpha = 1;
+}
+
+/** 0 below `a`, 1 above `b`, eased between. */
+function smoothstep(a: number, b: number, x: number): number {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
 }
 
 /** A point of the front-facing face, in face radii, lifted onto the sphere. */

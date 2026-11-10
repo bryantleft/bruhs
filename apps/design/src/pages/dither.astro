@@ -81,17 +81,38 @@ const ruleCode = `<hr class="dither-rule">`;
       face = { ...face, cx: size / 2, cy: size / 2, r: size * 0.42 };
       draw();
     }).observe(canvas);
+    // Ease toward where the pointer is, frame-rate independent: each frame
+    // covers 1 - e^(-dt/70ms) of the remaining turn (about 200ms to settle).
+    let target = { x: 0, y: 0 };
     let frame = 0;
+    let last = 0;
+    const turn = (now: number) => {
+      frame = 0;
+      const dt = last ? Math.min(64, now - last) : 16;
+      last = now;
+      const k = 1 - Math.exp(-dt / 70);
+      const dx = target.x - (face.lookX ?? 0);
+      const dy = target.y - (face.lookY ?? 0);
+      if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
+        last = 0;
+        return;
+      }
+      face = { ...face, lookX: (face.lookX ?? 0) + dx * k, lookY: (face.lookY ?? 0) + dy * k };
+      draw();
+      frame = requestAnimationFrame(turn);
+    };
     document.addEventListener("pointermove", (event) => {
       if (event.pointerType !== "mouse" || reduced) return;
       const rect = canvas.getBoundingClientRect();
-      const lookX = Math.max(-1, Math.min(1, (event.clientX - rect.left - face.cx) / 480));
-      const lookY = Math.max(-1, Math.min(1, (event.clientY - rect.top - face.cy) / 360));
-      face = { ...face, lookX, lookY };
-      frame ||= requestAnimationFrame(() => {
-        frame = 0;
-        draw();
-      });
+      target = {
+        x: Math.max(-1, Math.min(1, (event.clientX - rect.left - face.cx) / 480)) * 0.7,
+        y: Math.max(-1, Math.min(1, (event.clientY - rect.top - face.cy) / 360)) * 0.7,
+      };
+      frame ||= requestAnimationFrame(turn);
+    });
+    document.documentElement.addEventListener("mouseleave", () => {
+      target = { x: 0, y: 0 };
+      frame ||= requestAnimationFrame(turn);
     });
   }
 
