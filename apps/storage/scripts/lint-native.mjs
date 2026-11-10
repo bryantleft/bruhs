@@ -70,7 +70,8 @@ function lint(file, rules) {
 
 for (const file of files(views, ".swift")) lint(file, [...RULES, SEPARATORS]);
 for (const file of files(core, ".swift")) lint(file, [SEPARATORS]);
-for (const dir of diskMap) for (const file of files(dir, ".tsx")) lint(file, [SEPARATORS]);
+// The page's words live in its components and in the plain modules beside them, as the hover card's do.
+for (const dir of diskMap) for (const extension of [".tsx", ".ts"]) for (const file of files(dir, extension)) lint(file, [SEPARATORS]);
 
 if (findings.length) {
   console.error(`${findings.join("\n")}\n\nlint-native: ${findings.length} place(s) bypass the bruhs theme.`);

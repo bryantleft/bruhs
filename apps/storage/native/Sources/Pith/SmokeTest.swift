@@ -727,17 +727,6 @@ extension AppDelegate {
         await pageAnswer(web, "return window.pithIconBase ?? null", until: wanted)
     }
 
-    /// What `script` returns in the map's page, given `arguments`, once `done` holds for it or the smoke test's patience
-    /// runs out.
-    func pageAnswer<Answer>(_ web: WKWebView, _ script: String, arguments: [String: Any] = [:], until done: (Answer?) -> Bool) async -> Answer? {
-        let deadline = Date().addingTimeInterval(Self.patience)
-        while true {
-            let answer = (try? await web.callAsyncJavaScript(script, arguments: arguments, in: nil, contentWorld: .page)) as? Answer
-            if done(answer) || Date() >= deadline { return answer }
-            try? await Task.sleep(for: .milliseconds(100))
-        }
-    }
-
     /// The generation in an icon base, `pith://app/icon/<generation>/<appearance>/`.
     private static func generation(_ base: String) -> Int? {
         let prefix = "pith://app/icon/"
@@ -957,62 +946,6 @@ extension AppDelegate {
         print("double-click opened the folder \(opened) and drew it at once \(coarse); its finer tree came "
               + "\(received.map { "\(Int($0)) ms" } ?? "never") after, and drew \(drawn.map { "\(Int($0)) ms" } ?? "never") after that")
         return [check: opened && coarse && (received ?? .infinity) < 1500 && (drawn ?? .infinity) < 250 && back && gone && settled]
-    }
-
-    /// Waits until no map has reached the page for `quiet` seconds, as once the live map has answered every request:
-    /// the fixture doesn't change meanwhile, and the live map answers it within milliseconds.
-    func mapSettles(quiet: TimeInterval = 0.6) async -> Bool {
-        var last = disk.revision, since = Date()
-        return await eventually {
-            if self.disk.revision != last { last = self.disk.revision; since = Date() }
-            return Date().timeIntervalSince(since) >= quiet
-        }
-    }
-
-    /// A script that drives the map: `body` runs after what every such script needs.
-    /// - `canvas`, the map.
-    /// - `pause(ms)`, and `until(done, ms)`, which waits up to `ms` (3 s unless given) for `done()` and says if it came.
-    /// - `draws`, each time the map drew while the script ran, with the time and what the canvas said it showed.
-    /// - `mouse(type, at, detail)`, `click(at, detail)`, and `leave()`, which moves the pointer off the map.
-    /// - `boxOf(name)`, the painted box of the open folder's item `name` in the page, found by selecting the item in the
-    ///   map's list of items and reading the ring that outlines it, or null; `blockOf(name)`, that box's middle.
-    /// - `card()`, what the hover card says, or nothing when it's closed.
-    static func mapScript(_ body: String) -> String {
-        """
-        const canvas = document.querySelector("canvas");
-        const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-        const until = async (done, ms = 3000) => {
-          const end = performance.now() + ms;
-          while (!done() && performance.now() < end) await pause(20);
-          return done();
-        };
-        const draws = [];
-        const clearRect = CanvasRenderingContext2D.prototype.clearRect;
-        CanvasRenderingContext2D.prototype.clearRect = function (...rect) {
-          if (this.canvas === canvas) draws.push({ at: performance.now(), label: canvas.getAttribute("aria-label") ?? "" });
-          return clearRect.apply(this, rect);
-        };
-        const mouse = (type, at, detail = 0) => canvas.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window,
-          clientX: at.x, clientY: at.y, button: 0, buttons: type === "mousedown" ? 1 : 0, detail }));
-        const click = (at, detail) => { mouse("mousedown", at, detail); mouse("mouseup", at, detail); mouse("click", at, detail); };
-        const leave = () => canvas.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body }));
-        const boxOf = async (name) => {
-          const ring = () => canvas.parentElement.querySelector("div.pointer-events-none.absolute");
-          [...document.querySelectorAll('[aria-label^="Items in"] button')].find((button) => button.textContent.startsWith(name + " "))?.click();
-          if (!(await until(() => ring() !== null))) return null;
-          return ring().getBoundingClientRect();
-        };
-        const blockOf = async (name) => {
-          const box = await boxOf(name);
-          return box && { x: box.left + box.width / 2, y: box.top + box.height / 2 };
-        };
-        const card = () => canvas.parentElement.querySelector(".tooltip")?.textContent ?? "";
-        try {
-        \(body)
-        } finally {
-          CanvasRenderingContext2D.prototype.clearRect = clearRect;
-        }
-        """
     }
 
     /// Double-clicks the map with the newer map, in which `aimed` is a byte and `covering` a thousand times everything
@@ -1339,6 +1272,16 @@ extension AppDelegate {
         guard await eventually(predicate) else { throw DiskFailure("Native UI diagnostic timed out waiting for \(what).") }
     }
 
+    private func firstView<T: NSView>(_ type: T.Type, in view: NSView) -> T? {
+        if let match = view as? T { return match }
+        return view.subviews.lazy.compactMap { self.firstView(type, in: $0) }.first
+    }
+}
+
+// MARK: Shared with SmokeTestEdges.swift
+
+/// What the smoke test's checks of the disk map wait and drive the page with, here and in SmokeTestEdges.swift.
+extension AppDelegate {
     /// Waits for a checked outcome; a timeout is that check failing, not the whole run.
     func eventually(_ predicate: () -> Bool) async -> Bool {
         let deadline = Date().addingTimeInterval(Self.patience)
@@ -1348,9 +1291,71 @@ extension AppDelegate {
         return true
     }
 
-    private func firstView<T: NSView>(_ type: T.Type, in view: NSView) -> T? {
-        if let match = view as? T { return match }
-        return view.subviews.lazy.compactMap { self.firstView(type, in: $0) }.first
+    /// What `script` returns in the map's page, given `arguments`, once `done` holds for it or the smoke test's patience
+    /// runs out.
+    func pageAnswer<Answer>(_ web: WKWebView, _ script: String, arguments: [String: Any] = [:], until done: (Answer?) -> Bool) async -> Answer? {
+        let deadline = Date().addingTimeInterval(Self.patience)
+        while true {
+            let answer = (try? await web.callAsyncJavaScript(script, arguments: arguments, in: nil, contentWorld: .page)) as? Answer
+            if done(answer) || Date() >= deadline { return answer }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+    }
+
+    /// Waits until no map has reached the page for `quiet` seconds, as once the live map has answered every request:
+    /// the fixture doesn't change meanwhile, and the live map answers it within milliseconds.
+    func mapSettles(quiet: TimeInterval = 0.6) async -> Bool {
+        var last = disk.revision, since = Date()
+        return await eventually {
+            if self.disk.revision != last { last = self.disk.revision; since = Date() }
+            return Date().timeIntervalSince(since) >= quiet
+        }
+    }
+
+    /// A script that drives the map: `body` runs after what every such script needs.
+    /// - `canvas`, the map.
+    /// - `pause(ms)`, and `until(done, ms)`, which waits up to `ms` (3 s unless given) for `done()` and says if it came.
+    /// - `draws`, each time the map drew while the script ran, with the time and what the canvas said it showed.
+    /// - `mouse(type, at, detail)`, `click(at, detail)`, and `leave()`, which moves the pointer off the map.
+    /// - `boxOf(name)`, the painted box of the open folder's item `name` in the page, found by selecting the item in the
+    ///   map's list of items and reading the ring that outlines it, or null; `blockOf(name)`, that box's middle.
+    /// - `card()`, what the hover card says, or nothing when it's closed.
+    static func mapScript(_ body: String) -> String {
+        """
+        const canvas = document.querySelector("canvas");
+        const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        const until = async (done, ms = 3000) => {
+          const end = performance.now() + ms;
+          while (!done() && performance.now() < end) await pause(20);
+          return done();
+        };
+        const draws = [];
+        const clearRect = CanvasRenderingContext2D.prototype.clearRect;
+        CanvasRenderingContext2D.prototype.clearRect = function (...rect) {
+          if (this.canvas === canvas) draws.push({ at: performance.now(), label: canvas.getAttribute("aria-label") ?? "" });
+          return clearRect.apply(this, rect);
+        };
+        const mouse = (type, at, detail = 0) => canvas.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window,
+          clientX: at.x, clientY: at.y, button: 0, buttons: type === "mousedown" ? 1 : 0, detail }));
+        const click = (at, detail) => { mouse("mousedown", at, detail); mouse("mouseup", at, detail); mouse("click", at, detail); };
+        const leave = () => canvas.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body }));
+        const boxOf = async (name) => {
+          const ring = () => canvas.parentElement.querySelector("div.pointer-events-none.absolute");
+          [...document.querySelectorAll('[aria-label^="Items in"] button')].find((button) => button.textContent.startsWith(name + " "))?.click();
+          if (!(await until(() => ring() !== null))) return null;
+          return ring().getBoundingClientRect();
+        };
+        const blockOf = async (name) => {
+          const box = await boxOf(name);
+          return box && { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+        };
+        const card = () => canvas.parentElement.querySelector(".tooltip")?.textContent ?? "";
+        try {
+        \(body)
+        } finally {
+          CanvasRenderingContext2D.prototype.clearRect = clearRect;
+        }
+        """
     }
 }
 

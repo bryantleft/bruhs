@@ -1,6 +1,5 @@
 import type { TokenRef } from "@bruhs/theme/semantic";
 import {
-  memo,
   type ReactNode,
   useCallback,
   useEffect,
@@ -9,7 +8,6 @@ import {
   useState,
 } from "react";
 import { useShownLayout } from "~/hooks/useShownLayout";
-import { middleTruncate } from "~/lib/display-names";
 import { foldersBetween } from "~/lib/folder-trail";
 import {
   CATEGORY_LABEL,
@@ -36,7 +34,6 @@ import {
 } from "~/lib/map-hints";
 import {
   CATEGORIES,
-  type CollapsedTile,
   folderToOpenAt,
   GAP,
   headerLabel,
@@ -46,21 +43,16 @@ import {
   type LabelMetrics,
   labelMiddle,
   markRoom,
-  NOT_MEASURED,
   nodeOf,
-  type PackageTile,
-  shareOf,
   type Tile,
   type TreemapLayout,
   tileAt,
   tileForPath,
   tileLabel,
-  tileName,
-  tileSize,
   type UsedSpace,
-  unreadableCount,
 } from "~/lib/treemap-layout";
 import type { DirNode, TreeNode } from "~/lib/types";
+import { describe } from "./hover-card";
 import {
   browserFrames,
   drawMark,
@@ -73,6 +65,7 @@ import {
   paintArrived,
   type WaitingIcon,
 } from "./map-marks";
+import { TreemapItems } from "./treemap-items";
 
 interface Props {
   /** The directory currently shown as the treemap root. */
@@ -520,140 +513,6 @@ function drawMap(
   };
   visit(layout.tiles);
   return paint?.done() ?? [];
-}
-
-/** What the hover card says about a block, each part shown as its own line or figure. */
-interface Card {
-  readonly title: string;
-  /**
-   * What the block is, with the fill or outline it has on the map, as in the kind legend.
-   * Null for a group of small items, which mixes kinds.
-   */
-  readonly kind: {
-    readonly label: string;
-    readonly fill: string | null;
-  } | null;
-  readonly size: string;
-  /**
-   * The block's share of the open folder, e.g. "12% of Users", or of used space, e.g. "12% of used space", at a root
-   * with its Not measured block.
-   */
-  readonly share: string;
-  /** What clicks do; null once the user has done both. */
-  readonly hint: string | null;
-  /** Folders inside it the scan couldn't read, e.g. "2 folders inside couldn't be read". */
-  readonly unreadable: string | null;
-  /** How much it changed since the last scan, e.g. "+12.3 GB since Nov 3". */
-  readonly change: string | null;
-}
-
-/**
- * What a folder or package block holds, as its colour shows: "Folder, mostly images", or "Package" when nothing has
- * the most. A package whose name has a kind, as an app's does, is that kind.
- */
-function blockKind(tile: CollapsedTile | PackageTile): string {
-  if (tile.kind === "package" && tile.kindFrom === "name") {
-    return CATEGORY_LABEL[tile.category];
-  }
-  const noun = tile.kind === "package" ? "Package" : "Folder";
-  return tile.category === "other"
-    ? noun
-    : `${noun}, mostly ${CATEGORY_LABEL[tile.category].toLowerCase()}`;
-}
-
-/** "2 folders inside couldn't be read", or null when the scan read them all. */
-function unreadableInside(node: DirNode): string | null {
-  const count = unreadableCount(node);
-  if (count === 0) return null;
-  return `${count} ${count === 1 ? "folder" : "folders"} inside couldn’t be read`;
-}
-
-/**
- * What the card says of `tile`, laid out in `layout`. A share is of the layout's folder, or of used space where the
- * layout has a Not measured block: the folder's size and the block's.
- */
-function describe(
-  tile: Tile,
-  open: DirNode | null,
-  layout: TreemapLayout,
-  hints: boolean,
-  change: string | null,
-): Card {
-  const size = formatBytes(tileSize(tile));
-  const share = shareOf(tile, layout);
-  const openFolder = open ? ` Double-click to open ${open.name}/.` : "";
-  const title = middleTruncate(tileName(tile), 34);
-  const fill = (category: Category) => `var(${CATEGORY_VAR[category]})`;
-  const hint = (text: string) => (hints ? text : null);
-  switch (tile.kind) {
-    case "unmeasured":
-      return {
-        title,
-        kind: null,
-        size,
-        share,
-        // Always said: a click here opens no item, so nothing about it is learned.
-        hint: "Space the scan couldn’t see. Click to see why.",
-        unreadable: null,
-        change: null,
-      };
-    case "file":
-      return {
-        title,
-        kind: {
-          label: CATEGORY_LABEL[tile.category],
-          fill: fill(tile.category),
-        },
-        size,
-        share,
-        hint: hint(`Click to select.${openFolder}`),
-        unreadable: null,
-        change,
-      };
-    case "volume":
-      return {
-        title,
-        kind: { label: "Another volume on this disk", fill: null },
-        size,
-        share,
-        // Always said: why this block can't be opened isn't something a user learns once.
-        hint: "Measured, not scanned: macOS keeps this volume apart from your files.",
-        unreadable: null,
-        change,
-      };
-    case "group":
-      return {
-        title,
-        kind: null,
-        size,
-        share,
-        hint: hint(`Too small to show one by one.${openFolder}`),
-        unreadable: null,
-        change,
-      };
-    case "collapsed":
-    case "package":
-      return {
-        title,
-        kind: { label: blockKind(tile), fill: fill(tile.category) },
-        size,
-        share,
-        hint: hint("Click to select. Double-click to open."),
-        unreadable: unreadableInside(tile.node),
-        change,
-      };
-    case "folder":
-      // Drawn as a container around its contents, so its swatch is an outline.
-      return {
-        title,
-        kind: { label: "Folder", fill: null },
-        size,
-        share,
-        hint: hint("Click to select. Double-click to open."),
-        unreadable: unreadableInside(tile.node),
-        change,
-      };
-  }
 }
 
 /** The tile nearest `from` in an arrow key's direction, among the open folder's own items. */
@@ -1184,13 +1043,6 @@ export function TreemapCanvas({
   );
 }
 
-/** A folder the user can zoom into. */
-function isOpenable(node: TreeNode, root: DirNode): node is DirNode {
-  return (
-    node.kind === "dir" && node.children.length > 0 && node.path !== root.path
-  );
-}
-
 /** A small padlock for folders the scan couldn't read, drawn in the text colour: the one the map's header strips draw. */
 function LockGlyph() {
   return (
@@ -1204,89 +1056,3 @@ function LockGlyph() {
     </svg>
   );
 }
-
-/**
- * A screen reader can't read the canvas, so the current folder's items are also listed as
- * buttons, including the ones too small to draw and the folders the scan couldn't read,
- * and then the Not measured block, which explains itself. The list stays out of the tab
- * order, since the map itself is the one tab stop; VoiceOver still reaches every button,
- * and the item it's on is outlined on the map.
- */
-const TreemapItems = memo(function TreemapItems({
-  root,
-  selectedPath,
-  onSelect,
-  onEnterDir,
-  onFocusItem,
-  unmeasured,
-  onUnmeasured,
-}: Pick<
-  Props,
-  "root" | "selectedPath" | "onSelect" | "onEnterDir" | "onUnmeasured"
-> & {
-  onFocusItem: (path: string | null) => void;
-  /** The bytes of the map's Not measured block, which the list names last, or nothing without one. */
-  unmeasured?: number;
-}) {
-  return (
-    <ul
-      aria-label={`Items in ${root.name || root.path}`}
-      className="surface-floating focus-within:z-popover sr-only max-h-[calc(100%-1rem)] overflow-y-auto p-2 focus-within:not-sr-only focus-within:absolute focus-within:top-2 focus-within:left-2 focus-within:w-80"
-      onBlur={() => onFocusItem(null)}
-    >
-      {root.children.map((child) => (
-        <li key={child.path} className="flex items-center gap-1">
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-pressed={child.path === selectedPath}
-            disabled={child.kind === "unreadable" || child.kind === "volume"}
-            onClick={() => onSelect(child)}
-            onFocus={() =>
-              onFocusItem(child.kind === "aggregate" ? null : child.path)
-            }
-            className="menu-item block min-w-0 flex-1 truncate px-2 py-1"
-          >
-            {child.name}{" "}
-            <span className="text-code-sm text-(--role-text-secondary,var(--color-rambutan-400)) tabular-nums">
-              {child.kind === "unreadable"
-                ? "couldn’t be read"
-                : child.kind === "volume"
-                  ? `${formatBytes(child.size)}, another volume`
-                  : formatBytes(child.size)}
-            </span>
-          </button>
-          {isOpenable(child, root) && (
-            <button
-              type="button"
-              tabIndex={-1}
-              onClick={() => onEnterDir(child)}
-              onFocus={() => onFocusItem(child.path)}
-              aria-label={`Open ${child.name}`}
-              className="menu-item w-auto shrink-0 px-2 py-1"
-            >
-              Open
-            </button>
-          )}
-        </li>
-      ))}
-      {unmeasured !== undefined && unmeasured > 0 && (
-        <li className="flex items-center gap-1">
-          <button
-            type="button"
-            tabIndex={-1}
-            disabled={!onUnmeasured}
-            onClick={onUnmeasured}
-            onFocus={() => onFocusItem(null)}
-            className="menu-item block min-w-0 flex-1 truncate px-2 py-1"
-          >
-            {NOT_MEASURED}{" "}
-            <span className="text-code-sm text-(--role-text-secondary,var(--color-rambutan-400)) tabular-nums">
-              {formatBytes(unmeasured)}
-            </span>
-          </button>
-        </li>
-      )}
-    </ul>
-  );
-});
