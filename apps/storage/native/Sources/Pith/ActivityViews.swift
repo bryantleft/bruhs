@@ -8,7 +8,8 @@ import SwiftUI
 struct ActivityView: View {
     let model: ActivityModel
     @Bindable var state: ActivityState
-    @AppStorage("inspectorWidth") private var inspectorWidth = 300.0
+    /// The inspector's width, a setting kept as it changes (`Setting.inspectorWidth`).
+    @State private var inspectorWidth = UserDefaults.standard.object(forKey: Setting.inspectorWidth.rawValue) as? Double ?? 300
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -51,6 +52,7 @@ struct ActivityView: View {
         }
         .onAppear(perform: applyFocus)
         .onChange(of: model.focusAppID) { applyFocus() }
+        .onChange(of: inspectorWidth) { _, width in UserDefaults.standard.set(width, for: .inspectorWidth) }
         .onChange(of: model.snapshot?.uptime) {
             // A ranked range that has aged out of the ten-minute history has nothing left to rank.
             if state.range != nil && rankedRange == nil { state.backToLive() }

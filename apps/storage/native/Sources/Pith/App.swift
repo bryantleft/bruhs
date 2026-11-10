@@ -7,6 +7,8 @@ import PithCore
 @main @MainActor struct PithApp {
     static func main() async {
         if CommandLine.arguments.contains("--probe") { await probe(); return }
+        // Before anything reads a setting: an automated run never sees or changes the person's.
+        Launch.keepSettingsInMemory()
         let application = NSApplication.shared
         let delegate = AppDelegate()
         application.delegate = delegate
@@ -27,6 +29,9 @@ import PithCore
 }
 
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation, QLPreviewPanelDataSource {
+    /// The person's persisted state as a smoke test found it, read before the models below are made, which the run must
+    /// leave as it was.
+    let stateAtLaunch = CommandLine.arguments.contains("--smoke-test") ? PersistedState.read() : nil
     let activity = ActivityModel()
     let disk = DiskModel()
     let alertSettings = AlertSettings()
@@ -88,10 +93,9 @@ import PithCore
                 Task { @MainActor in self?.disk.refreshChoices() }
             })
         }
-        let automated = CommandLine.arguments.contains { ["--activity", "--scan", "--smoke-test"].contains($0) }
         // An automated run never goes online or asks the person anything, and leaves their update settings alone. Nor
         // does it map the person's disk, which the smoke test does with a folder of its own.
-        if !automated { startUpdates(); disk.startLive() }
+        if !Launch.isAutomated { startUpdates(); disk.startLive() }
         if CommandLine.arguments.contains("--activity") { showActivity() }
         if let index = CommandLine.arguments.firstIndex(of: "--scan"), CommandLine.arguments.indices.contains(index + 1) {
             showDisk(); disk.scan(URL(fileURLWithPath: CommandLine.arguments[index + 1]))
@@ -102,7 +106,7 @@ import PithCore
             Task { await smokeTest(root: root, report: report) }
         }
         // A menu bar item can be hidden by macOS or crowded out behind the notch, so the first launch says where Pith is.
-        if !automated && !UserDefaults.standard.bool(forKey: WelcomeView.seenKey) { showWelcome() }
+        if !Launch.isAutomated && !UserDefaults.standard.bool(forKey: Setting.welcomeSeen.rawValue) { showWelcome() }
     }
 
     // MARK: Menus
@@ -211,7 +215,8 @@ import PithCore
             window.backgroundColor = BruhsNSColor.canvas
             window.titlebarAppearsTransparent = true
             window.delegate = self; window.isReleasedWhenClosed = false; window.center()
-            window.setFrameAutosaveName("Pith Settings")
+            // AppKit keeps a window's frame in the person's defaults, which an automated run leaves alone.
+            if !Launch.isAutomated { window.setFrameAutosaveName("Pith Settings") }
             settingsWindow = window
         }
         NSApp.activate(ignoringOtherApps: true); settingsWindow?.makeKeyAndOrderFront(nil)
@@ -232,7 +237,7 @@ import PithCore
             window.delegate = self; window.isReleasedWhenClosed = false; window.center()
             welcomeWindow = window
         }
-        UserDefaults.standard.set(true, forKey: WelcomeView.seenKey)
+        UserDefaults.standard.set(true, for: .welcomeSeen)
         NSApp.activate(ignoringOtherApps: true); welcomeWindow?.makeKeyAndOrderFront(nil)
     }
 

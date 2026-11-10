@@ -142,6 +142,11 @@ extension AppDelegate {
             statusItem?.togglePanel()
             checks["menu_panel_opens"] = statusItem?.panelWindow?.isVisible == true
             statusItem?.togglePanel()
+            // Last, after everything the run did: the person's settings and the files Pith keeps for them, their history
+            // among them, are as they were before it began.
+            let changes = stateAtLaunch.map { PersistedState.read().differences(from: $0) } ?? ["nothing read at launch"]
+            print("the person's state: \(changes.isEmpty ? "as it was" : "changed \(changes)")")
+            checks["left_the_persons_state_alone"] = changes.isEmpty
             forgetScans()
             let data = try JSONSerialization.data(withJSONObject: checks, options: [.prettyPrinted, .sortedKeys])
             try data.write(to: report)
@@ -665,5 +670,44 @@ extension AppDelegate {
     private func firstView<T: NSView>(_ type: T.Type, in view: NSView) -> T? {
         if let match = view as? T { return match }
         return view.subviews.lazy.compactMap { self.firstView(type, in: $0) }.first
+    }
+}
+
+/// The person's state that a run of Pith could change, read without changing anything: Pith's defaults as saved, and
+/// when each file and folder Pith keeps for them last changed, their Activity history among them. Their scans are left
+/// out: their own Pith keeps those current while it runs, and the smoke test keeps its own in a folder of its own.
+struct PersistedState {
+    /// Pith's defaults domain as saved.
+    let defaults: NSDictionary
+    /// When each file and folder last changed, by path.
+    let changed: [String: Date]
+
+    static func read() -> PersistedState {
+        let files = FileManager.default
+        let bundle = Bundle.main.bundleIdentifier ?? "app.bruhs.pith"
+        let library = files.homeDirectoryForCurrentUser.appendingPathComponent("Library")
+        let support = library.appendingPathComponent("Application Support/Pith"), scans = support.appendingPathComponent("Scans")
+        var changed: [String: Date] = [:]
+        func note(_ url: URL) {
+            if let date = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate { changed[url.path] = date }
+        }
+        for place in [support, library.appendingPathComponent("Caches/\(bundle)"), library.appendingPathComponent("HTTPStorages/\(bundle)"),
+                      library.appendingPathComponent("WebKit/\(bundle)"), library.appendingPathComponent("Saved Application State/\(bundle).savedState")] {
+            note(place)
+            let items = files.enumerator(at: place, includingPropertiesForKeys: [.contentModificationDateKey])
+            while let item = items?.nextObject() as? URL {
+                if item.standardizedFileURL.path == scans.standardizedFileURL.path { items?.skipDescendants(); continue }
+                note(item)
+            }
+        }
+        return PersistedState(defaults: (UserDefaults.standard.persistentDomain(forName: bundle) ?? [:]) as NSDictionary, changed: changed)
+    }
+
+    /// What differs from `earlier`: each default whose value changed, came or went, and each file or folder that did.
+    func differences(from earlier: PersistedState) -> [String] {
+        let keys = Set((defaults.allKeys + earlier.defaults.allKeys).compactMap { $0 as? String })
+        let settings = keys.filter { defaults[$0] as? NSObject != earlier.defaults[$0] as? NSObject }.map { "default \($0)" }
+        let paths = Set(changed.keys).union(earlier.changed.keys).filter { changed[$0] != earlier.changed[$0] }.map { "file \($0)" }
+        return (settings + paths).sorted()
     }
 }

@@ -53,11 +53,10 @@ extension Font {
     static let shared = TextSize()
     /// Steps either side of the default, as Mail and Notes offer. Past 1.4 the panel no longer fits under the menu bar.
     static let steps: [Double] = [0.85, 1, 1.15, 1.3, 1.4]
-    private static let key = "textScale"
     private(set) var scale: Double
 
     private init() {
-        let saved = UserDefaults.standard.double(forKey: Self.key)
+        let saved = UserDefaults.standard.double(forKey: Setting.textScale.rawValue)
         scale = Self.steps.contains(saved) ? saved : 1
     }
 
@@ -73,7 +72,7 @@ extension Font {
 
     private func set(_ value: Double) {
         scale = value
-        UserDefaults.standard.set(value, forKey: Self.key)
+        UserDefaults.standard.set(value, for: .textScale)
     }
 
     /// A point size at the current scale.

@@ -5,9 +5,9 @@ import Observation
 /// since macOS 15, shortcuts made of Option alone, or Option and Shift, no longer register.
 @MainActor @Observable final class PanelShortcut {
     static let display = "⌃⌥⌘P"
-    var enabled = UserDefaults.standard.bool(forKey: "panelShortcut") {
+    var enabled = UserDefaults.standard.bool(forKey: Setting.panelShortcut.rawValue) {
         didSet {
-            UserDefaults.standard.set(enabled, forKey: "panelShortcut")
+            UserDefaults.standard.set(enabled, for: .panelShortcut)
             enabled ? register() : unregister()
         }
     }

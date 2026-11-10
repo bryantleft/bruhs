@@ -4,7 +4,6 @@ import SwiftUI
 /// off any app's menu bar item and a full menu bar hides items behind the camera, and nothing reports either, so this
 /// window is the way back in.
 struct WelcomeView: View {
-    static let seenKey = "welcomeSeen"
     let activity: ActivityModel
     let glyph: NSImage?
     let open: (WindowTab) -> Void

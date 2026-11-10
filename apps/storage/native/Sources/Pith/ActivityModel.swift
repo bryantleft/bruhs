@@ -24,12 +24,12 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
     var snapshot: ActivitySnapshot?
     var history = SessionHistory()
     var paused = false
-    var iconOnly = UserDefaults.standard.bool(forKey: "iconOnly") {
-        didSet { UserDefaults.standard.set(iconOnly, forKey: "iconOnly"); onSample?() }
+    var iconOnly = UserDefaults.standard.bool(forKey: Setting.iconOnly.rawValue) {
+        didSet { UserDefaults.standard.set(iconOnly, for: .iconOnly); onSample?() }
     }
     /// What the menu bar item shows after its glyph.
-    var menuBarShows = MenuBarMetric(rawValue: UserDefaults.standard.string(forKey: "menuBarShows") ?? "") ?? .cpu {
-        didSet { UserDefaults.standard.set(menuBarShows.rawValue, forKey: "menuBarShows"); onSample?() }
+    var menuBarShows = MenuBarMetric(rawValue: UserDefaults.standard.string(forKey: Setting.menuBarShows.rawValue) ?? "") ?? .cpu {
+        didSet { UserDefaults.standard.set(menuBarShows.rawValue, for: .menuBarShows); onSample?() }
     }
     /// Space free on the startup disk now, as Finder counts it.
     var availableDisk: Int64?
@@ -52,10 +52,10 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
     /// Set when the panel opens Activity for one app; Activity selects it and clears this.
     var focusAppID: String?
     /// A week of history, kept on this Mac only while the user has turned it on: Pith's promise was that history
-    /// clears when it quits, so keeping more is the user's choice.
-    var keepsHistory = UserDefaults.standard.bool(forKey: "keepsHistory") {
+    /// clears when it quits, so keeping more is the user's choice. An automated run keeps it, in memory only.
+    var keepsHistory = UserDefaults.standard.bool(forKey: Setting.keepsHistory.rawValue) {
         didSet {
-            UserDefaults.standard.set(keepsHistory, forKey: "keepsHistory")
+            UserDefaults.standard.set(keepsHistory, for: .keepsHistory)
             if keepsHistory { loadHistory() } else { clearHistory() }
         }
     }
@@ -114,10 +114,14 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
 
     // MARK: Kept history
 
-    /// ~/Library/Application Support/Pith/history.json.
-    static var historyFile: URL? {
+    /// ~/Library/Application Support/Pith/history.json, where the person's week of history is kept.
+    static var savedHistory: URL? {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Pith/history.json")
     }
+
+    /// The history file this run reads, saves and clears: the person's, or none in an automated run, which keeps its
+    /// history in memory only.
+    static var historyFile: URL? { Launch.isAutomated ? nil : savedHistory }
 
     /// The apps that wrote the most to disk since `date`, from the kept week of history, each app with its bundle.
     /// Without history kept there's nothing to say; with it, the stretch covered can begin after `date`, when history

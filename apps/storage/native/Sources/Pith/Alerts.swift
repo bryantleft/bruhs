@@ -38,14 +38,14 @@ enum AlertKind: String, CaseIterable, Identifiable {
     private(set) var authorization: UNAuthorizationStatus?
 
     init() {
-        enabled = Set((UserDefaults.standard.stringArray(forKey: "alerts") ?? []).compactMap(AlertKind.init(rawValue:)))
+        enabled = Set((UserDefaults.standard.stringArray(forKey: Setting.alerts.rawValue) ?? []).compactMap(AlertKind.init(rawValue:)))
     }
 
     func isOn(_ kind: AlertKind) -> Bool { enabled.contains(kind) }
 
     func set(_ kind: AlertKind, _ on: Bool) {
         if on { enabled.insert(kind) } else { enabled.remove(kind) }
-        UserDefaults.standard.set(enabled.map(\.rawValue).sorted(), forKey: "alerts")
+        UserDefaults.standard.set(enabled.map(\.rawValue).sorted(), for: .alerts)
         if on { requestAuthorization() }
     }
 

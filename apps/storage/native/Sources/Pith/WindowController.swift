@@ -64,7 +64,9 @@ enum WindowTab: String, CaseIterable, Identifiable {
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.center()
-        window.setFrameAutosaveName("Pith Main Window")
+        // AppKit keeps the window's frame in the person's defaults. An automated run leaves them alone, so its window
+        // opens centred at the usual size.
+        if !Launch.isAutomated { window.setFrameAutosaveName("Pith Main Window") }
         state.tabChanged = { [weak self] in self?.visibilityChanged?() }
     }
 

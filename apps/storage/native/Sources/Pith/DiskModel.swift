@@ -93,9 +93,9 @@ enum MapCommand: Equatable {
     var writers: ((Date) -> DiskWriters)?
     /// Keep the live map between launches, so Pith opens on it and catches up from what FSEvents saw, and a day's
     /// folder sizes, so the map shows what grew. On unless the user turns it off.
-    var remembersScans = UserDefaults.standard.object(forKey: "remembersScans") as? Bool ?? true {
+    var remembersScans = UserDefaults.standard.object(forKey: Setting.remembersScans.rawValue) as? Bool ?? true {
         didSet {
-            UserDefaults.standard.set(remembersScans, forKey: "remembersScans")
+            UserDefaults.standard.set(remembersScans, for: .remembersScans)
             if !remembersScans { forgetScans() }
             live?.keep(remembersScans ? liveSnapshot : nil)
         }
@@ -108,9 +108,10 @@ enum MapCommand: Equatable {
     private(set) var changes = DiskChanges()
     private var watcher: DiskWatcher?
     /// Where kept maps go: the live map, a day's folder sizes, and each scanned folder's sizes, in
-    /// ~/Library/Application Support/Pith/Scans. The smoke test points it at a folder of its own, so its fixture never
-    /// touches the user's.
-    var scansFolder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Pith/Scans")
+    /// ~/Library/Application Support/Pith/Scans. An automated run keeps none in the person's folder, so it has none,
+    /// unless the smoke test points it at a folder of its own.
+    var scansFolder = Launch.isAutomated
+        ? nil : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Pith/Scans")
     var problem: DiskProblem?
     var isScanning = false
     var isTrashing = false
