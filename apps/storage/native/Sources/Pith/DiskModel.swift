@@ -493,8 +493,11 @@ enum MapCommand: Equatable {
     }
 
     /// Looks off the main thread for the selected items at `paths`, which the map no longer shows, and drops those no
-    /// longer on the disk, once the selection is as it was. `lstat` never opens an item, and the map has read each.
-    private func dropGone(_ paths: [String]) {
+    /// longer on the disk, once the selection is as it was. `lstat` never opens an item, and the map has read each; one
+    /// where the map can't read now, or macOS may be holding it, isn't looked at, and stays (`DiskSelection.mayLook`).
+    private func dropGone(_ unshown: [String]) {
+        let asking = macOSMayHoldFolders
+        let paths = unshown.filter { DiskSelection.mayLook(for: $0, in: result, asking: asking, isGuarded: Icons.places.isProtected) }
         guard !paths.isEmpty else { return }
         let picked = selection.paths
         Task {

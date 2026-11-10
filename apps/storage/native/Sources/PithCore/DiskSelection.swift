@@ -79,6 +79,20 @@ public struct DiskSelection: Equatable, Sendable {
         return unshown
     }
 
+    /// Whether Pith may look at the disk for the selected item at `path`, which `map` no longer shows: not while a folder
+    /// above it on the map, or the item itself, is one the map couldn't read, nor, inside a location macOS guards
+    /// (`isGuarded`), while macOS may be holding some of the map's folders (`asking`, as the icon rule takes it). A look
+    /// there could wait on macOS or bring its question, so the item stays selected until the map can read there again.
+    public static func mayLook(for path: String, in map: DiskResult?, asking: Bool, isGuarded: (String) -> Bool) -> Bool {
+        if asking && isGuarded(path) { return false }
+        var node = map?.root
+        while let at = node, at.path != path {
+            node = at.children?.first { $0.kind != .aggregate && DiskChanges.isInside(path, $0.path) }
+            if node?.kind == .unreadable { return false }
+        }
+        return true
+    }
+
     /// The items of `gone` are no longer on the disk: they leave the selection.
     public mutating func drop(_ gone: Set<String>) {
         keep { !gone.contains($0) }

@@ -110,6 +110,25 @@ final class DiskSelectionTests: XCTestCase {
         XCTAssertEqual(selection.items.map(\.size), [6, 10])
     }
 
+    /// Pith looks at the disk for a selected item the map no longer shows only where the map can read: not while a folder
+    /// above it on the map is one the map couldn't read, nor inside a location macOS guards while macOS may be holding
+    /// some of the map's folders, where a look could wait on macOS or bring its question. The item stays selected.
+    func testPithLooksAtTheDiskForAFoldedItemOnlyWhereTheMapCanRead() {
+        let locked = DiskNode(kind: .unreadable, name: "locked", path: "/r/locked", size: 0, reason: .protected, children: nil)
+        let open = DiskNode(kind: .dir, name: "b", path: "/r/b", size: 20, files: 2, children: [
+            DiskNode(kind: .aggregate, name: "(smaller items)", path: "/r/b/__other__", size: 20, files: 2, children: nil),
+        ])
+        let summary = DiskSummary(dirs: 2, files: 2, bytes: 20, errors: 1, unreadable: .init(protected: 1, denied: 0, other: 0), entryErrors: 0,
+                                  cloudOnly: .init(files: 0, bytes: 0, folders: 0), elapsedMs: 1, engine: "bulk")
+        let map = DiskResult(root: DiskNode(kind: .dir, name: "r", path: "/r", size: 20, files: 2, children: [open, locked]), topFiles: [], summary: summary)
+        let guarded = { (path: String) in path.hasPrefix("/r/b/") }
+        XCTAssertFalse(DiskSelection.mayLook(for: "/r/locked/x.bin", in: map, asking: false, isGuarded: guarded), "below a folder the map couldn't read")
+        XCTAssertFalse(DiskSelection.mayLook(for: "/r/locked", in: map, asking: false, isGuarded: guarded), "one the map can't read itself now")
+        XCTAssertTrue(DiskSelection.mayLook(for: "/r/b/x.bin", in: map, asking: false, isGuarded: guarded), "folded into readable smaller items")
+        XCTAssertFalse(DiskSelection.mayLook(for: "/r/b/x.bin", in: map, asking: true, isGuarded: guarded), "where macOS guards, while it may be asking")
+        XCTAssertTrue(DiskSelection.mayLook(for: "/r/c/x.bin", in: map, asking: true, isGuarded: guarded), "outside what it guards")
+    }
+
     func testOpeningAFolderKeepsTheItemsStillOnTheMap() {
         var selection = DiskSelection(["/r/a/x.bin", "/r/b", "/r/a/y"])
         selection.keep(inside: "/r/a")
