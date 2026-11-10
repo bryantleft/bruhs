@@ -177,6 +177,7 @@ struct DiskNotices: View {
             DiskNotice(symbol: "trash", tint: BruhsColor.textSecondary, message: moved.note) {
                 Button("Undo") { model.undoTrash() }
                     .buttonStyle(.bruhsGhost)
+                    .disabled(!model.canUndoMove)
                     .help(moved.moves.count == 1 ? "Put it back where it was (⌘Z)" : "Put them back where they were (⌘Z)")
                 Button { model.dismissTrashNote() } label: { Image(systemName: "xmark") }
                     .buttonStyle(.bruhsGhost)

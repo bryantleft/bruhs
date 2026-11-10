@@ -271,12 +271,15 @@ extension AppDelegate {
                 && back.page && cleared && settled]
     }
 
-    /// Every ⌘Z undoes its own Move to Trash. Three files of the check's own go to the run's own folder, a move each, and
-    /// Edit > Undo, through the window's undo manager, puts back the last, then the one before it, each back on the map and
-    /// selected. Then the middle one moves again, the note's Undo puts it back, and the ⌘Z after that puts back the first
-    /// move's file rather than the middle one again. Undo moves nothing back to the Trash, so nothing is left to Redo.
+    /// Every ⌘Z undoes its own Move to Trash, typed as the person types it with the map focused: through the window, the
+    /// page first, then Edit > Undo, which names the move. Three files of the check's own go to the run's own folder, a
+    /// move each, and ⌘Z puts back the last, then the one before it, each back on the map and selected. The middle one
+    /// moves again, then the last, and while that move is under way Undo waits: Edit > Undo is off and ⌘Z does nothing,
+    /// and so does the note's Undo, since the move registers its own Undo once it lands, and Undo meanwhile would put back
+    /// the move before it (`undo_waits_for_a_move_under_way`). Once it lands, the note's Undo puts back the last, and the
+    /// ⌘Z after that the middle one, then the first. Undo moves nothing back to the Trash, so nothing is left to Redo.
     func checkEachUndoUndoesItsOwnMove(_ fixture: String) async -> [String: Bool] {
-        let name = "each_undo_undoes_its_own_move"
+        let name = "each_undo_undoes_its_own_move", waits = "undo_waits_for_a_move_under_way"
         let files = FileManager.default, mark = UUID().uuidString.prefix(8).lowercased()
         let items = (1...3).map { (fixture as NSString).appendingPathComponent("pith-undo-\(mark)-\($0).bin") }
         var inTrash: [URL] = []
@@ -286,44 +289,76 @@ extension AppDelegate {
             disk.dismissTrashNote()
         }
         // 1 MiB each, the least the live map lists by name.
-        guard let undo = webView?.window?.undoManager, items.allSatisfy({ files.createFile(atPath: $0, contents: Data(count: 1 << 20)) }),
+        guard let web = webView, let window = web.window, let undo = window.undoManager,
+              items.allSatisfy({ files.createFile(atPath: $0, contents: Data(count: 1 << 20)) }),
               await eventually({ items.allSatisfy { self.disk.result?.item(at: $0) != nil } }), await mapSettles() else {
             print("each undo: the check's files never reached the map")
-            return [name: false]
+            return [name: false, waits: false]
         }
         func on(_ path: String) -> Bool { FileManager.default.fileExists(atPath: path) && disk.result?.item(at: path) != nil }
         func off(_ path: String) -> Bool { !FileManager.default.fileExists(atPath: path) && disk.result?.item(at: path) == nil }
-        /// Moves `path` to the Trash as the person does, in a move of its own: whether it left the disk and the map.
-        func move(_ path: String) async -> Bool {
-            disk.requestTrash([path], undoManager: undo)
+        /// Whether the move to the Trash of `path` landed: it left the disk and the map, and the note names it.
+        func landed(_ path: String) async -> Bool {
             let moved = await eventually { off(path) && self.disk.trashed?.moves.map(\.plan.target.path) == [path] && !self.disk.isTrashing }
             inTrash += disk.trashed?.moves.compactMap(\.trashed) ?? []
             return moved
+        }
+        /// Moves `path` to the Trash as the person does, in a move of its own: whether it left the disk and the map.
+        func move(_ path: String) async -> Bool {
+            disk.requestTrash([path], undoManager: undo)
+            return await landed(path)
         }
         /// Whether `path` came back, on the map and selected, while each of `away` stayed in the Trash.
         func back(_ path: String, leaving away: [String]) async -> Bool {
             await eventually { on(path) && self.disk.selection.paths == [path] && !self.disk.isTrashing } && away.allSatisfy(off)
         }
+        /// The Edit menu's Undo, enabled and titled as the menu bar shows it now.
+        func undoItem() -> NSMenuItem? {
+            let edit = NSApp.mainMenu?.item(withTitle: "Edit")?.submenu
+            edit?.update()
+            return edit?.items.first { $0.keyEquivalent == "z" && $0.keyEquivalentModifierMask == .command }
+        }
+        // The map focused, as after a click on it, in the window the person types in.
+        showDisk()
+        window.makeFirstResponder(web)
+        let focused = await eventually { window.isKeyWindow && window.firstResponder === web }
         var moved = true
         for path in items { moved = await move(path) && moved }
-        let action = undo.undoActionName
-        undo.undo()
+        let named = undoItem().map { $0.isEnabled && $0.title == "Undo Move to Trash" } == true
+        pressCommand("z", keyCode: 6, in: window)
         let last = await back(items[2], leaving: [items[0], items[1]])
-        undo.undo()
+        pressCommand("z", keyCode: 6, in: window)
         let before = await back(items[1], leaving: [items[0]])
         let again = await move(items[1])
+        // The last moves again, and before it lands, Edit > Undo, ⌘Z as the menu takes it, and the note's Undo, still
+        // the middle one's, are tried. The menu takes ⌘Z whether its Undo is on or off, so what came back says.
+        disk.requestTrash([items[2]], undoManager: undo)
+        let menuWaits = undoItem()?.isEnabled == false
+        let noteWaits = !disk.canUndoMove
+        let pressed = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: ProcessInfo.processInfo.systemUptime,
+                                       windowNumber: window.windowNumber, context: nil, characters: "z", charactersIgnoringModifiers: "z",
+                                       isARepeat: false, keyCode: 6).map { NSApp.mainMenu?.performKeyEquivalent(with: $0) == true } ?? false
         disk.undoTrash()
-        let noted = await back(items[1], leaving: [items[0]]) && disk.trashed == nil
-        undo.undo()
+        let thenLanded = await landed(items[2])
+        // Nothing came back meanwhile, nor once the move landed.
+        let held = await mapSettles() && [items[0], items[1], items[2]].allSatisfy(off)
+        disk.undoTrash()
+        let noted = await back(items[2], leaving: [items[0], items[1]]) && disk.trashed == nil
+        pressCommand("z", keyCode: 6, in: window)
+        let middle = await back(items[1], leaving: [items[0]])
+        pressCommand("z", keyCode: 6, in: window)
         let first = await back(items[0], leaving: [])
         let redo = undo.canRedo
         if first { inTrash = [] }
-        print("each undo: three moves \(moved) (\(action)); ⌘Z put back the last \(last), ⌘Z again the one before \(before); moved again \(again), "
-              + "the note's Undo put it back \(noted), then ⌘Z the first move's file \(first); Redo offered \(redo)")
+        print("each undo: the map focused \(focused); three moves \(moved), Edit > Undo named the move \(named); ⌘Z put back the last \(last), ⌘Z "
+              + "again the one before \(before); moved again \(again); while the last moved again, Edit > Undo off \(menuWaits), the note's Undo "
+              + "off \(noteWaits), ⌘Z taken by the menu \(pressed), it landed \(thenLanded) and nothing came back \(held); the note's Undo put "
+              + "the last back \(noted), then ⌘Z the middle \(middle) and the first \(first); Redo offered \(redo)")
         for path in items { try? files.removeItem(atPath: path) }
         let cleared = await eventually { items.allSatisfy { self.disk.result?.item(at: $0) == nil } }
         let settled = await mapSettles()
-        return [name: moved && action == "Move to Trash" && last && before && again && noted && first && !redo && cleared && settled]
+        return [name: focused && moved && named && last && before && again && noted && middle && first && !redo && cleared && settled,
+                waits: menuWaits && noteWaits && pressed && thenLanded && held]
     }
 
     /// Whether the page shows `selected` as Pith holds it: a block outlined for each, each on a block of its own here,

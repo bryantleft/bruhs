@@ -1203,7 +1203,7 @@ extension AppDelegate {
 
     /// Presses Command and `key` as AppKit routes a key equivalent: to the window's views first, the map's page among
     /// them when it has the focus, then to the main menu.
-    private func pressCommand(_ key: String, keyCode: UInt16, in window: NSWindow) {
+    func pressCommand(_ key: String, keyCode: UInt16, in window: NSWindow) {
         guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: ProcessInfo.processInfo.systemUptime,
                                            windowNumber: window.windowNumber, context: nil, characters: key, charactersIgnoringModifiers: key,
                                            isARepeat: false, keyCode: keyCode) else { return }

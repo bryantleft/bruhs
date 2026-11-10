@@ -310,8 +310,13 @@ import PithCore
         return main.state.activity
     }
 
+    /// Whether Edit > Undo waits for a move to the Trash under way: the main window's undo manager holds Move to Trash,
+    /// and a move registers its own Undo once it lands, so ⌘Z meanwhile would put back the move before it
+    /// (`DiskModel.canUndoMove`).
+    private var undoWaitsForAMove: Bool { !disk.canUndoMove && undoTarget != nil && undoTarget === mainWindow?.window.undoManager }
+
     @objc private func undoInFocus(_ sender: Any?) {
-        if let search = focusedSearch { search.undoSearch() } else { undoTarget?.undo() }
+        if let search = focusedSearch { search.undoSearch() } else if !undoWaitsForAMove { undoTarget?.undo() }
     }
     @objc private func redoInFocus(_ sender: Any?) {
         if let search = focusedSearch { search.redoSearch() } else { undoTarget?.redo() }
@@ -403,7 +408,7 @@ import PithCore
         case #selector(undoInFocus(_:)):
             if let search = focusedSearch { menuItem.title = "Undo Typing"; return search.canUndoSearch }
             menuItem.title = undoTarget?.undoMenuItemTitle ?? "Undo"
-            return undoTarget?.canUndo == true
+            return undoTarget?.canUndo == true && !undoWaitsForAMove
         case #selector(redoInFocus(_:)):
             if let search = focusedSearch { menuItem.title = "Redo Typing"; return search.canRedoSearch }
             menuItem.title = undoTarget?.redoMenuItemTitle ?? "Redo"

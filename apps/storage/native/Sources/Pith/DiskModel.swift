@@ -153,6 +153,12 @@ enum MapCommand: Equatable {
     /// that one ends rather than being lost. `trashWork` counts the moves, plans and Undos begun and not ended.
     @ObservationIgnored private var trashing: Task<Void, Never>?
     @ObservationIgnored private var trashWork = 0
+    /// The moves to the Trash under way, from their planning until they land. Undo waits for them (`canUndoMove`): a move
+    /// registers its own Undo once it lands, so ⌘Z or the note's Undo meanwhile would put back the move before it.
+    private(set) var movesUnderWay = 0
+    /// Whether Undo may put back a move to the Trash now: none is under way. Edit > Undo and the note's Undo are off
+    /// otherwise.
+    var canUndoMove: Bool { movesUnderWay == 0 }
     /// The folder the map is showing, as the page reports it. Nil until the page reports a new map's folder.
     private(set) var openFolder: String?
     /// A folder the page went back or forward to that the map's tree leaves out: the live map shows it in detail, so
@@ -945,7 +951,10 @@ enum MapCommand: Equatable {
     func requestTrash(_ paths: [String], undoManager: UndoManager?) {
         guard result != nil, !isScanning, !isTrashing else { return }
         beganTrashWork()
+        movesUnderWay += 1
         Task {
+            // Until it's planned, and then as its move, which counts itself (`move`).
+            defer { movesUnderWay -= 1 }
             let plan = await trashPlan(for: paths)
             endedTrashWork()
             switch plan {
@@ -969,9 +978,11 @@ enum MapCommand: Equatable {
     private func move(_ batch: TrashBatch, undoManager: UndoManager?) {
         problem = nil
         let mover = Self.mover(into: trashFolder)
+        movesUnderWay += 1
         afterTrashWork {
             let outcome = await Task.detached(priority: .userInitiated) { batch.move(with: mover) }.value
             self.moved(outcome, undoManager: undoManager)
+            self.movesUnderWay -= 1
         }
     }
 
@@ -1054,8 +1065,9 @@ enum MapCommand: Equatable {
     }
 
     /// The notice's Undo: puts back the latest move, which ⌘Z then no longer undoes, so ⌘Z next undoes the one before.
+    /// It waits while a move is under way, whose note this isn't yet (`canUndoMove`).
     func undoTrash() {
-        guard let trashed else { return }
+        guard let trashed, canUndoMove else { return }
         undos.undo(trashed)
     }
 
