@@ -1,6 +1,7 @@
 import XCTest
 import AppKit
 import Darwin
+import UniformTypeIdentifiers
 @testable import PithCore
 
 final class IconKeyTests: XCTestCase {
@@ -399,6 +400,37 @@ final class SystemIconTests: XCTestCase {
         XCTAssertNotEqual(pixels(drawnFull.image), pixels(drawnEmpty.image), "the full and empty Trash look different")
         XCTAssertEqual(pixels(drawnFull.image), fullAgain.flatMap { pixels($0.image) })
         XCTAssertEqual(pixels(drawnEmpty.image), emptyAgain.flatMap { pixels($0.image) })
+    }
+
+    /// `IconAppearance` has no Increase Contrast, since macOS draws the same artwork in the high-contrast appearances as
+    /// in the plain ones. A macOS that draws any of this sample otherwise needs the contrast in the icon's key.
+    func testHighContrastDrawsTheSameArtwork() throws {
+        let workspace = NSWorkspace.shared
+        let sample: [(String, NSImage?)] = [
+            ("plain folder", workspace.icon(for: .folder)), ("Documents", UTType("com.apple.documents-folder").map(workspace.icon(for:))),
+            ("Finder", workspace.icon(forFile: "/System/Library/CoreServices/Finder.app")),
+        ] + ["pdf", "png", "zip"].map { ($0, workspace.icon(for: UTType(filenameExtension: $0, conformingTo: .data) ?? .data)) }
+        /// `image` drawn as the store draws an icon, in any appearance.
+        func pixels(_ image: NSImage, _ appearance: NSAppearance.Name) -> Data? {
+            guard let space = CGColorSpace(name: CGColorSpace.displayP3),
+                  let context = CGContext(data: nil, width: 32, height: 32, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+            context.scaleBy(x: 2, y: 2)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+            NSAppearance(named: appearance)?.performAsCurrentDrawingAppearance {
+                image.draw(in: NSRect(x: 0, y: 0, width: 16, height: 16), from: .zero, operation: .sourceOver, fraction: 1)
+            }
+            NSGraphicsContext.restoreGraphicsState()
+            return context.makeImage()?.dataProvider?.data as Data?
+        }
+        for (name, icon) in sample {
+            let image = try XCTUnwrap(icon, name)
+            XCTAssertEqual(pixels(image, .accessibilityHighContrastAqua), pixels(image, .aqua), "\(name) in light")
+            XCTAssertEqual(pixels(image, .accessibilityHighContrastDarkAqua), pixels(image, .darkAqua), "\(name) in dark")
+        }
+        let folder = try XCTUnwrap(sample.first?.1)
+        XCTAssertNotEqual(pixels(folder, .aqua), pixels(folder, .darkAqua), "the drawings follow the appearance")
     }
 
     func testASymbolStandsInWhereMacOSHasNoIcon() async throws {

@@ -69,6 +69,13 @@ public enum IconKey: Hashable, Sendable {
 
 /// Light or dark. macOS picks an icon's artwork for the appearance it's drawn in, so each appearance is drawn and
 /// kept apart. Its name is how an icon's URL says which.
+///
+/// Increase Contrast isn't part of it, since macOS draws the same artwork with it: on macOS 26.3, a plain folder, the
+/// Documents folder's type, Finder, the pdf, png and zip types, Safari, the full Trash and the Applications folder's
+/// type, drawn at 16 pt at 1x and 2x, 32 pt and 128 pt at 2x, matched pixel for pixel in `.accessibilityHighContrastAqua`
+/// and `.aqua`, and in `.accessibilityHighContrastDarkAqua` and `.darkAqua`, while light and dark differed by up to 42,063
+/// of 65,536 pixels and a folder and Documents' by 812 of 4,096. The comparison drew in those appearances, with the Mac's
+/// own Increase Contrast setting off. `SystemIconTests` draws the sample again in each.
 public enum IconAppearance: String, Hashable, Sendable, CaseIterable {
     case light, dark
 
