@@ -62,11 +62,12 @@ public struct FolderPath: Equatable, Sendable {
 }
 
 extension DiskNode {
-    /// The folder at `path` in this tree, found by following the path down from here. Nil when the tree doesn't hold
-    /// it, or holds something else there.
+    /// The folder at `path` in this tree, found by following the path down from here (`Toward`). Nil when the tree
+    /// doesn't hold it, or holds something else there.
     public func folder(at path: String) -> DiskNode? {
         if path == self.path { return kind == .dir ? self : nil }
-        guard DiskChanges.isInside(path, self.path) else { return nil }
-        return children?.first { $0.kind == .dir && DiskChanges.isInside(path, $0.path) }?.folder(at: path)
+        guard let children, let toward = Toward(path, from: self.path),
+              let next = children.indices.first(where: { children[$0].kind == .dir && toward.leads(to: children[$0].path) }) else { return nil }
+        return children[next].folder(at: path)
     }
 }

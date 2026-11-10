@@ -68,6 +68,30 @@ final class DiskTests: XCTestCase {
         XCTAssertEqual(everything.item(at: "/Users/a.bin")?.name, "a.bin", "under the startup disk's root")
     }
 
+    /// A walk down the tree compares each folder's children with paths built once for them all: the next level down
+    /// toward the path asked for, and that level and a slash, for a child drawn further down, as a volume can be.
+    func testAWalkDownTheTreeBuildsItsPathsOncePerFolder() throws {
+        let toward = try XCTUnwrap(DiskNode.Toward("/Users/me/a.bin", from: "/"))
+        XCTAssertEqual([toward.level, toward.below], ["/Users", "/Users/"])
+        XCTAssertEqual(DiskNode.Toward("/Users/me/Caf\u{e9}/x", from: "/Users/me")?.level, "/Users/me/Caf\u{e9}")
+        XCTAssertNil(DiskNode.Toward("/r", from: "/r"), "the folder itself")
+        XCTAssertNil(DiskNode.Toward("/rx/a", from: "/r"), "a path that only starts like it")
+        XCTAssertNil(DiskNode.Toward("/r", from: "/r/a"), "a folder above it")
+        func node(_ kind: DiskNode.Kind, _ path: String, _ children: [DiskNode]? = nil) -> DiskNode {
+            DiskNode(kind: kind, name: (path as NSString).lastPathComponent, path: path, size: 1, children: children)
+        }
+        let volume = node(.volume, "/System/Volumes/Preboot")
+        XCTAssertTrue(toward.leads(to: "/Users"))
+        XCTAssertFalse(toward.leads(to: "/Users 2"), "a sibling that only starts like it")
+        XCTAssertFalse(toward.leads(to: "/Library"))
+        XCTAssertTrue(DiskNode.Toward("/System/Volumes/Preboot", from: "/")?.leads(to: volume.path) == true, "a volume drawn further down")
+        XCTAssertFalse(DiskNode.Toward("/System/Volumes/Data", from: "/")?.leads(to: volume.path) == true)
+        let root = node(.dir, "/", [node(.dir, "/System", []), volume, node(.dir, "/Users", [node(.unreadable, "/Users/me")])])
+        XCTAssertEqual(root.node(at: volume.path), volume, "found past a folder of its level that doesn't hold it")
+        XCTAssertTrue(root.couldntRead(toward: "/Users/me/a.bin"))
+        XCTAssertFalse(root.couldntRead(toward: "/System/Library"))
+    }
+
     func testRemovingAnItemShrinksEveryFolderAboveIt() throws {
         let result = sample()
         let updated = try XCTUnwrap(result.removing("/r/a/big.bin"))

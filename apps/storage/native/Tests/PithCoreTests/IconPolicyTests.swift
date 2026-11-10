@@ -225,6 +225,31 @@ final class IconPolicyTests: XCTestCase {
         XCTAssertFalse(try loads(.item(home + "/Projects/Folder 11/Folder 12"), policy), "a folder the map doesn't have")
     }
 
+    /// A request walks down the map comparing each folder's children with paths built once for them all, so a wide folder
+    /// costs a comparison a child and nothing built for each: 20,000 subfolders, about the most the scanner draws in a
+    /// folder open on the map (its blocks are 1/20,000 of the folder's size at least), the last of them asked for, and the
+    /// walk toward an item below it, as the path bar and the selection bar make (`DiskNode.couldntRead(toward:)`). In a
+    /// release build each takes 0.23 ms, where building each child's path with a slash took 2.3 ms and 1.9 ms. These tests
+    /// run unoptimized, several times slower, so 20 ms is the bound: what it catches is a request whose cost grows faster.
+    func testAWideFolderCostsAComparisonAChild() throws {
+        let wide = home + "/Projects/node_modules"
+        let children = (0..<20_000).map { DiskNode(kind: .dir, name: "package-\($0)", path: wide + "/package-\($0)", size: 1, files: 1, children: []) }
+        let tree = folder(home, [folder(home + "/Projects", [DiskNode(kind: .dir, name: "node_modules", path: wide, size: 20_000, files: 20_000, children: children)])])
+        let last = wide + "/package-19999", policy = policy(nil)
+        var fastest = TimeInterval.infinity, walk = TimeInterval.infinity
+        for _ in 0..<5 {
+            policy.map = tree
+            var start = DispatchTime.now().uptimeNanoseconds
+            XCTAssertTrue(try loads(.item(last), policy))
+            fastest = min(fastest, TimeInterval(DispatchTime.now().uptimeNanoseconds - start) / 1e9)
+            start = DispatchTime.now().uptimeNanoseconds
+            XCTAssertFalse(tree.couldntRead(toward: last + "/lib"))
+            walk = min(walk, TimeInterval(DispatchTime.now().uptimeNanoseconds - start) / 1e9)
+        }
+        XCTAssertLessThan(fastest, 0.02, "the request took \(fastest * 1000) ms")
+        XCTAssertLessThan(walk, 0.02, "the walk took \(walk * 1000) ms")
+    }
+
     /// A `..` in an item's path, written out or escaped, would reach a folder of the map if the path were resolved, so
     /// it must be refused as it stands. Dot segments between the URL's own slashes never make an icon's URL either.
     func testEncodedClimbsAreRefused() throws {

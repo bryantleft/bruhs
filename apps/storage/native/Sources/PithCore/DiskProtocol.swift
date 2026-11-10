@@ -44,13 +44,13 @@ public struct DiskNode: Codable, Sendable, Equatable {
 
     public var entries: [DiskNode] { [self] + (children ?? []).flatMap(\.entries) }
 
-    /// The node at `path`: this one, or one inside it, found down the children whose paths hold `path`. Nil for one the
-    /// tree folds into its folder's smaller items.
+    /// The node at `path`: this one, or one inside it, found down the children whose paths hold `path` (`Toward`). Nil
+    /// for one the tree folds into its folder's smaller items.
     public func node(at path: String) -> DiskNode? {
         if self.path == path { return self }
-        guard let children, DiskChanges.isInside(path, self.path) else { return nil }
-        for child in children where DiskChanges.isInside(path, child.path) {
-            if let found = child.node(at: path) { return found }
+        guard let children, let toward = Toward(path, from: self.path) else { return nil }
+        for index in children.indices where toward.leads(to: children[index].path) {
+            if let found = children[index].node(at: path) { return found }
         }
         return nil
     }
@@ -58,13 +58,56 @@ public struct DiskNode: Codable, Sendable, Equatable {
     /// Whether this tree draws a folder it couldn't read on the way down to `path`, or at `path` itself: the scanner's
     /// listing of it failed, so the tree holds nothing below it, and Pith can't read there now.
     public func couldntRead(toward path: String) -> Bool {
-        var node: DiskNode? = self
-        while let at = node {
-            if at.kind == .unreadable { return true }
-            if at.path == path { return false }
-            node = at.children?.first { $0.kind != .aggregate && DiskChanges.isInside(path, $0.path) }
+        var node = self
+        while node.kind != .unreadable {
+            guard node.path != path, let children = node.children, let toward = Toward(path, from: node.path),
+                  let next = children.indices.first(where: { children[$0].kind != .aggregate && toward.leads(to: children[$0].path) }) else { return false }
+            node = children[next]
         }
-        return false
+        return true
+    }
+
+    /// The way from a folder down to a path inside it, for finding the folder's children that hold the path with paths
+    /// built once for all of them. A scanner's child is one level down, at `level`, the folder's path and the next of the
+    /// path's names, and one drawn further down, as a volume can be, starts with that level and a slash, `below`, which
+    /// rules out every other child at the cost of a comparison. So a walk down a tree costs about 11 ns for each child of
+    /// each folder on the way in a release build, where building each child's path with a slash cost 113 ns (2.3 ms for
+    /// the last of 20,000 subfolders, against 0.23 ms now).
+    struct Toward {
+        let path: String
+        let level: String
+        let below: String
+
+        /// The way from `folder` down to `path`, or nil when `path` isn't inside it. A path that starts with the folder's
+        /// very bytes, as the scanner's paths do, is cut by its bytes; one that starts with it spelled otherwise, as a
+        /// decomposed name can be, by its characters, which costs a microsecond or two more.
+        init?(_ path: String, from folder: String) {
+            let prefix = folder == "/" ? "/" : folder + "/"
+            let bytes = path.utf8
+            let name: Substring
+            if bytes.count > prefix.utf8.count, bytes.starts(with: prefix.utf8) {
+                let start = bytes.index(bytes.startIndex, offsetBy: prefix.utf8.count)
+                name = path[start..<(bytes[start...].firstIndex(of: UInt8(ascii: "/")) ?? bytes.endIndex)]
+            } else if path.hasPrefix(prefix), let first = path.dropFirst(prefix.count).split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false).first {
+                name = first
+            } else {
+                return nil
+            }
+            guard !name.isEmpty else { return nil }
+            self.path = path
+            level = prefix + name
+            below = level + "/"
+        }
+
+        /// Whether the child of the folder at `child` holds `path`: it's at the next level down toward it, or further down
+        /// and holds it. A child one level down ends before `below` does, or has another byte where `below` has its
+        /// slash, so it costs a length and a byte before the comparison a child drawn further down needs.
+        func leads(to child: String) -> Bool {
+            if child == level { return true }
+            let bytes = child.utf8, count = below.utf8.count
+            guard bytes.count > count, bytes[bytes.index(bytes.startIndex, offsetBy: count - 1)] == UInt8(ascii: "/") else { return false }
+            return child.hasPrefix(below) && DiskChanges.isInside(path, child)
+        }
     }
 
     /// A real file or folder: something to select, reveal and move to the Trash.
@@ -187,8 +230,9 @@ public struct DiskResult: Codable, Sendable {
     }
 
     /// The real file or folder at `path`, from the tree or the largest-files list. Each node's path is its folder's and
-    /// its name, so the tree is searched only down the folders that hold `path`: a lookup costs the item's depth, not the
-    /// map's size, and the selection looks up each of its items with every map.
+    /// its name, so the tree is searched only down the folders that hold `path` (`DiskNode.Toward`): a lookup costs a
+    /// comparison for each child of each folder on the way, not the map's size, and the selection looks up each of its
+    /// items with every map.
     public func item(at path: String) -> DiskNode? {
         root.node(at: path).flatMap { $0.isItem ? $0 : nil }
             ?? topFiles.first { $0.path == path }.map { DiskNode(kind: .file, name: $0.name, path: $0.path, size: $0.size, children: nil) }
@@ -582,12 +626,14 @@ public enum BridgePolicy {
 /// so its images are the page's own and a canvas that draws them can read their pixels back.
 ///
 /// It keeps the map, the disks and the apps as they're set, and judges each request by the map as it is then. The page
-/// asks for icons as each map comes, on the main thread, so a request finds its folder by following its path down the
-/// map, as `DiskResult.item(at:)` finds an item: it costs the folder's depth, not the map's size. Indexing every folder
-/// at the first request after each map took 2.8 ms on the development Mac for the whole disk's map of 14,019 nodes (77 ms
-/// for one of 177,001), against the 2 ms a map that comes every two seconds may cost, a tenth of a percent of a core
-/// within Pith's 3.4% with Disk on screen (VERIFICATION.md). A lookup takes 3 µs (median, 66 µs at most) there, and
-/// 4 µs (0.14 ms at most) in the larger map.
+/// asks for icons as each map comes, on the main thread, so a request walks down the map toward its folder, comparing
+/// each folder's children on the way with paths built once for them all (`DiskNode.Toward`): it costs about 11 ns for
+/// each child of each folder on the way in a release build, not the map's size. Indexing every folder at the first
+/// request after each map took 2.8 ms on the development Mac for the whole disk's map of 14,019 nodes (77 ms for one of
+/// 177,001), against the 2 ms a map that comes every two seconds may cost, a tenth of a percent of a core within Pith's
+/// 3.4% with Disk on screen (VERIFICATION.md). A request now takes 0.020 ms there (median, 0.13 ms at most), its walk 3 µs
+/// of that, and one for the last of 20,000 subfolders, about the most the scanner draws in an open folder, 0.23 ms,
+/// where building each child's path with a slash to compare took 2.3 ms.
 public final class IconPolicy {
     /// The start of every icon's URL, up to its size: `pith://app/icon/<generation>/<appearance>/`. WebKit keeps an
     /// image from Pith's scheme for as long as its URL stays the same, so a new generation loads every icon again.
@@ -644,13 +690,13 @@ public final class IconPolicy {
         map.flatMap { Self.folderOrVolume(at: path, in: $0) }
     }
 
-    /// The first folder or volume at `path` in `tree`, down the folders that hold it, as a walk of the whole tree in
-    /// order would find it first.
+    /// The first folder or volume at `path` in `tree`, as a walk of the whole tree in order would find it first: down the
+    /// folders that hold it (`DiskNode.Toward`).
     private static func folderOrVolume(at path: String, in tree: DiskNode) -> DiskNode? {
         if tree.path == path { return tree.kind == .dir || tree.kind == .volume ? tree : nil }
-        guard tree.kind == .dir, let children = tree.children, DiskChanges.isInside(path, tree.path) else { return nil }
-        for child in children where DiskChanges.isInside(path, child.path) {
-            if let found = folderOrVolume(at: path, in: child) { return found }
+        guard tree.kind == .dir, let children = tree.children, let toward = DiskNode.Toward(path, from: tree.path) else { return nil }
+        for index in children.indices where toward.leads(to: children[index].path) {
+            if let found = folderOrVolume(at: path, in: children[index]) { return found }
         }
         return nil
     }
