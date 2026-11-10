@@ -251,6 +251,23 @@ final class KnownPlacesTests: XCTestCase {
         XCTAssertEqual(places(missing: ["com.apple.mail"]).ownerKey(for: path("Library/Mail/V10")) { _ in nil }, .folder, "a place without its app")
     }
 
+    /// macOS guards removable and network volumes, so an app on another disk, a share or an automount is never looked
+    /// up: a container's app found there, a place's app found there, and an app the page names all show none.
+    func testAnAppOnAnotherDiskIsNeverLookedUp() {
+        let table = KnownPlaces(home: home, searchPaths: [:], mounts: { MountTableTests.table }) {
+            $0 == "com.apple.mail" ? URL(fileURLWithPath: "/Volumes/Archive/Mail.app") : nil
+        }
+        let notes = path("Library/Containers/com.apple.Notes/Data")
+        XCTAssertEqual(table.ownerKey(for: notes) { _ in URL(fileURLWithPath: "/Volumes/Archive/Notes.app") }, .folder, "a container's app on another disk")
+        XCTAssertEqual(table.ownerKey(for: notes) { _ in URL(fileURLWithPath: "/System/Applications/Notes.app") }, .item("/System/Applications/Notes.app"))
+        XCTAssertEqual(table.ownerKey(for: path("Library/Mail/V10")) { _ in nil }, .folder, "a place's app on another disk")
+        for app in ["/Volumes/Archive/Tool.app", "/Volumes/share/Tool.app", "/System/Volumes/Data/home/tester/Tool.app", path("Library/Containers/x/Data/Tool.app")] {
+            XCTAssertFalse(table.mayShowApp(app), app)
+        }
+        XCTAssertTrue(table.mayShowApp("/Applications/Tool.app"))
+        XCTAssertTrue(table.mayShowApp("/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app"))
+    }
+
     func testTheMapsUnreadableFoldersNameTheAppsThatOwnThem() {
         let table = places()
         let notes = path("Library/Containers/com.apple.Notes/Data"), devices = path("Library/Developer/Devices")

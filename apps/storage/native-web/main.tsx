@@ -24,7 +24,7 @@ import { GROUP_KEY, itemAt, itemKey } from "./icon-rule";
 import { KindLegend } from "./kind-legend";
 import { MapIcon, useAnyIcon, useOwners, usePageIcons } from "./map-icon";
 import { type NavigationAction, NO_MAP, navigate } from "./navigation";
-import { placesIn } from "./places";
+import { placesIn, unreadableBesides } from "./places";
 import { Places, usePlaces } from "./places-section";
 import { GREW_SHOWN, UNREADABLE_SHOWN, WRITERS_SHOWN } from "./side-lists";
 import "./styles.css";
@@ -380,10 +380,9 @@ function DiskMap() {
 
   // The well-known places in the open folder, at the startup disk's root and the home folder of its live map.
   const shownPlaces = placesIn(places, current.path);
-  // Unreadable folders in the open folder, which the map can't size, so it lists them instead.
-  const unreadable = current.children.filter(
-    (child) => child.kind === "unreadable",
-  );
+  // Unreadable folders in the open folder, which the map can't size, so it lists them instead: all but the places
+  // Places names already.
+  const unreadable = unreadableBesides(current.children, shownPlaces);
   // What grew most inside the open folder since the last scan of the scan's folder.
   const prefix = current.path === "/" ? "/" : `${current.path}/`;
   const grew = growth
@@ -549,24 +548,19 @@ function DiskMap() {
                 Couldn’t read
               </h2>
               <ul className="space-y-0.5">
-                {unreadable.slice(0, UNREADABLE_SHOWN).map((folder) => {
-                  // The app the folder belongs to, when Pith can tell; else its place's icon or a plain folder.
-                  const owner = owners.get(folder.path);
-                  return (
-                    <li
-                      key={folder.path}
-                      title={folder.path}
-                      className="text-code-sm flex items-center gap-2 text-(--role-text-secondary)"
-                    >
-                      {icons && (
-                        <MapIcon
-                          url={owner ? icons.key(owner) : icons.item(folder)}
-                        />
-                      )}
-                      <span className="min-w-0 truncate">{folder.name}</span>
-                    </li>
-                  );
-                })}
+                {unreadable.slice(0, UNREADABLE_SHOWN).map((folder) => (
+                  <li
+                    key={folder.path}
+                    title={folder.path}
+                    className="text-code-sm flex items-center gap-2 text-(--role-text-secondary)"
+                  >
+                    {/* The app the folder belongs to, when Pith can tell; else its place's icon or a plain folder. */}
+                    {icons && (
+                      <MapIcon url={icons.unreadable(folder, owners)} />
+                    )}
+                    <span className="min-w-0 truncate">{folder.name}</span>
+                  </li>
+                ))}
               </ul>
               {unreadable.length > UNREADABLE_SHOWN && (
                 <p className="text-label-sm text-(--role-text-tertiary)">

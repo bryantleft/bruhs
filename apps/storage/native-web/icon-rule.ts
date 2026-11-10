@@ -187,6 +187,18 @@ export function readOwners(text: unknown): ReadonlyMap<string, string> {
 }
 
 /**
+ * The key a Couldn't read row shows for `folder`, a folder the map couldn't read: the app that owns it when native names
+ * one (`readOwners`), and otherwise the rule's, its place's own icon or a plain folder.
+ */
+export function unreadableKey(
+  folder: IconItem,
+  owners: ReadonlyMap<string, string>,
+  rule: IconRule,
+): string {
+  return owners.get(folder.path) ?? iconKey(folder, rule);
+}
+
+/**
  * The item a list names by its path alone, as Grew since does, for its icon: the map's node at `path`, found by
  * following the path down from `folder`, or else a file the map lists among the largest. Anything else is a path the
  * map doesn't show, which the rule can only take for a folder it hasn't listed.

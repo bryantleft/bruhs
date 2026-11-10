@@ -9,6 +9,7 @@ import {
   itemKey,
   readIconRule,
   readOwners,
+  unreadableKey,
 } from "../native-web/icon-rule.ts";
 import type { DirNode, FileNode, TreeNode } from "../src/lib/types.ts";
 
@@ -177,5 +178,36 @@ describe("readOwners", () => {
     ]) {
       assert.equal(readOwners(text).size, 0, String(text));
     }
+  });
+});
+
+describe("unreadableKey", () => {
+  const rule = readIconRule(sent());
+  assert.ok(rule);
+  const notes = "/Users/zo\u00eb/Library/Containers/com.apple.Notes/Data";
+  const app = itemKey("/System/Applications/Notes.app");
+  const folder = (path: string): IconItem => ({ kind: "unreadable", path });
+
+  test("is the owner's app when native names one", () => {
+    assert.equal(
+      unreadableKey(folder(notes), new Map([[notes, app]]), rule),
+      app,
+    );
+  });
+
+  test("is otherwise the rule's: a known place's own icon, or a plain folder", () => {
+    const owners = new Map([[notes, app]]);
+    assert.equal(
+      unreadableKey(folder("/Users/zo\u00eb/Library/Mail"), owners, rule),
+      "place/mail",
+    );
+    assert.equal(
+      unreadableKey(folder("/private/var/db/sudo"), owners, rule),
+      "folder",
+    );
+    assert.equal(
+      unreadableKey(folder(notes), readOwners(null), rule),
+      "folder",
+    );
   });
 });

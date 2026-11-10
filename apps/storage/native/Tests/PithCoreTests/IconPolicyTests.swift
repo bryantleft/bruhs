@@ -145,6 +145,16 @@ final class IconPolicyTests: XCTestCase {
         XCTAssertTrue(try loads(.item(home + "/Applications/Fine.app"), policy))
     }
 
+    /// macOS guards removable and network volumes too, so an app the page names, as a writer or as a folder's owner,
+    /// loads no icon when it lies on another disk, a share or the home automount: its icon would be looked up there.
+    func testAppsOnOtherDisksLoadNoIcon() throws {
+        let places = KnownPlaces(home: URL(fileURLWithPath: home, isDirectory: true), searchPaths: [:], mounts: { MountTableTests.table }) { _ in nil }
+        let elsewhere = ["/Volumes/Archive/Tool.app", "/Volumes/share/Apps/Tool.app", "/System/Volumes/Data/home/tester/Tool.app"]
+        let policy = IconPolicy(places: places, apps: Set(elsewhere + ["/Applications/Safari.app"]))
+        for path in elsewhere { XCTAssertFalse(try loads(.item(path), policy), path) }
+        XCTAssertTrue(try loads(.item("/Applications/Safari.app"), policy))
+    }
+
     /// What the policy found in a map lasts until the map changes, and the disks and apps it allows are the ones set
     /// last, so nothing an earlier map, disk or app allowed lets a path through after a change.
     func testAChangeDropsWhatTheLastMapDisksAndAppsAllowed() throws {

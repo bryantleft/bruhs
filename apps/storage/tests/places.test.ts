@@ -8,9 +8,11 @@ import {
   placeFigure,
   placesIn,
   readPlaces,
+  unreadableBesides,
 } from "../native-web/places.ts";
 import { PLACES_SHOWN } from "../native-web/side-lists.ts";
 import { formatBytes } from "../src/lib/format.ts";
+import type { TreeNode } from "../src/lib/types.ts";
 
 /** A home of the test's own, as the scanner spells it, composed. Pith's own paths come from `URL`, decomposed. */
 const home = "/Users/zoë";
@@ -306,5 +308,60 @@ describe("readPlaces", () => {
     ]) {
       assert.equal(readPlaces(text), null, String(text));
     }
+  });
+});
+
+describe("Couldn't read beside Places", () => {
+  /** A folder the map couldn't read, as the scanner names it, composed. */
+  const locked = (path: string): TreeNode => ({
+    kind: "unreadable",
+    name: path.slice(path.lastIndexOf("/") + 1),
+    path,
+    size: 0,
+    reason: "protected",
+  });
+  const children: TreeNode[] = [
+    locked(`${home}/Documents`),
+    locked(`${home}/.Trash`),
+    locked(`${home}/Locked`),
+    {
+      kind: "dir",
+      name: "Projects",
+      path: `${home}/Projects`,
+      size: 5,
+      files: 1,
+      children: [],
+    },
+  ];
+  const names = (folders: readonly TreeNode[]) => folders.map((f) => f.name);
+
+  test("leaves out the folders Places shows, so each is named once", () => {
+    const trashLocked = { ...trash, size: null };
+    const shown = placesIn(table([documents, trashLocked]), home);
+    assert.deepEqual(ids(shown), ["documents", "trash"]);
+    assert.deepEqual(names(unreadableBesides(children, shown)), ["Locked"]);
+  });
+
+  test("keeps every folder it can't read when Places shows none of them", () => {
+    assert.deepEqual(names(unreadableBesides(children, [])), [
+      "Documents",
+      ".Trash",
+      "Locked",
+    ]);
+    // A place Places leaves out, past its six, is still listed.
+    assert.deepEqual(names(unreadableBesides(children, [mail])), [
+      "Documents",
+      ".Trash",
+      "Locked",
+    ]);
+  });
+
+  test("compares paths composed, as the scanner and native spell them apart", () => {
+    // Native's place path is decomposed; the scanner's folder is composed.
+    assert.ok(documents.path.includes("zoe\u0308"));
+    assert.deepEqual(names(unreadableBesides(children, [documents])), [
+      ".Trash",
+      "Locked",
+    ]);
   });
 });

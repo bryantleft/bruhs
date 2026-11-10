@@ -14,6 +14,7 @@ import {
   NO_OWNERS,
   readIconRule,
   readOwners,
+  unreadableKey,
 } from "./icon-rule";
 import {
   ICON_POINTS,
@@ -112,6 +113,11 @@ export interface PageIcons {
   /** The URL of the icon `key` names, such as an app's or the smaller items'. */
   key(key: string): string;
   /**
+   * The URL of the icon a folder the map couldn't read shows (`unreadableKey`): its owner app's, when Pith names one
+   * among `owners`, and otherwise the rule's.
+   */
+  unreadable(folder: IconItem, owners: ReadonlyMap<string, string>): string;
+  /**
    * The icons the map's canvas draws on its strips and blocks, from the page's cache: each block's by Pith's rule, at
    * the size and pixel ratio the canvas asks for. The smaller items have none on the map.
    */
@@ -160,6 +166,13 @@ export function usePageIcons(): PageIcons | null {
         item: (item: IconItem) =>
           iconURL(sent.base, ICON_POINTS, scale, iconKey(item, sent.rule)),
         key: (key: string) => iconURL(sent.base, ICON_POINTS, scale, key),
+        unreadable: (folder: IconItem, owners: ReadonlyMap<string, string>) =>
+          iconURL(
+            sent.base,
+            ICON_POINTS,
+            scale,
+            unreadableKey(folder, owners, sent.rule),
+          ),
         map: {
           url: (tile, points, ratio) =>
             tile.kind === "group"

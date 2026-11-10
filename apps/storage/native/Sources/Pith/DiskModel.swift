@@ -24,6 +24,8 @@ struct TrashedItem: Equatable {
     let trashed: URL
     /// The map before the move, which Undo restores exactly.
     let previous: DiskResult
+    /// The places the move took out of Places, which Undo puts back with the map.
+    let places: [LivePlace]
 
     static func == (lhs: TrashedItem, rhs: TrashedItem) -> Bool { lhs.trashed == rhs.trashed && lhs.original == rhs.original }
 }
@@ -64,7 +66,7 @@ enum MapCommand: Equatable {
             // JSON kept for a map that's changed since is a stale picture of it.
             if !settingLive { resultJSON = nil }
             icons.map = result?.root
-            findOwners()
+            sideColumn.map = result
         }
     }
     /// The live map's own JSON of `result`, while `result` is just as the live map sent it.
@@ -346,7 +348,7 @@ enum MapCommand: Equatable {
             accounting = nil
             revision = UUID()
         }
-        livePlaces = []
+        sideColumn.mapIsntLive()
         liveView = path
         scope = path
         live.makeFirstMap()
@@ -372,7 +374,7 @@ enum MapCommand: Equatable {
         }
         treeLater?.cancel(); treeLater = nil
         lastTree = Date()
-        live.request(path: path, focus: detailFolder, places: sectionPlaces.shortcuts.map(\.path))
+        live.request(path: path, focus: detailFolder, places: sideColumn.places.shortcuts.map(\.path))
         detailAsked = detailFolder
     }
 
@@ -390,7 +392,7 @@ enum MapCommand: Equatable {
     private func showLive(_ value: DiskResult, json: String, places: [LivePlace]) {
         guard value.root.path == liveView else { return }
         let rootChanged = result?.root.path != value.root.path
-        livePlaces = places
+        if let live { sideColumn.liveTreeArrived(root: live.root, places: places) }
         settingLive = true
         result = value
         resultJSON = json
@@ -509,6 +511,7 @@ enum MapCommand: Equatable {
     /// Scans `root` once. The current map stays until the new one arrives, so a cancelled or failed scan leaves it.
     private func scanOnce(_ root: URL) {
         liveView = nil
+        sideColumn.mapIsntLive()
         operation?.cancel()
         let id = UUID(); generation = id
         problem = nil; note = nil; progress = nil; isScanning = true; rescanning = nil
@@ -667,68 +670,23 @@ enum MapCommand: Equatable {
     /// The apps the page names under Wrote the most since, as native last sent them: the page may load the icons of
     /// their bundles.
     @ObservationIgnored var pageWriters: [DiskWriter] = [] {
-        didSet { allowApps() }
+        didSet { sideColumn.writers = Set(pageWriters.compactMap(\.bundle)) }
     }
 
-    /// The apps that own the folders the map couldn't read, by folder (`KnownPlaces.owners`): the Couldn't read rows on
-    /// the map's page show their icons, so the page may load the icons of their bundles too. They go to the page with
-    /// the map they came from.
-    @ObservationIgnored private(set) var owners: [String: IconKey] = [:] {
-        didSet { allowApps() }
+    /// What the map's side column shows beside the map: the Places section's table, and the apps that own the folders
+    /// the map couldn't read, which LaunchServices finds off the main thread. It sets the apps the icon route serves.
+    @ObservationIgnored private(set) lazy var sideColumn = SideColumnFeed(places: Icons.places, policy: icons) {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0)
     }
 
-    /// The bundles of the apps the page names, under Wrote the most since and as the owners of folders it couldn't read:
-    /// the icon route serves an app's own icon to the page for these alone.
-    private func allowApps() {
-        let owning = owners.values.compactMap { key -> String? in
-            if case .item(let app) = key { return app }
-            return nil
-        }
-        icons.apps = Set(pageWriters.compactMap(\.bundle)).union(owning)
-    }
+    /// The apps that own the folders the map couldn't read, by folder, which Couldn't read shows on the map's page.
+    var owners: [String: IconKey] { sideColumn.owners }
 
-    /// Finds the apps that own the folders a new map couldn't read: a walk of its tree, under a millisecond for a whole
-    /// disk's map, which a map that read every folder skips.
-    private func findOwners() {
-        guard let result, result.summary.errors > 0 else {
-            if !owners.isEmpty { owners = [:] }
-            return
-        }
-        let found = Icons.places.owners(in: result.root) { self.application($0) }
-        if found != owners { owners = found }
-    }
+    /// The icon of what `folder`, a folder the map couldn't read, belongs to, as the unreadable list shows it.
+    func ownerKey(for folder: String) -> IconKey { sideColumn.ownerKey(for: folder) }
 
-    /// The icon of what `folder`, a folder the map couldn't read, belongs to (`KnownPlaces.ownerKey`), as the unreadable
-    /// list shows it.
-    func ownerKey(for folder: String) -> IconKey {
-        Icons.places.ownerKey(for: folder) { self.application($0) }
-    }
-
-    /// The apps LaunchServices found for other apps' containers, by bundle ID, kept for the session: a container's app
-    /// is asked for once, which takes microseconds.
-    @ObservationIgnored private var applications: [String: URL?] = [:]
-
-    private func application(_ bundleID: String) -> URL? {
-        if let found = applications[bundleID] { return found }
-        let found = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
-        applications[bundleID] = found
-        return found
-    }
-
-    // MARK: Places
-
-    /// The known places the map's Places section offers. The smoke test gives a table of its fixture's own, so the
-    /// section shows through the same code while Pith looks at none of the person's folders.
-    @ObservationIgnored lazy var sectionPlaces = Icons.places
-    /// What the live map's index held at each of those places when its last tree came.
-    @ObservationIgnored private var livePlaces: [LivePlace] = []
-
-    /// What the map's Places section shows from: for the live map, the places its index named with its last tree
-    /// (`KnownPlaces.placesTable`). Nil for a scan, where the section never shows.
-    var placesTable: PlacesTable? {
-        guard let live, liveView != nil, let result else { return nil }
-        return sectionPlaces.placesTable(for: result.root, mapRoot: live.root, live: livePlaces)
-    }
+    /// What the map's Places section shows from: the live map's places, or nil for a scan, where it never shows.
+    var placesTable: PlacesTable? { sideColumn.placesTable(for: result?.root) }
 
     /// Whether macOS may be holding some of the live map's folders: it's asking about some, or the map is catching up
     /// after a launch, listing again what changed meanwhile and what was waiting on macOS when it was saved.
@@ -764,6 +722,8 @@ enum MapCommand: Equatable {
         defer { isTrashing = false }
         do {
             let trashedURL = try moveToTrash(plan.target)
+            // A place it held leaves Places with it, until Undo puts it back.
+            let places = sideColumn.tookOff(plan.target.path)
             if selected == plan.target.path { select(nil) }
             if let updated = result.removing(plan.target.path) {
                 self.result = updated
@@ -771,7 +731,7 @@ enum MapCommand: Equatable {
                 // The tree didn't hold it (an item inside a group of smaller ones): the next scan reflects it.
                 edited = true
             }
-            trashed = trashedURL.map { TrashedItem(name: plan.name, size: plan.size, original: plan.target, trashed: $0, previous: result) }
+            trashed = trashedURL.map { TrashedItem(name: plan.name, size: plan.size, original: plan.target, trashed: $0, previous: result, places: places) }
             if liveView == nil { edited = true }
             mapAnswersPerson = true
             revision = UUID()
@@ -807,7 +767,9 @@ enum MapCommand: Equatable {
         guard let item = trashed, !isScanning else { return }
         do {
             try FileManager.default.moveItem(at: item.trashed, to: item.original)
-            result = item.previous; trashed = nil; mapAnswersPerson = true; revision = UUID()
+            result = item.previous; trashed = nil; mapAnswersPerson = true
+            sideColumn.putBack(item.places)
+            revision = UUID()
             select(item.original.path)
         } catch {
             problem = DiskProblem(message: "Pith couldn’t put \(item.name) back. Open the Trash in Finder and drag it out instead.")

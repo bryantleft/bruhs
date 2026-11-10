@@ -43,6 +43,8 @@ public struct KnownPlaces: Sendable {
     public let home: String
     /// Other apps' containers, `~/Library/Containers`, each named by its app's bundle ID.
     private let containers: String
+    /// The file systems mounted now, which say whether an app lies on the startup disk.
+    private let mounts: @Sendable () -> MountTable
 
     /// The places the disk map's Places section offers, by id: the ones the design spec names, where Apple's Storage pane
     /// finds space, and the iPhone and iPad backups Apple's own checklist names. The table also keeps Desktop, Music, TV,
@@ -52,8 +54,10 @@ public struct KnownPlaces: Sendable {
 
     /// The places in `home`, and at `searchPaths` as `FileManager.urls(for:in:)` gives them, with each owning app
     /// that `application` finds by its bundle ID. A place whose search path is missing is left out. The Trash's icon
-    /// shows it full unless `trashIsEmpty`: Pith names the Trash as a place only while it holds something.
-    public init(home: URL, searchPaths: [FileManager.SearchPathDirectory: URL], trashIsEmpty: Bool = false, application: (String) -> URL?) {
+    /// shows it full unless `trashIsEmpty`: Pith names the Trash as a place only while it holds something. `mounts`
+    /// gives the file systems mounted when an app's icon is asked for: this Mac's own, or a test's.
+    public init(home: URL, searchPaths: [FileManager.SearchPathDirectory: URL], trashIsEmpty: Bool = false,
+                mounts: @escaping @Sendable () -> MountTable = MountTable.current, application: (String) -> URL?) {
         let library = home.appendingPathComponent("Library")
         func folder(_ directory: FileManager.SearchPathDirectory, _ inside: String? = nil) -> URL? {
             searchPaths[directory].map { url in inside.map { url.appendingPathComponent($0) } ?? url }
@@ -91,6 +95,7 @@ public struct KnownPlaces: Sendable {
         guarded = places.filter(\.isProtected).map(\.path) + ["Containers", "Group Containers", "CloudStorage"].map { library.appendingPathComponent($0).path }
         self.home = home.path
         containers = library.appendingPathComponent("Containers").path
+        self.mounts = mounts
     }
 
     /// This Mac's places: the home folder, the search paths, and the apps LaunchServices finds. Applications is the
@@ -138,6 +143,14 @@ public struct KnownPlaces: Sendable {
         return guarded.contains(where: inside) || path.split(separator: "/").contains { $0.hasSuffix(".photoslibrary") }
     }
 
+    /// Whether Pith may look an app's icon up by its bundle's path: the app lies on the startup disk, outside the
+    /// locations macOS guards. macOS guards removable and network volumes too, so an app on another disk, a share or the
+    /// home automount is never looked up. The owners of folders the map couldn't read, in the unreadable list and on the
+    /// page, and every app the icon route serves the page go by this.
+    public func mayShowApp(_ path: String) -> Bool {
+        !isProtected(path) && mounts().isOnStartupDisk(path)
+    }
+
     /// The rule as the disk map's page applies it, with `asking` as `iconKey(for:asking:)` takes it.
     public func iconRule(asking: Bool) -> IconRule {
         IconRule(places: places.map { IconRule.Place(id: $0.id, path: $0.path) }, guarded: guarded, asking: asking)
@@ -172,8 +185,9 @@ public struct KnownPlaces: Sendable {
     /// holds at each place (`live`, which came with that tree): each place the section offers that the index names, in
     /// the table's order, with its size as the map shows it, or none where Pith can't read it. A place the tree shows has
     /// the tree's figure, the one its block shows, which is newer than the index's when the map changed since, as when
-    /// Move to Trash took an item out of it. One the tree folds into smaller items has the index's, the figure its own
-    /// map shows once it's opened. The section shows at the live map's root, the startup disk's, and at the home folder.
+    /// Move to Trash took an item out of the place. One the tree folds into smaller items has the index's, the figure its
+    /// own map shows once it's opened. A place Move to Trash took off the map leaves `live` with it (`SideColumnFeed`).
+    /// The section shows at the live map's root, the startup disk's, and at the home folder.
     public func placesTable(for tree: DiskNode, mapRoot: String, live: [LivePlace]) -> PlacesTable {
         let held = Dictionary(live.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
         let places = shortcuts.compactMap { place -> PlacesTable.Place? in
@@ -187,8 +201,8 @@ public struct KnownPlaces: Sendable {
     /// The icon of what `folder`, a folder the map couldn't read, belongs to, when Pith can tell without looking the
     /// folder up by its path. A known place shows its own. A folder inside one shows the app the place belongs to, as one
     /// in Mail shows Mail's, and a folder in another app's container, `~/Library/Containers/<bundle ID>`, the app that
-    /// `application` finds for that bundle ID. An app where macOS guards isn't looked up either. Anything else shows a
-    /// plain folder.
+    /// `application` finds for that bundle ID. An app Pith may not look up (`mayShowApp`), where macOS guards or on
+    /// another disk, isn't looked up either. Anything else shows a plain folder.
     public func ownerKey(for folder: String, application: (String) -> URL?) -> IconKey {
         if let place = place(at: folder) { return .place(place.id) }
         let app: String?
@@ -199,7 +213,7 @@ public struct KnownPlaces: Sendable {
         } else {
             app = nil
         }
-        guard let app, !isProtected(app) else { return .folder }
+        guard let app, mayShowApp(app) else { return .folder }
         return .item(app)
     }
 

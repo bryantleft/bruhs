@@ -1,4 +1,5 @@
 import { formatBytes } from "../src/lib/format.ts";
+import type { TreeNode, UnreadableNode } from "../src/lib/types.ts";
 import { PLACES_SHOWN } from "./side-lists.ts";
 
 /**
@@ -59,6 +60,21 @@ export function placesIn(table: PlacesTable | null, folder: string): Place[] {
     .sort((a, b) => (b.size ?? 0) - (a.size ?? 0));
   const unreadable = inside.filter((place) => place.size === null);
   return [...sized, ...unreadable].slice(0, PLACES_SHOWN);
+}
+
+/**
+ * The open folder's folders the map couldn't read, which Couldn't read lists: all but those Places shows already, so a
+ * place Pith can't read is named once on the screen, in Places. Paths compare composed, as `placesIn` compares them.
+ */
+export function unreadableBesides(
+  children: readonly TreeNode[],
+  shown: readonly Place[],
+): UnreadableNode[] {
+  const named = new Set(shown.map((place) => place.path.normalize("NFC")));
+  return children.filter(
+    (child): child is UnreadableNode =>
+      child.kind === "unreadable" && !named.has(child.path.normalize("NFC")),
+  );
 }
 
 /** The table native sends, as JSON, as the page uses it: null for anything else. */

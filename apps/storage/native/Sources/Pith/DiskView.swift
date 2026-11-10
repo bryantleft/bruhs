@@ -269,8 +269,9 @@ private struct DiskNotices: View {
     }
 }
 
-/// The folders a scan couldn't read, with why, so the user can see what Full Disk Access would change.
-private struct UnreadableList: View {
+/// The folders a scan couldn't read, with why, so the user can see what Full Disk Access would change. The smoke test
+/// draws it too, so it isn't private.
+struct UnreadableList: View {
     let model: DiskModel
     let folders: [DiskUnreadableFolder]
     let total: UInt64
@@ -571,6 +572,7 @@ struct DiskWebView: NSViewRepresentable {
         view.underPageBackgroundColor = .clear
         context.coordinator.web = view
         context.coordinator.followDisplayOptions()
+        context.coordinator.followOwners()
         model.pageCommand = { [weak coordinator = context.coordinator] command in coordinator?.run(command) }
         created(view)
         view.pageZoom = textScale
@@ -622,20 +624,21 @@ struct DiskWebView: NSViewRepresentable {
         var iconRule: IconRule? {
             didSet {
                 guard iconRule != oldValue else { return }
-                let encoder = JSONEncoder()
-                encoder.outputFormatting = .sortedKeys
-                iconRuleJSON = iconRule.flatMap { try? encoder.encode($0) }.map { String(decoding: $0, as: UTF8.self) }
+                iconRuleJSON = iconRule.flatMap(Self.json)
                 sendIcons()
             }
         }
         /// The rule as JSON, encoded once for each rule and in one spelling for it: the page tries the icons it was
         /// refused again when the text changes.
         private var iconRuleJSON: String?
-        /// The Places section's table and the owners of the folders the map couldn't read, as the page last got them.
-        /// Each travels with a map, in the same call, and only when it changes, so the page shows it with the map it
-        /// belongs to.
+        /// The Places section's table as the page last got it. It travels with a map, in the same call, and only when it
+        /// changes, so the page shows its sizes with the map they're the figures of.
         private var sentPlaces: PlacesTable?
-        private var sentOwners: [String: String] = [:]
+        /// The apps that own the folders the map couldn't read, by folder, as keys, which Couldn't read shows. They go to
+        /// the page once it's ready and whenever they change, as when a container's app is found between maps.
+        private var owners: [String: String] = [:] {
+            didSet { if owners != oldValue { sendOwners() } }
+        }
         /// How long macOS waits for a second click to make a double-click, which the page holds its map still for
         /// after a click: a web page can't read it. It goes to the page once it's ready and when the setting changes.
         var doubleClickInterval: TimeInterval? {
@@ -663,6 +666,14 @@ struct DiskWebView: NSViewRepresentable {
                 Task { @MainActor in self?.differentiatesWithoutColor = Coordinator.differentiateWithoutColor() }
             }
         }
+        /// Follows the owners of the folders the map couldn't read, which `SideColumnFeed` finds off the main thread,
+        /// often after the map they belong to has gone to the page, so each change is watched for here and sent on its
+        /// own rather than with a map.
+        func followOwners() {
+            owners = withObservationTracking { model.owners.mapValues(\.string) } onChange: { [weak self] in
+                Task { @MainActor in self?.followOwners() }
+            }
+        }
         func stopFollowingDisplayOptions() {
             if let displayOptions { NSWorkspace.shared.notificationCenter.removeObserver(displayOptions) }
             displayOptions = nil
@@ -674,11 +685,11 @@ struct DiskWebView: NSViewRepresentable {
             switch action {
             case "ready":
                 // Every page load starts empty, a reload or a restart after a crash included, so it gets the icons' base
-                // and rule and then the scan again, with its places and owners, and the native selection and history it
+                // and rule, the owners, and then the scan again with its places, and the native selection and history it
                 // no longer has are dropped.
                 ready = true; revision = nil; model.select(nil); model.mapStartsOver(); sendIcons(); sendDoubleClickInterval()
-                sendDifferentiateWithoutColor()
-                sentPlaces = nil; sentOwners = [:]
+                sendDifferentiateWithoutColor(); sendOwners()
+                sentPlaces = nil
                 send(revision: model.revision)
             case "select": model.select(path)
             case "location":
@@ -771,19 +782,13 @@ struct DiskWebView: NSViewRepresentable {
                 // they change.
                 var script = "window.pithReceive(payload, atOnce); window.pithReceiveGrowth?.(growth)"
                 var arguments: [String: Any] = ["payload": payload as Any? ?? NSNull(), "atOnce": atOnce, "growth": growth as Any? ?? NSNull()]
-                // The Places section's table and the apps that own the folders the map couldn't read come with the map
-                // they belong to, in the same call, so the page draws them together, and only when they change.
+                // The Places section's table comes with the map its sizes are the figures of, in the same call, so the page
+                // draws them together, and only when it changes.
                 let places = model.placesTable
                 if places != sentPlaces {
                     sentPlaces = places
                     script = "window.pithReceivePlaces?.(places); " + script
                     arguments["places"] = places.flatMap(Self.json) ?? NSNull()
-                }
-                let owners = model.owners.mapValues(\.string)
-                if owners != sentOwners {
-                    sentOwners = owners
-                    script = "window.pithReceiveOwners?.(owners); " + script
-                    arguments["owners"] = Self.json(owners) ?? NSNull()
                 }
                 web.callAsyncJavaScript(script, arguments: arguments, in: nil, in: .page) { [weak self] result in
                     if case .failure(let error) = result { self?.model.problem = DiskProblem(message: "Pith couldn’t draw the disk map: \(error.localizedDescription)") }
@@ -791,11 +796,20 @@ struct DiskWebView: NSViewRepresentable {
             } catch { model.problem = DiskProblem(message: "Pith couldn’t prepare the disk map: \(error.localizedDescription)") }
         }
 
-        /// `value` as JSON in one spelling, as the page reads a table native sends.
+        /// `value` as JSON in one spelling, as the page reads a table native sends: the icon rule, Places and the owners.
         private static func json(_ value: some Encodable) -> String? {
             let encoder = JSONEncoder()
             encoder.outputFormatting = .sortedKeys
             return (try? encoder.encode(value)).map { String(decoding: $0, as: UTF8.self) }
+        }
+
+        /// Gives the page the apps that own the folders the map couldn't read once it's ready for them, and again
+        /// whenever they change.
+        private func sendOwners() {
+            guard ready, let web else { return }
+            web.callAsyncJavaScript("window.pithReceiveOwners?.(owners)", arguments: ["owners": Self.json(owners) ?? NSNull()], in: nil, in: .page) { result in
+                if case .failure(let error) = result { NSLog("Pith: the disk map didn’t take the owners of the folders it couldn’t read: \(error.localizedDescription)") }
+            }
         }
 
         /// Gives the page the icons' base and rule once it's ready for them, a reload's included, and again whenever
