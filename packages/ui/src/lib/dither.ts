@@ -4,7 +4,7 @@
  * The Bruh is a halftone: a hex grid over the face, each dot sized by the light
  * on a sphere (dot area tracks brightness) and shrunk a little toward the rim,
  * so the silhouette stays round and the face reads as a lit ball. The eyes are
- * holes and the mouth is one row of red. Geometry comes from `bruhGeometry`,
+ * one-row slits and the mouth is one row of red. Geometry comes from `bruhGeometry`,
  * so the dots always match the logo, and looking left or right turns toward
  * the logo's own `left` and `right` variants. bruhs.ai and the bruhs-ai app
  * carry ports of the same algorithm.
@@ -57,12 +57,19 @@ const variant = (name: keyof typeof faces) => ({
   rightEye: unit(faces[name].rightEye),
   mouth: unit(faces[name].mouth),
 });
-const ORIGINAL = variant("original");
+// The logo's eyes sit 102 and 101 units from center; mirror them so the
+// symmetric hex grid cuts identical slits.
+const FRONT = variant("original");
+const EYE_HALF = (FRONT.rightEye.x - FRONT.leftEye.x) / 2;
+const ORIGINAL = {
+  ...FRONT,
+  leftEye: { x: -EYE_HALF, y: FRONT.leftEye.y },
+  rightEye: { x: EYE_HALF, y: FRONT.rightEye.y },
+};
 const LEFT = variant("left");
 const RIGHT = variant("right");
 const EYE_RX = eye.rx / base.r;
 const MOUTH_RX = mouth.rx / base.r;
-const FEATURE_RY = eye.ry / base.r;
 // Light from the upper left, mostly frontal; some ambient so the shadow side
 // keeps its dots and the outline stays whole.
 const LIGHT = normalize(-0.35, -0.45, 0.82);
@@ -101,8 +108,9 @@ export function bruhDots(width: number, height: number, face: BrailleBruh): Dot[
   const toward = (a: Point, b: Point): Point => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t + nudge });
   const eyes = [toward(ORIGINAL.leftEye, turned.leftEye), toward(ORIGINAL.rightEye, turned.rightEye)];
   const m = toward(ORIGINAL.mouth, turned.mouth);
-  const eyeRy = Math.max(FEATURE_RY, (pitch * 0.9) / r);
-  // The mouth is exactly one row: the one nearest its line.
+  // Eyes and mouth are exactly one row each: the row nearest their line. An
+  // oval hole cut across staggered rows comes out ▽ on one eye and △ on the other.
+  const eyeRows = eyes.map((e) => Math.round((e.y * r) / rowH));
   const mouthRow = Math.round((m.y * r) / rowH);
 
   const dots: Dot[] = [];
@@ -111,15 +119,17 @@ export function bruhDots(width: number, height: number, face: BrailleBruh): Dot[
   for (let row = -rows; row <= rows; row++) {
     const y = cy + row * rowH;
     if (y < -pitch || y > height + pitch) continue;
-    const offset = row & 1 ? pitch / 2 : 0;
     for (let col = -cols; col <= cols; col++) {
-      const x = cx + col * pitch + offset;
+      // Offsets in whole half-steps, so a dot and its mirror twin get exactly
+      // negated positions and the face stays symmetric.
+      const halfSteps = 2 * col + (row & 1);
+      const x = cx + (halfSteps * pitch) / 2;
       if (x < -pitch || x > width + pitch) continue;
-      const dx = (x - cx) / r;
+      const dx = (halfSteps * pitch) / (2 * r);
       const dy = (y - cy) / r;
       let value = shade(dx, dy);
       if (value === null) continue;
-      if (eyes.some((e) => ((dx - e.x) / EYE_RX) ** 2 + ((dy - e.y) / eyeRy) ** 2 <= 1)) continue;
+      if (eyes.some((e, i) => row === eyeRows[i] && Math.abs((dx - e.x) / EYE_RX) <= 1)) continue;
       const isMouth = row === mouthRow && Math.abs((dx - m.x) / MOUTH_RX) <= 1;
       if (isMouth) value = Math.max(value, 0.75);
       const radius = (pitch / 2) * 0.92 * Math.sqrt(value);
