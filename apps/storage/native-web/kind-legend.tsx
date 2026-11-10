@@ -1,10 +1,16 @@
 import { kindLabel } from "../src/components/treemap-canvas";
-import { CATEGORY_VAR, formatBytes } from "../src/lib/format";
+import { CATEGORY_VAR, type Category, formatBytes } from "../src/lib/format";
+import { GLYPH_BOX, KIND_GLYPHS } from "../src/lib/kind-glyphs";
 import { KINDS, type Kind, type KindBytes } from "../src/lib/treemap-layout";
 
 interface Props {
   /** The open folder's bytes by kind. */
   bytes: KindBytes;
+  /**
+   * macOS's Differentiate Without Color is on: each kind of file shows the glyph its blocks show on the map, the cue
+   * that doesn't need colour.
+   */
+  glyphs: boolean;
   /** The kind highlighted on the map, if any. */
   active: Kind | null;
   /** Highlight a kind, or show every kind again when it's already highlighted. */
@@ -15,11 +21,31 @@ interface Props {
 const last = (kind: Kind) =>
   kind === "volume" ? 2 : kind === "grouped" ? 1 : 0;
 
+/** A kind's glyph, as the map draws it on that kind's blocks. Decorative: the kind's name follows it. */
+function KindGlyph({ kind }: { kind: Category }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox={`0 0 ${GLYPH_BOX} ${GLYPH_BOX}`}
+      className="size-4 shrink-0 fill-(--role-text-secondary)"
+    >
+      {KIND_GLYPHS[kind].map(({ d, evenOdd }) => (
+        <path
+          key={d}
+          d={d}
+          fillRule={evenOdd ? "evenodd" : undefined}
+          clipRule={evenOdd ? "evenodd" : undefined}
+        />
+      ))}
+    </svg>
+  );
+}
+
 /**
  * What each colour means and how much of the folder it holds. Each row also highlights
  * its kind on the map. Grouped small items come last: the scan doesn't know their kinds.
  */
-export function KindLegend({ bytes, active, onToggle }: Props) {
+export function KindLegend({ bytes, glyphs, active, onToggle }: Props) {
   const rows = KINDS.filter((kind) => bytes[kind] > 0).sort(
     (a, b) => last(a) - last(b) || bytes[b] - bytes[a],
   );
@@ -58,6 +84,9 @@ export function KindLegend({ bytes, active, onToggle }: Props) {
                     : { background: `var(${CATEGORY_VAR[kind]})` }
                 }
               />
+              {glyphs && kind !== "grouped" && kind !== "volume" && (
+                <KindGlyph kind={kind} />
+              )}
               <span className="text-label-sm min-w-0 flex-1 truncate">
                 {kindLabel(kind)}
               </span>

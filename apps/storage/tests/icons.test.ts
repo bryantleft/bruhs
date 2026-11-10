@@ -191,3 +191,67 @@ describe("IconCache", () => {
     assert.equal(cache.mayShowAny([guarded, app]), true, "one loaded");
   });
 });
+
+describe("IconCache's cap", () => {
+  const base = "pith://app/icon/1/dark/";
+  const url = (name: string) => `${base}14@2x/item/%2F${name}.png`;
+
+  test("keeps at most its cap of loaded icons, letting the least recently used go", async () => {
+    const { loads, load } = loader();
+    const cache = new IconCache(load, 2);
+    cache.setBase(base);
+    let heard = 0;
+    cache.subscribe(() => {
+      heard += 1;
+    });
+    for (const name of ["a", "b", "c"]) cache.request(url(name));
+    loads[0].finish("a");
+    loads[1].finish("b");
+    await settle();
+    // Drawn again, as the map's next paint draws what it still shows.
+    assert.equal(cache.image(url("a")), "a");
+    loads[2].finish("c");
+    await settle();
+    assert.equal(heard, 3);
+    assert.equal(cache.state(url("b")), undefined, "used least recently");
+    assert.equal(cache.image(url("a")), "a");
+    assert.equal(cache.image(url("c")), "c");
+    // Shown again, it loads again.
+    cache.request(url("b"));
+    assert.equal(loads.length, 4);
+  });
+
+  test("counts loaded icons only: a failure or a load under way takes no room", async () => {
+    const { loads, load } = loader();
+    const cache = new IconCache(load, 1);
+    cache.setBase(base);
+    for (const name of ["a", "b", "c"]) cache.request(url(name));
+    loads[0].fail();
+    loads[1].finish("b");
+    await settle();
+    assert.equal(cache.state(url("a")), "failed");
+    assert.equal(cache.state(url("b")), "loaded");
+    assert.equal(cache.state(url("c")), "loading");
+    loads[2].finish("c");
+    await settle();
+    assert.equal(cache.state(url("a")), "failed", "still remembered");
+    assert.equal(cache.state(url("b")), undefined);
+    assert.equal(cache.state(url("c")), "loaded");
+  });
+
+  test("counts a list showing an icon as using it", async () => {
+    const { loads, load } = loader();
+    const cache = new IconCache(load, 2);
+    cache.setBase(base);
+    for (const name of ["row", "a", "b"]) cache.request(url(name));
+    loads[0].finish("row");
+    loads[1].finish("a");
+    await settle();
+    // A row reads its icon's state whenever the cache changes.
+    assert.equal(cache.state(url("row")), "loaded");
+    loads[2].finish("b");
+    await settle();
+    assert.equal(cache.state(url("row")), "loaded");
+    assert.equal(cache.state(url("a")), undefined);
+  });
+});

@@ -5,7 +5,8 @@
  * The map shows three levels below the current folder. The top two levels are drawn as
  * containers with a header strip, so the hierarchy reads; the third level is drawn as
  * blocks, and a double-click opens any of them. Siblings too small for a legible block are
- * merged into one "N smaller items" group, so the map never dissolves into confetti.
+ * merged into one "N smaller items" group, so the map never dissolves into confetti. A
+ * package, such as an app, is one block at any level, as Finder shows it as one item.
  */
 
 import { type HierarchyRectangularNode, treemapSquarify } from "d3-hierarchy";
@@ -19,6 +20,7 @@ import {
   type Category,
   categoryForName,
   formatBytes,
+  isPackageName,
 } from "./format.ts";
 import type {
   AggregateNode,
@@ -60,6 +62,36 @@ export const MIN_TILE = 8;
  */
 const HEADER_BY_DEPTH: readonly number[] = [0, 18, 16];
 
+/**
+ * The icon at the start of a header strip, by depth: 14 px on a depth-1 folder's 18 px strip and 12 px on a depth-2
+ * folder's 16 px one, the largest that fit inside the folder's 1 px outline with a pixel and a half above and below.
+ */
+const HEADER_ICON_BY_DEPTH: readonly number[] = [0, 14, 12];
+
+/**
+ * A block's mark, an icon or a file's glyph, at the start of its label line: 14 px, on a block painted at least
+ * 48 by 20 px, the spec's "about 48 by 20". That height holds the mark with 3 px above and below, as the 13 px label
+ * line keeps 3 px of padding. That width holds the label's padding on both sides, the mark and its gap, and three
+ * characters, so on a block that narrow the mark alone says what it is, unless its name is that short.
+ */
+const BLOCK_MARK = { size: 14, width: 48, height: 20 } as const;
+
+/** The room between a mark and the label after it. */
+const MARK_GAP = 4;
+
+/**
+ * What a host draws at the start of labels, which the layout keeps room for. `icons`: macOS's own, on depth-1 and
+ * depth-2 header strips and on package, volume and folder blocks with room, as Pith's page draws them. `glyphs`: each
+ * file block's kind as a glyph, the cue that doesn't need colour, which Pith's page draws while Differentiate Without
+ * Color is on. The browser app draws neither.
+ */
+export interface LabelMarks {
+  readonly icons: boolean;
+  readonly glyphs: boolean;
+}
+
+const NO_MARKS: LabelMarks = { icons: false, glyphs: false };
+
 /** A container's 1 px outline, inside which its contents keep their own gap. */
 const OUTLINE = 1;
 
@@ -73,6 +105,11 @@ interface Box {
 interface TileBase extends Box {
   /** 1 for the current folder's own items. */
   readonly depth: number;
+  /**
+   * The side, in CSS pixels, of the square kept at the start of its label line for its mark: its icon, or a file's
+   * glyph. Its label starts after it, whether or not the mark has come. None when it has no mark.
+   */
+  readonly slot?: number;
 }
 
 /** A folder drawn as a container: a header strip with its name, then its contents. */
@@ -86,6 +123,17 @@ export interface FolderTile extends TileBase {
 /** A folder drawn as one block, coloured by the kind it holds most of. */
 export interface CollapsedTile extends TileBase {
   readonly kind: "collapsed";
+  readonly node: DirNode;
+  readonly category: Category;
+}
+
+/**
+ * A package, such as an app or a Photos library: a folder Finder shows as one item, drawn as one block at any level
+ * and opened with a double-click like a folder. It's drawn as a folder block is, in the kind its name has in the kind
+ * table, as an app's is Apps & binaries, or else the kind it holds most of.
+ */
+export interface PackageTile extends TileBase {
+  readonly kind: "package";
   readonly node: DirNode;
   readonly category: Category;
 }
@@ -117,6 +165,7 @@ export interface GroupTile extends TileBase {
 export type Tile =
   | FolderTile
   | CollapsedTile
+  | PackageTile
   | FileTile
   | VolumeTile
   | GroupTile;
@@ -217,6 +266,7 @@ function layoutItems(
   depth: number,
   kinds: ReadonlyMap<DirNode, KindBytes>,
   order: SiblingOrder | undefined,
+  marks: LabelMarks,
 ): Tile[] {
   const items = folder.children
     .filter((child) => child.size > 0)
@@ -243,7 +293,7 @@ function layoutItems(
   }
 
   const tiles: Tile[] = shown.map((item, i) =>
-    tileFor(item, boxes[i], depth, kinds, order),
+    tileFor(item, boxes[i], depth, kinds, order, marks),
   );
   const drawn = new Set<TreeNode>(shown);
   const rest = items.filter((item) => !drawn.has(item));
@@ -252,7 +302,7 @@ function layoutItems(
     const real = rest.filter(isItem);
     tiles.push(
       rest.length === 1 && real.length === 1
-        ? tileFor(real[0], restBox, depth, kinds, order)
+        ? tileFor(real[0], restBox, depth, kinds, order, marks)
         : {
             kind: "group",
             parent: folder,
@@ -267,12 +317,35 @@ function layoutItems(
   return tiles.filter((tile) => !isEmpty(tile));
 }
 
+/** A block's mark, when the host draws it and the block's painted box has room for one, as `BLOCK_MARK` measures. */
+const blockMark = (box: Box, drawn: boolean): { slot?: number } =>
+  drawn &&
+  box.x1 - box.x0 - GAP >= BLOCK_MARK.width &&
+  box.y1 - box.y0 - GAP >= BLOCK_MARK.height
+    ? { slot: BLOCK_MARK.size }
+    : {};
+
+/** What `folder` holds, by kind. */
+function kindsOf(
+  folder: DirNode,
+  kinds: ReadonlyMap<DirNode, KindBytes>,
+): KindBytes {
+  const bytes = kinds.get(folder);
+  if (!bytes) {
+    throw new Error(
+      `The kind totals don't cover ${folder.path}; build them with kindBytesByFolder from the map's own folder.`,
+    );
+  }
+  return bytes;
+}
+
 function tileFor(
   item: Item,
   box: Box,
   depth: number,
   kinds: ReadonlyMap<DirNode, KindBytes>,
   order: SiblingOrder | undefined,
+  marks: LabelMarks,
 ): Tile {
   if (item.kind === "file") {
     return {
@@ -281,10 +354,30 @@ function tileFor(
       category: categoryForName(item.name),
       depth,
       ...box,
+      ...blockMark(box, marks.glyphs),
     };
   }
   if (item.kind === "volume")
-    return { kind: "volume", node: item, depth, ...box };
+    return {
+      kind: "volume",
+      node: item,
+      depth,
+      ...box,
+      ...blockMark(box, marks.icons),
+    };
+  if (isPackageName(item.name)) {
+    // One thing, as Finder shows it, so its contents wait until it's opened.
+    const named = categoryForName(item.name);
+    return {
+      kind: "package",
+      node: item,
+      category:
+        named === "other" ? dominantCategory(kindsOf(item, kinds)) : named,
+      depth,
+      ...box,
+      ...blockMark(box, marks.icons),
+    };
+  }
   const header = HEADER_BY_DEPTH[depth] ?? 0;
   const content = {
     x0: box.x0 + OUTLINE + GAP,
@@ -298,30 +391,34 @@ function tileFor(
     content.x1 - content.x0 >= 2 * MIN_TILE &&
     content.y1 - content.y0 >= 2 * MIN_TILE;
   if (header > 0 && roomy) {
-    const children = layoutItems(item, content, depth + 1, kinds, order);
+    const children = layoutItems(item, content, depth + 1, kinds, order, marks);
     if (children.length > 0) {
-      return { kind: "folder", node: item, header, children, depth, ...box };
+      return {
+        kind: "folder",
+        node: item,
+        header,
+        children,
+        depth,
+        ...box,
+        ...(marks.icons ? { slot: HEADER_ICON_BY_DEPTH[depth] } : {}),
+      };
     }
-  }
-  const bytes = kinds.get(item);
-  if (!bytes) {
-    throw new Error(
-      `The kind totals don't cover ${item.path}; build them with kindBytesByFolder from the map's own folder.`,
-    );
   }
   return {
     kind: "collapsed",
     node: item,
-    category: dominantCategory(bytes),
+    category: dominantCategory(kindsOf(item, kinds)),
     depth,
     ...box,
+    ...blockMark(box, marks.icons),
   };
 }
 
 /**
  * Lay out `root`'s contents to fill `width` × `height` CSS pixels. Given `order`, the places the shown layout of the
  * same folder gave its items, a newer map keeps them there unless the change in size is visible (`keepPlaces`), so
- * squarify's rows don't flip over a few bytes. Without it, items go largest first.
+ * squarify's rows don't flip over a few bytes. Without it, items go largest first. Tiles keep room at the start of
+ * their labels for the `marks` the host draws.
  */
 export function layoutTreemap(
   root: DirNode,
@@ -329,13 +426,14 @@ export function layoutTreemap(
   height: number,
   kinds: ReadonlyMap<DirNode, KindBytes>,
   order?: SiblingOrder,
+  marks: LabelMarks = NO_MARKS,
 ): TreemapLayout {
   const box = { x0: 0, y0: 0, x1: Math.floor(width), y1: Math.floor(height) };
   return {
     root,
     width,
     height,
-    tiles: layoutItems(root, box, 1, kinds, order),
+    tiles: layoutItems(root, box, 1, kinds, order, marks),
   };
 }
 
@@ -397,11 +495,12 @@ function keepPlaces(
 
 /**
  * Whether `next` draws just what `shown` does, so the page can keep `shown` and draw nothing: the same folder at the
- * same size, and every tile, header strip and label in the same box, of the same kind and colour, with the same name
- * and the same size to print. Boxes are whole CSS pixels and the two draw at the same pixel ratio, so the same box
- * covers the same device pixels. Sizes count as they print whether or not a label has room for one, and so does a
- * folder's count of folders inside it that couldn't be read, so the hover card of a layout kept never shows a size or
- * a count the map has moved past.
+ * same size, and every tile, header strip and label in the same box, of the same kind and colour, with the same name,
+ * the same size to print and the same room for a mark. Boxes are whole CSS pixels and the two draw at the same pixel
+ * ratio, so the same box covers the same device pixels. Sizes count as they print whether or not a label has room for
+ * one, and so does a folder's count of folders inside it that couldn't be read, so the hover card of a layout kept
+ * never shows a size or a count the map has moved past. An icon arriving changes no layout: the map paints it into
+ * the room its layout kept.
  */
 export function drawsTheSame(
   shown: TreemapLayout,
@@ -423,9 +522,14 @@ function sameTiles(a: readonly Tile[], b: readonly Tile[]): boolean {
 const printSame = (a: number, b: number) =>
   a === b || formatBytes(a) === formatBytes(b);
 
-/** A file's colour comes from its name, a folder block's from what it holds; other kinds have one colour each. */
+/**
+ * A file's colour comes from its name, a folder block's from what it holds, and a package's from either; other kinds
+ * have one colour each.
+ */
 const fillOf = (tile: Tile) =>
-  tile.kind === "file" || tile.kind === "collapsed" ? tile.category : null;
+  tile.kind === "file" || tile.kind === "collapsed" || tile.kind === "package"
+    ? tile.category
+    : null;
 
 /** How many folders inside `folder` the scan couldn't read, which its hover card counts. */
 export const unreadableCount = (folder: DirNode) =>
@@ -434,11 +538,17 @@ export const unreadableCount = (folder: DirNode) =>
     0,
   );
 
+/** Folders, folder blocks and packages: what a double-click opens, and what a card counts unreadable folders inside. */
+const isFolderLike = (
+  tile: Tile,
+): tile is FolderTile | CollapsedTile | PackageTile =>
+  tile.kind === "folder" ||
+  tile.kind === "collapsed" ||
+  tile.kind === "package";
+
 /** The folders a folder's card counts as unreadable; null for other tiles, whose cards count none. */
 const unreadableOf = (tile: Tile) =>
-  tile.kind === "folder" || tile.kind === "collapsed"
-    ? unreadableCount(tile.node)
-    : null;
+  isFolderLike(tile) ? unreadableCount(tile.node) : null;
 
 function sameTile(a: Tile, b: Tile): boolean {
   const named =
@@ -451,6 +561,7 @@ function sameTile(a: Tile, b: Tile): boolean {
     a.y0 === b.y0 &&
     a.x1 === b.x1 &&
     a.y1 === b.y1 &&
+    a.slot === b.slot &&
     named &&
     fillOf(a) === fillOf(b) &&
     printSame(tileSize(a), tileSize(b)) &&
@@ -486,7 +597,7 @@ export function tileAt(
 }
 
 /**
- * The folder a double-click at a point opens: the folder block or header under it, or the
+ * The folder a double-click at a point opens: the folder block, package or header under it, or the
  * folder holding the block under it. Null for the map's own items, whose folder is open.
  */
 export function folderToOpenAt(
@@ -494,10 +605,7 @@ export function folderToOpenAt(
   x: number,
   y: number,
 ): DirNode | null {
-  const folders = tilesAt(layout, x, y).filter(
-    (tile) => tile.kind === "folder" || tile.kind === "collapsed",
-  );
-  return folders.at(-1)?.node ?? null;
+  return tilesAt(layout, x, y).filter(isFolderLike).at(-1)?.node ?? null;
 }
 
 /**
@@ -539,10 +647,15 @@ export function groupName(tile: GroupTile): string {
   return tile.count > 0 ? `${groupCount(tile)} smaller items` : "Smaller items";
 }
 
-/** The name a block stands for. Folders end in "/" so they read as folders without colour. */
+/**
+ * The name a block stands for. Folders end in "/" so they read as folders without colour; a package is one thing, as
+ * a file is, so it doesn't.
+ */
 export function tileName(tile: Tile): string {
   if (tile.kind === "group") return groupName(tile);
-  return tile.kind === "file" || tile.kind === "volume"
+  return tile.kind === "file" ||
+    tile.kind === "volume" ||
+    tile.kind === "package"
     ? tile.node.name
     : `${tile.node.name}/`;
 }
@@ -568,8 +681,8 @@ const MIN_KEPT = 4;
 
 /**
  * A tile's name in at most `maxChars`, or null when cutting it would leave it unrecognisable.
- * Files are cut in the middle so the extension stays; folders keep their start, which tells
- * them apart; groups shorten to "253+ items" instead.
+ * Files are cut in the middle so the extension stays; folders and packages keep their start,
+ * which tells them apart, as a package's icon tells its kind; groups shorten to "253+ items" instead.
  */
 function fitName(tile: Tile, maxChars: number): string | null {
   if (tile.kind === "group") {
@@ -585,7 +698,7 @@ function fitName(tile: Tile, maxChars: number): string | null {
       ? middleTruncate(tile.node.name, maxChars)
       : null;
   }
-  // A folder header is a folder by its place; a folder block says so with "/".
+  // A folder header is a folder by its place; a folder block says so with "/". A package is one thing.
   const slash = tile.kind === "collapsed" ? "/" : "";
   const room = maxChars - slash.length;
   if (graphemeLength(tile.node.name) <= room) return tile.node.name + slash;
@@ -605,29 +718,37 @@ function oneLine(tile: Tile, size: string, maxChars: number) {
 const innerWidth = (tile: Tile, metrics: LabelMetrics) =>
   tile.x1 - tile.x0 - GAP - 2 * metrics.padX;
 
+/** How far a tile's first label line starts after its padding: past its mark and the gap after it, if it has one. */
+export const markRoom = (tile: Tile) => (tile.slot ? tile.slot + MARK_GAP : 0);
+
 /** What fits inside a block, or null when nothing legible does. */
 export function tileLabel(
   tile: Exclude<Tile, FolderTile>,
   metrics: LabelMetrics,
 ): TileLabel | null {
-  const maxChars = Math.floor(innerWidth(tile, metrics) / metrics.charWidth);
+  const width = innerWidth(tile, metrics);
+  const maxChars = Math.floor(width / metrics.charWidth);
+  // The first line starts after the block's mark; the second runs below it, across the block.
+  const firstChars = Math.floor((width - markRoom(tile)) / metrics.charWidth);
   const height = tile.y1 - tile.y0 - GAP - 2 * metrics.padY;
   if (height < metrics.lineHeight) return null;
   const size = formatBytes(tileSize(tile));
   if (height >= 2 * metrics.lineHeight) {
-    const name = fitName(tile, maxChars);
+    const name = fitName(tile, firstChars);
     if (name === null) return null;
     return { name, size: size.length <= maxChars ? size : null, lines: 2 };
   }
-  const line = oneLine(tile, size, maxChars);
+  const line = oneLine(tile, size, firstChars);
   return line && { ...line, lines: 1 };
 }
 
-/** What fits in a folder's header strip, or null. */
+/** What fits in a folder's header strip after its icon, or null. */
 export function headerLabel(
   tile: FolderTile,
   metrics: LabelMetrics,
 ): { name: string; size: string | null } | null {
-  const maxChars = Math.floor(innerWidth(tile, metrics) / metrics.charWidth);
+  const maxChars = Math.floor(
+    (innerWidth(tile, metrics) - markRoom(tile)) / metrics.charWidth,
+  );
   return oneLine(tile, formatBytes(tile.node.size), maxChars);
 }

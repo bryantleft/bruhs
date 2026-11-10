@@ -5,6 +5,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import type { MapIcons } from "../src/components/map-marks";
 import { useDevicePixelRatio } from "../src/components/treemap-canvas";
 import {
   type IconItem,
@@ -82,12 +83,17 @@ export function MapIcon({
   return <img src={url} alt="" draggable={false} className={box} />;
 }
 
-/** The URLs of macOS's icons for the page, at its own pixel ratio. */
+/** The URLs of macOS's icons for the page, at its own pixel ratio, and the map's own icons. */
 export interface PageIcons {
   /** The URL of `item`'s icon, by Pith's rule. */
   item(item: IconItem): string;
   /** The URL of the icon `key` names, such as an app's or the smaller items'. */
   key(key: string): string;
+  /**
+   * The icons the map's canvas draws on its strips and blocks, from the page's cache: each block's by Pith's rule, at
+   * the size and pixel ratio the canvas asks for. The smaller items have none on the map.
+   */
+  map: MapIcons;
 }
 
 /**
@@ -132,6 +138,20 @@ export function usePageIcons(): PageIcons | null {
         item: (item: IconItem) =>
           iconURL(sent.base, ICON_POINTS, scale, iconKey(item, sent.rule)),
         key: (key: string) => iconURL(sent.base, ICON_POINTS, scale, key),
+        map: {
+          url: (tile, points, ratio) =>
+            tile.kind === "group"
+              ? null
+              : iconURL(
+                  sent.base,
+                  points,
+                  iconScale(ratio),
+                  iconKey(tile.node, sent.rule),
+                ),
+          image: (url) => pageIcons.image(url),
+          request: (url) => pageIcons.request(url),
+          subscribe: pageIcons.subscribe,
+        },
       },
     [sent, scale],
   );

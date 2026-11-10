@@ -1,5 +1,7 @@
 /** Human-readable sizes and file-type → fruit-color categorization. */
 
+import packages from "./packages.json" with { type: "json" };
+
 const UNITS = ["B", "KB", "MB", "GB", "TB", "PB"];
 
 /**
@@ -193,9 +195,29 @@ export const CATEGORY_LABEL: Record<Category, string> = {
   other: "Other",
 };
 
-export function categoryForName(name: string): Category {
+/** What follows a name's last dot, lowercased; none when the name has no dot but its first, as a hidden folder's. */
+function extensionOf(name: string): string | null {
   const dot = name.lastIndexOf(".");
-  if (dot <= 0) return "other";
-  const ext = name.slice(dot + 1).toLowerCase();
+  return dot <= 0 ? null : name.slice(dot + 1).toLowerCase();
+}
+
+export function categoryForName(name: string): Category {
+  const ext = extensionOf(name);
+  if (ext === null) return "other";
   return EXT_CATEGORY[ext] ?? "other";
+}
+
+/** The extensions of src/lib/packages.json, lowercased, since macOS reads an extension in any case. */
+const PACKAGE_EXTENSIONS: ReadonlySet<string> = new Set(
+  packages.extensions.map((extension) => extension.toLowerCase()),
+);
+
+/**
+ * Whether a folder named `name` is a package, which Finder shows as one item, such as an app, a Photos library or an
+ * Xcode archive: its extension is one macOS declares as a package type. The list is src/lib/packages.json, which
+ * PackageExtensionsTests.swift checks against the types macOS declares.
+ */
+export function isPackageName(name: string): boolean {
+  const ext = extensionOf(name);
+  return ext !== null && PACKAGE_EXTENSIONS.has(ext);
 }

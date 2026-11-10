@@ -102,6 +102,8 @@ declare global {
     pithReceiveGrowth: (growth: GrowthMessage | null) => void;
     /** How long macOS waits for a second click to make a double-click, in seconds. */
     pithReceiveDoubleClickInterval: (seconds: number) => void;
+    /** Whether macOS's Differentiate Without Color is on. */
+    pithReceiveDifferentiateWithoutColor: (on: boolean) => void;
     /**
      * Pith's path bar and Go menu: open a folder of the map, go back or forward through the folders opened, or up
      * to the open folder's enclosing folder.
@@ -143,6 +145,23 @@ function useDoubleClickInterval(): number {
   return doubleClick;
 }
 
+/**
+ * Whether macOS's Differentiate Without Color is on: then the map's file blocks and By kind show each kind's glyph,
+ * the cue that doesn't need colour. A web page can't read the setting, so Pith sends it once the page is ready and
+ * again whenever it changes; until then, off.
+ */
+function useDifferentiateWithoutColor(): boolean {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    window.pithReceiveDifferentiateWithoutColor = (value) =>
+      setOn(value === true);
+    return () => {
+      window.pithReceiveDifferentiateWithoutColor = () => {};
+    };
+  }, []);
+  return on;
+}
+
 function DiskMap() {
   const [result, setResult] = useState<ResultEvent | null>(null);
   // Whether the map answers the person's own action, which the map shows at once, however still it holds.
@@ -158,6 +177,7 @@ function DiskMap() {
   const icons = usePageIcons();
   // Taken before the page says it's ready, as the icons are.
   const doubleClickInterval = useDoubleClickInterval();
+  const glyphs = useDifferentiateWithoutColor();
   // The folder of the last map, kept across an empty payload: a map of another folder stops highlighting.
   const mapRoot = useRef<string | null>(null);
 
@@ -381,6 +401,8 @@ function DiskMap() {
             onTrash={trash}
             growth={growth?.changes}
             growthSince={growth?.since}
+            mapIcons={icons?.map}
+            kindGlyphs={glyphs}
             icon={
               icons
                 ? (tile) => (
@@ -401,6 +423,7 @@ function DiskMap() {
           {kindBytes && (
             <KindLegend
               bytes={kindBytes}
+              glyphs={glyphs}
               active={shownKind}
               onToggle={(kind) =>
                 setHighlight(kind === shownKind ? null : kind)

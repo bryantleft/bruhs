@@ -568,6 +568,7 @@ struct DiskWebView: NSViewRepresentable {
         }
         view.underPageBackgroundColor = .clear
         context.coordinator.web = view
+        context.coordinator.followDisplayOptions()
         model.pageCommand = { [weak coordinator = context.coordinator] command in coordinator?.run(command) }
         created(view)
         view.pageZoom = textScale
@@ -581,11 +582,13 @@ struct DiskWebView: NSViewRepresentable {
         context.coordinator.iconAppearance = IconAppearance(colorScheme)
         context.coordinator.iconRule = model.iconRule
         context.coordinator.doubleClickInterval = NSEvent.doubleClickInterval
+        context.coordinator.differentiatesWithoutColor = NSWorkspace.shared.accessibilityDisplayShouldDifferentiateWithoutColor
         context.coordinator.send(revision: model.revision)
     }
     static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) {
         view.stopLoading(); view.navigationDelegate = nil
         view.configuration.userContentController.removeScriptMessageHandler(forName: "pith")
+        coordinator.stopFollowingDisplayOptions()
         coordinator.web = nil
         coordinator.model.pageCommand = nil
     }
@@ -631,7 +634,28 @@ struct DiskWebView: NSViewRepresentable {
         var doubleClickInterval: TimeInterval? {
             didSet { if doubleClickInterval != oldValue { sendDoubleClickInterval() } }
         }
+        /// Whether macOS's Differentiate Without Color is on, which the page answers with each file kind's glyph on the
+        /// map and in By kind, a cue that doesn't need colour. A web page can't read it, so it goes to the page once it's
+        /// ready and whenever it changes.
+        var differentiatesWithoutColor: Bool? {
+            didSet { if differentiatesWithoutColor != oldValue { sendDifferentiateWithoutColor() } }
+        }
+        /// macOS posts display option changes, Differentiate Without Color's among them, without SwiftUI drawing the view
+        /// again, so the coordinator listens for them while the page is there.
+        private var displayOptions: NSObjectProtocol?
         init(model: DiskModel) { self.model = model }
+
+        func followDisplayOptions() {
+            guard displayOptions == nil else { return }
+            displayOptions = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.differentiatesWithoutColor = NSWorkspace.shared.accessibilityDisplayShouldDifferentiateWithoutColor }
+            }
+        }
+        func stopFollowingDisplayOptions() {
+            if let displayOptions { NSWorkspace.shared.notificationCenter.removeObserver(displayOptions) }
+            displayOptions = nil
+        }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard BridgePolicy.allows(url: message.frameInfo.request.url, mainFrame: message.frameInfo.isMainFrame),
                   let body = message.body as? [String: Any], let action = body["action"] as? String else { return }
@@ -641,6 +665,7 @@ struct DiskWebView: NSViewRepresentable {
                 // Every page load starts empty, a reload or a restart after a crash included, so it gets the icons' base
                 // and rule and then the scan again, and the native selection and history it no longer has are dropped.
                 ready = true; revision = nil; model.select(nil); model.mapStartsOver(); sendIcons(); sendDoubleClickInterval()
+                sendDifferentiateWithoutColor()
                 send(revision: model.revision)
             case "select": model.select(path)
             case "location":
@@ -753,6 +778,13 @@ struct DiskWebView: NSViewRepresentable {
             guard ready, let web, let doubleClickInterval else { return }
             web.callAsyncJavaScript("window.pithReceiveDoubleClickInterval?.(seconds)", arguments: ["seconds": doubleClickInterval], in: nil, in: .page) { result in
                 if case .failure(let error) = result { NSLog("Pith: the disk map didn’t take macOS’s double-click interval: \(error.localizedDescription)") }
+            }
+        }
+        /// Gives the page Differentiate Without Color once it's ready for it, and again when it changes.
+        private func sendDifferentiateWithoutColor() {
+            guard ready, let web, let differentiatesWithoutColor else { return }
+            web.callAsyncJavaScript("window.pithReceiveDifferentiateWithoutColor?.(on)", arguments: ["on": differentiatesWithoutColor], in: nil, in: .page) { result in
+                if case .failure(let error) = result { NSLog("Pith: the disk map didn’t take Differentiate Without Color: \(error.localizedDescription)") }
             }
         }
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {

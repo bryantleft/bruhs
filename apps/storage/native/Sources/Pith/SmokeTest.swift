@@ -122,6 +122,7 @@ extension AppDelegate {
             checks.merge(try await inspectDisk(), uniquingKeysWith: { _, new in new })
             // Before the icon route's check, which stops every load the page has going.
             checks.merge(await checkListIcons(), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkMapMarks(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkSideLists(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkIconsReachEveryPage(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkIconRoute(fixture), uniquingKeysWith: { _, new in new })
@@ -276,6 +277,70 @@ extension AppDelegate {
     private static let cardIcon = """
         const icon = document.querySelector(".tooltip img");
         return icon !== null && icon.complete && icon.naturalWidth > 0 && icon.alt === "" ? icon.src : null;
+        """
+
+    /// The map draws macOS's icons on itself and, with Differentiate Without Color on, each file kind's glyph. The
+    /// fixture's sub folder shows its icon at the start of its label line, in the room the map keeps for it, drawn on
+    /// the canvas from Pith's route. The setting reaches the page as the coordinator learns it: turned the other way
+    /// from this Mac's, By kind shows its glyphs, or stops, and the map draws again; then macOS's notice that display
+    /// options changed, posted in Pith alone, makes the coordinator read this Mac's setting again, and the page follows
+    /// it back. No system setting changes.
+    private func checkMapMarks() async -> [String: Bool] {
+        let names = ["map_shows_icons", "kind_glyphs_follow_differentiate_without_color"]
+        guard let web = webView, let coordinator = web.navigationDelegate as? DiskWebView.Coordinator else {
+            return Dictionary(uniqueKeysWithValues: names.map { ($0, false) })
+        }
+        let painted = try? await web.callAsyncJavaScript(Self.mapIcon, arguments: ["name": "sub"], in: nil, contentWorld: .page) as? Double
+
+        let system = NSWorkspace.shared.accessibilityDisplayShouldDifferentiateWithoutColor
+        defer { coordinator.differentiatesWithoutColor = NSWorkspace.shared.accessibilityDisplayShouldDifferentiateWithoutColor }
+        let before = await pageAnswer(web, Self.mapMarks) { (marks: [String: Int]?) in marks != nil }
+        coordinator.differentiatesWithoutColor = !system
+        let turned = await pageAnswer(web, Self.mapMarks) { (marks: [String: Int]?) in
+            ((marks?["glyphs"] ?? 0) > 0) == !system && marks?["print"] != nil && marks?["print"] != before?["print"]
+        }
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: NSWorkspace.shared)
+        let back = await pageAnswer(web, Self.mapMarks) { (marks: [String: Int]?) in
+            ((marks?["glyphs"] ?? 0) > 0) == system && marks?["print"] != nil && marks?["print"] != turned?["print"]
+        }
+        let followed = before != nil && ((turned?["glyphs"] ?? 0) > 0) == !system && turned?["print"] != before?["print"]
+            && ((back?["glyphs"] ?? 0) > 0) == system && back?["print"] != turned?["print"] && coordinator.differentiatesWithoutColor == system
+        print("map icons: sub's icon painted \(painted.map { "\(Int($0 * 100))%" } ?? "nothing") of its slot; Differentiate Without Color \(system ? "on" : "off") here, "
+              + "By kind's glyphs \(before?["glyphs"] ?? -1), turned \(turned?["glyphs"] ?? -1), back \(back?["glyphs"] ?? -1), and the map drew again \(followed)")
+        return [names[0]: (painted ?? 0) >= 0.25, names[1]: followed]
+    }
+
+    /// How much of the 14 px square at the start of the label line of the open folder's item `name` its icon covers:
+    /// the share of the canvas's own pixels there unlike the map's ground beside it, once that's a quarter or 3 s have
+    /// passed. The item is found by selecting it in the map's list of items, and the selection is cleared after.
+    private static let mapIcon = mapScript("""
+        const box = await boxOf(name);
+        if (!box) return null;
+        const frame = canvas.getBoundingClientRect(), scale = canvas.width / frame.width;
+        const context = canvas.getContext("2d");
+        const read = (x, y, size) => context.getImageData(Math.round((box.left - frame.left + x) * scale),
+          Math.round((box.top - frame.top + y) * scale), Math.max(1, Math.round(size * scale)), Math.max(1, Math.round(size * scale))).data;
+        const covered = () => {
+          const slot = read(4, 3, 14), ground = read(2, 10, 1);
+          let unlike = 0;
+          for (let i = 0; i < slot.length; i += 4) {
+            if ([0, 1, 2, 3].some((channel) => Math.abs(slot[i + channel] - ground[channel]) > 24)) unlike += 1;
+          }
+          return unlike / (slot.length / 4);
+        };
+        await until(() => covered() >= 0.25);
+        const share = covered();
+        canvas.parentElement.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+        return share;
+        """)
+
+    /// How many glyphs By kind shows, and a print of the map's pixels, which changes whenever the map draws anything else.
+    private static let mapMarks = """
+        const canvas = document.querySelector("canvas");
+        const pixels = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+        let print = 0;
+        for (let i = 0; i < pixels.length; i += 4) print = (print * 31 + pixels[i] + 3 * pixels[i + 1] + 7 * pixels[i + 2] + 11 * pixels[i + 3]) | 0;
+        return { glyphs: document.querySelectorAll('[aria-labelledby="kinds-heading"] svg').length, print };
         """
 
     /// Grew since, Wrote the most since and Couldn't read lead with their items' icons too. A folder of the fixture that
@@ -705,8 +770,8 @@ extension AppDelegate {
     /// - `pause(ms)`, and `until(done, ms)`, which waits up to `ms` (3 s unless given) for `done()` and says if it came.
     /// - `draws`, each time the map drew while the script ran, with the time and what the canvas said it showed.
     /// - `mouse(type, at, detail)`, `click(at, detail)`, and `leave()`, which moves the pointer off the map.
-    /// - `blockOf(name)`, the middle of the block of the open folder's item `name`, found by selecting the item in the
-    ///   map's list of items and reading the ring that outlines it, or null.
+    /// - `boxOf(name)`, the painted box of the open folder's item `name` in the page, found by selecting the item in the
+    ///   map's list of items and reading the ring that outlines it, or null; `blockOf(name)`, that box's middle.
     /// - `card()`, what the hover card says, or nothing when it's closed.
     private static func mapScript(_ body: String) -> String {
         """
@@ -727,12 +792,15 @@ extension AppDelegate {
           clientX: at.x, clientY: at.y, button: 0, buttons: type === "mousedown" ? 1 : 0, detail }));
         const click = (at, detail) => { mouse("mousedown", at, detail); mouse("mouseup", at, detail); mouse("click", at, detail); };
         const leave = () => canvas.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body }));
-        const blockOf = async (name) => {
+        const boxOf = async (name) => {
           const ring = () => canvas.parentElement.querySelector("div.pointer-events-none.absolute");
           [...document.querySelectorAll('[aria-label^="Items in"] button')].find((button) => button.textContent.startsWith(name + " "))?.click();
           if (!(await until(() => ring() !== null))) return null;
-          const box = ring().getBoundingClientRect();
-          return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+          return ring().getBoundingClientRect();
+        };
+        const blockOf = async (name) => {
+          const box = await boxOf(name);
+          return box && { x: box.left + box.width / 2, y: box.top + box.height / 2 };
         };
         const card = () => canvas.parentElement.querySelector(".tooltip")?.textContent ?? "";
         try {

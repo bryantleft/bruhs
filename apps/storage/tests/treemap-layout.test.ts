@@ -5,19 +5,23 @@ import {
   dominantCategory,
   drawsTheSame,
   type FileTile,
+  type FolderTile,
   folderToOpenAt,
   GAP,
   groupName,
   headerLabel,
   kindBytesByFolder,
+  type LabelMarks,
   layoutTreemap,
   MIN_TILE,
+  type PackageTile,
   siblingOrder,
   type Tile,
   type TreemapLayout,
   tileAt,
   tileForPath,
   tileLabel,
+  tileName,
 } from "../src/lib/treemap-layout.ts";
 import type {
   AggregateNode,
@@ -25,6 +29,7 @@ import type {
   FileNode,
   TreeNode,
   UnreadableNode,
+  VolumeNode,
 } from "../src/lib/types.ts";
 
 const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1);
@@ -681,6 +686,294 @@ describe("drawsTheSame", () => {
       drawsTheSame(
         layout(dir("/r", [big, ...tiny]), 400, 300),
         layout(dir("/r", [big, ...tiny, file("/r/dot.txt", 1)]), 400, 300),
+      ),
+      false,
+    );
+  });
+});
+
+/** `root` laid out for a host that draws `marks` at the start of labels: macOS's icons, and kinds' glyphs. */
+function marked(
+  root: DirNode,
+  width: number,
+  height: number,
+  marks: Partial<LabelMarks>,
+) {
+  return layoutTreemap(
+    root,
+    width,
+    height,
+    kindBytesByFolder(root),
+    undefined,
+    {
+      icons: false,
+      glyphs: false,
+      ...marks,
+    },
+  );
+}
+
+describe("packages", () => {
+  const xcode = dir("/r/Xcode.app", [
+    dir("/r/Xcode.app/Contents", [
+      file("/r/Xcode.app/Contents/Assets.car", 6000),
+      file("/r/Xcode.app/Contents/Xcode.icns", 3000),
+    ]),
+  ]);
+  const shots = dir("/r/shots", [
+    file("/r/shots/a.png", 4500),
+    file("/r/shots/b.png", 4500),
+  ]);
+  const map = layout(dir("/r", [xcode, shots]), 600, 400);
+
+  test("draws a package as one block, where a folder of the same size holds its contents", () => {
+    const app = only(map, "package", "/r/Xcode.app");
+    assert.equal(app.node, xcode);
+    assert.equal(app.depth, 1);
+    assert.equal("children" in app, false);
+    assert.equal(only(map, "folder", "/r/shots").children.length, 2);
+  });
+
+  test("colours an app as Apps & binaries, and another package by its kind or what it holds most of", () => {
+    const root = dir("/r", [
+      // An app holds images, Info.plist and its executable, but it's an app.
+      dir("/r/Pictures.app", [
+        file("/r/Pictures.app/a.png", 9000),
+        file("/r/Pictures.app/tool", 1000),
+      ]),
+      dir("/r/Photos Library.photoslibrary", [
+        dir("/r/Photos Library.photoslibrary/originals", [
+          file("/r/Photos Library.photoslibrary/originals/IMG_1.heic", 8000),
+          file("/r/Photos Library.photoslibrary/originals/IMG_2.mov", 2000),
+        ]),
+      ]),
+      // A disk image's bands have no extension, but the kind table names its own.
+      dir("/r/Backup.sparsebundle", [
+        dir("/r/Backup.sparsebundle/bands", [
+          file("/r/Backup.sparsebundle/bands/0", 5000),
+          file("/r/Backup.sparsebundle/bands/1", 5000),
+        ]),
+      ]),
+    ]);
+    const map = layout(root, 600, 400);
+    assert.equal(only(map, "package", "/r/Pictures.app").category, "binary");
+    assert.equal(
+      only(map, "package", "/r/Photos Library.photoslibrary").category,
+      "image",
+    );
+    assert.equal(
+      only(map, "package", "/r/Backup.sparsebundle").category,
+      "archive",
+    );
+  });
+
+  test("opens a package with a double-click, and finds what's inside it at its block", () => {
+    const app = only(map, "package", "/r/Xcode.app");
+    assert.equal(tileAt(map, ...centre(app)), app);
+    assert.equal(folderToOpenAt(map, ...centre(app)), xcode);
+    assert.equal(tileForPath(map, "/r/Xcode.app/Contents/Assets.car"), app);
+    // Inside a folder, a double-click on the package opens the package, not the folder around it.
+    const inside = layout(
+      dir("/r", [dir("/r/Applications", [xcode, shots])]),
+      600,
+      400,
+    );
+    const nested = only(inside, "package", "/r/Xcode.app");
+    assert.equal(nested.depth, 2);
+    assert.equal(folderToOpenAt(inside, ...centre(nested)), xcode);
+  });
+
+  test("lays out a package's contents as a folder's once it's open", () => {
+    const opened = layout(xcode, 600, 400);
+    assert.equal(
+      only(opened, "folder", "/r/Xcode.app/Contents").children.length,
+      2,
+    );
+  });
+
+  test("names a package as one thing, without a folder's slash, and keeps its start when cut", () => {
+    const metrics = { charWidth: 6, lineHeight: 13, padX: 4, padY: 3 };
+    const app = only(map, "package", "/r/Xcode.app");
+    assert.equal(tileName(app), "Xcode.app");
+    assert.equal(tileName(only(map, "folder", "/r/shots")), "shots/");
+    const code: PackageTile = {
+      ...app,
+      node: dir("/r/Visual Studio Code.app", [
+        file("/r/Visual Studio Code.app/Code", 1_288_490_189),
+      ]),
+      x0: 0,
+      y0: 0,
+      x1: 120,
+      y1: 60,
+    };
+    assert.deepEqual(tileLabel(code, metrics), {
+      name: "Visual Studio Cod…",
+      size: "1.29 GB",
+      lines: 2,
+    });
+  });
+});
+
+describe("icon slots", () => {
+  const metrics = { charWidth: 6, lineHeight: 13, padX: 4, padY: 3 };
+  const root = dir("/r", [
+    dir("/r/Applications", [
+      dir("/r/Applications/Utilities", [
+        dir("/r/Applications/Utilities/Terminal.app", [
+          file("/r/Applications/Utilities/Terminal.app/Terminal", 30_000),
+        ]),
+        file("/r/Applications/Utilities/notes.txt", 20_000),
+      ]),
+      file("/r/Applications/clip.mov", 40_000),
+    ]),
+    file("/r/movie.mov", 60_000),
+  ]);
+
+  test("keeps no room for icons or glyphs for a host that draws neither", () => {
+    for (const tile of allTiles(layout(root, 600, 400).tiles)) {
+      assert.equal(tile.slot, undefined, tileName(tile));
+    }
+  });
+
+  test("puts a 14 px icon on a depth-1 header strip and a 12 px one on a depth-2 strip", () => {
+    const map = marked(root, 600, 400, { icons: true });
+    assert.equal(only(map, "folder", "/r/Applications").slot, 14);
+    assert.equal(only(map, "folder", "/r/Applications/Utilities").slot, 12);
+  });
+
+  test("gives package, volume and folder blocks of 48 by 20 px or more a 14 px icon", () => {
+    const preboot: VolumeNode = {
+      kind: "volume",
+      name: "Preboot",
+      path: "/r/Preboot",
+      size: 1000,
+      sharesDisk: true,
+    };
+    const blocks: [TreeNode, Tile["kind"]][] = [
+      [dir("/r/Xcode.app", [file("/r/Xcode.app/Xcode", 1000)]), "package"],
+      [preboot, "volume"],
+      // Too low for a header and its contents, so one block.
+      [dir("/r/shots", [file("/r/shots/a.png", 1000)]), "collapsed"],
+    ];
+    for (const [node, kind] of blocks) {
+      // Alone in the map, the block fills it: its painted box is the map less the gap.
+      const at = (width: number, height: number) =>
+        marked(dir("/r", [node]), width, height, { icons: true }).tiles[0];
+      assert.equal(at(49, 21).kind, kind);
+      assert.equal(at(49, 21).slot, 14, `${kind} painted 48 by 20`);
+      assert.equal(at(48, 21).slot, undefined, `${kind} painted 47 wide`);
+      assert.equal(at(49, 20).slot, undefined, `${kind} painted 19 high`);
+    }
+  });
+
+  test("gives a file block no icon, and with glyphs on, its kind's glyph where an icon would fit", () => {
+    const clip = dir("/r", [file("/r/clip.mov", 1000)]);
+    assert.equal(
+      marked(clip, 49, 21, { icons: true }).tiles[0].slot,
+      undefined,
+    );
+    assert.equal(
+      marked(clip, 49, 21, { icons: true, glyphs: true }).tiles[0].slot,
+      14,
+    );
+    assert.equal(
+      marked(clip, 48, 21, { glyphs: true }).tiles[0].slot,
+      undefined,
+    );
+    // Glyphs alone mark files, never folders.
+    const glyphs = marked(root, 600, 400, { glyphs: true });
+    assert.equal(only(glyphs, "folder", "/r/Applications").slot, undefined);
+    assert.equal(only(glyphs, "file", "/r/movie.mov").slot, 14);
+  });
+
+  test("gives the group of smaller items no mark", () => {
+    // Each too small for a block of its own, together a sixth of the map.
+    const tiny = Array.from({ length: 400 }, (_, i) =>
+      file(`/r/note-${i}.txt`, 500),
+    );
+    const map = marked(
+      dir("/r", [file("/r/big.mov", 1_000_000), ...tiny]),
+      400,
+      300,
+      {
+        icons: true,
+        glyphs: true,
+      },
+    );
+    const group = map.tiles.find((tile) => tile.kind === "group");
+    assert.ok(group);
+    assert.ok(group.x1 - group.x0 > 48 && group.y1 - group.y0 > 20);
+    assert.equal(group.slot, undefined);
+  });
+
+  test("starts a block's label after its mark, so the two never overlap", () => {
+    const app = (x1: number, y1: number, slot?: number): PackageTile => ({
+      kind: "package",
+      node: dir("/r/Visual Studio Code.app", [
+        file("/r/Visual Studio Code.app/Code", 1_288_490_189),
+      ]),
+      category: "binary",
+      depth: 1,
+      x0: 0,
+      y0: 0,
+      x1,
+      y1,
+      ...(slot === undefined ? {} : { slot }),
+    });
+    // 120 px holds 18 characters, or 15 after a 14 px icon and its gap; the size on the second line keeps the width.
+    assert.deepEqual(tileLabel(app(120, 60, 14), metrics), {
+      name: "Visual Studio…",
+      size: "1.29 GB",
+      lines: 2,
+    });
+    // On one line, name and size share what's left after the icon.
+    assert.deepEqual(tileLabel(app(190, 22), metrics), {
+      name: "Visual Studio Code.app",
+      size: "1.29 GB",
+      lines: 1,
+    });
+    assert.deepEqual(tileLabel(app(190, 22, 14), metrics), {
+      name: "Visual Studio Code…",
+      size: "1.29 GB",
+      lines: 1,
+    });
+  });
+
+  test("starts a header's label after its icon", () => {
+    const apps = (slot?: number): FolderTile => ({
+      kind: "folder",
+      node: dir("/r/Applications", [file("/r/Applications/a.mov", 1500)]),
+      header: 18,
+      children: [],
+      depth: 1,
+      x0: 0,
+      y0: 0,
+      x1: 140,
+      y1: 100,
+      ...(slot === undefined ? {} : { slot }),
+    });
+    assert.deepEqual(headerLabel(apps(), metrics), {
+      name: "Applications",
+      size: "1.50 KB",
+    });
+    assert.deepEqual(headerLabel(apps(14), metrics), {
+      name: "Applicati…",
+      size: "1.50 KB",
+    });
+  });
+
+  test("draws differently when a mark's room comes or goes", () => {
+    const plain = layout(root, 600, 400);
+    const icons = marked(root, 600, 400, { icons: true });
+    assert.equal(
+      drawsTheSame(icons, marked(root, 600, 400, { icons: true })),
+      true,
+    );
+    assert.equal(drawsTheSame(plain, icons), false);
+    assert.equal(
+      drawsTheSame(
+        icons,
+        marked(root, 600, 400, { icons: true, glyphs: true }),
       ),
       false,
     );
