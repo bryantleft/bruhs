@@ -55,6 +55,18 @@ public struct DiskNode: Codable, Sendable, Equatable {
         return nil
     }
 
+    /// Whether this tree draws a folder it couldn't read on the way down to `path`, or at `path` itself: the scanner's
+    /// listing of it failed, so the tree holds nothing below it, and Pith can't read there now.
+    public func couldntRead(toward path: String) -> Bool {
+        var node: DiskNode? = self
+        while let at = node {
+            if at.kind == .unreadable { return true }
+            if at.path == path { return false }
+            node = at.children?.first { $0.kind != .aggregate && DiskChanges.isInside(path, $0.path) }
+        }
+        return false
+    }
+
     /// A real file or folder: something to select, reveal and move to the Trash.
     public var isItem: Bool { kind == .dir || kind == .file }
 

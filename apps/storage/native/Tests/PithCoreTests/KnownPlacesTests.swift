@@ -257,6 +257,39 @@ final class KnownPlacesTests: XCTestCase {
         XCTAssertEqual(table.iconKey(for: folder("Projects/New"), asking: false), .item(path("Projects/New")))
     }
 
+    /// A folder the map listed while Pith had access keeps its own icon, by its path, until the scanner lists it again:
+    /// once the person has answered, macOS doesn't ask again. When the scanner's listing of a folder above it fails, as
+    /// after the person withdraws access, the map shows that folder as one it couldn't read, and an item kept from the
+    /// earlier map, as one still selected is, shows a plain folder: Pith no longer looks it up by its path.
+    func testAnItemBelowAFolderTheMapCanNoLongerReadShowsAPlainFolder() {
+        let table = places()
+        func dir(_ relative: String, _ children: [DiskNode] = []) -> DiskNode {
+            DiskNode(kind: .dir, name: (relative as NSString).lastPathComponent, path: path(relative), size: 4096, files: 1, children: children)
+        }
+        func locked(_ relative: String, _ reason: DiskNode.Reason) -> DiskNode {
+            DiskNode(kind: .unreadable, name: (relative as NSString).lastPathComponent, path: path(relative), size: 0, reason: reason, children: nil)
+        }
+        let taxes = dir("Documents/Taxes"), app = dir("Projects/Old/App.app")
+        let file = DiskNode(kind: .file, name: "a.pdf", path: path("Documents/Taxes/a.pdf"), size: 1, children: nil)
+        let earlier = DiskNode(kind: .dir, name: home.lastPathComponent, path: home.path, size: 1, files: 1, children: [
+            dir("Documents", [taxes]), dir("Projects", [dir("Projects/Old", [app])]),
+        ])
+        XCTAssertEqual(table.iconKey(for: taxes, in: earlier, asking: false), .item(taxes.path), "listed while Pith had access")
+        XCTAssertEqual(table.iconKey(for: app, in: earlier, asking: false), .item(app.path))
+        // The scanner listed Documents again and macOS kept it out, and Old's permissions changed.
+        let later = DiskNode(kind: .dir, name: home.lastPathComponent, path: home.path, size: 1, files: 1, children: [
+            locked("Documents", .protected), dir("Projects", [locked("Projects/Old", .denied)]),
+        ])
+        XCTAssertEqual(table.iconKey(for: taxes, in: later, asking: false), .folder, "inside a folder the map can no longer read")
+        XCTAssertEqual(table.iconKey(for: app, in: later, asking: false), .folder, "outside the locations macOS guards too")
+        XCTAssertEqual(table.iconKey(for: file, in: later, asking: false), .type("pdf"), "a file keeps its type's icon")
+        XCTAssertEqual(table.iconKey(for: dir("Documents"), in: later, asking: false), .place("documents"), "a known place keeps its own")
+        XCTAssertEqual(table.iconKey(for: taxes, in: earlier.with(size: 1, files: 1, children: [dir("Documents", [locked("Documents/Taxes", .protected)])]),
+                                     asking: false), .folder, "the map can't read the folder itself now")
+        XCTAssertEqual(table.iconKey(for: taxes, in: nil, asking: false), .item(taxes.path), "no map says otherwise")
+        XCTAssertEqual(table.iconKey(for: taxes, in: earlier, asking: true), .folder, "the rule's own answer otherwise")
+    }
+
     /// The places the disk map's Places section offers are the ones the spec names, in the table's order: Apple's Storage
     /// categories and its checklist's backups, not every folder the table keeps an icon for.
     func testTheSectionOffersThePlacesTheSpecNames() {

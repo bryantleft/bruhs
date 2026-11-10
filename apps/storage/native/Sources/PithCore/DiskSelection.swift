@@ -85,12 +85,7 @@ public struct DiskSelection: Equatable, Sendable {
     /// there could wait on macOS or bring its question, so the item stays selected until the map can read there again.
     public static func mayLook(for path: String, in map: DiskResult?, asking: Bool, isGuarded: (String) -> Bool) -> Bool {
         if asking && isGuarded(path) { return false }
-        var node = map?.root
-        while let at = node, at.path != path {
-            node = at.children?.first { $0.kind != .aggregate && DiskChanges.isInside(path, $0.path) }
-            if node?.kind == .unreadable { return false }
-        }
-        return true
+        return map?.root.couldntRead(toward: path) != true
     }
 
     /// The items of `gone` are no longer on the disk: they leave the selection.

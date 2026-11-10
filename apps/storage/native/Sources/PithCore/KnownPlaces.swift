@@ -206,7 +206,9 @@ public struct KnownPlaces: Sendable {
     /// Such a folder, an empty one, and a folder the map couldn't read show a plain folder, and the map's smaller items
     /// show a group. The Trash shows macOS's empty Trash while it holds nothing, by the scanner's word (`trashIsEmpty`,
     /// from `trashHoldsNothing`), and `item` draws nothing in it; otherwise the full Trash, as when the map couldn't read
-    /// it or hasn't listed it yet, which leaves it looking empty.
+    /// it or hasn't listed it yet, which leaves it looking empty. An item that may come from an earlier map is judged by
+    /// the map as it is now (`iconKey(for:in:asking:trashIsEmpty:)`), which says what the rule does once the person
+    /// withdraws Pith's access.
     public func iconKey(for item: DiskNode, asking: Bool, trashIsEmpty: Bool = false) -> IconKey {
         if let place = place(at: item.path) {
             return .place(place.id == Self.trashID && trashIsEmpty && Self.drawsNothing(item) ? emptyTrash?.id ?? place.id : place.id)
@@ -218,6 +220,22 @@ public struct KnownPlaces: Sendable {
         case .dir, .volume: return .item(item.path)
         case .aggregate: return .group
         }
+    }
+
+    /// The icon key for `item` as `iconKey(for:asking:trashIsEmpty:)` gives it, for an item that may come from an earlier
+    /// map than `map`, the tree the map shows now, as one still selected from that map does. The person can withdraw
+    /// Pith's access to a folder the map listed, by turning off Full Disk Access or a Files and Folders permission, and
+    /// the map shows it listed until the scanner lists it again. A lookup by its path meanwhile brings no question: once
+    /// the person has answered, macOS doesn't ask again, and lets the listing fail instead. It asks again only after the
+    /// person resets Pith's permissions, and then the scanner's next listing there asks the same question, and from the
+    /// moment it's asking, the rule looks nothing up by its path where macOS guards (`asking`). So the rule keeps a
+    /// folder's own icon until the scanner's listing says otherwise, and that listing error is the signal Pith has: a
+    /// folder, package, app or volume `map` shows inside a folder it couldn't read, or couldn't read itself, shows a
+    /// plain folder, never looked up by its path. A file keeps its type's icon and a known place its own.
+    public func iconKey(for item: DiskNode, in map: DiskNode?, asking: Bool, trashIsEmpty: Bool = false) -> IconKey {
+        let key = iconKey(for: item, asking: asking, trashIsEmpty: trashIsEmpty)
+        if case .item = key, map?.couldntRead(toward: item.path) == true { return .folder }
+        return key
     }
 
     /// Whether the map has listed `folder`: it has a size, files or contents. A folder found in its parent's listing
