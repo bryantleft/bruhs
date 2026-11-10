@@ -230,14 +230,21 @@ public struct KnownPlaces: Sendable {
 
     /// The icon key for `item` as `iconKey(for:asking:trashIsEmpty:)` gives it, for an item that may come from an earlier
     /// map than `map`, the tree the map shows now, as one still selected from that map does. The person can withdraw
-    /// Pith's access to a folder the map listed, by turning off Full Disk Access or a Files and Folders permission, and
-    /// the map shows it listed until the scanner lists it again. A lookup by its path meanwhile brings no question: once
-    /// the person has answered, macOS doesn't ask again, and lets the listing fail instead. It asks again only after the
-    /// person resets Pith's permissions, and then the scanner's next listing there asks the same question, and from the
-    /// moment it's asking, the rule looks nothing up by its path where macOS guards (`asking`). So the rule keeps a
-    /// folder's own icon until the scanner's listing says otherwise, and that listing error is the signal Pith has: a
-    /// folder, package, app or volume `map` shows inside a folder it couldn't read, or couldn't read itself, shows a
-    /// plain folder, never looked up by its path. A file keeps its type's icon and a known place its own.
+    /// Pith's access to a folder the map listed, and the map shows it listed until the scanner lists it again.
+    ///
+    /// A Files and Folders permission turned off records the person's answer, so macOS doesn't ask again and lets the
+    /// listing fail, and a lookup by its path meanwhile brings no question. Full Disk Access turned off is another matter:
+    /// it opened Desktop, Documents, Downloads, other apps' data and removable and network volumes without an answer for
+    /// each, so once it's off they have none, and macOS asks at the next access, which a lookup by path could be. Pith
+    /// probes for that loss as it becomes active and with each live map, and from then the locations macOS guards count
+    /// as asking (`asking`, `DiskAccessWatch`) until the scanner has listed them again. A reset of Pith's permissions
+    /// leaves the locations unanswered too; Pith can't tell one from the person's own answers, but the question a lookup
+    /// could bring is the one the scanner's next listing there brings, and from the moment macOS is asking it, the rule
+    /// looks nothing up there.
+    ///
+    /// So the rule keeps a folder's own icon until the scanner's listing says otherwise, and that listing error is the
+    /// signal Pith has: a folder, package, app or volume `map` shows inside a folder it couldn't read, or couldn't read
+    /// itself, shows a plain folder, never looked up by its path. A file keeps its type's icon and a known place its own.
     public func iconKey(for item: DiskNode, in map: DiskNode?, asking: Bool, trashIsEmpty: Bool = false) -> IconKey {
         let key = iconKey(for: item, asking: asking, trashIsEmpty: trashIsEmpty)
         if case .item = key, map?.couldntRead(toward: item.path) == true { return .folder }

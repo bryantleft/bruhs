@@ -455,6 +455,7 @@ enum MapCommand: Equatable {
 
     private func showLive(_ tree: LiveTree, figures: VolumeFigures?) {
         guard tree.map.root.path == liveView else { return }
+        probeDiskAccess()
         // A map from an index that doesn't show the person's changes yet shows them anyway, and is then no longer the
         // scanner's own JSON.
         let edited = liveEdits.apply(to: tree.map, places: tree.places, answer: tree.answer)
@@ -925,11 +926,37 @@ enum MapCommand: Equatable {
     var placesTable: PlacesTable? { sideColumn.placesTable(for: result?.root) }
 
     /// Whether macOS may be holding some of the live map's folders: it's asking about some, or the map is catching up
-    /// after a launch, listing again what changed meanwhile and what was waiting on macOS when it was saved.
+    /// after a launch, listing again what changed meanwhile and what was waiting on macOS when it was saved. Pith having
+    /// lost Full Disk Access since the map's folders were listed counts too, as it leaves the locations macOS guards
+    /// unanswered (`DiskAccessWatch`).
     private var macOSMayHoldFolders: Bool {
+        if diskAccess.countsAsAsking(listedSince: mapListedSince) { return true }
         guard let live, liveView != nil else { return false }
         if case .catchingUp = live.state { return true }
         return live.asking > 0
+    }
+
+    /// When the map's folders began to be listed: the live map's last walk or check of every folder, or the scan's start.
+    private var mapListedSince: Date? {
+        if let live, liveView != nil { return live.listedEveryFolderSince }
+        return scannedAt.map { $0.addingTimeInterval(-Double(result?.summary.elapsedMs ?? 0) / 1000) }
+    }
+
+    /// Whether Pith still has Full Disk Access, as the probe last found, kept across launches in Pith's settings.
+    private(set) var diskAccess = DiskAccessWatch(granted: UserDefaults.standard.bool(forKey: Setting.hadFullDiskAccess.rawValue),
+                                                  lostAt: UserDefaults.standard.double(forKey: Setting.fullDiskAccessLostAt.rawValue) > 0
+                                                      ? Date(timeIntervalSince1970: UserDefaults.standard.double(forKey: Setting.fullDiskAccessLostAt.rawValue)) : nil)
+
+    /// Looks whether Pith still has Full Disk Access, as Pith becomes active and with each live map: an open and a close
+    /// of a file only it opens, 8 to 11 µs (`DiskAccessWatch.probe`), which never brings a question.
+    func probeDiskAccess() {
+        var watch = diskAccess
+        watch.probed(DiskAccessWatch.probe(DiskAccessWatch.probePath(home: NSHomeDirectory())), at: Date())
+        if let since = live?.listedEveryFolderSince { watch.listedEveryFolder(since: since) }
+        guard watch != diskAccess else { return }
+        diskAccess = watch
+        UserDefaults.standard.set(watch.granted, for: .hadFullDiskAccess)
+        UserDefaults.standard.set(watch.lostAt?.timeIntervalSince1970 ?? 0, for: .fullDiskAccessLostAt)
     }
 
     /// What moving the items at `paths` to the Trash would do, or why they can't go (`TrashBatch.plan`), planned off the

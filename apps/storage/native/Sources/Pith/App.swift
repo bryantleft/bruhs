@@ -79,6 +79,12 @@ import PithCore
         disk.showQuickLook = { [weak self] urls in self?.quickLook(urls) }
         disk.writers = { [weak self] since in self?.activity.writers(since: since) ?? .empty }
         activity.start(); statusItem?.update()
+        // Pith looks whether it has lost Full Disk Access at launch, before the map shows an icon, and whenever it becomes
+        // active, as after the person has been in System Settings (`DiskAccessWatch`).
+        disk.probeDiskAccess()
+        observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.disk.probeDiskAccess() }
+        })
         let center = NSWorkspace.shared.notificationCenter
         observers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
             // The map is saved before the Mac sleeps, since a Mac that doesn't wake up again never quits Pith.

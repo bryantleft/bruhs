@@ -24,18 +24,22 @@ enum Setting: String, CaseIterable {
     case iconOnly, menuBarShows, keepsHistory, alerts, remembersScans, panelShortcut, textScale, inspectorWidth, welcomeSeen
     /// The disk map's click hints the person has learned, by name (`MapHints`).
     case learnedMapHints
+    /// Whether Pith had Full Disk Access at the last probe that could tell, and when it found it lost, in seconds since
+    /// 1970, 0 for never, so a loss is found across launches and lasts through them (`DiskAccessWatch`).
+    case hadFullDiskAccess, fullDiskAccessLostAt
 
     /// Its value in an automated run, whatever the person chose: Pith's default, but for two. Keep a week of history is
     /// on, off by default, so the run keeps Activity's history, in memory only, and the welcome window counts as seen,
     /// unseen by default, so the run never shows it.
     var automatedValue: Any {
         switch self {
-        case .iconOnly, .panelShortcut: false
+        case .iconOnly, .panelShortcut, .hadFullDiskAccess: false
         case .keepsHistory, .remembersScans, .welcomeSeen: true
         case .menuBarShows: MenuBarMetric.cpu.rawValue
         case .alerts, .learnedMapHints: [String]()
         case .textScale: 1.0
         case .inspectorWidth: 300.0
+        case .fullDiskAccessLostAt: 0.0
         }
     }
 }

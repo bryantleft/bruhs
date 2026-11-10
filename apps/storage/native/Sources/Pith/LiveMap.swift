@@ -87,6 +87,9 @@ import PithCore
     private var firstMapWanted = false
     /// When a walk or a check last listed every folder.
     private var listedAt: Date?
+    /// When the last walk or check that listed every folder began, as losing Full Disk Access asks (`DiskAccessWatch`):
+    /// one begun since has asked macOS whatever it needed to.
+    private(set) var listedEveryFolderSince: Date?
 
     init(root: String) {
         self.root = root
@@ -261,9 +264,10 @@ import PithCore
         case .progress(_, let files, let bytes, let errors, let asking):
             self.asking = asking
             if case .mapping = state { state = .mapping(DiskProgress(files: files, bytes: bytes, errors: errors)) }
-        case .walked(_, _, _, _, let asking):
+        case .walked(let ms, _, _, _, let asking):
             self.asking = asking
             listedAt = Date()
+            listedEveryFolderSince = Date(timeIntervalSinceNow: -Double(ms) / 1000)
             rebuildReason = nil
             updatedAt = Date()
             state = .live(0)
@@ -298,6 +302,7 @@ import PithCore
         case .checked(let check):
             lastCheck = check
             listedAt = Date()
+            listedEveryFolderSince = Date(timeIntervalSinceNow: -Double(check.ms) / 1000)
             if checks.checked() { endDailyCheck(.finished) }
             NSLog("Pith: checked \(check.folders) folders in \(check.ms) ms; \(check.corrected) had changed without an event, by \(check.bytes) bytes.")
         case .stats(let line):
