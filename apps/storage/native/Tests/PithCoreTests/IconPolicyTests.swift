@@ -135,6 +135,16 @@ final class IconPolicyTests: XCTestCase {
         XCTAssertFalse(try loads(.item("/Applications/Safari.app/Contents"), policy))
     }
 
+    /// An app's icon is looked up by its bundle's path, so an app the page names that runs from where macOS guards, as
+    /// one opened from Downloads does, loads no icon.
+    func testAppsWhereMacOSGuardsLoadNoIcon() throws {
+        let guarded = [home + "/Downloads/Tool.app", home + "/Desktop/Old/Thing.app", home + "/Library/Containers/com.example.x/Data/Helper.app",
+                       "/Volumes/Archive/Photos.photoslibrary/Editor.app"]
+        let policy = policy(nil, apps: Set(guarded + [home + "/Applications/Fine.app"]))
+        for path in guarded { XCTAssertFalse(try loads(.item(path), policy), path) }
+        XCTAssertTrue(try loads(.item(home + "/Applications/Fine.app"), policy))
+    }
+
     /// What the policy found in a map lasts until the map changes, and the disks and apps it allows are the ones set
     /// last, so nothing an earlier map, disk or app allowed lets a path through after a change.
     func testAChangeDropsWhatTheLastMapDisksAndAppsAllowed() throws {

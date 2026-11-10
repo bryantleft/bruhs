@@ -1,4 +1,5 @@
 import {
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -8,7 +9,10 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 import { LargestFiles } from "../src/components/largest-files";
-import { TreemapCanvas } from "../src/components/treemap-canvas";
+import {
+  TreemapCanvas,
+  useDevicePixelRatio,
+} from "../src/components/treemap-canvas";
 import { formatBytes } from "../src/lib/format";
 import { LARGEST_FILES_SHOWN, largestFilesIn } from "../src/lib/largest-files";
 import { parseResultEvent } from "../src/lib/protocol";
@@ -20,6 +24,19 @@ import type {
   ResultEvent,
   TreeNode,
 } from "../src/lib/types";
+import {
+  GROUP_KEY,
+  ICON_POINTS,
+  type IconRule,
+  iconKey,
+  iconScale,
+  iconURL,
+  itemAt,
+  itemKey,
+  pageIcons,
+  parseIconRule,
+  useIcon,
+} from "./icons";
 import { KindLegend } from "./kind-legend";
 import { type NavigationAction, NO_MAP, navigate } from "./navigation";
 import "./styles.css";
@@ -46,6 +63,8 @@ type Message =
 interface Writer {
   name: string;
   bytes: number;
+  /** The app's bundle, whose icon shows beside its name; none for a process without one. */
+  bundle?: string;
 }
 
 interface Growth {
@@ -67,19 +86,61 @@ interface GrowthMessage {
   writersHint?: unknown;
 }
 
-/** The writers Pith sent, each with a name and a byte count, or none. */
+/** The writers Pith sent, each with a name and a byte count and maybe its app's bundle, or none. */
 function parseWriters(value: unknown): Writer[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item: unknown) => {
     if (typeof item !== "object" || item === null) return [];
-    const { name, bytes } = item as Record<string, unknown>;
+    const { name, bytes, bundle } = item as Record<string, unknown>;
     return typeof name === "string" &&
       typeof bytes === "number" &&
       Number.isFinite(bytes) &&
       bytes > 0
-      ? [{ name, bytes }]
+      ? [
+          {
+            name,
+            bytes,
+            bundle:
+              typeof bundle === "string" && bundle.startsWith("/")
+                ? bundle
+                : undefined,
+          },
+        ]
       : [];
   });
+}
+
+/** The rule native sends with the icons' base, as JSON, or null when it isn't one. */
+function readIconRule(text: unknown): IconRule | null {
+  if (typeof text !== "string") return null;
+  try {
+    return parseIconRule(JSON.parse(text));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A 16 px icon from Pith, as macOS draws it. It's decorative, since the name beside it says what it is. Its room stays
+ * empty while it loads and when there's none to show, unless `fallback` is given to show instead.
+ */
+function MapIcon({
+  url,
+  fallback,
+  className = "",
+}: {
+  url: string | null;
+  fallback?: ReactNode;
+  className?: string;
+}) {
+  const state = useIcon(url);
+  const box = `size-4 shrink-0 ${className}`.trim();
+  const room = <span aria-hidden="true" className={box} />;
+  if (url === null || state === "failed") {
+    return fallback === undefined ? room : fallback;
+  }
+  if (state !== "loaded") return room;
+  return <img src={url} alt="" draggable={false} className={box} />;
 }
 
 declare global {
@@ -88,10 +149,12 @@ declare global {
     pithReceiveGrowth: (growth: GrowthMessage | null) => void;
     /**
      * Where Pith serves macOS's icons for the map, `pith://app/icon/<generation>/<appearance>/`, which an icon's
-     * `<points>@<scale>x/<key>.png` follows. Pith sends it with each map, and again with a new generation when the
-     * appearance changes, since WebKit keeps an image from Pith's scheme for as long as its URL stays the same.
+     * `<points>@<scale>x/<key>.png` follows, and Pith's rule for each item's key, as JSON (`IconRule` in
+     * KnownPlaces.swift). Pith sends both with each map, the base again with a new generation when the appearance
+     * changes, since WebKit keeps an image from Pith's scheme for as long as its URL stays the same, and the rule again
+     * when it changes.
      */
-    pithReceiveIconBase: (base: string | null) => void;
+    pithReceiveIconBase: (base: string | null, rule?: string | null) => void;
     /** The icons' base as Pith last sent it. */
     pithIconBase?: string;
     /**
@@ -125,6 +188,14 @@ function DiskMap() {
   const [highlight, setHighlight] = useState<Kind | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [growth, setGrowth] = useState<Growth | null>(null);
+  // Where Pith serves macOS's icons and its rule for each item's key, as sent: none until both have come.
+  const [icons, setIcons] = useState<{
+    base: string;
+    sent: string;
+    rule: IconRule;
+  } | null>(null);
+  // Icons are drawn at the page's own pixel ratio, which Bigger Text and the display change.
+  const scale = iconScale(useDevicePixelRatio());
   // The folder of the last map, kept across an empty payload: a map of another folder stops highlighting.
   const mapRoot = useRef<string | null>(null);
 
@@ -181,8 +252,23 @@ function DiskMap() {
           typeof value.writersHint === "string" ? value.writersHint : undefined,
       });
     };
-    window.pithReceiveIconBase = (base) => {
-      window.pithIconBase = typeof base === "string" ? base : undefined;
+    // The rule as Pith last sent it, which comes again with each map.
+    let lastRule: unknown = null;
+    window.pithReceiveIconBase = (base, rule) => {
+      const shown = typeof base === "string" ? base : undefined;
+      window.pithIconBase = shown;
+      // A new base is a new generation of URLs, so the icons of the last one go.
+      pageIcons.setBase(shown ?? null);
+      // The route answers by the rule, so what it refused under the last one, as while macOS was asking, it may allow now.
+      if (rule !== lastRule) pageIcons.forgetFailures();
+      lastRule = rule;
+      setIcons((current) => {
+        if (shown === undefined || typeof rule !== "string") return null;
+        // Each map brings the same base and rule again, which change nothing.
+        if (current?.base === shown && current.sent === rule) return current;
+        const parsed = readIconRule(rule);
+        return parsed && { base: shown, sent: rule, rule: parsed };
+      });
     };
     post({ action: "ready" });
     return () => {
@@ -322,6 +408,13 @@ function DiskMap() {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
     : [];
+  // macOS's own icon for a key, once Pith has said where its icons are.
+  const iconFor = (key: string) =>
+    icons && iconURL(icons.base, ICON_POINTS, scale, key);
+  // Apps show their own icons; a list of processes none of which has a bundle shows none.
+  const writerIcons =
+    icons !== null &&
+    (growth?.writers.some((writer) => writer.bundle !== undefined) ?? false);
 
   return (
     <main className="flex h-full min-h-0 flex-col gap-2 px-4 pt-3 pb-4">
@@ -341,6 +434,20 @@ function DiskMap() {
             onTrash={trash}
             growth={growth?.changes}
             growthSince={growth?.since}
+            icon={
+              icons
+                ? (tile) => (
+                    <MapIcon
+                      url={iconFor(
+                        tile.kind === "group"
+                          ? GROUP_KEY
+                          : iconKey(tile.node, icons.rule),
+                      )}
+                      fallback={null}
+                    />
+                  )
+                : undefined
+            }
           />
         </section>
         <div className="flex min-h-0 flex-col gap-5">
@@ -376,6 +483,16 @@ function DiskMap() {
                       aria-pressed={path === selected}
                       className="menu-item gap-2 px-2 py-1 aria-pressed:bg-(--role-selection)"
                     >
+                      {icons && (
+                        <MapIcon
+                          url={iconFor(
+                            iconKey(
+                              itemAt(current, path, result.topFiles),
+                              icons.rule,
+                            ),
+                          )}
+                        />
+                      )}
                       <span className="text-code-sm min-w-0 flex-1 truncate text-(--role-text)">
                         {path.slice(prefix.length)}
                       </span>
@@ -409,6 +526,16 @@ function DiskMap() {
                           key={writer.name}
                           className="flex items-baseline gap-2 py-1"
                         >
+                          {writerIcons && (
+                            <MapIcon
+                              url={
+                                writer.bundle
+                                  ? iconFor(itemKey(writer.bundle))
+                                  : null
+                              }
+                              className="self-center"
+                            />
+                          )}
                           <span className="text-body-sm min-w-0 flex-1 truncate text-(--role-text)">
                             {writer.name}
                           </span>
@@ -446,9 +573,12 @@ function DiskMap() {
                   <li
                     key={folder.path}
                     title={folder.path}
-                    className="text-code-sm truncate text-(--role-text-secondary)"
+                    className="text-code-sm flex items-center gap-2 text-(--role-text-secondary)"
                   >
-                    {folder.name}
+                    {icons && (
+                      <MapIcon url={iconFor(iconKey(folder, icons.rule))} />
+                    )}
+                    <span className="min-w-0 truncate">{folder.name}</span>
                   </li>
                 ))}
               </ul>
@@ -473,6 +603,21 @@ function DiskMap() {
                 onHoverPath={setHovered}
                 onSelect={selectFile}
                 onMenu={(file) => showMenu(file.path)}
+                icon={
+                  icons
+                    ? (file, swatch) => (
+                        <MapIcon
+                          url={iconFor(
+                            iconKey(
+                              { kind: "file", path: file.path },
+                              icons.rule,
+                            ),
+                          )}
+                          fallback={swatch}
+                        />
+                      )
+                    : undefined
+                }
               />
             ) : (
               <p className="text-body-sm text-pretty text-(--role-text-secondary)">

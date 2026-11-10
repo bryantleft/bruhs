@@ -41,6 +41,8 @@ enum DiskWriters: Equatable {
 struct DiskWriter: Equatable {
     let name: String
     let bytes: UInt64
+    /// The app's bundle, whose icon the page shows beside it, or nil for a process that has none.
+    var bundle: String?
 }
 
 /// A volume Pith can scan, for the disk menu and the list shown when the live map can't run.
@@ -622,13 +624,23 @@ enum MapCommand: Equatable {
     }
 
     /// What the map's page may load from Pith's icon route, by the same rule: an item's own icon only for what the map
-    /// shows with that key and for the disks the disk menu lists. It's given the map and the disks as they change. The
-    /// apps under Wrote the most since reach the page without their bundles' paths, so it allows none of theirs.
+    /// shows with that key, for the disks the disk menu lists and for the apps the page names under Wrote the most
+    /// since. It's given the map, the disks and the apps as they change.
     @ObservationIgnored private lazy var icons = IconPolicy(places: Icons.places)
 
     /// The icon the page asks for at `url` on Pith's icon route, or nil when it may not have it.
     func iconRequest(for url: URL) -> IconRequest? {
         icons.request(for: url, asking: macOSMayHoldFolders)
+    }
+
+    /// Pith's icon rule as the map's page applies it, which goes to the page with the icons' base, so the page gives
+    /// each item the key `iconKey(for:)` gives it.
+    var iconRule: IconRule { Icons.places.iconRule(asking: macOSMayHoldFolders) }
+
+    /// The apps the page names under Wrote the most since, as native last sent them: the page may load the icons of
+    /// their bundles.
+    @ObservationIgnored var pageWriters: [DiskWriter] = [] {
+        didSet { icons.apps = Set(pageWriters.compactMap(\.bundle)) }
     }
 
     /// Whether macOS may be holding some of the live map's folders: it's asking about some, or the map is catching up

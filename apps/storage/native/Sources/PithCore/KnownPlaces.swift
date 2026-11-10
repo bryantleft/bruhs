@@ -36,8 +36,9 @@ public struct KnownPlaces: Sendable {
     }
 
     public let places: [Place]
-    /// Locations macOS guards that aren't places of their own: other apps' containers and cloud storage folders.
-    private let guarded: [String]
+    /// The locations macOS guards: the protected places, then other apps' containers and the cloud storage folders. A
+    /// Photos library is guarded wherever it is, which `isProtected` knows by its extension.
+    public let guarded: [String]
 
     /// The places in `home`, and at `searchPaths` as `FileManager.urls(for:in:)` gives them, with each owning app
     /// that `application` finds by its bundle ID. A place whose search path is missing is left out. The Trash's icon
@@ -77,7 +78,7 @@ public struct KnownPlaces: Sendable {
             entry.url.map { Place(id: entry.id, path: $0.path, name: entry.name, icon: Self.icon(choosing: entry.icons, application: application),
                                   isProtected: entry.isProtected) }
         }
-        guarded = ["Containers", "Group Containers", "CloudStorage"].map { library.appendingPathComponent($0).path }
+        guarded = places.filter(\.isProtected).map(\.path) + ["Containers", "Group Containers", "CloudStorage"].map { library.appendingPathComponent($0).path }
     }
 
     /// This Mac's places: the home folder, the search paths, and the apps LaunchServices finds. Applications is the
@@ -119,8 +120,12 @@ public struct KnownPlaces: Sendable {
     /// library, or it's inside one.
     public func isProtected(_ path: String) -> Bool {
         let inside = { (folder: String) in path == folder || path.hasPrefix(folder + "/") }
-        return places.contains { $0.isProtected && inside($0.path) } || guarded.contains(where: inside)
-            || path.split(separator: "/").contains { $0.hasSuffix(".photoslibrary") }
+        return guarded.contains(where: inside) || path.split(separator: "/").contains { $0.hasSuffix(".photoslibrary") }
+    }
+
+    /// The rule as the disk map's page applies it, with `asking` as `iconKey(for:asking:)` takes it.
+    public func iconRule(asking: Bool) -> IconRule {
+        IconRule(places: places.map { IconRule.Place(id: $0.id, path: $0.path) }, guarded: guarded, asking: asking)
     }
 
     /// The icon key for an item of the map, by Pith's icon rule. A known place shows its own icon, read or not, and a
@@ -147,4 +152,19 @@ public struct KnownPlaces: Sendable {
     private static func showsAListing(_ folder: DiskNode) -> Bool {
         folder.size > 0 || (folder.files ?? 0) > 0 || !(folder.children ?? []).isEmpty
     }
+}
+
+/// Pith's icon rule as the disk map's page applies it (`iconKey` in native-web/icons.ts), which native sends with the
+/// icons' base: the known places by path, the locations macOS guards, and whether macOS may be holding some of the
+/// map's folders. With it the page gives each item the key `KnownPlaces.iconKey(for:asking:)` gives it, so it asks the
+/// icon route for no icon the route would refuse. tests/icon-keys.json holds both to the same cases.
+public struct IconRule: Codable, Equatable, Sendable {
+    public struct Place: Codable, Equatable, Sendable {
+        public let id: String
+        public let path: String
+    }
+
+    public let places: [Place]
+    public let guarded: [String]
+    public let asking: Bool
 }

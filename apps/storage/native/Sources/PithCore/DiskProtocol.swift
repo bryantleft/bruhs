@@ -500,7 +500,8 @@ public final class IconPolicy {
     }
     /// The roots of the disks the disk menu lists.
     public var volumes: Set<String>
-    /// The bundles of the apps the page names from Activity's history, under Wrote the most since.
+    /// The bundles of the apps the page names from Activity's history, under Wrote the most since. One that lies where
+    /// macOS guards loads no icon.
     public var apps: Set<String>
     /// The map's folders and volumes by path, found at the first request since the map was set.
     private var items: [String: DiskNode]?
@@ -526,14 +527,14 @@ public final class IconPolicy {
     /// Whether the page may have `key`'s icon. A file type, the plain folder, the group and a known place need no path,
     /// so any of them may load. An item's own icon is looked up by its path, so it loads only for a folder, package, app
     /// or volume the map shows with that very key by Pith's icon rule, a disk the disk menu lists, or an app on the
-    /// page. A folder the map couldn't read, one macOS may be holding, a known place or a path the map doesn't show
-    /// never gets looked up by its path this way.
+    /// page outside the locations macOS guards. A folder the map couldn't read, one macOS may be holding, a known place
+    /// or a path the map doesn't show never gets looked up by its path this way.
     private func allows(_ key: IconKey, asking: Bool) -> Bool {
         switch key {
         case .type, .folder, .group: return true
         case .place(let id): return places.place(id: id) != nil
         case .item(let path):
-            if volumes.contains(path) || apps.contains(path) { return true }
+            if volumes.contains(path) || (apps.contains(path) && !places.isProtected(path)) { return true }
             return item(at: path).map { places.iconKey(for: $0, asking: asking) == key } ?? false
         }
     }

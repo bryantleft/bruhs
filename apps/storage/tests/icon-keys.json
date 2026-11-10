@@ -1,0 +1,588 @@
+{
+  "about": "Pith's icon rule, KnownPlaces.iconKey(for:asking:) in native/Sources/PithCore/KnownPlaces.swift, and the disk map page's copy of it, iconKey in native-web/icons.ts, both give each of these items its key. The rule is the table native sends the page for a test home, /Users/zo\u00eb, with the places' paths as URL spells them, decomposed. IconRuleTests.swift and icons.test.ts read this file.",
+  "home": "/Users/zo\u00eb",
+  "rule": {
+    "places": [
+      {
+        "id": "photos-library",
+        "path": "/Users/zoe\u0308/Pictures/Photos Library.photoslibrary"
+      },
+      { "id": "mail", "path": "/Users/zoe\u0308/Library/Mail" },
+      { "id": "messages", "path": "/Users/zoe\u0308/Library/Messages" },
+      { "id": "developer", "path": "/Users/zoe\u0308/Library/Developer" },
+      {
+        "id": "icloud-drive",
+        "path": "/Users/zoe\u0308/Library/Mobile Documents"
+      },
+      { "id": "downloads", "path": "/Users/zoe\u0308/Downloads" },
+      { "id": "documents", "path": "/Users/zoe\u0308/Documents" },
+      { "id": "desktop", "path": "/Users/zoe\u0308/Desktop" },
+      { "id": "applications", "path": "/Applications" },
+      { "id": "trash", "path": "/Users/zoe\u0308/.Trash" },
+      {
+        "id": "backups",
+        "path": "/Users/zoe\u0308/Library/Application Support/MobileSync/Backup"
+      },
+      { "id": "music", "path": "/Users/zoe\u0308/Music/Music" },
+      { "id": "tv", "path": "/Users/zoe\u0308/Movies/TV" },
+      {
+        "id": "books",
+        "path": "/Users/zoe\u0308/Library/Containers/com.apple.BKAgentService/Data/Documents/iBooks/Books"
+      },
+      {
+        "id": "podcasts",
+        "path": "/Users/zoe\u0308/Library/Group Containers/243LU875E5.groups.com.apple.podcasts/Library/Cache"
+      }
+    ],
+    "guarded": [
+      "/Users/zoe\u0308/Pictures/Photos Library.photoslibrary",
+      "/Users/zoe\u0308/Library/Mail",
+      "/Users/zoe\u0308/Library/Messages",
+      "/Users/zoe\u0308/Library/Mobile Documents",
+      "/Users/zoe\u0308/Downloads",
+      "/Users/zoe\u0308/Documents",
+      "/Users/zoe\u0308/Desktop",
+      "/Users/zoe\u0308/.Trash",
+      "/Users/zoe\u0308/Library/Application Support/MobileSync/Backup",
+      "/Users/zoe\u0308/Library/Containers/com.apple.BKAgentService/Data/Documents/iBooks/Books",
+      "/Users/zoe\u0308/Library/Group Containers/243LU875E5.groups.com.apple.podcasts/Library/Cache",
+      "/Users/zoe\u0308/Library/Containers",
+      "/Users/zoe\u0308/Library/Group Containers",
+      "/Users/zoe\u0308/Library/CloudStorage"
+    ],
+    "asking": false
+  },
+  "cases": [
+    {
+      "why": "A file shows its type's icon, from its extension, lowercased.",
+      "node": {
+        "kind": "file",
+        "name": "Caf\u00e9 Menu.PDF",
+        "path": "/Users/zo\u00eb/Projects/Caf\u00e9 Menu.PDF",
+        "size": 2000000
+      },
+      "asking": false,
+      "key": "type/pdf"
+    },
+    {
+      "why": "A file in a guarded place shows its type's icon too, asking or not.",
+      "node": {
+        "kind": "file",
+        "name": "100% #1?.tar.GZ",
+        "path": "/Users/zo\u00eb/Documents/100% #1?.tar.GZ",
+        "size": 2000000
+      },
+      "asking": true,
+      "key": "type/gz"
+    },
+    {
+      "why": "A name whose only dot comes first has no extension.",
+      "node": {
+        "kind": "file",
+        "name": ".zshrc",
+        "path": "/Users/zo\u00eb/.zshrc",
+        "size": 2000000
+      },
+      "asking": false,
+      "key": "type/"
+    },
+    {
+      "why": "An extension with a space is none.",
+      "node": {
+        "kind": "file",
+        "name": "Mr. Smith",
+        "path": "/Users/zo\u00eb/Notes/Mr. Smith",
+        "size": 2000000
+      },
+      "asking": false,
+      "key": "type/"
+    },
+    {
+      "why": "The name before the last dot can't be . or ..",
+      "node": {
+        "kind": "file",
+        "name": "...pdf",
+        "path": "/Users/zo\u00eb/Notes/...pdf",
+        "size": 2000000
+      },
+      "asking": false,
+      "key": "type/"
+    },
+    {
+      "why": "Three dots before the last are a name.",
+      "node": {
+        "kind": "file",
+        "name": "....pdf",
+        "path": "/Users/zo\u00eb/Notes/....pdf",
+        "size": 2000000
+      },
+      "asking": false,
+      "key": "type/pdf"
+    },
+    {
+      "why": "An extension's own characters are escaped.",
+      "node": {
+        "kind": "file",
+        "name": "odd.#?",
+        "path": "/Users/zo\u00eb/odd.#?",
+        "size": 2000000
+      },
+      "asking": false,
+      "key": "type/%23%3F"
+    },
+    {
+      "why": "Each letter of an extension is lowercased on its own, as Swift does, so a final sigma stays a sigma.",
+      "node": {
+        "kind": "file",
+        "name": "Odos.ΟΔΟΣ",
+        "path": "/Users/zo\u00eb/Odos.ΟΔΟΣ",
+        "size": 2000000
+      },
+      "asking": false,
+      "key": "type/%CE%BF%CE%B4%CE%BF%CF%83"
+    },
+    {
+      "why": "Outside the locations macOS guards, a folder shows its own icon, asking or not, its path escaped as IconKey spells it.",
+      "node": {
+        "kind": "dir",
+        "name": "My Caf\u00e9 ☕️ 100% #1?",
+        "path": "/Users/zo\u00eb/Projects/My Caf\u00e9 ☕️ 100% #1?",
+        "size": 4096,
+        "files": 1,
+        "children": []
+      },
+      "asking": true,
+      "key": "item/%2FUsers%2Fzo%C3%AB%2FProjects%2FMy%20Caf%C3%A9%20%E2%98%95%EF%B8%8F%20100%25%20%231%3F"
+    },
+    {
+      "why": "encodeURIComponent would leave !'()* as they are, and the route refuses that spelling.",
+      "node": {
+        "kind": "dir",
+        "name": "Don't (copy) *this*!",
+        "path": "/Users/zo\u00eb/Projects/Don't (copy) *this*!",
+        "size": 4096,
+        "files": 1,
+        "children": []
+      },
+      "asking": false,
+      "key": "item/%2FUsers%2Fzo%C3%AB%2FProjects%2FDon%27t%20%28copy%29%20%2Athis%2A%21"
+    },
+    {
+      "why": "Letters of every script are escaped byte by byte.",
+      "node": {
+        "kind": "dir",
+        "name": "日本語",
+        "path": "/Users/zo\u00eb/Проекты/日本語",
+        "size": 4096,
+        "files": 1,
+        "children": []
+      },
+      "asking": false,
+      "key": "item/%2FUsers%2Fzo%C3%AB%2F%D0%9F%D1%80%D0%BE%D0%B5%D0%BA%D1%82%D1%8B%2F%E6%97%A5%E6%9C%AC%E8%AA%9E"
+    },
+    {
+      "why": "The root is an item too.",
+      "node": {
+        "kind": "dir",
+        "name": "",
+        "path": "/",
+        "size": 4096,
+        "files": 1,
+        "children": []
+      },
+      "asking": true,
+      "key": "item/%2F"
+    },
+    {
+      "why": "An app outside the guarded locations shows its own icon.",
+      "node": {
+        "kind": "dir",
+        "name": "Xcode.app",
+        "path": "/Applications/Xcode.app",
+        "size": 4096,
+        "files": 1,
+        "children": []
+      },
+      "asking": true,
+      "key": "item/%2FApplications%2FXcode.app"
+    },
+    {
+      "why": "Inside a guarded place, a folder the map has listed shows its own icon once macOS isn't asking.",
+      "node": {
+        "kind": "dir",
+        "name": "Taxes 2026",
+        "path": "/Users/zo\u00eb/Documents/Taxes 2026",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": false,
+      "key": "item/%2FUsers%2Fzo%C3%AB%2FDocuments%2FTaxes%202026"
+    },
+    {
+      "why": "While macOS may be holding folders, a guarded one shows a plain folder.",
+      "node": {
+        "kind": "dir",
+        "name": "Taxes 2026",
+        "path": "/Users/zo\u00eb/Documents/Taxes 2026",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": true,
+      "key": "folder"
+    },
+    {
+      "why": "A guarded folder the map hasn't listed shows a plain folder.",
+      "node": {
+        "kind": "dir",
+        "name": "New",
+        "path": "/Users/zo\u00eb/Documents/New",
+        "size": 0,
+        "files": 0,
+        "children": []
+      },
+      "asking": false,
+      "key": "folder"
+    },
+    {
+      "why": "Files counted are a listing.",
+      "node": {
+        "kind": "dir",
+        "name": "Just files",
+        "path": "/Users/zo\u00eb/Downloads/Just files",
+        "size": 0,
+        "files": 2,
+        "children": []
+      },
+      "asking": false,
+      "key": "item/%2FUsers%2Fzo%C3%AB%2FDownloads%2FJust%20files"
+    },
+    {
+      "why": "Contents are a listing.",
+      "node": {
+        "kind": "dir",
+        "name": "Only children",
+        "path": "/Users/zo\u00eb/Desktop/Only children",
+        "size": 0,
+        "files": 0,
+        "children": [
+          {
+            "kind": "file",
+            "name": "a.pdf",
+            "path": "/Users/zo\u00eb/Desktop/Only children/a.pdf",
+            "size": 0
+          }
+        ]
+      },
+      "asking": false,
+      "key": "item/%2FUsers%2Fzo%C3%AB%2FDesktop%2FOnly%20children"
+    },
+    {
+      "why": "Other apps' data is guarded.",
+      "node": {
+        "kind": "dir",
+        "name": "Data",
+        "path": "/Users/zo\u00eb/Library/Containers/com.apple.Notes/Data",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": true,
+      "key": "folder"
+    },
+    {
+      "why": "Other apps' data shows its own icon once listed and macOS isn't asking.",
+      "node": {
+        "kind": "dir",
+        "name": "Data",
+        "path": "/Users/zo\u00eb/Library/Containers/com.apple.Notes/Data",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": false,
+      "key": "item/%2FUsers%2Fzo%C3%AB%2FLibrary%2FContainers%2Fcom.apple.Notes%2FData"
+    },
+    {
+      "why": "Apps' shared data is guarded.",
+      "node": {
+        "kind": "dir",
+        "name": "group.com.apple.notes",
+        "path": "/Users/zo\u00eb/Library/Group Containers/group.com.apple.notes",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": true,
+      "key": "folder"
+    },
+    {
+      "why": "Cloud storage folders are guarded.",
+      "node": {
+        "kind": "dir",
+        "name": "Dropbox",
+        "path": "/Users/zo\u00eb/Library/CloudStorage/Dropbox",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": true,
+      "key": "folder"
+    },
+    {
+      "why": "Inside iCloud Drive a listed folder shows its own icon once macOS isn't asking.",
+      "node": {
+        "kind": "dir",
+        "name": "com~apple~CloudDocs",
+        "path": "/Users/zo\u00eb/Library/Mobile Documents/com~apple~CloudDocs",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": false,
+      "key": "item/%2FUsers%2Fzo%C3%AB%2FLibrary%2FMobile%20Documents%2Fcom~apple~CloudDocs"
+    },
+    {
+      "why": "A name that only starts like a guarded place's isn't inside it.",
+      "node": {
+        "kind": "dir",
+        "name": "DocumentsOld",
+        "path": "/Users/zo\u00eb/DocumentsOld",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": true,
+      "key": "item/%2FUsers%2Fzo%C3%AB%2FDocumentsOld"
+    },
+    {
+      "why": "A Photos library is guarded wherever it is.",
+      "node": {
+        "kind": "dir",
+        "name": "Old Photos.photoslibrary",
+        "path": "/Volumes/Archive/Old Photos.photoslibrary",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": true,
+      "key": "folder"
+    },
+    {
+      "why": "A listed Photos library shows its own icon once macOS isn't asking.",
+      "node": {
+        "kind": "dir",
+        "name": "Old Photos.photoslibrary",
+        "path": "/Volumes/Archive/Old Photos.photoslibrary",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": false,
+      "key": "item/%2FVolumes%2FArchive%2FOld%20Photos.photoslibrary"
+    },
+    {
+      "why": "So is everything inside a Photos library.",
+      "node": {
+        "kind": "dir",
+        "name": "originals",
+        "path": "/Volumes/Archive/Old Photos.photoslibrary/originals",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": true,
+      "key": "folder"
+    },
+    {
+      "why": "Only a name that ends in .photoslibrary is a library.",
+      "node": {
+        "kind": "dir",
+        "name": "Photos.photoslibrary backup",
+        "path": "/Volumes/Archive/Photos.photoslibrary backup",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": true,
+      "key": "item/%2FVolumes%2FArchive%2FPhotos.photoslibrary%20backup"
+    },
+    {
+      "why": "Paths compare as Swift's do, whatever their normalization: a decomposed path is inside a guarded place too.",
+      "node": {
+        "kind": "dir",
+        "name": "Nouveau",
+        "path": "/Users/zoe\u0308/Downloads/Nouveau",
+        "size": 0,
+        "files": 0,
+        "children": []
+      },
+      "asking": false,
+      "key": "folder"
+    },
+    {
+      "why": "An item's key keeps the item's own spelling of its path.",
+      "node": {
+        "kind": "dir",
+        "name": "Nouveau",
+        "path": "/Users/zoe\u0308/Downloads/Nouveau",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": false,
+      "key": "item/%2FUsers%2Fzoe%CC%88%2FDownloads%2FNouveau"
+    },
+    {
+      "why": "A known place shows its place's icon, read or not, and never by its path.",
+      "node": {
+        "kind": "dir",
+        "name": "Documents",
+        "path": "/Users/zo\u00eb/Documents",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": false,
+      "key": "place/documents"
+    },
+    {
+      "why": "A place's path matches in either normalization.",
+      "node": {
+        "kind": "dir",
+        "name": "Desktop",
+        "path": "/Users/zoe\u0308/Desktop",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": true,
+      "key": "place/desktop"
+    },
+    {
+      "why": "A known place the map couldn't read still shows its place's icon.",
+      "node": {
+        "kind": "unreadable",
+        "name": "Mail",
+        "path": "/Users/zo\u00eb/Library/Mail",
+        "size": 0,
+        "reason": "protected"
+      },
+      "asking": false,
+      "key": "place/mail"
+    },
+    {
+      "why": "The Photos library in Pictures is a place.",
+      "node": {
+        "kind": "dir",
+        "name": "Photos Library.photoslibrary",
+        "path": "/Users/zo\u00eb/Pictures/Photos Library.photoslibrary",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": false,
+      "key": "place/photos-library"
+    },
+    {
+      "why": "Applications is the Mac's own folder.",
+      "node": {
+        "kind": "dir",
+        "name": "Applications",
+        "path": "/Applications",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": false,
+      "key": "place/applications"
+    },
+    {
+      "why": "The Trash is a place.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zo\u00eb/.Trash",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": true,
+      "key": "place/trash"
+    },
+    {
+      "why": "iCloud Drive is a place.",
+      "node": {
+        "kind": "dir",
+        "name": "Mobile Documents",
+        "path": "/Users/zo\u00eb/Library/Mobile Documents",
+        "size": 4096,
+        "files": 3,
+        "children": []
+      },
+      "asking": false,
+      "key": "place/icloud-drive"
+    },
+    {
+      "why": "A folder the map couldn't read shows a plain folder.",
+      "node": {
+        "kind": "unreadable",
+        "name": "sudo",
+        "path": "/private/var/db/sudo",
+        "size": 0,
+        "reason": "denied"
+      },
+      "asking": false,
+      "key": "folder"
+    },
+    {
+      "why": "So does one the map couldn't read in a guarded place.",
+      "node": {
+        "kind": "unreadable",
+        "name": "Locked",
+        "path": "/Users/zo\u00eb/Documents/Locked",
+        "size": 0,
+        "reason": "protected"
+      },
+      "asking": false,
+      "key": "folder"
+    },
+    {
+      "why": "The map's smaller items show a group.",
+      "node": {
+        "kind": "aggregate",
+        "name": "(smaller items)",
+        "path": "/Users/zo\u00eb/Projects/__other__",
+        "size": 4096,
+        "files": 12
+      },
+      "asking": false,
+      "key": "group"
+    },
+    {
+      "why": "A volume shows its own icon.",
+      "node": {
+        "kind": "volume",
+        "name": "Preboot",
+        "path": "/System/Volumes/Preboot",
+        "size": 4096,
+        "sharesDisk": true
+      },
+      "asking": true,
+      "key": "item/%2FSystem%2FVolumes%2FPreboot"
+    },
+    {
+      "why": "A volume shows its own icon even where macOS guards.",
+      "node": {
+        "kind": "volume",
+        "name": "GoogleDrive",
+        "path": "/Users/zo\u00eb/Library/CloudStorage/GoogleDrive",
+        "size": 0,
+        "sharesDisk": false
+      },
+      "asking": true,
+      "key": "item/%2FUsers%2Fzo%C3%AB%2FLibrary%2FCloudStorage%2FGoogleDrive"
+    }
+  ]
+}

@@ -579,6 +579,7 @@ struct DiskWebView: NSViewRepresentable {
         if nsView.isHidden == visible { nsView.isHidden = !visible }
         if nsView.pageZoom != textScale { nsView.pageZoom = textScale }
         context.coordinator.iconAppearance = IconAppearance(colorScheme)
+        context.coordinator.iconRule = model.iconRule
         context.coordinator.send(revision: model.revision)
     }
     static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) {
@@ -610,6 +611,18 @@ struct DiskWebView: NSViewRepresentable {
         private var iconGeneration = 1
         /// Where the page loads its icons from, up to their size and key (`IconPolicy.base`).
         private var iconBase: String? { iconAppearance.map { IconPolicy.base(generation: iconGeneration, appearance: $0) } }
+        /// Pith's icon rule as the page applies it, which travels with the base. A new one, as when macOS stops asking,
+        /// goes to the page at once.
+        var iconRule: IconRule? {
+            didSet { if iconRule != oldValue { sendIconBase() } }
+        }
+        /// The rule as JSON, in one spelling for one rule: the page tries the icons it was refused again when the text
+        /// changes.
+        private var iconRuleJSON: String? {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .sortedKeys
+            return iconRule.flatMap { try? encoder.encode($0) }.map { String(decoding: $0, as: UTF8.self) }
+        }
         init(model: DiskModel) { self.model = model }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard BridgePolicy.allows(url: message.frameInfo.request.url, mainFrame: message.frameInfo.isMainFrame),
@@ -685,12 +698,15 @@ struct DiskWebView: NSViewRepresentable {
             do {
                 let payload = try model.resultJSON ?? model.result.map { String(decoding: try JSONEncoder().encode($0), as: UTF8.self) }
                 // What grew since the last scan of this folder travels apart from the scanner's own result.
+                var writers: [DiskWriter] = []
                 let growth = model.growthSince.map { since in
                     var growth: [String: Any] = ["since": Self.day(since), "changes": model.growth]
-                    // Who wrote while it grew: a correlation, which the page words as one.
+                    // Who wrote while it grew: a correlation, which the page words as one. Each app comes with its bundle,
+                    // for its icon.
                     switch model.writers?(since) {
                     case .apps(let apps, let from)?:
-                        growth["writers"] = apps.map { ["name": $0.name, "bytes": $0.bytes] as [String: Any] }
+                        writers = apps
+                        growth["writers"] = apps.map { ["name": $0.name, "bytes": $0.bytes, "bundle": $0.bundle as Any? ?? NSNull()] as [String: Any] }
                         growth["writersSince"] = Self.day(from)
                     case .historyOff?:
                         growth["writersHint"] = "Turn on Keep a week of history in Settings to see which apps wrote the most since then."
@@ -699,19 +715,23 @@ struct DiskWebView: NSViewRepresentable {
                     }
                     return growth
                 }
-                // The icons' base comes first, so the map's icons load from the current one.
-                web.callAsyncJavaScript("window.pithReceiveIconBase?.(iconBase); window.pithReceive(payload); window.pithReceiveGrowth?.(growth)",
-                                        arguments: ["iconBase": iconBase as Any? ?? NSNull(), "payload": payload as Any? ?? NSNull(), "growth": growth as Any? ?? NSNull()],
+                // Before the page can ask: it may load the icons of the apps it names now, and of no others.
+                model.pageWriters = writers
+                // The icons' base and rule come first, so the map's icons load from the current ones.
+                web.callAsyncJavaScript("window.pithReceiveIconBase?.(iconBase, iconRule); window.pithReceive(payload); window.pithReceiveGrowth?.(growth)",
+                                        arguments: ["iconBase": iconBase as Any? ?? NSNull(), "iconRule": iconRuleJSON as Any? ?? NSNull(),
+                                                    "payload": payload as Any? ?? NSNull(), "growth": growth as Any? ?? NSNull()],
                                         in: nil, in: .page) { [weak self] result in
                     if case .failure(let error) = result { self?.model.problem = DiskProblem(message: "Pith couldn’t draw the disk map: \(error.localizedDescription)") }
                 }
             } catch { model.problem = DiskProblem(message: "Pith couldn’t prepare the disk map: \(error.localizedDescription)") }
         }
 
-        /// Gives the page the icons' new base, between maps, once it's ready for one; until then each map brings it.
+        /// Gives the page the icons' base and rule, between maps, once it's ready for them; until then each map brings them.
         private func sendIconBase() {
             guard ready, let web else { return }
-            web.callAsyncJavaScript("window.pithReceiveIconBase?.(iconBase)", arguments: ["iconBase": iconBase as Any? ?? NSNull()], in: nil, in: .page) { result in
+            web.callAsyncJavaScript("window.pithReceiveIconBase?.(iconBase, iconRule)",
+                                    arguments: ["iconBase": iconBase as Any? ?? NSNull(), "iconRule": iconRuleJSON as Any? ?? NSNull()], in: nil, in: .page) { result in
                 if case .failure(let error) = result { NSLog("Pith: the disk map didn’t take its icons’ new base: \(error.localizedDescription)") }
             }
         }

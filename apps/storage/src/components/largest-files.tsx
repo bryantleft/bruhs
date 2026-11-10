@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { type ReactNode, useMemo } from "react";
 import { parentFolder, splitFolder, splitName } from "~/lib/display-names";
 import { CATEGORY_VAR, categoryForName, formatBytes } from "~/lib/format";
 import type { FileEntry } from "~/lib/types";
@@ -16,6 +16,11 @@ interface Props {
   base?: string;
   /** Right-click on a row: show the file's actions. Without it there's no menu. */
   onMenu?: (file: FileEntry) => void;
+  /**
+   * Each file's 16 px icon in place of its swatch, for a host that has icons: Pith's page shows macOS's own. It gets
+   * the file and its swatch, to show when there's no icon for it. Without it the rows lead with their swatches.
+   */
+  icon?: (file: FileEntry, swatch: ReactNode) => ReactNode;
 }
 
 const inside = (path: string, folder: string) =>
@@ -33,6 +38,7 @@ export function LargestFiles({
   onHoverPath,
   base,
   onMenu,
+  icon,
 }: Props) {
   // Worked out once per list, so hovering only changes which rows are highlighted.
   const rows = useMemo(
@@ -86,11 +92,27 @@ export function LargestFiles({
                 title={f.path}
                 className="menu-item items-start gap-2 px-2 py-1 aria-pressed:bg-(--role-selection,var(--color-persimmon-950))"
               >
-                <span
-                  aria-hidden="true"
-                  className="rounded-seed mt-1 size-2.5 shrink-0"
-                  style={{ background: color }}
-                />
+                {icon ? (
+                  // The swatch, when it stands in, keeps the icon's room, so the names stay in line.
+                  <span
+                    aria-hidden="true"
+                    className="mt-px flex size-4 shrink-0 items-center justify-center"
+                  >
+                    {icon(
+                      f,
+                      <span
+                        className="rounded-seed size-2.5"
+                        style={{ background: color }}
+                      />,
+                    )}
+                  </span>
+                ) : (
+                  <span
+                    aria-hidden="true"
+                    className="rounded-seed mt-1 size-2.5 shrink-0"
+                    style={{ background: color }}
+                  />
+                )}
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="text-code-sm flex min-w-0 text-(--role-text,var(--color-rambutan-200))">
                     <span className="min-w-0 overflow-hidden text-ellipsis whitespace-pre">

@@ -119,13 +119,17 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Pith/history.json")
     }
 
-    /// The apps that wrote the most to disk since `date`, from the kept week of history. Without history kept there's
-    /// nothing to say; with it, the stretch covered can begin after `date`, when history began later.
+    /// The apps that wrote the most to disk since `date`, from the kept week of history, each app with its bundle.
+    /// Without history kept there's nothing to say; with it, the stretch covered can begin after `date`, when history
+    /// began later.
     func writers(since date: Date) -> DiskWriters {
         guard keepsHistory else { return .historyOff }
         guard let written = longHistory.written(in: date...Date()) else { return .empty }
         let apps = written.apps.prefix(5).map { app in
-            DiskWriter(name: longHistory.identities[app.id]?.name ?? app.id, bytes: app.bytes)
+            // An app's executable, as history keeps it, is its .app bundle (`AppSample.executable`).
+            let identity = longHistory.identities[app.id]
+            return DiskWriter(name: identity?.name ?? app.id, bytes: app.bytes,
+                              bundle: identity?.kind == ProcessKind.app.rawValue ? identity?.executable : nil)
         }
         return apps.isEmpty ? .empty : .apps(Array(apps), since: written.from)
     }

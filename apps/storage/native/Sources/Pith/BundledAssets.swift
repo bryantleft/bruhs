@@ -15,6 +15,8 @@ import WebKit
     /// come since and gone unanswered. The smoke test checks that each one comes.
     private(set) var stoppedWhileDrawing = 0
     private(set) var drawnAfterStopping = 0
+    /// How many icon requests are waiting for their drawing now. Once none are, every stop WebKit makes of them has come.
+    var waitingForDrawings: Int { waiting.count }
 
     init(icons: @escaping (URL) -> IconRequest?) { self.icons = icons }
 

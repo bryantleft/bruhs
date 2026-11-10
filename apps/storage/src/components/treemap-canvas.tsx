@@ -1,5 +1,13 @@
 import type { TokenRef } from "@bruhs/theme/semantic";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { middleTruncate } from "~/lib/display-names";
 import { foldersBetween } from "~/lib/folder-trail";
 import {
@@ -68,6 +76,11 @@ interface Props {
   growth?: ReadonlyMap<string, number>;
   /** When that scan was, e.g. "Nov 3". */
   growthSince?: string;
+  /**
+   * The hovered block's 16 px icon, which the hover card leads its title with, for a host that has icons: Pith's page
+   * shows macOS's own. Nothing when there's no icon for the block.
+   */
+  icon?: (tile: Tile) => ReactNode;
 }
 
 /** Labels are Monaspace Neon at 11 px, the size of the native data captions. */
@@ -161,7 +174,7 @@ function useAppearance(follow: boolean) {
 }
 
 /** The display's pixel density, which changes when the window moves between screens. */
-function useDevicePixelRatio() {
+export function useDevicePixelRatio() {
   const [ratio, setRatio] = useState(() => window.devicePixelRatio || 1);
   useEffect(() => {
     const query = window.matchMedia(`(resolution: ${ratio}dppx)`);
@@ -601,6 +614,7 @@ export function TreemapCanvas({
   onTrash,
   growth,
   growthSince,
+  icon,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -891,9 +905,22 @@ export function TreemapCanvas({
               : { top: pointer.y + 14 }),
           }}
         >
-          <p className="text-code-sm font-medium break-all text-(--role-text,var(--color-rambutan-50))">
-            {card.title}
-          </p>
+          {icon && pointed ? (
+            <p className="text-code-sm flex gap-1.5 font-medium text-(--role-text,var(--color-rambutan-50))">
+              {/* Hidden when there's no icon to show, so the title starts where it would without one. */}
+              <span
+                aria-hidden="true"
+                className="mt-px flex shrink-0 empty:hidden"
+              >
+                {icon(pointed)}
+              </span>
+              <span className="min-w-0 break-all">{card.title}</span>
+            </p>
+          ) : (
+            <p className="text-code-sm font-medium break-all text-(--role-text,var(--color-rambutan-50))">
+              {card.title}
+            </p>
+          )}
           {card.kind && (
             <p className="text-label-sm mt-1 flex items-center gap-1.5 text-(--role-text-secondary,var(--color-rambutan-300))">
               <span

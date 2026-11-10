@@ -117,6 +117,8 @@ extension AppDelegate {
             print("live map \(disk.result?.root.size ?? 0) bytes, \(disk.result?.summary.files ?? 0) files; scan \(scanned.root.size) bytes, \(scanned.summary.files) files")
             checks["live_map_matches_scan"] = disk.result?.root.size == scanned.root.size && disk.result?.summary.files == scanned.summary.files
             checks.merge(try await inspectDisk(), uniquingKeysWith: { _, new in new })
+            // Before the icon route's check, which stops every load the page has going.
+            checks.merge(await checkListIcons(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkIconRoute(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkPathBar(fixture, in: main), uniquingKeysWith: { _, new in new })
             checks.merge(try await checkLiveFollows(disk, in: fixture, prefix: "live_map"), uniquingKeysWith: { _, new in new })
@@ -219,6 +221,50 @@ extension AppDelegate {
         return drawn == IconAppearance.allCases
     }
 
+    /// The side lists and the hover card lead with macOS's icons, which the page loads from Pith's route at its own
+    /// pixel ratio: every row of Largest files shows one that has loaded, and so does the card for the block under the
+    /// pointer. Each is decorative, with an empty alt.
+    private func checkListIcons() async -> [String: Bool] {
+        guard let web = webView else { return ["side_rows_show_icons": false, "hover_card_shows_icon": false] }
+        let rows = await pageAnswer(web, Self.rowIcons) { (rows: [String: Any]?) in
+            let count = rows?["rows"] as? Int ?? 0
+            return count > 0 && rows?["loaded"] as? Int == count
+        }
+        _ = try? await web.callAsyncJavaScript(Self.pointAtMap("mousemove"), in: nil, contentWorld: .page)
+        let card = await pageAnswer(web, Self.cardIcon) { (src: String?) in src != nil }
+        _ = try? await web.callAsyncJavaScript(Self.pointAtMap("mouseout"), in: nil, contentWorld: .page)
+        let count = rows?["rows"] as? Int ?? 0
+        print("side rows: \(rows?["loaded"] as? Int ?? 0) of \(count) icons loaded, first \(rows?["first"] as? String ?? "none"); hover card \(card ?? "no icon")")
+        return ["side_rows_show_icons": count > 0 && rows?["loaded"] as? Int == count, "hover_card_shows_icon": card != nil]
+    }
+
+    /// How many rows Largest files has, and how many lead with a decorative icon from the page's icon base that has
+    /// loaded at the page's own scale.
+    private static let rowIcons = """
+        const base = window.pithIconBase;
+        const scale = Math.min(3, Math.max(1, Math.round(window.devicePixelRatio)));
+        const icons = [...document.querySelectorAll('[aria-label="Largest files"] li')].map((row) => row.querySelector("img"));
+        const loaded = icons.filter((icon) => icon !== null && typeof base === "string" && icon.src.startsWith(base + "16@" + scale + "x/")
+          && icon.complete && icon.naturalWidth === 16 * scale && icon.alt === "");
+        return { rows: icons.length, loaded: loaded.length, first: icons[0]?.src ?? null };
+        """
+
+    /// The pointer moving onto the middle of the map, or off it again, as the page hears it.
+    private static func pointAtMap(_ event: String) -> String {
+        """
+        const canvas = document.querySelector("canvas");
+        const box = canvas.getBoundingClientRect();
+        canvas.dispatchEvent(new MouseEvent("\(event)", { bubbles: true, clientX: box.left + box.width / 2, clientY: box.top + box.height / 2,
+          relatedTarget: document.body }));
+        """
+    }
+
+    /// The hover card's icon, once it has loaded: its URL, or null.
+    private static let cardIcon = """
+        const icon = document.querySelector(".tooltip img");
+        return icon !== null && icon.complete && icon.naturalWidth > 0 && icon.alt === "" ? icon.src : null;
+        """
+
     /// The map's page loads icons from Pith's own scheme, so a canvas can read them back. The map's own folder draws on
     /// a canvas whose pixels `getImageData` returns, which it refuses for an image from another origin, while a folder
     /// outside the map and a key of no kind get a 404. When the page stops loads while their icons are still being
@@ -246,6 +292,9 @@ extension AppDelegate {
 
         let stoppedBefore = assets.stoppedWhileDrawing, lateBefore = assets.drawnAfterStopping
         let unfinished = (try? await web.callAsyncJavaScript(Self.stopIcons, in: nil, contentWorld: .page)) as? Int ?? -1
+        // WebKit can tell the route of a stop after the page's loads have ended, so the stops are counted once no request
+        // waits for its drawing: each was either answered or stopped by then.
+        let settled = await eventually { assets.waitingForDrawings == 0 }
         let stopped = assets.stoppedWhileDrawing - stoppedBefore
         let caughtUp = await eventually { assets.drawnAfterStopping - lateBefore >= stopped }
         let late = assets.drawnAfterStopping - lateBefore
@@ -263,7 +312,7 @@ extension AppDelegate {
         print("icon route from \(before ?? "no base"): \(own) painted \(first.painted) pixels, others loaded \(first.loaded); "
               + "\(stopped) requests stopped while drawing, \(late) of their drawings came unanswered, \(unfinished) of 120 loads unfinished on the page, "
               + "then a new size drew \(afterStopping.drawn); \(other.rawValue) gave \(after ?? "no base") for \(expected ?? "nothing"), drew \(inOther.drawn)")
-        return [names[0]: first.drawn, names[1]: first.loaded == [false, false], names[2]: stopped > 0 && caughtUp && afterStopping.drawn,
+        return [names[0]: first.drawn, names[1]: first.loaded == [false, false], names[2]: settled && stopped > 0 && caughtUp && afterStopping.drawn,
                 names[3]: expected != nil && after == expected && inOther.drawn]
     }
 
@@ -309,10 +358,15 @@ extension AppDelegate {
 
     /// The page's icon base, once `wanted` holds for it or the smoke test's patience runs out.
     private func pageIconBase(_ web: WKWebView, until wanted: (String?) -> Bool = { _ in true }) async -> String? {
+        await pageAnswer(web, "return window.pithIconBase ?? null", until: wanted)
+    }
+
+    /// What `script` returns in the map's page, once `done` holds for it or the smoke test's patience runs out.
+    private func pageAnswer<Answer>(_ web: WKWebView, _ script: String, until done: (Answer?) -> Bool) async -> Answer? {
         let deadline = Date().addingTimeInterval(Self.patience)
         while true {
-            let base = (try? await web.callAsyncJavaScript("return window.pithIconBase ?? null", in: nil, contentWorld: .page)) as? String
-            if wanted(base) || Date() >= deadline { return base }
+            let answer = (try? await web.callAsyncJavaScript(script, in: nil, contentWorld: .page)) as? Answer
+            if done(answer) || Date() >= deadline { return answer }
             try? await Task.sleep(for: .milliseconds(100))
         }
     }
