@@ -36,6 +36,18 @@ public struct BucketApp: Codable, Sendable, Equatable {
     public let written: UInt64?
 }
 
+/// An app that wrote to disk while a folder grew, as Disk names it: its name, what it wrote, and its .app bundle, whose
+/// icon shows beside it, or nil for a process that has none.
+public struct DiskWriter: Sendable, Equatable {
+    public let name: String
+    public let bytes: UInt64
+    public let bundle: String?
+
+    public init(name: String, bytes: UInt64, bundle: String? = nil) {
+        self.name = name; self.bytes = bytes; self.bundle = bundle
+    }
+}
+
 /// What an app was, kept once for every bucket that mentions it.
 public struct BucketIdentity: Codable, Sendable, Equatable {
     public let name: String
@@ -119,6 +131,20 @@ public struct LongHistory: Codable, Sendable {
         }
         let apps = bytes.map { (id: $0.key, bytes: $0.value) }.sorted { $0.bytes > $1.bytes }
         return (apps, max(range.lowerBound, first.start))
+    }
+
+    /// The apps that wrote the most between `range`'s ends, most first and at most `limit` of them, each named as history
+    /// knows it and with its .app bundle when it's an app, and when the buckets they come from begin. Nil when no bucket
+    /// overlaps the range.
+    public func writers(in range: ClosedRange<Date>, limit: Int) -> (writers: [DiskWriter], from: Date)? {
+        guard let written = written(in: range) else { return nil }
+        let writers = written.apps.prefix(limit).map { app in
+            // An app's executable, as history keeps it, is its .app bundle (`AppSample.executable`).
+            let identity = identities[app.id]
+            return DiskWriter(name: identity?.name ?? app.id, bytes: app.bytes,
+                              bundle: identity?.kind == ProcessKind.app.rawValue ? identity?.executable : nil)
+        }
+        return (Array(writers), written.from)
     }
 
     /// Buckets inside the span ending at `now`, oldest first: 30-second ones for six hours, 5-minute ones beyond.

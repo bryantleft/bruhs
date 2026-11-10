@@ -38,13 +38,6 @@ enum DiskWriters: Equatable {
     case empty
 }
 
-struct DiskWriter: Equatable {
-    let name: String
-    let bytes: UInt64
-    /// The app's bundle, whose icon the page shows beside it, or nil for a process that has none.
-    var bundle: String?
-}
-
 /// A volume Pith can scan, for the disk menu and the list shown when the live map can't run.
 struct DiskVolumeChoice: Identifiable, Equatable {
     let url: URL
@@ -107,9 +100,10 @@ enum MapCommand: Equatable {
             live?.keep(remembersScans ? liveSnapshot : nil)
         }
     }
-    /// How much items changed since the baseline, and when that was.
-    private(set) var growth: [String: Int64] = [:]
-    private(set) var growthSince: Date?
+    /// How much items changed since the baseline, and when that was. The map's comparisons set them, and so does the
+    /// smoke test, in memory, since it never reads or writes the person's scans.
+    var growth: [String: Int64] = [:]
+    var growthSince: Date?
     /// Folders FSEvents says changed since a scanned map's scan began. The live map follows changes itself.
     private(set) var changes = DiskChanges()
     private var watcher: DiskWatcher?

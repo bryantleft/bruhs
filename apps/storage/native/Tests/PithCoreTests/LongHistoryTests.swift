@@ -91,6 +91,28 @@ final class LongHistoryTests: XCTestCase {
         XCTAssertNil(history.written(in: base.addingTimeInterval(-7200)...base.addingTimeInterval(-3600)), "nothing kept from before")
     }
 
+    /// Disk names who wrote while a folder grew, each app with its bundle, whose icon shows beside it. A tool or a process
+    /// of macOS's own has no bundle.
+    func testWritersComeWithTheirAppsBundles() throws {
+        var history = LongHistory()
+        let apps = [("/Applications/Xcode.app:1:1", "Xcode", "/Applications/Xcode.app", 3_000_000.0),
+                    ("/usr/local/bin/node:2:1", "node", "/usr/local/bin/node", 2_000_000.0),
+                    ("/usr/libexec/mds:3:1", "mds", "/usr/libexec/mds", 1_000_000.0)].map { id, name, executable, written in
+            AppSample(id: id, name: name, executable: executable, members: [], cpu: 1, memory: 100, read: nil, written: written, restricted: false)
+        }
+        for second in stride(from: 0.0, to: 62, by: 2) {
+            history.record(ActivitySnapshot(date: base.addingTimeInterval(second), uptime: second, cpu: 10, pressure: .normal, apps: apps, error: nil,
+                                            memory: MemoryUse(physical: 1000, used: 500, app: 400, wired: 50, compressed: 50, cached: 100, swapUsed: 10, swapTotal: 100)))
+        }
+        let found = try XCTUnwrap(history.writers(in: base...base.addingTimeInterval(60), limit: 5))
+        XCTAssertEqual(found.writers.map(\.name), ["Xcode", "node", "mds"], "most first")
+        XCTAssertEqual(found.writers.map(\.bundle), ["/Applications/Xcode.app", nil, nil])
+        XCTAssertEqual(found.writers.first?.bytes, history.written(in: base...base.addingTimeInterval(60))?.apps.first?.bytes)
+        XCTAssertEqual(found.from, base)
+        XCTAssertEqual(history.writers(in: base...base.addingTimeInterval(60), limit: 1)?.writers.map(\.name), ["Xcode"])
+        XCTAssertNil(history.writers(in: base.addingTimeInterval(-7200)...base.addingTimeInterval(-3600), limit: 5), "nothing kept from before")
+    }
+
     func testAHistoryKeptBeforeWritesWereCountedStillLoads() throws {
         var history = LongHistory()
         for second in stride(from: 0.0, to: 62, by: 2) { history.record(writing(second, [(id: "a", cpu: 5, written: 1000)])) }

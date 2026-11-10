@@ -1,5 +1,5 @@
 {
-  "about": "Pith's icon rule, KnownPlaces.iconKey(for:asking:) in native/Sources/PithCore/KnownPlaces.swift, and the disk map page's copy of it, iconKey in native-web/icons.ts, both give each of these items its key. The rule is the table native sends the page for a test home, /Users/zo\u00eb, with the places' paths as URL spells them, decomposed. IconRuleTests.swift and icons.test.ts read this file.",
+  "about": "Pith's icon rule, KnownPlaces.iconKey(for:asking:) in native/Sources/PithCore/KnownPlaces.swift, and the disk map page's copy of it, iconKey in native-web/icon-rule.ts, both give each of these items its key. The rule is the table native sends the page for a test home, /Users/zo\u00eb, with the places' paths as URL spells them, decomposed. IconRuleTests.swift and icon-rule.test.ts read this file.",
   "home": "/Users/zo\u00eb",
   "rule": {
     "places": [
@@ -118,6 +118,50 @@
       },
       "asking": false,
       "key": "type/pdf"
+    },
+    {
+      "why": "One dot before the last is no name either.",
+      "node": {
+        "kind": "file",
+        "name": "..pdf",
+        "path": "/Users/zo\u00eb/Notes/..pdf",
+        "size": 2000000
+      },
+      "asking": false,
+      "key": "type/"
+    },
+    {
+      "why": "An accented extension, composed, is lowercased and escaped as it's spelled.",
+      "node": {
+        "kind": "file",
+        "name": "Menu.CAF\u00c9",
+        "path": "/Users/zo\u00eb/Notes/Menu.CAF\u00c9",
+        "size": 2000000
+      },
+      "asking": false,
+      "key": "type/caf%C3%A9"
+    },
+    {
+      "why": "Decomposed, it keeps its own spelling.",
+      "node": {
+        "kind": "file",
+        "name": "Menu.CAFE\u0301",
+        "path": "/Users/zo\u00eb/Notes/Menu.CAFE\u0301",
+        "size": 2000000
+      },
+      "asking": false,
+      "key": "type/cafe%CC%81"
+    },
+    {
+      "why": "A tab, unlike a space, belongs to an extension.",
+      "node": {
+        "kind": "file",
+        "name": "Columns.T\tSV",
+        "path": "/Users/zo\u00eb/Notes/Columns.T\tSV",
+        "size": 2000000
+      },
+      "asking": false,
+      "key": "type/t%09sv"
     },
     {
       "why": "An extension's own characters are escaped.",

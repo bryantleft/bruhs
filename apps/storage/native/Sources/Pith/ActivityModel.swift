@@ -124,14 +124,8 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
     /// began later.
     func writers(since date: Date) -> DiskWriters {
         guard keepsHistory else { return .historyOff }
-        guard let written = longHistory.written(in: date...Date()) else { return .empty }
-        let apps = written.apps.prefix(5).map { app in
-            // An app's executable, as history keeps it, is its .app bundle (`AppSample.executable`).
-            let identity = longHistory.identities[app.id]
-            return DiskWriter(name: identity?.name ?? app.id, bytes: app.bytes,
-                              bundle: identity?.kind == ProcessKind.app.rawValue ? identity?.executable : nil)
-        }
-        return apps.isEmpty ? .empty : .apps(Array(apps), since: written.from)
+        guard let found = longHistory.writers(in: date...Date(), limit: 5), !found.writers.isEmpty else { return .empty }
+        return .apps(found.writers, since: found.from)
     }
 
     private func recordHistory(_ sample: ActivitySnapshot) {

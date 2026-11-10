@@ -154,7 +154,7 @@ public struct KnownPlaces: Sendable {
     }
 }
 
-/// Pith's icon rule as the disk map's page applies it (`iconKey` in native-web/icons.ts), which native sends with the
+/// Pith's icon rule as the disk map's page applies it (`iconKey` in native-web/icon-rule.ts), which native sends with the
 /// icons' base: the known places by path, the locations macOS guards, and whether macOS may be holding some of the
 /// map's folders. With it the page gives each item the key `KnownPlaces.iconKey(for:asking:)` gives it, so it asks the
 /// icon route for no icon the route would refuse. tests/icon-keys.json holds both to the same cases.

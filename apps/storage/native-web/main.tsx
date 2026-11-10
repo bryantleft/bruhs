@@ -1,5 +1,4 @@
 import {
-  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -9,10 +8,7 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 import { LargestFiles } from "../src/components/largest-files";
-import {
-  TreemapCanvas,
-  useDevicePixelRatio,
-} from "../src/components/treemap-canvas";
+import { TreemapCanvas } from "../src/components/treemap-canvas";
 import { formatBytes } from "../src/lib/format";
 import { LARGEST_FILES_SHOWN, largestFilesIn } from "../src/lib/largest-files";
 import { parseResultEvent } from "../src/lib/protocol";
@@ -24,20 +20,9 @@ import type {
   ResultEvent,
   TreeNode,
 } from "../src/lib/types";
-import {
-  GROUP_KEY,
-  ICON_POINTS,
-  type IconRule,
-  iconKey,
-  iconScale,
-  iconURL,
-  itemAt,
-  itemKey,
-  pageIcons,
-  parseIconRule,
-  useIcon,
-} from "./icons";
+import { GROUP_KEY, itemAt, itemKey } from "./icon-rule";
 import { KindLegend } from "./kind-legend";
+import { MapIcon, useAnyIcon, usePageIcons } from "./map-icon";
 import { type NavigationAction, NO_MAP, navigate } from "./navigation";
 import "./styles.css";
 
@@ -110,53 +95,10 @@ function parseWriters(value: unknown): Writer[] {
   });
 }
 
-/** The rule native sends with the icons' base, as JSON, or null when it isn't one. */
-function readIconRule(text: unknown): IconRule | null {
-  if (typeof text !== "string") return null;
-  try {
-    return parseIconRule(JSON.parse(text));
-  } catch {
-    return null;
-  }
-}
-
-/**
- * A 16 px icon from Pith, as macOS draws it. It's decorative, since the name beside it says what it is. Its room stays
- * empty while it loads and when there's none to show, unless `fallback` is given to show instead.
- */
-function MapIcon({
-  url,
-  fallback,
-  className = "",
-}: {
-  url: string | null;
-  fallback?: ReactNode;
-  className?: string;
-}) {
-  const state = useIcon(url);
-  const box = `size-4 shrink-0 ${className}`.trim();
-  const room = <span aria-hidden="true" className={box} />;
-  if (url === null || state === "failed") {
-    return fallback === undefined ? room : fallback;
-  }
-  if (state !== "loaded") return room;
-  return <img src={url} alt="" draggable={false} className={box} />;
-}
-
 declare global {
   interface Window {
     pithReceive: (payload: string | null) => void;
     pithReceiveGrowth: (growth: GrowthMessage | null) => void;
-    /**
-     * Where Pith serves macOS's icons for the map, `pith://app/icon/<generation>/<appearance>/`, which an icon's
-     * `<points>@<scale>x/<key>.png` follows, and Pith's rule for each item's key, as JSON (`IconRule` in
-     * KnownPlaces.swift). Pith sends both with each map, the base again with a new generation when the appearance
-     * changes, since WebKit keeps an image from Pith's scheme for as long as its URL stays the same, and the rule again
-     * when it changes.
-     */
-    pithReceiveIconBase: (base: string | null, rule?: string | null) => void;
-    /** The icons' base as Pith last sent it. */
-    pithIconBase?: string;
     /**
      * Pith's path bar and Go menu: open a folder of the map, go back or forward through the folders opened, or up
      * to the open folder's enclosing folder.
@@ -188,14 +130,8 @@ function DiskMap() {
   const [highlight, setHighlight] = useState<Kind | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [growth, setGrowth] = useState<Growth | null>(null);
-  // Where Pith serves macOS's icons and its rule for each item's key, as sent: none until both have come.
-  const [icons, setIcons] = useState<{
-    base: string;
-    sent: string;
-    rule: IconRule;
-  } | null>(null);
-  // Icons are drawn at the page's own pixel ratio, which Bigger Text and the display change.
-  const scale = iconScale(useDevicePixelRatio());
+  // macOS's icons, once Pith has sent where they are and its rule for each item's key.
+  const icons = usePageIcons();
   // The folder of the last map, kept across an empty payload: a map of another folder stops highlighting.
   const mapRoot = useRef<string | null>(null);
 
@@ -252,29 +188,10 @@ function DiskMap() {
           typeof value.writersHint === "string" ? value.writersHint : undefined,
       });
     };
-    // The rule as Pith last sent it, which comes again with each map.
-    let lastRule: unknown = null;
-    window.pithReceiveIconBase = (base, rule) => {
-      const shown = typeof base === "string" ? base : undefined;
-      window.pithIconBase = shown;
-      // A new base is a new generation of URLs, so the icons of the last one go.
-      pageIcons.setBase(shown ?? null);
-      // The route answers by the rule, so what it refused under the last one, as while macOS was asking, it may allow now.
-      if (rule !== lastRule) pageIcons.forgetFailures();
-      lastRule = rule;
-      setIcons((current) => {
-        if (shown === undefined || typeof rule !== "string") return null;
-        // Each map brings the same base and rule again, which change nothing.
-        if (current?.base === shown && current.sent === rule) return current;
-        const parsed = readIconRule(rule);
-        return parsed && { base: shown, sent: rule, rule: parsed };
-      });
-    };
     post({ action: "ready" });
     return () => {
       window.pithReceive = () => {};
       window.pithReceiveGrowth = () => {};
-      window.pithReceiveIconBase = () => {};
     };
   }, []);
 
@@ -382,6 +299,12 @@ function DiskMap() {
     highlight !== null && kindBytes !== null && kindBytes[highlight] > 0
       ? highlight
       : null;
+  // The apps under Wrote the most since show their own icons, by their bundles. A list where none can, because none
+  // has a bundle or every one's icon failed, keeps no room for them.
+  const writerIcons = (growth?.writers ?? []).map((writer) =>
+    icons && writer.bundle ? icons.key(itemKey(writer.bundle)) : null,
+  );
+  const showsWriterIcons = useAnyIcon(writerIcons);
 
   if (error) {
     return (
@@ -408,13 +331,6 @@ function DiskMap() {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
     : [];
-  // macOS's own icon for a key, once Pith has said where its icons are.
-  const iconFor = (key: string) =>
-    icons && iconURL(icons.base, ICON_POINTS, scale, key);
-  // Apps show their own icons; a list of processes none of which has a bundle shows none.
-  const writerIcons =
-    icons !== null &&
-    (growth?.writers.some((writer) => writer.bundle !== undefined) ?? false);
 
   return (
     <main className="flex h-full min-h-0 flex-col gap-2 px-4 pt-3 pb-4">
@@ -438,11 +354,11 @@ function DiskMap() {
               icons
                 ? (tile) => (
                     <MapIcon
-                      url={iconFor(
+                      url={
                         tile.kind === "group"
-                          ? GROUP_KEY
-                          : iconKey(tile.node, icons.rule),
-                      )}
+                          ? icons.key(GROUP_KEY)
+                          : icons.item(tile.node)
+                      }
                       fallback={null}
                     />
                   )
@@ -485,11 +401,8 @@ function DiskMap() {
                     >
                       {icons && (
                         <MapIcon
-                          url={iconFor(
-                            iconKey(
-                              itemAt(current, path, result.topFiles),
-                              icons.rule,
-                            ),
+                          url={icons.item(
+                            itemAt(current, path, result.topFiles),
                           )}
                         />
                       )}
@@ -521,18 +434,14 @@ function DiskMap() {
                 {growth.writers.length > 0 ? (
                   <>
                     <ul className="space-y-px">
-                      {growth.writers.map((writer) => (
+                      {growth.writers.map((writer, index) => (
                         <li
                           key={writer.name}
                           className="flex items-baseline gap-2 py-1"
                         >
-                          {writerIcons && (
+                          {showsWriterIcons && (
                             <MapIcon
-                              url={
-                                writer.bundle
-                                  ? iconFor(itemKey(writer.bundle))
-                                  : null
-                              }
+                              url={writerIcons[index]}
                               className="self-center"
                             />
                           )}
@@ -575,9 +484,7 @@ function DiskMap() {
                     title={folder.path}
                     className="text-code-sm flex items-center gap-2 text-(--role-text-secondary)"
                   >
-                    {icons && (
-                      <MapIcon url={iconFor(iconKey(folder, icons.rule))} />
-                    )}
+                    {icons && <MapIcon url={icons.item(folder)} />}
                     <span className="min-w-0 truncate">{folder.name}</span>
                   </li>
                 ))}
@@ -607,12 +514,7 @@ function DiskMap() {
                   icons
                     ? (file, swatch) => (
                         <MapIcon
-                          url={iconFor(
-                            iconKey(
-                              { kind: "file", path: file.path },
-                              icons.rule,
-                            ),
-                          )}
+                          url={icons.item({ kind: "file", path: file.path })}
                           fallback={swatch}
                         />
                       )

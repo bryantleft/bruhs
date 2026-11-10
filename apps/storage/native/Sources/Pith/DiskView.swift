@@ -605,7 +605,7 @@ struct DiskWebView: NSViewRepresentable {
             didSet {
                 guard iconAppearance != oldValue else { return }
                 if oldValue != nil { iconGeneration += 1 }
-                sendIconBase()
+                sendIcons()
             }
         }
         private var iconGeneration = 1
@@ -614,15 +614,17 @@ struct DiskWebView: NSViewRepresentable {
         /// Pith's icon rule as the page applies it, which travels with the base. A new one, as when macOS stops asking,
         /// goes to the page at once.
         var iconRule: IconRule? {
-            didSet { if iconRule != oldValue { sendIconBase() } }
+            didSet {
+                guard iconRule != oldValue else { return }
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = .sortedKeys
+                iconRuleJSON = iconRule.flatMap { try? encoder.encode($0) }.map { String(decoding: $0, as: UTF8.self) }
+                sendIcons()
+            }
         }
-        /// The rule as JSON, in one spelling for one rule: the page tries the icons it was refused again when the text
-        /// changes.
-        private var iconRuleJSON: String? {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .sortedKeys
-            return iconRule.flatMap { try? encoder.encode($0) }.map { String(decoding: $0, as: UTF8.self) }
-        }
+        /// The rule as JSON, encoded once for each rule and in one spelling for it: the page tries the icons it was
+        /// refused again when the text changes.
+        private var iconRuleJSON: String?
         init(model: DiskModel) { self.model = model }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard BridgePolicy.allows(url: message.frameInfo.request.url, mainFrame: message.frameInfo.isMainFrame),
@@ -630,9 +632,9 @@ struct DiskWebView: NSViewRepresentable {
             let path = body["path"] as? String
             switch action {
             case "ready":
-                // Every page load starts empty, a reload or a restart after a crash included, so it gets the scan
-                // again, and the native selection and history it no longer has are dropped.
-                ready = true; revision = nil; model.select(nil); model.mapStartsOver(); send(revision: model.revision)
+                // Every page load starts empty, a reload or a restart after a crash included, so it gets the icons' base
+                // and rule and then the scan again, and the native selection and history it no longer has are dropped.
+                ready = true; revision = nil; model.select(nil); model.mapStartsOver(); sendIcons(); send(revision: model.revision)
             case "select": model.select(path)
             case "location":
                 if let path {
@@ -717,18 +719,19 @@ struct DiskWebView: NSViewRepresentable {
                 }
                 // Before the page can ask: it may load the icons of the apps it names now, and of no others.
                 model.pageWriters = writers
-                // The icons' base and rule come first, so the map's icons load from the current ones.
-                web.callAsyncJavaScript("window.pithReceiveIconBase?.(iconBase, iconRule); window.pithReceive(payload); window.pithReceiveGrowth?.(growth)",
-                                        arguments: ["iconBase": iconBase as Any? ?? NSNull(), "iconRule": iconRuleJSON as Any? ?? NSNull(),
-                                                    "payload": payload as Any? ?? NSNull(), "growth": growth as Any? ?? NSNull()],
+                // The icons' base and rule aren't in it: the page has them since it was ready, and gets them again when
+                // they change.
+                web.callAsyncJavaScript("window.pithReceive(payload); window.pithReceiveGrowth?.(growth)",
+                                        arguments: ["payload": payload as Any? ?? NSNull(), "growth": growth as Any? ?? NSNull()],
                                         in: nil, in: .page) { [weak self] result in
                     if case .failure(let error) = result { self?.model.problem = DiskProblem(message: "Pith couldn’t draw the disk map: \(error.localizedDescription)") }
                 }
             } catch { model.problem = DiskProblem(message: "Pith couldn’t prepare the disk map: \(error.localizedDescription)") }
         }
 
-        /// Gives the page the icons' base and rule, between maps, once it's ready for them; until then each map brings them.
-        private func sendIconBase() {
+        /// Gives the page the icons' base and rule once it's ready for them, a reload's included, and again whenever
+        /// either changes. Maps come without them.
+        private func sendIcons() {
             guard ready, let web else { return }
             web.callAsyncJavaScript("window.pithReceiveIconBase?.(iconBase, iconRule)",
                                     arguments: ["iconBase": iconBase as Any? ?? NSNull(), "iconRule": iconRuleJSON as Any? ?? NSNull()], in: nil, in: .page) { result in

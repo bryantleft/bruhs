@@ -1,9 +1,9 @@
 import XCTest
 @testable import PithCore
 
-/// Pith's icon rule and the disk map page's copy of it (`iconKey` in native-web/icons.ts) read one fixture,
+/// Pith's icon rule and the disk map page's copy of it (`iconKey` in native-web/icon-rule.ts) read one fixture,
 /// tests/icon-keys.json: the table native sends the page for a test home, and the key each item gets by the rule.
-/// tests/icons.test.ts checks the page against the same cases, so the two can't drift apart.
+/// tests/icon-rule.test.ts checks the page against the same cases, so the two can't drift apart.
 final class IconRuleTests: XCTestCase {
     private struct Fixture: Decodable {
         struct Case: Decodable {

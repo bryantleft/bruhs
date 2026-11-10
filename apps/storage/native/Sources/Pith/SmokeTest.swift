@@ -119,6 +119,8 @@ extension AppDelegate {
             checks.merge(try await inspectDisk(), uniquingKeysWith: { _, new in new })
             // Before the icon route's check, which stops every load the page has going.
             checks.merge(await checkListIcons(), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkSideLists(fixture), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkIconsReachEveryPage(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkIconRoute(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkPathBar(fixture, in: main), uniquingKeysWith: { _, new in new })
             checks.merge(try await checkLiveFollows(disk, in: fixture, prefix: "live_map"), uniquingKeysWith: { _, new in new })
@@ -265,6 +267,90 @@ extension AppDelegate {
         return icon !== null && icon.complete && icon.naturalWidth > 0 && icon.alt === "" ? icon.src : null;
         """
 
+    /// Grew since, Wrote the most since and Couldn't read lead with their items' icons too. A folder of the fixture that
+    /// nobody may list shows under Couldn't read. What grew and who wrote are put in memory, since Pith keeps its record
+    /// of them with the person's scans, history and settings, which the smoke test never reads or writes: the fixture's
+    /// sub folder grew, and an app with a real bundle and a tool without one wrote. They reach the page as any writers
+    /// do, so the route has to allow the app's icon by its bundle, and the tool shows none.
+    private func checkSideLists(_ fixture: String) async -> [String: Bool] {
+        let names = ["grew_since_shows_icons", "wrote_the_most_shows_app_icons", "couldnt_read_shows_icons"]
+        let files = FileManager.default
+        let locked = URL(fileURLWithPath: fixture).appendingPathComponent("pith-smoke-locked-\(UUID().uuidString)")
+        defer {
+            // Readable again first: a folder nobody may list can't be emptied to remove.
+            try? files.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path)
+            try? files.removeItem(at: locked)
+        }
+        guard let web = webView,
+              (try? files.createDirectory(at: locked, withIntermediateDirectories: false, attributes: [.posixPermissions: 0])) != nil else {
+            return Dictionary(uniqueKeysWithValues: names.map { ($0, false) })
+        }
+        let listed = await eventually { self.disk.result?.root.children?.contains { $0.path == locked.path && $0.kind == .unreadable } == true }
+        let sub = (fixture as NSString).appendingPathComponent("sub"), app = "/System/Library/CoreServices/Finder.app"
+        let kept = (writers: disk.writers, growth: disk.growth, since: disk.growthSince)
+        disk.writers = { since in
+            .apps([DiskWriter(name: "Finder", bytes: 3_000_000, bundle: app), DiskWriter(name: "pith-smoke-tool", bytes: 1_000_000)], since: since)
+        }
+        let grown: [String: Int64] = [sub: 2_000_000]
+        let lists = await pageAnswer(web, Self.sideListIcons, arguments: ["grewKey": IconKey.item(sub).string, "appKey": IconKey.item(app).string]) {
+            (lists: [String: Bool]?) in
+            // A newer map compares itself with the baseline again, which drops a growth put in memory, so it's put back.
+            if self.disk.growth != grown { self.disk.growth = grown; self.disk.growthSince = Date(); self.disk.revision = UUID() }
+            return lists?["grew"] == true && lists?["wrote"] == true && lists?["unreadable"] == true
+        }
+        disk.writers = kept.writers; disk.growth = kept.growth; disk.growthSince = kept.since; disk.revision = UUID()
+        print("side lists: grew \(lists?["grew"] ?? false), wrote \(lists?["wrote"] ?? false), couldn't read \(lists?["unreadable"] ?? false) "
+              + "(the locked folder listed \(listed))")
+        return [names[0]: lists?["grew"] == true, names[1]: lists?["wrote"] == true, names[2]: listed && lists?["unreadable"] == true]
+    }
+
+    /// Whether the side lists lead with loaded, decorative icons: the folder that grew with its own, the app that wrote
+    /// with its bundle's while the tool after it shows none, and the folder nobody may read with a plain folder.
+    private static let sideListIcons = """
+        const loaded = (icon) => icon !== null && icon.complete && icon.naturalWidth > 0 && icon.alt === "";
+        const rows = (heading) => [...(document.querySelector('[aria-labelledby="' + heading + '"]')?.querySelectorAll("li") ?? [])]
+          .map((row) => row.querySelector("img"));
+        const grew = rows("grew-heading"), wrote = rows("writers-heading"), unreadable = rows("unreadable-heading");
+        return {
+          grew: grew.some((icon) => loaded(icon) && icon.src.endsWith("/" + grewKey + ".png")),
+          wrote: wrote.length === 2 && loaded(wrote[0]) && wrote[0].src.endsWith("/" + appKey + ".png") && wrote[1] === null,
+          unreadable: unreadable.some((icon) => loaded(icon) && icon.src.endsWith("/folder.png")),
+        };
+        """
+
+    /// The icons' base and rule reach the page once it's ready and again when either changes, never with each map: a map
+    /// sent again leaves them alone, and a reloaded page gets them before its first map, so its rows lead with their
+    /// icons again.
+    private func checkIconsReachEveryPage() async -> [String: Bool] {
+        let names = ["icon_base_not_resent_with_maps", "icons_reach_a_reloaded_page"]
+        guard let web = webView else { return Dictionary(uniqueKeysWithValues: names.map { ($0, false) }) }
+        _ = try? await web.callAsyncJavaScript(Self.countReceipts, in: nil, contentWorld: .page)
+        disk.revision = UUID()
+        let counts = await pageAnswer(web, "return window.pithSmokeCounts ?? null") { (counts: [String: Int]?) in (counts?["maps"] ?? 0) > 0 }
+        let before = await pageIconBase(web)
+        web.reload()
+        // The page that counted is gone once the reloaded one answers.
+        let rows = await pageAnswer(web, "if (window.pithSmokeCounts !== undefined) return null;\n" + Self.rowIcons) { (rows: [String: Any]?) in
+            let count = rows?["rows"] as? Int ?? 0
+            return count > 0 && rows?["loaded"] as? Int == count
+        }
+        let after = await pageIconBase(web)
+        let count = rows?["rows"] as? Int ?? 0
+        print("icons across maps: \(counts?["maps"] ?? 0) maps and \(counts?["bases"] ?? -1) bases sent; after a reload \(rows?["loaded"] as? Int ?? 0) "
+              + "of \(count) icons loaded from \(after ?? "no base"), before \(before ?? "no base")")
+        return [names[0]: (counts?["maps"] ?? 0) > 0 && counts?["bases"] == 0,
+                names[1]: before != nil && after == before && count > 0 && rows?["loaded"] as? Int == count]
+    }
+
+    /// Counts the maps and the icons' bases Pith gives the page from now on, in `window.pithSmokeCounts`.
+    private static let countReceipts = """
+        const counts = { maps: 0, bases: 0 };
+        window.pithSmokeCounts = counts;
+        const receive = window.pithReceive, base = window.pithReceiveIconBase;
+        window.pithReceive = (...values) => { counts.maps += 1; return receive(...values); };
+        window.pithReceiveIconBase = (...values) => { counts.bases += 1; return base(...values); };
+        """
+
     /// The map's page loads icons from Pith's own scheme, so a canvas can read them back. The map's own folder draws on
     /// a canvas whose pixels `getImageData` returns, which it refuses for an image from another origin, while a folder
     /// outside the map and a key of no kind get a 404. When the page stops loads while their icons are still being
@@ -361,11 +447,12 @@ extension AppDelegate {
         await pageAnswer(web, "return window.pithIconBase ?? null", until: wanted)
     }
 
-    /// What `script` returns in the map's page, once `done` holds for it or the smoke test's patience runs out.
-    private func pageAnswer<Answer>(_ web: WKWebView, _ script: String, until done: (Answer?) -> Bool) async -> Answer? {
+    /// What `script` returns in the map's page, given `arguments`, once `done` holds for it or the smoke test's patience
+    /// runs out.
+    private func pageAnswer<Answer>(_ web: WKWebView, _ script: String, arguments: [String: Any] = [:], until done: (Answer?) -> Bool) async -> Answer? {
         let deadline = Date().addingTimeInterval(Self.patience)
         while true {
-            let answer = (try? await web.callAsyncJavaScript(script, in: nil, contentWorld: .page)) as? Answer
+            let answer = (try? await web.callAsyncJavaScript(script, arguments: arguments, in: nil, contentWorld: .page)) as? Answer
             if done(answer) || Date() >= deadline { return answer }
             try? await Task.sleep(for: .milliseconds(100))
         }
