@@ -85,11 +85,10 @@ final class LiveIndexTests: XCTestCase {
 
     func testATreeIsCheckedLikeAScanResult() throws {
         let tree = #"{"type":"tree","request":3,"result":{"type":"result","version":4,"root":{"name":"x","path":"/x","size":10,"kind":"dir","files":1,"children":[]},"topFiles":[],"volumes":[],"unreadableFolders":[],"summary":{"dirs":1,"files":1,"bytes":10,"errors":0,"unreadable":{"protected":0,"denied":0,"other":0},"entryErrors":0,"cloudOnly":{"files":0,"bytes":0,"folders":0},"clones":{"files":0,"bytes":0},"elapsedMs":5,"engine":"bulk"}}}"#
-        guard case .tree(let request, let result, let json, let places, let unlisted, let pending) = try LiveDecoder.decode(Data(tree.utf8)) else { return XCTFail("not a tree") }
+        guard case .tree(let request, let result, let json, let places, let unlisted) = try LiveDecoder.decode(Data(tree.utf8)) else { return XCTFail("not a tree") }
         XCTAssertEqual(request, 3)
         XCTAssertEqual(places, [], "a tree asked for without places")
         XCTAssertEqual(unlisted, [], "nor any of the person's changes")
-        XCTAssertNil(pending, "a scanner that doesn't say how many folders wait")
         XCTAssertEqual(result.root.size, 10)
         // The page gets the result object exactly as the scanner wrote it.
         XCTAssertTrue(json.hasPrefix(#"{"type":"result","version":4"#) && json.hasSuffix(#""engine":"bulk"}}"#))
@@ -102,12 +101,11 @@ final class LiveIndexTests: XCTestCase {
     /// still gets exactly as the scanner wrote it.
     func testATreeSaysWhatItsIndexHoldsAtEachPlace() throws {
         let result = #"{"type":"result","version":4,"root":{"name":"x","path":"/x","size":10,"kind":"dir","files":1,"children":[]},"topFiles":[],"volumes":[],"unreadableFolders":[],"summary":{"dirs":1,"files":1,"bytes":10,"errors":0,"unreadable":{"protected":0,"denied":0,"other":0},"entryErrors":0,"cloudOnly":{"files":0,"bytes":0,"folders":0},"clones":{"files":0,"bytes":0},"elapsedMs":5,"engine":"bulk"}}"#
-        let line = #"{"type":"tree","request":3,"pending":3,"places":[{"path":"/x/Library/Mail","size":null},{"path":"/x/Library/Developer","size":4096},{"path":"/x/Library/Mobile Documents","size":null,"asking":true}],"unlisted":["/x/a.bin"],"result":"# + result + "}"
-        guard case .tree(_, _, let json, let places, let unlisted, let pending) = try LiveDecoder.decode(Data(line.utf8)) else { return XCTFail("not a tree") }
+        let line = #"{"type":"tree","request":3,"places":[{"path":"/x/Library/Mail","size":null},{"path":"/x/Library/Developer","size":4096},{"path":"/x/Library/Mobile Documents","size":null,"asking":true}],"unlisted":["/x/a.bin"],"result":"# + result + "}"
+        guard case .tree(_, _, let json, let places, let unlisted) = try LiveDecoder.decode(Data(line.utf8)) else { return XCTFail("not a tree") }
         XCTAssertEqual(places, [LivePlace(path: "/x/Library/Mail", size: nil), LivePlace(path: "/x/Library/Developer", size: 4096),
                                 LivePlace(path: "/x/Library/Mobile Documents", size: nil, asking: true)], "a place waiting on macOS says so")
         XCTAssertEqual(unlisted, ["/x/a.bin"], "the person's changes its index doesn't show yet")
-        XCTAssertEqual(pending, 3, "folders waiting to be listed for a change")
         XCTAssertEqual(json, result)
     }
 
@@ -240,7 +238,7 @@ final class LiveIndexTests: XCTestCase {
             request += 1
             process.tree(path: folder.path, focus: nil, request: request)
             let asked = request
-            _ = waitFor(reports, timeout: 2) { if case .tree(asked, let result, _, _, _, _) = $0 { size = result.root.size; return true }; return false }
+            _ = waitFor(reports, timeout: 2) { if case .tree(asked, let result, _, _, _) = $0 { size = result.root.size; return true }; return false }
             RunLoop.current.run(until: Date().addingTimeInterval(0.5))
         }
         XCTAssertEqual(size, scanned)
@@ -273,7 +271,7 @@ final class LiveIndexTests: XCTestCase {
         process.tree(path: folder.path, focus: nil, request: 1, places: [developer, locked.path, inside, folder.appendingPathComponent("Messages").path],
                      gone: [developer, gone], back: [developer, gone])
         var answer: (DiskResult, [LivePlace], [String])?
-        XCTAssertTrue(waitFor(reports) { if case .tree(1, let result, _, let places, let unlisted, _) = $0 { answer = (result, places, unlisted); return true }; return false })
+        XCTAssertTrue(waitFor(reports) { if case .tree(1, let result, _, let places, let unlisted) = $0 { answer = (result, places, unlisted); return true }; return false })
         let (map, places, unlisted) = try XCTUnwrap(answer)
         XCTAssertEqual(places, [LivePlace(path: developer, size: map.item(at: developer)?.size), LivePlace(path: locked.path, size: nil),
                                 LivePlace(path: inside, size: nil)])
