@@ -4,10 +4,11 @@
  * The Bruh is a halftone: a hex grid over the face, each dot sized by the light
  * on a sphere (dot area tracks brightness) and shrunk a little toward the rim,
  * so the silhouette stays round and the face reads as a lit ball. The eyes are
- * one-row slits and the mouth is one row of red. Geometry comes from `bruhGeometry`,
- * so the dots always match the logo, and looking left or right turns toward
- * the logo's own `left` and `right` variants. bruhs.ai and the bruhs-ai app
- * carry ports of the same algorithm.
+ * one-row slits and the mouth is one row of red. Geometry comes from
+ * `bruhGeometry`, so the dots always match the logo. Looking turns the whole
+ * head in 3D: the features ride the sphere, curving and foreshortening toward
+ * the rim under a fixed light, and the ball leans a little the way it looks.
+ * bruhs.ai and the bruhs-ai app carry ports of the same algorithm.
  *
  * Pure math plus one Canvas 2D draw call; no DOM lookups, so it runs in Node.
  */
@@ -34,9 +35,9 @@ export interface BrailleBruh {
   readonly cx: number;
   readonly cy: number;
   readonly r: number;
-  /** -1 turns fully to the `left` variant, 1 to `right`, 0 is `original`. */
+  /** -1 turns the head fully left, 1 fully right. */
   readonly lookX?: number;
-  /** -1 (up) to 1 (down); the logo has no vertical variants, so this is a small nudge. */
+  /** -1 tilts the head up, 1 down. */
   readonly lookY?: number;
 }
 
@@ -52,22 +53,19 @@ export interface Dot {
 
 const { base, eye, mouth, faces } = bruhGeometry;
 const unit = (p: Point): Point => ({ x: (p.x - base.cx) / base.r, y: (p.y - base.cy) / base.r });
-const variant = (name: keyof typeof faces) => ({
-  leftEye: unit(faces[name].leftEye),
-  rightEye: unit(faces[name].rightEye),
-  mouth: unit(faces[name].mouth),
-});
 // The logo's eyes sit 102 and 101 units from center; mirror them so the
 // symmetric hex grid cuts identical slits.
-const FRONT = variant("original");
-const EYE_HALF = (FRONT.rightEye.x - FRONT.leftEye.x) / 2;
-const ORIGINAL = {
-  ...FRONT,
-  leftEye: { x: -EYE_HALF, y: FRONT.leftEye.y },
-  rightEye: { x: EYE_HALF, y: FRONT.rightEye.y },
-};
-const LEFT = variant("left");
-const RIGHT = variant("right");
+const FRONT_LEFT_EYE = unit(faces.original.leftEye);
+const FRONT_RIGHT_EYE = unit(faces.original.rightEye);
+const EYE_HALF = (FRONT_RIGHT_EYE.x - FRONT_LEFT_EYE.x) / 2;
+const LEFT_EYE: Point = { x: -EYE_HALF, y: FRONT_LEFT_EYE.y };
+const RIGHT_EYE: Point = { x: EYE_HALF, y: FRONT_RIGHT_EYE.y };
+const MOUTH_AT = unit(faces.original.mouth);
+// A full look (lookX or lookY of ±1) turns the head this far, in radians,
+// and shifts the ball this share of its radius.
+const MAX_YAW = 0.75;
+const MAX_PITCH = 0.45;
+const LEAN = 0.04;
 const EYE_RX = eye.rx / base.r;
 const MOUTH_RX = mouth.rx / base.r;
 // Light from the upper left, mostly frontal; some ambient so the shadow side
@@ -95,23 +93,29 @@ export function shade(dx: number, dy: number): number | null {
 
 /**
  * Every dot of a Bruh in a `width` × `height` box. The hex grid is anchored on
- * the face's center, so the face is symmetric wherever it sits.
+ * the ball's center, so a face looking straight ahead is exactly symmetric.
  */
 export function bruhDots(width: number, height: number, face: BrailleBruh): Dot[] {
-  const { cx, cy, r } = face;
+  const { r } = face;
+  const lookX = Math.max(-1, Math.min(1, face.lookX ?? 0));
+  const lookY = Math.max(-1, Math.min(1, face.lookY ?? 0));
+  const cx = face.cx + lookX * LEAN * r;
+  const cy = face.cy + lookY * LEAN * r;
   const pitch = pitchFor(r);
   const rowH = (pitch * Math.sqrt(3)) / 2;
-  const look = Math.max(-1, Math.min(1, face.lookX ?? 0));
-  const nudge = Math.max(-1, Math.min(1, face.lookY ?? 0)) * 0.05;
-  const turned = look < 0 ? LEFT : RIGHT;
-  const t = Math.abs(look);
-  const toward = (a: Point, b: Point): Point => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t + nudge });
-  const eyes = [toward(ORIGINAL.leftEye, turned.leftEye), toward(ORIGINAL.rightEye, turned.rightEye)];
-  const m = toward(ORIGINAL.mouth, turned.mouth);
-  // Eyes and mouth are exactly one row each: the row nearest their line. An
-  // oval hole cut across staggered rows comes out ▽ on one eye and △ on the other.
-  const eyeRows = eyes.map((e) => Math.round((e.y * r) / rowH));
-  const mouthRow = Math.round((m.y * r) / rowH);
+  const head = rotation(lookX * MAX_YAW, lookY * MAX_PITCH);
+  // Where each feature lands once the head turns. Eyes and mouth are exactly
+  // one row each, the row nearest where they land: an oval hole cut across
+  // staggered rows comes out ▽ on one eye and △ on the other.
+  const land = (at: Point) => {
+    const seen = head.toScreen(lift(at));
+    return { at, row: Math.round((seen.y * r) / rowH), visible: seen.z > 0.15 };
+  };
+  const leftEye = land(LEFT_EYE);
+  const rightEye = land(RIGHT_EYE);
+  const m = land(MOUTH_AT);
+  const on = (feature: ReturnType<typeof land>, row: number, local: Point, rx: number) =>
+    feature.visible && row === feature.row && Math.abs(local.x - feature.at.x) <= rx && Math.abs(local.y - feature.at.y) < 0.2;
 
   const dots: Dot[] = [];
   const rows = Math.ceil(r / rowH) + 1;
@@ -126,11 +130,13 @@ export function bruhDots(width: number, height: number, face: BrailleBruh): Dot[
       const x = cx + (halfSteps * pitch) / 2;
       if (x < -pitch || x > width + pitch) continue;
       const dx = (halfSteps * pitch) / (2 * r);
-      const dy = (y - cy) / r;
+      const dy = (row * rowH) / r;
       let value = shade(dx, dy);
       if (value === null) continue;
-      if (eyes.some((e, i) => row === eyeRows[i] && Math.abs((dx - e.x) / EYE_RX) <= 1)) continue;
-      const isMouth = row === mouthRow && Math.abs((dx - m.x) / MOUTH_RX) <= 1;
+      // The point of the head's own (unturned) surface now under this dot.
+      const local = head.toLocal(dx, dy, Math.sqrt(Math.max(0, 1 - dx * dx - dy * dy)));
+      if (on(leftEye, row, local, EYE_RX) || on(rightEye, row, local, EYE_RX)) continue;
+      const isMouth = on(m, row, local, MOUTH_RX);
       if (isMouth) value = Math.max(value, 0.75);
       const radius = (pitch / 2) * 0.92 * Math.sqrt(value);
       if (radius < pitch * 0.07) continue;
@@ -181,6 +187,34 @@ export function drawDots(
     ctx.fillStyle = colors[kind];
     ctx.fill();
   }
+}
+
+/** A point of the front-facing face, in face radii, lifted onto the sphere. */
+function lift(p: Point): { x: number; y: number; z: number } {
+  return { x: p.x, y: p.y, z: Math.sqrt(Math.max(0, 1 - p.x * p.x - p.y * p.y)) };
+}
+
+/**
+ * The head's turn: a tilt (pitch, positive looks down) then a turn (yaw,
+ * positive looks right), on screen axes with y down and z toward the viewer.
+ */
+function rotation(yaw: number, pitch: number) {
+  const cosY = Math.cos(yaw);
+  const sinY = Math.sin(yaw);
+  const cosP = Math.cos(pitch);
+  const sinP = Math.sin(pitch);
+  return {
+    toScreen(p: { x: number; y: number; z: number }) {
+      const y = p.y * cosP + p.z * sinP;
+      const z = -p.y * sinP + p.z * cosP;
+      return { x: p.x * cosY + z * sinY, y, z: -p.x * sinY + z * cosY };
+    },
+    toLocal(x: number, y: number, z: number) {
+      const lx = x * cosY - z * sinY;
+      const lz = x * sinY + z * cosY;
+      return { x: lx, y: y * cosP - lz * sinP, z: y * sinP + lz * cosP };
+    },
+  };
 }
 
 function normalize(x: number, y: number, z: number): { x: number; y: number; z: number } {
