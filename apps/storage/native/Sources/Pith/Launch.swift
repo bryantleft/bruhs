@@ -1,8 +1,9 @@
 import Foundation
 
 /// How this run of Pith began. A run a script starts and checks, with `--smoke-test`, `--activity` or `--scan`, leaves
-/// the person's persisted state as it found it: it reads none of their settings and writes none, and keeps its Activity
-/// history and its scans in memory or in folders of its own, never in theirs.
+/// the person's persisted state as it found it: it reads none of their settings and writes none, keeps its Activity
+/// history and its scans in memory or in folders of its own, never in theirs, and moves nothing into their Trash
+/// (`DiskModel.trashFolder`).
 enum Launch {
     static let isAutomated = CommandLine.arguments.contains { ["--activity", "--scan", "--smoke-test"].contains($0) }
 

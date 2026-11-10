@@ -4,14 +4,16 @@ import PithCore
 
 extension AppDelegate {
     /// Runs the real packaged renderer and scanner against a caller-supplied fixture.
-    /// No system setting is changed by this diagnostic, and the only item it moves to the Trash is a file of its own,
-    /// which Undo puts back.
+    /// No Trash operation touches the person's Trash, and no system setting is changed by this diagnostic.
     func smokeTest(root: URL, report: URL) async {
         var checks: [String: Bool] = [:]
-        // The fixture's scans are kept in a folder of the smoke test's own, never the user's, which goes when it ends.
+        // The fixture's scans are kept in a folder of the smoke test's own, never the user's, and what it moves to the
+        // Trash goes to another of its own, never the user's Trash. Both go when it ends.
         let scans = FileManager.default.temporaryDirectory.appendingPathComponent("pith-smoke-scans-\(UUID().uuidString)")
+        let trash = FileManager.default.temporaryDirectory.appendingPathComponent("pith-smoke-trash-\(UUID().uuidString)")
         disk.scansFolder = scans
-        let forgetScans = { _ = try? FileManager.default.removeItem(at: scans) }
+        disk.trashFolder = trash
+        let forgetFolders = { for folder in [scans, trash] { _ = try? FileManager.default.removeItem(at: folder) } }
         checks["native_fonts_registered"] = BruhsFonts.isAvailable
         // The fallback symbol is a template image too, so the SVG itself has to decode.
         let glyph = Bundle.main.url(forResource: "StatusGlyph", withExtension: "svg").flatMap(NSImage.init(contentsOf:))
@@ -151,14 +153,14 @@ extension AppDelegate {
             let changes = stateAtLaunch.map { PersistedState.read().differences(from: $0) } ?? ["nothing read at launch"]
             print("the person's state: \(changes.isEmpty ? "as it was" : "changed \(changes)")")
             checks["left_the_persons_state_alone"] = changes.isEmpty
-            forgetScans()
+            forgetFolders()
             let data = try JSONSerialization.data(withJSONObject: checks, options: [.prettyPrinted, .sortedKeys])
             try data.write(to: report)
             print(String(decoding: data, as: UTF8.self))
             if checks.values.contains(false) { exit(1) }
             NSApp.terminate(nil)
         } catch {
-            forgetScans()
+            forgetFolders()
             let failure: [String: Any] = ["checks": checks, "error": error.localizedDescription]
             if let data = try? JSONSerialization.data(withJSONObject: failure, options: [.prettyPrinted, .sortedKeys]) { try? data.write(to: report); print(String(decoding: data, as: UTF8.self)) }
             exit(1)
@@ -592,7 +594,8 @@ extension AppDelegate {
 
     /// The person's own changes show at once, though the pointer rests on the map and holds a newer map from the live
     /// map still: Command-Delete takes the block under the pointer off the map, and Undo puts it back. The item is a
-    /// file of the check's own, which goes to the person's Trash for a moment and comes back with Undo.
+    /// file of the check's own. Move to Trash puts it in the run's own folder, as it does in any automated run, never
+    /// in the person's Trash, and Undo moves it back from there.
     private func checkOwnChangesShowAtOnce(_ fixture: String) async -> [String: Bool] {
         let names = ["trash_leaves_the_map_at_once", "undo_returns_to_the_map_at_once"]
         let files = FileManager.default
@@ -606,19 +609,22 @@ extension AppDelegate {
             if let inTrash { try? files.removeItem(at: inTrash) }
             disk.dismissTrashNote()
         }
-        // 2 MiB: the live map lists files of 1 MiB or more by name.
-        guard files.createFile(atPath: item, contents: Data(count: 2 << 20)), let web = webView, await eventually(listed), await mapSettles(),
+        // 1 MiB, the least the live map lists by name (`BIG_FILE`), so the item has a block of its own.
+        guard files.createFile(atPath: item, contents: Data(count: 1 << 20)), let web = webView, await eventually(listed), await mapSettles(),
               let payload = disk.resultJSON else {
             return Dictionary(uniqueKeysWithValues: names.map { ($0, false) })
         }
         let trash = try? await web.callAsyncJavaScript(Self.trashUnderPointer, arguments: ["payload": payload, "name": name], in: nil,
                                                        contentWorld: .page) as? [String: Any]
         inTrash = disk.trashed?.trashed
+        // Into the run's own folder, not the person's Trash.
+        let own = disk.trashFolder.map { folder in inTrash?.path.hasPrefix(folder.path + "/") == true } ?? false
         let after = trash?["after"] as? Double
         let left = trash?["named"] as? Bool == true && trash?["waited"] as? Bool == true && trash?["left"] as? Bool == true
-            && (after ?? .infinity) < 1000 && inTrash != nil && !files.fileExists(atPath: item)
+            && (after ?? .infinity) < 1000 && own && !files.fileExists(atPath: item)
         print("Command-Delete under the pointer: the card named the item \(trash?["named"] as? Bool == true), a newer map waited "
-              + "\(trash?["waited"] as? Bool == true), the block left \(after.map { "\(Int($0)) ms" } ?? "never") after the key")
+              + "\(trash?["waited"] as? Bool == true), the item went to the run's own folder \(own), and its block left "
+              + "\(after.map { "\(Int($0)) ms" } ?? "never") after the key")
 
         // Undo as the Edit menu does it, through the undo manager the move registered with.
         let undo = web.window?.undoManager

@@ -112,12 +112,16 @@ enum MapCommand: Equatable {
     /// unless the smoke test points it at a folder of its own.
     var scansFolder = Launch.isAutomated
         ? nil : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Pith/Scans")
+    /// Where an automated run's Move to Trash puts items, since it never touches the person's Trash: a folder the smoke
+    /// test gives it, which Undo moves them back from. Without one, an automated run moves nothing to the Trash.
+    var trashFolder: URL?
     var problem: DiskProblem?
     var isScanning = false
     var isTrashing = false
     var revision = UUID()
-    /// Set when the person's own action changed the map, moving an item to the Trash or putting it back, until the
-    /// page has that map: the page shows it at once, though the pointer or a click would hold a newer map still.
+    /// Set when the person's own action changed the map, until the page has that map: moving an item to the Trash,
+    /// putting it back, or a scan they asked for, such as Refresh. The page shows it at once, though the pointer or a
+    /// click would hold a newer map still. The live map's own refreshes come unmarked, and wait.
     @ObservationIgnored var mapAnswersPerson = false
     /// The folder being scanned, or the one the map shows.
     private(set) var scope: String?
@@ -522,6 +526,8 @@ enum MapCommand: Equatable {
                 if result?.root.path != value.root.path { mapStartsOver() }
                 result = value; scannedAt = Date(); edited = false; trashed = nil
                 compareWithLastScan(value)
+                // The person asked for this scan: a folder they chose or opened, Refresh, or Scan Again.
+                mapAnswersPerson = true
                 revision = UUID()
                 refreshAccounting()
                 changes = DiskChanges()
@@ -581,7 +587,8 @@ enum MapCommand: Equatable {
                         changes.merge(earlier)
                         return
                     }
-                    self.result = merged; edited = true; trashed = nil; revision = UUID()
+                    // Refresh or Scan Again, which the person asked for.
+                    self.result = merged; edited = true; trashed = nil; mapAnswersPerson = true; revision = UUID()
                     select(selected)
                 } catch {
                     changes.merge(earlier)
@@ -693,8 +700,7 @@ enum MapCommand: Equatable {
         isTrashing = true; problem = nil
         defer { isTrashing = false }
         do {
-            var trashedURL: NSURL?
-            try FileManager.default.trashItem(at: plan.target, resultingItemURL: &trashedURL)
+            let trashedURL = try moveToTrash(plan.target)
             if selected == plan.target.path { select(nil) }
             if let updated = result.removing(plan.target.path) {
                 self.result = updated
@@ -702,7 +708,7 @@ enum MapCommand: Equatable {
                 // The tree didn't hold it (an item inside a group of smaller ones): the next scan reflects it.
                 edited = true
             }
-            trashed = (trashedURL as URL?).map { TrashedItem(name: plan.name, size: plan.size, original: plan.target, trashed: $0, previous: result) }
+            trashed = trashedURL.map { TrashedItem(name: plan.name, size: plan.size, original: plan.target, trashed: $0, previous: result) }
             if liveView == nil { edited = true }
             mapAnswersPerson = true
             revision = UUID()
@@ -713,6 +719,24 @@ enum MapCommand: Equatable {
         } catch {
             problem = DiskProblem(message: "Pith couldn’t move \(plan.name) to the Trash. \(Self.plain(error))")
         }
+    }
+
+    /// Moves `item` to the person's Trash, as Finder does, and says where it went. An automated run never touches the
+    /// person's Trash (`Launch.isAutomated`): it moves the item into `trashFolder` instead, and Undo moves it back from
+    /// there as from the Trash.
+    private func moveToTrash(_ item: URL) throws -> URL? {
+        guard Launch.isAutomated else {
+            var trashedURL: NSURL?
+            try FileManager.default.trashItem(at: item, resultingItemURL: &trashedURL)
+            return trashedURL as URL?
+        }
+        guard let trashFolder else { throw DiskFailure("An automated run of Pith doesn’t use your Trash.") }
+        // A folder for each item, so two items of the same name never meet.
+        let holder = trashFolder.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: holder, withIntermediateDirectories: true)
+        let moved = holder.appendingPathComponent(item.lastPathComponent)
+        try FileManager.default.moveItem(at: item, to: moved)
+        return moved
     }
 
     /// Moves the last trashed item back where it was and restores the map from before.
