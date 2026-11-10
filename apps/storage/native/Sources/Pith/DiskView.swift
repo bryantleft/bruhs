@@ -87,14 +87,33 @@ struct DiskView: View {
     }
 }
 
-/// Where the map is, as one path from the disk down, with a caption on what the map holds and Cancel while a scan runs.
-private struct DiskControlBar: View {
+/// "Where the space is" for a map of a whole volume: a link to its popover, which a click on the map's Not measured block
+/// opens too. While a scan runs, the map it accounts for stays on screen, dimmed, and takes no clicks, so the link stays
+/// and is the way to it.
+struct WhereTheSpaceIsLink: View {
     let model: DiskModel
 
-    /// "Where the space is", open from its link or from a click on the map's Not measured block.
     private var showsWhereTheSpaceIs: Binding<Bool> {
         Binding(get: { model.showsWhereTheSpaceIs }, set: { model.showsWhereTheSpaceIs = $0 })
     }
+
+    var body: some View {
+        if let rows = model.spaceRows {
+            Button("Where the space is") { model.showsWhereTheSpaceIs.toggle() }
+                .buttonStyle(.link)
+                .font(BruhsType.note)
+                .foregroundStyle(BruhsColor.accent)
+                .popover(isPresented: showsWhereTheSpaceIs, arrowEdge: .bottom) { WhereTheSpaceIsView(rows: rows) }
+                .help("What the disk’s used space holds, including what the scan couldn’t measure")
+                // Gone with the link, so it doesn't open again by itself when the link comes back.
+                .onDisappear { model.showsWhereTheSpaceIs = false }
+        }
+    }
+}
+
+/// Where the map is, as one path from the disk down, with a caption on what the map holds and Cancel while a scan runs.
+private struct DiskControlBar: View {
+    let model: DiskModel
 
     var body: some View {
         HStack(spacing: 12) {
@@ -127,17 +146,7 @@ private struct DiskControlBar: View {
                                   ? "macOS lost track of some changes, so this scans the whole folder again."
                                   : "Scan the folders that changed again, and put them in their places on the map.")
                     }
-                    // While a scan runs the map it accounts for stays on screen, dimmed, and so does this.
-                    if let rows = model.spaceRows {
-                        Button("Where the space is") { model.showsWhereTheSpaceIs.toggle() }
-                            .buttonStyle(.link)
-                            .font(BruhsType.note)
-                            .foregroundStyle(BruhsColor.accent)
-                            .popover(isPresented: showsWhereTheSpaceIs, arrowEdge: .bottom) { WhereTheSpaceIsView(rows: rows) }
-                            .help("What the disk’s used space holds, including what the scan couldn’t measure")
-                            // Gone with the link, so it doesn't open again by itself when the link comes back.
-                            .onDisappear { model.showsWhereTheSpaceIs = false }
-                    }
+                    WhereTheSpaceIsLink(model: model)
                 }
             }
             Spacer(minLength: 12)
@@ -551,9 +560,10 @@ struct DiskWebView: NSViewRepresentable {
         context.coordinator.iconRule = model.iconRule
         context.coordinator.doubleClickInterval = NSEvent.doubleClickInterval
         context.coordinator.differentiatesWithoutColor = Coordinator.differentiateWithoutColor()
+        context.coordinator.scanning = model.isScanning
         context.coordinator.send(revision: model.revision)
-        // After its map, which carries it when the two changed together; the volume's own figures come a moment after a
-        // new root's first map, and go on their own. The page matches it to its map by root.
+        // After its map, which carries it: a map of a whole volume goes out with the figures measured for it. Without a
+        // map, it goes on its own. The page matches it to its map by root.
         context.coordinator.notMeasured = model.notMeasured
     }
     static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) {
@@ -617,9 +627,14 @@ struct DiskWebView: NSViewRepresentable {
         var differentiatesWithoutColor: Bool? {
             didSet { if differentiatesWithoutColor != oldValue { sendDifferentiateWithoutColor() } }
         }
+        /// Whether a scan is running. The map it was drawn from stays on screen meanwhile, dimmed, and takes no clicks, so
+        /// its hover cards offer none. The page can't tell, so it goes there once the page is ready and whenever it changes.
+        var scanning: Bool? {
+            didSet { if scanning != oldValue { sendScanning() } }
+        }
         /// The used space of the volume a map of a whole volume shows, which the page draws as its Not measured block at
-        /// the map's root and gives the root's shares of. It travels with the map when the two change together, as with
-        /// every live map, so the page draws them at once, and on its own when the volume's figures come after their map.
+        /// the map's root and gives the root's shares of. It travels with the map it was measured for, so the page draws
+        /// them at once, and on its own only when it changes without a map.
         var notMeasured: DiskModel.NotMeasured? {
             didSet { sendNotMeasured() }
         }
@@ -660,10 +675,11 @@ struct DiskWebView: NSViewRepresentable {
             switch action {
             case "ready":
                 // Every page load starts empty, a reload, a new window and a restart after a crash included, so it gets
-                // the icons' base and rule, the owners and the click hints learned, and then the scan again with its places
-                // and its volume's used space, and the native selection and history it no longer has are dropped.
+                // the icons' base and rule, the map's settings, whether a scan is running, the owners and the click hints
+                // learned, and then the scan again with its places and its volume's used space, and the native selection
+                // and history it no longer has are dropped.
                 ready = true; revision = nil; model.select(nil); model.mapStartsOver(); sendIcons(); sendDoubleClickInterval()
-                sendDifferentiateWithoutColor(); sendOwners(); sendLearnedHints()
+                sendDifferentiateWithoutColor(); sendScanning(); sendOwners(); sendLearnedHints()
                 sentPlaces = nil; sentNotMeasured = nil
                 send(revision: model.revision)
             case "select": model.select(path)
@@ -768,7 +784,7 @@ struct DiskWebView: NSViewRepresentable {
                     script = "window.pithReceivePlaces?.(places); " + script
                     arguments["places"] = places.flatMap(Self.json) ?? NSNull()
                 }
-                // So is the volume's used space, which moves with every map it's set against.
+                // So is the volume's used space, measured for this map before it went out.
                 let usedSpace = model.notMeasured
                 if usedSpace != sentNotMeasured {
                     sentNotMeasured = usedSpace
@@ -820,6 +836,13 @@ struct DiskWebView: NSViewRepresentable {
                 if case .failure(let error) = result { NSLog("Pith: the disk map didn’t take Differentiate Without Color: \(error.localizedDescription)") }
             }
         }
+        /// Tells the page whether a scan is running once it's ready, and again when that changes.
+        private func sendScanning() {
+            guard ready, let web, let scanning else { return }
+            web.callAsyncJavaScript("window.pithReceiveScanning?.(on)", arguments: ["on": scanning], in: nil, in: .page) { result in
+                if case .failure(let error) = result { NSLog("Pith: the disk map didn’t take whether a scan is running: \(error.localizedDescription)") }
+            }
+        }
         /// Gives the page the click hints the person has learned, from Pith's settings, once it's ready for them: a new
         /// window's page shows none it has learned.
         private func sendLearnedHints() {
@@ -828,8 +851,7 @@ struct DiskWebView: NSViewRepresentable {
                 if case .failure(let error) = result { NSLog("Pith: the disk map didn’t take the hints it has learned: \(error.localizedDescription)") }
             }
         }
-        /// Gives the page the volume's used space when it changed without a map, as when the volume's figures come after
-        /// their map, or nothing for a map of a folder.
+        /// Gives the page the volume's used space when it changed without a map, or nothing for a map of a folder.
         private func sendNotMeasured() {
             guard ready, let web, notMeasured != sentNotMeasured else { return }
             sentNotMeasured = notMeasured

@@ -119,6 +119,8 @@ declare global {
     pithReceiveDoubleClickInterval: (seconds: number) => void;
     /** Whether macOS's Differentiate Without Color is on. */
     pithReceiveDifferentiateWithoutColor: (on: boolean) => void;
+    /** Whether a scan is running, which Pith shows over the earlier map, dimmed, taking no clicks on it meanwhile. */
+    pithReceiveScanning: (on: boolean) => void;
     /**
      * Pith's path bar and Go menu: open a folder of the map, go back or forward through the folders opened, or up
      * to the open folder's enclosing folder.
@@ -177,6 +179,22 @@ function useDifferentiateWithoutColor(): boolean {
   return on;
 }
 
+/**
+ * Whether a scan is running. Pith shows the earlier map meanwhile, dimmed, and takes no clicks on it, so its hover cards
+ * offer none. A web page can't tell, so Pith sends it once the page is ready and again whenever it changes; until then,
+ * none is.
+ */
+function useScanning(): boolean {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    window.pithReceiveScanning = (value) => setOn(value === true);
+    return () => {
+      window.pithReceiveScanning = () => {};
+    };
+  }, []);
+  return on;
+}
+
 function DiskMap() {
   const [result, setResult] = useState<ResultEvent | null>(null);
   // Whether the map answers the person's own action, which the map shows at once, however still it holds.
@@ -197,6 +215,7 @@ function DiskMap() {
   // Taken before the page says it's ready, as the icons are.
   const doubleClickInterval = useDoubleClickInterval();
   const glyphs = useDifferentiateWithoutColor();
+  const scanning = useScanning();
   const accounted = useUsedSpace();
   // The click hints the map has learned, which Pith keeps in its settings so they stay learned in every window.
   const tellHint = useCallback(
@@ -453,6 +472,7 @@ function DiskMap() {
             kindGlyphs={glyphs}
             padlocks
             hints={hints}
+            scanning={scanning}
             usedSpace={usedSpace}
             onUnmeasured={explainNotMeasured}
             icon={

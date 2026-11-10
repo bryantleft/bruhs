@@ -106,19 +106,22 @@ extension AppDelegate {
     ///   with its figure.
     /// - The block's card gives its share of the volume's used space, the popover's Used on this disk. A click on it opens
     ///   "Where the space is", whose popover shows, and leaves the selection as it was; a double-click opens no folder; its
-    ///   row in the map's list of items opens "Where the space is" too, and so does a click while a scan runs.
+    ///   row in the map's list of items opens "Where the space is" too.
     /// - Move to Trash, into the run's own folder, takes a file off the map, and its bytes join Not measured at once, on
     ///   the page too, as the volume still holds them; Undo puts them back at once.
     /// - A file written outside Pith, as a download is, shows on the live map by itself, and the volume's space, measured
-    ///   again with that map, holds it too: Used on this disk grows by it and Not measured holds still, on the page too.
+    ///   before that map goes out, holds it too: Used on this disk grows by it and Not measured holds still, on the page
+    ///   too. Every figure the page gets comes in one call with the map it was measured for, none after it to correct it.
     ///   Once the file is deleted, Used on this disk goes back, and Not measured still holds.
+    /// - While a scan runs, the map takes no clicks and its cards offer none, and the "Where the space is" link still opens
+    ///   it (`checkScanningMap`).
     /// - "Where the space is" has an In the Trash row of the map's figure for the Trash, and every row leads with its
     ///   icon, drawn as the popover draws them in a window of its own off screen, in the appearance the main window
     ///   doesn't have, the disk's and the Trash's by the icon store.
     /// Once the volume's figures go, the block goes too.
     func checkNotMeasured(_ fixture: String, report: URL) async -> [String: Bool] {
         let names = ["not_measured_block_matches_the_popover", "where_the_space_is_shows_icons", "not_measured_follows_trash_and_undo",
-                     "not_measured_explains_itself_while_scanning", "not_measured_holds_as_files_change_outside_pith"]
+                     "map_takes_no_clicks_while_scanning", "not_measured_holds_as_files_change_outside_pith"]
         let files = FileManager.default, mark = UUID().uuidString.prefix(8).lowercased()
         let trash = (fixture as NSString).appendingPathComponent("pith-smoke-trash-\(mark)")
         let item = (fixture as NSString).appendingPathComponent("pith-smoke-gone-\(mark).bin")
@@ -202,7 +205,8 @@ extension AppDelegate {
                   + "\(onThePage ?? "nothing"); after Undo \(undone.map(String.init) ?? "none"), the page's \(backOnThePage ?? "nothing")")
 
             // A file written outside Pith, as a download is, and then deleted: the live map follows it by itself, and the
-            // volume's space, measured again with each map, with it.
+            // volume's space, measured before each map goes out, with it.
+            let keeping = await keepNotMeasuredSent(web)
             let written = files.createFile(atPath: outside, contents: Data(count: 1 << 20))
             let grown = used.map { $0 + (1 << 20) }
             let onTheMap = await eventually { self.disk.result?.item(at: outside) != nil }
@@ -214,23 +218,18 @@ extension AppDelegate {
             let shrank = await eventually { self.disk.notMeasured?.used == used }
             let heldAfter = disk.notMeasured?.bytes
             let heldAfterOnThePage = await pageAnswer(web, Self.notMeasuredItem) { (text: String?) in text == figure.map { "Not measured " + $0 } }
+            // Each figure went to the page with its map, measured for it, and none came after to correct it.
+            let figuresSent = keeping ? await notMeasuredSent(web) : nil
+            let together = figuresSent.map { !$0.isEmpty && $0.allSatisfy(\.withMap) } ?? false
             checks[names[4]] = block != nil && grown != nil && written && onTheMap && grew && held == block
                 && heldOnThePage == figure.map { "Not measured " + $0 } && deleted && offTheMap && shrank && heldAfter == block
-                && heldAfterOnThePage == figure.map { "Not measured " + $0 }
+                && heldAfterOnThePage == figure.map { "Not measured " + $0 } && together
             print("not measured with a file written outside Pith: on the map \(onTheMap), used \(usedWhileWritten.map(String.init) ?? "none") for "
                   + "\(grown.map(String.init) ?? "none"), Not measured \(held.map(String.init) ?? "none"), the page's \(heldOnThePage ?? "nothing"); "
                   + "once deleted, off the map \(offTheMap), used back \(shrank), Not measured \(heldAfter.map(String.init) ?? "none"), the page's "
-                  + "\(heldAfterOnThePage ?? "nothing"), for \(block.map(String.init) ?? "none")")
+                  + "\(heldAfterOnThePage ?? "nothing"), for \(block.map(String.init) ?? "none"); the page got \(Self.figures(figuresSent))")
 
-            // A scan under way leaves the map it was drawn from, dimmed, and its explanation with it.
-            disk.isScanning = true
-            let scanned = try? await web.callAsyncJavaScript(Self.clickTheBlock, in: nil, contentWorld: .page) as? [String: Any]
-            let whileScanning = await eventually { self.disk.showsWhereTheSpaceIs }
-            let presentedWhileScanning = await eventually { Self.popoverShows }
-            disk.isScanning = kept.scanning
-            disk.showsWhereTheSpaceIs = false
-            _ = await eventually { !Self.popoverShows }
-            checks[names[3]] = scanned?["card"] != nil && whileScanning && presentedWhileScanning
+            checks[names[3]] = await checkScanningMap(web, scanning: kept.scanning)
 
             let trashRow = rows.first { $0.label == "In the Trash" }?.figure
             let trashShown = disk.result?.root.children?.first { $0.path == trash }?.size
@@ -243,9 +242,8 @@ extension AppDelegate {
             print("not measured: \(block.map(String.init) ?? "none") bytes of \(used.map(String.init) ?? "none") used sent the page \(sent), the accounting's "
                   + "\(accounting.map(String.init) ?? "none"), the popover's \(shown(notMeasuredRow)) of \(shown(usedRow)), listed as \(listed ?? "nothing"); "
                   + "the card \(card ?? "never showed") for \(share ?? "no share"); a click opened Where the space is \(explains), its popover showed "
-                  + "\(presented), the selection and folder stayed \(stayed), the list's row opened it \(fromTheList), and a click while scanning "
-                  + "\(whileScanning) with its popover \(presentedWhileScanning); In the Trash \(shown(trashRow)) against the map's "
-                  + "\(trashShown.map(String.init) ?? "none")")
+                  + "\(presented), the selection and folder stayed \(stayed), and the list's row opened it \(fromTheList); In the Trash "
+                  + "\(shown(trashRow)) against the map's \(trashShown.map(String.init) ?? "none")")
         }
         // The volume's figures went with the defer above, and the block goes with them.
         let gone = await pageAnswer(web, Self.notMeasuredItem) { (text: String?) in text == nil } == nil
@@ -261,6 +259,265 @@ extension AppDelegate {
     /// Whether a popover shows, as "Where the space is" does once it opens: AppKit's popover windows.
     private static var popoverShows: Bool {
         NSApp.windows.contains { $0.isVisible && $0.className.contains("Popover") }
+    }
+
+    /// While a scan runs, the map it was drawn from stays on screen, dimmed, and takes no clicks: its cards offer none,
+    /// the Not measured block's included, a click through the window doesn't reach it, as AppKit finds the view a click
+    /// goes to and as the click itself shows, and "Where the space is" still opens from its link, drawn off screen as the
+    /// control bar draws it. Without a scan, the same click through the window reaches the map and opens "Where the space
+    /// is" from the block, and once the scan ends its card offers the click again.
+    private func checkScanningMap(_ web: WKWebView, scanning: Bool) async -> Bool {
+        guard let window = web.window,
+              let found = (try? await web.callAsyncJavaScript(Self.hoverTheMap, in: nil, contentWorld: .page)) as? [String: Any],
+              let at = found["at"] as? [String: Any], let point = Self.windowPoint(at, in: web) else {
+            print("map while scanning: no Not measured block found")
+            return false
+        }
+        let offered = (found["block"] as? String)?.contains("Click to see why.") == true
+        let place = ["x": at["x"] ?? 0, "y": at["y"] ?? 0]
+        // Without a scan, a click through the window reaches the map, and the block opens Where the space is.
+        let reached = Self.reachesTheMap(point, in: window, web: web)
+        Self.click(at: point, in: window)
+        let opened = await eventually { self.disk.showsWhereTheSpaceIs }
+        disk.showsWhereTheSpaceIs = false
+        _ = await eventually { !Self.popoverShows }
+
+        let selected = disk.selected
+        disk.isScanning = true
+        // Once the page knows, the block's card offers no click, and no other card does.
+        let told = await pageAnswer(web, Self.hoverAt, arguments: place) { (text: String?) in
+            text?.hasPrefix("Not measured") == true && text?.localizedCaseInsensitiveContains("click") == false
+        }
+        let cards = ((try? await web.callAsyncJavaScript(Self.hoverTheMap, in: nil, contentWorld: .page)) as? [String: Any])?["cards"] as? [String] ?? []
+        let offersNone = !cards.isEmpty && cards.allSatisfy { !$0.localizedCaseInsensitiveContains("click") }
+        let blocked = await eventually { !Self.reachesTheMap(point, in: window, web: web) }
+        Self.click(at: point, in: window)
+        // Longer than the click took to open it without a scan.
+        try? await Task.sleep(for: .milliseconds(600))
+        let ignored = !disk.showsWhereTheSpaceIs && disk.selected == selected
+        let linked = await linkOpens()
+        disk.showsWhereTheSpaceIs = false
+        _ = await eventually { !Self.popoverShows }
+        disk.isScanning = scanning
+        let offeredAgain = await pageAnswer(web, Self.hoverAt, arguments: place) { (text: String?) in text?.contains("Click to see why.") == true }
+        print("map while scanning: without a scan, the block's card offered the click \(offered), a click through the window reached the map "
+              + "\(reached) and opened Where the space is \(opened); while scanning, the block's card said \(told ?? "nothing"), \(cards.count) cards "
+              + "offered no click \(offersNone), the window's click reached the map \(!blocked) and was ignored \(ignored), the link opened it "
+              + "\(linked); once the scan ended the card offered the click again \(offeredAgain != nil)")
+        return offered && reached && opened && told.map { !$0.localizedCaseInsensitiveContains("click") } == true && offersNone && blocked && ignored
+            && linked && offeredAgain != nil
+    }
+
+    /// Clicks "Where the space is", drawn off screen as Disk's control bar draws it: whether it opened.
+    private func linkOpens() async -> Bool {
+        let host = NSHostingView(rootView: WhereTheSpaceIsLink(model: disk).padding(8))
+        let size = host.fittingSize
+        let window = NSWindow(contentRect: NSRect(x: -8000, y: -8000, width: size.width, height: size.height), styleMask: [.borderless], backing: .buffered,
+                              defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil); window.contentView = nil }
+        try? await Task.sleep(for: .milliseconds(300))
+        Self.click(at: NSPoint(x: size.width / 2, y: size.height / 2), in: window)
+        return await eventually { self.disk.showsWhereTheSpaceIs }
+    }
+
+    /// Where `at`, a point of the page in CSS pixels, is in the web view's window.
+    private static func windowPoint(_ at: [String: Any], in web: WKWebView) -> NSPoint? {
+        guard let x = (at["x"] as? NSNumber)?.doubleValue, let y = (at["y"] as? NSNumber)?.doubleValue else { return nil }
+        let zoom = web.pageZoom
+        let inView = NSPoint(x: x * zoom, y: web.isFlipped ? y * zoom : web.bounds.height - y * zoom)
+        return web.convert(inView, to: nil)
+    }
+
+    /// Whether a click at `point` in `window` goes to the map's web view, as AppKit finds the view a click goes to.
+    private static func reachesTheMap(_ point: NSPoint, in window: NSWindow, web: WKWebView) -> Bool {
+        guard let frame = window.contentView?.superview, let hit = frame.hitTest(point) else { return false }
+        return hit === web || hit.isDescendant(of: web)
+    }
+
+    /// A click at `point` in `window`, sent through the window as AppKit sends the person's. The release waits in the app's
+    /// event queue before the press goes: a control that tracks the mouse once pressed, as AppKit's buttons do, takes it
+    /// from there and lets go, and anything else gets it from the queue once the press is handled.
+    static func click(at point: NSPoint, in window: NSWindow) {
+        func event(_ type: NSEvent.EventType) -> NSEvent? {
+            NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                               windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)
+        }
+        guard let press = event(.leftMouseDown), let release = event(.leftMouseUp) else { return }
+        NSApp.postEvent(release, atStart: false)
+        window.sendEvent(press)
+    }
+
+    /// Moves the pointer across the map, a point at a time, saying each card that showed and where the Not measured
+    /// block's did.
+    private static let hoverTheMap = mapScript("""
+        leave();
+        await pause(100);
+        const frame = canvas.getBoundingClientRect();
+        const cards = [];
+        let at = null;
+        let block = null;
+        for (let y = 0.1; y < 1; y += 0.2) {
+          for (let x = 0.1; x < 1; x += 0.2) {
+            const point = { x: frame.left + frame.width * x, y: frame.top + frame.height * y };
+            mouse("mousemove", point);
+            await pause(60);
+            const text = card();
+            if (text) cards.push(text);
+            if (!at && text.startsWith("Not measured")) {
+              at = point;
+              block = text;
+            }
+          }
+        }
+        leave();
+        return { at, block, cards };
+        """)
+
+    /// The card at `x`, `y` on the page.
+    private static let hoverAt = mapScript("""
+        leave();
+        await pause(60);
+        mouse("mousemove", { x, y });
+        await pause(80);
+        const text = card();
+        leave();
+        return text;
+        """)
+
+    /// Keeps every Not measured figure native sends the page from now on, in order, as the page's own receiver gets it:
+    /// its bytes, or null for none, and whether a map came in the same call. Native sends a figure and its map in one
+    /// call, the figure first, so the map arrives before anything else on the page runs.
+    private static let keepNotMeasured = """
+        const kept = window.pithSmokeNotMeasured ?? { receive: window.pithReceiveNotMeasured, receiveMap: window.pithReceive };
+        kept.sent = [];
+        kept.last = null;
+        window.pithSmokeNotMeasured = kept;
+        window.pithReceiveNotMeasured = (root, bytes, used) => {
+          const figure = { bytes, withMap: false };
+          kept.sent.push(figure);
+          kept.last = figure;
+          queueMicrotask(() => {
+            if (kept.last === figure) kept.last = null;
+          });
+          kept.receive(root, bytes, used);
+        };
+        window.pithReceive = (payload, atOnce) => {
+          if (kept.last) kept.last.withMap = true;
+          kept.receiveMap(payload, atOnce);
+        };
+        return true;
+        """
+
+    /// The figures kept since, with the page's own receivers back in their places.
+    private static let keptNotMeasured = """
+        const kept = window.pithSmokeNotMeasured;
+        if (!kept) return null;
+        window.pithReceiveNotMeasured = kept.receive;
+        window.pithReceive = kept.receiveMap;
+        delete window.pithSmokeNotMeasured;
+        return kept.sent;
+        """
+
+    /// A Not measured figure the page got: its bytes, nil for none, and whether its map came with it.
+    struct SentFigure {
+        let bytes: UInt64?
+        let withMap: Bool
+    }
+
+    /// Starts keeping the Not measured figures native sends the page: whether it could.
+    func keepNotMeasuredSent(_ web: WKWebView) async -> Bool {
+        (try? await web.callAsyncJavaScript(Self.keepNotMeasured, in: nil, contentWorld: .page)) as? Bool == true
+    }
+
+    /// The Not measured figures native sent the page since `keepNotMeasuredSent`, in order.
+    func notMeasuredSent(_ web: WKWebView) async -> [SentFigure]? {
+        ((try? await web.callAsyncJavaScript(Self.keptNotMeasured, in: nil, contentWorld: .page)) as? [[String: Any]])?.map {
+            SentFigure(bytes: ($0["bytes"] as? NSNumber)?.uint64Value, withMap: $0["withMap"] as? Bool == true)
+        }
+    }
+
+    /// Figures as a log line names them.
+    static func figures(_ sent: [SentFigure]?) -> String {
+        guard let sent else { return "nothing it could keep" }
+        guard !sent.isEmpty else { return "no figure" }
+        return sent.map { "\($0.bytes.map(String.init) ?? "none") \($0.withMap ? "with its map" : "alone")" }.joined(separator: ", ")
+    }
+
+    /// Writes `bytes` zeros to `path` from another process, as a download outside Pith does: FSEvents tells a scanned map's
+    /// watcher nothing of what Pith writes itself. Zeros written, not a copy, which APFS could make a clone that takes no
+    /// space of its own.
+    private static func writeOutsidePith(_ path: String, bytes: Int) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/dd")
+        process.arguments = ["if=/dev/zero", "of=\(path)", "bs=\(bytes)", "count=1"]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return false }
+        process.waitUntilExit()
+        return process.terminationStatus == 0
+    }
+
+    /// A scanned map of a whole volume keeps its Not measured through Refresh. A folder of the run's own stands in for
+    /// the volume, as the fixture does for the live map, with figures of its own: its used space twice what the walk
+    /// finds and half as much again as the walk finds not measured. A file written outside Pith into one of its folders,
+    /// as a download is, makes Refresh scan that folder again, and the volume's space, measured before the refreshed map
+    /// goes out, holds the file too: Used on this disk grows by it, Not measured holds still, and the page gets that one
+    /// figure, with the refreshed map. Then the live map comes back, as when the person picks the disk again.
+    func checkRefreshedVolume(_ fixture: String) async -> [String: Bool] {
+        let check = "not_measured_holds_through_a_refresh"
+        let files = FileManager.default
+        let volume = files.temporaryDirectory.appendingPathComponent("pith-smoke-volume-\(UUID().uuidString)").resolvingSymlinksInPath().path
+        let folder = (volume as NSString).appendingPathComponent("folder")
+        let download = (folder as NSString).appendingPathComponent("download.bin")
+        defer { try? files.removeItem(atPath: volume) }
+        guard let web = webView, (try? files.createDirectory(atPath: folder, withIntermediateDirectories: true)) != nil,
+              files.createFile(atPath: (folder as NSString).appendingPathComponent("kept.bin"), contents: Data(count: 1 << 20)),
+              files.createFile(atPath: (volume as NSString).appendingPathComponent("top.bin"), contents: Data(count: 2 << 20)),
+              let walked = (try? await ScannerRunner().scan(binary: disk.binary, root: URL(fileURLWithPath: volume)) { _ in })?.summary.bytes else {
+            return [check: false]
+        }
+        let kept = (measures: disk.measures, measuresSpace: disk.measuresSpace)
+        disk.measures = { root in
+            guard root == volume else { return kept.measures(root) }
+            let written = ((try? FileManager.default.attributesOfItem(atPath: download))?[.size] as? NSNumber)?.uint64Value ?? 0
+            return VolumeUse(used: walked * 2 + written, walkedVolumes: [walked + walked / 2 + written], snapshots: 2, purgeable: walked / 4)
+        }
+        disk.measuresSpace = { root in
+            guard root == volume else { return kept.measuresSpace(root) }
+            let written = ((try? FileManager.default.attributesOfItem(atPath: download))?[.size] as? NSNumber)?.uint64Value ?? 0
+            return VolumeUse.Space(used: walked * 2 + written, walkedVolumes: [walked + walked / 2 + written])
+        }
+        disk.scan(URL(fileURLWithPath: volume))
+        let scanned = await eventually { self.disk.result?.root.path == volume && !self.disk.isScanning && self.disk.notMeasured != nil }
+        let block = disk.notMeasured?.bytes, used = disk.notMeasured?.used
+        let figure = block.map(bytes)
+        let listed = await pageAnswer(web, Self.notMeasuredItem) { (text: String?) in text == figure.map { "Not measured " + $0 } }
+        let keeping = await keepNotMeasuredSent(web)
+        let written = Self.writeOutsidePith(download, bytes: 1 << 20)
+        let noticed = await eventually { !self.disk.changes.isEmpty }
+        disk.refresh()
+        let refreshed = await eventually { !self.disk.isScanning && self.disk.edited }
+        let grown = used.map { $0 + (1 << 20) }
+        let grew = await eventually { self.disk.notMeasured?.used == grown }
+        let usedAfter = disk.notMeasured?.used, held = disk.notMeasured?.bytes
+        let heldOnThePage = await pageAnswer(web, Self.notMeasuredItem) { (text: String?) in text == figure.map { "Not measured " + $0 } }
+        // The refreshed map and the volume's space were measured together, so its one figure is the one it had.
+        let figuresSent = keeping ? await notMeasuredSent(web) : nil
+        let together = figuresSent.map { !$0.isEmpty && $0.allSatisfy { $0.withMap && $0.bytes == block } } ?? false
+        disk.measures = kept.measures
+        disk.measuresSpace = kept.measuresSpace
+        disk.scan(URL(fileURLWithPath: fixture))
+        let back = await eventually { self.disk.liveView == fixture && self.disk.result?.root.path == fixture && self.disk.notMeasured == nil }
+        let settled = await mapSettles()
+        print("refreshed volume: scanned \(scanned) with Not measured \(block.map(String.init) ?? "none") of \(used.map(String.init) ?? "none") used, listed "
+              + "\(listed ?? "nothing"); a file written outside Pith noticed \(noticed), refreshed \(refreshed), used "
+              + "\(usedAfter.map(String.init) ?? "none") for \(grown.map(String.init) ?? "none"), Not measured \(held.map(String.init) ?? "none"), the "
+              + "page's \(heldOnThePage ?? "nothing"); the page got \(Self.figures(figuresSent)); the live map back \(back), settled \(settled)")
+        return [check: scanned && block != nil && listed == figure.map { "Not measured " + $0 } && written && noticed && refreshed && grew
+            && held == block && heldOnThePage == figure.map { "Not measured " + $0 } && together && back && settled]
     }
 
     /// The Not measured block's row in the map's list of items: its words, or null when there's none.
@@ -400,13 +657,7 @@ extension AppDelegate {
         let before = panes.asked.count
         var clicks = 0
         for x in stride(from: width - 4, through: width / 2, by: -6) where panes.asked.count == before {
-            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-                if let event = NSEvent.mouseEvent(with: type, location: NSPoint(x: x, y: height / 2), modifierFlags: [],
-                                                  timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
-                                                  eventNumber: 0, clickCount: 1, pressure: 1) {
-                    window.sendEvent(event)
-                }
-            }
+            Self.click(at: NSPoint(x: x, y: height / 2), in: window)
             clicks += 1
             try? await Task.sleep(for: .milliseconds(20))
         }

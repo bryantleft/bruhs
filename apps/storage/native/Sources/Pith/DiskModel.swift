@@ -92,12 +92,11 @@ enum MapCommand: Equatable {
     /// Where the volume's space went, for a map of a whole volume: the volume's own figures set against the map as it is
     /// now (`account`), so what the map gains or loses, as by Move to Trash and Undo, moves Not measured at once.
     private(set) var accounting: DiskAccounting?
-    /// The volume's own figures, and the map's root they're of (`VolumeUse`), measured off the main thread when the
-    /// map's root changes and every five minutes on the live map, and its space again with every live map.
-    @ObservationIgnored private var volumeUse: (root: String, use: VolumeUse)? {
+    /// The volume's own figures for the map shown (`figures(for:full:)`), measured before the map went out and set
+    /// against it with it.
+    @ObservationIgnored private var volumeUse: VolumeFigures? {
         didSet { account() }
     }
-    private var accountedAt = Date.distantPast
     /// Whether "Where the space is" is open: its link opens it, and so does a click on the map's Not measured block.
     var showsWhereTheSpaceIs = false
     /// Shows items in Quick Look; the app delegate owns the panel.
@@ -285,7 +284,7 @@ enum MapCommand: Equatable {
     func startLive(root: String = "/", keep: Bool? = nil) {
         guard live == nil else { return }
         let live = LiveMap(root: root)
-        live.received = { [weak self] value, json, places in self?.showLive(value, json: json, places: places) }
+        live.received = { [weak self] value, json, places in self?.liveTreeArrived(value, json: json, places: places) }
         live.treeFailed = { [weak self] reason in self?.liveTreeFailed(reason) }
         live.changed = { [weak self] in self?.refreshLive() }
         self.live = live
@@ -360,16 +359,31 @@ enum MapCommand: Equatable {
     @ObservationIgnored private var baseline: ScanMemory?
     private var openFolderNeedsDetail: Bool { detailFolder != detailAsked }
 
-    private func showLive(_ value: DiskResult, json: String, places: [LivePlace]) {
+    /// The live maps that came, counted: a map whose volume's figures were still being measured when a newer one came is
+    /// dropped for it.
+    @ObservationIgnored private var liveMaps = 0
+
+    /// A live map came. Its volume's figures are measured off the main thread first, and then the two go out together.
+    private func liveTreeArrived(_ value: DiskResult, json: String, places: [LivePlace]) {
         guard value.root.path == liveView else { return }
-        let rootChanged = result?.root.path != value.root.path
+        liveMaps += 1
+        let number = liveMaps
+        Task {
+            let figures = await self.figures(for: value.root.path)
+            guard number == liveMaps else { return }
+            showLive(value, json: json, places: places, figures: figures)
+        }
+    }
+
+    private func showLive(_ value: DiskResult, json: String, places: [LivePlace], figures: VolumeFigures?) {
+        guard value.root.path == liveView else { return }
         if let live { sideColumn.liveTreeArrived(root: live.root, places: places) }
         settingLive = true
+        volumeUse = figures
         result = value
         resultJSON = json
         settingLive = false
         scope = value.root.path
-        if rootChanged || Date().timeIntervalSince(accountedAt) > 300 { refreshAccounting() } else { measureSpaceAgain() }
         compareWithBaseline(value)
         keepSelection()
         revision = UUID()
@@ -498,15 +512,19 @@ enum MapCommand: Equatable {
                     await self?.record(event, generation: id)
                 }
                 guard !Task.isCancelled, generation == id else { return }
+                // All the volume's figures, measured afresh for a new scan, go out with it. The scan has finished, so a
+                // Cancel that comes while they're measured is too late for it.
+                let figures = await self.figures(for: value.root.path, full: true)
+                guard generation == id else { return }
                 select(nil)
                 // The page opens a map of another folder at its root; a new scan of the same one stays where it was.
                 if result?.root.path != value.root.path { mapStartsOver() }
+                volumeUse = figures
                 result = value; scannedAt = Date(); edited = false; trashed = nil
                 compareWithLastScan(value)
                 // The person asked for this scan: a folder they chose or opened, Refresh, or Scan Again.
                 mapAnswersPerson = true
                 revision = UUID()
-                refreshAccounting()
                 changes = DiskChanges()
                 watch(root.path, since: since)
             } catch {
@@ -560,11 +578,15 @@ enum MapCommand: Equatable {
                     let fresh = try await runner.scan(binary: binary, root: URL(fileURLWithPath: folder), within: map) { [weak self] event in
                         await self?.record(event, generation: id)
                     }
+                    // The volume's space, measured again, goes out with the map the folder joins: what changed there outside
+                    // Pith is on both.
+                    let figures = await self.figures(for: result.root.path)
                     guard !Task.isCancelled, generation == id, let current = self.result, let merged = current.replacing(folder, with: fresh) else {
                         changes.merge(earlier)
                         return
                     }
                     // Refresh or Scan Again, which the person asked for.
+                    volumeUse = figures
                     self.result = merged; edited = true; trashed = nil; mapAnswersPerson = true; revision = UUID()
                     select(selected)
                 } catch {
@@ -852,29 +874,37 @@ enum MapCommand: Equatable {
     /// volumes a walk enters, or nil for a map of a folder. The smoke test gives figures of its own.
     @ObservationIgnored var measuresSpace: @Sendable (String) -> VolumeUse.Space? = DiskModel.measureSpace
 
-    /// Measures the volume's own figures for the map shown: what's used, on the volumes the map walks and in local
-    /// snapshots, and what's purgeable. Off the main thread: `tmutil` takes a moment.
-    func refreshAccounting() {
-        guard let result else { volumeUse = nil; return }
-        accountedAt = Date()
-        let root = result.root.path, measures = measures
-        Task {
-            let use = await Task.detached(priority: .utility) { measures(root) }.value
-            guard self.result?.root.path == root else { return }
-            volumeUse = use.map { (root, $0) }
-        }
+    /// A whole volume's own figures for a map of `root`, and when they were last all measured.
+    private struct VolumeFigures {
+        let root: String
+        let use: VolumeUse
+        let allMeasured: Date
     }
 
-    /// Measures the volume's space again for the live map just shown, which the file system gives at once: what changed
-    /// outside Pith, as a download, then moves Used on this disk with the map, and Not measured only by what the map can't
-    /// see. The snapshots and what's purgeable wait for the next full measure.
-    private func measureSpaceAgain() {
-        guard let volumeUse, volumeUse.root == result?.root.path else { return }
-        let root = volumeUse.root, measuresSpace = measuresSpace
-        Task {
+    /// The volume's own figures for a map of `root` about to go out, measured off the main thread, so the map and its
+    /// Not measured go out together, measured for it: its space, which the file system gives at once, and its snapshots
+    /// and what's purgeable too when `full`, when the figures held are another root's or none, or when they're five
+    /// minutes old. Nil for a map of a folder, which nothing can account for.
+    private func figures(for root: String, full: Bool = false) async -> VolumeFigures? {
+        let measures = measures, measuresSpace = measuresSpace
+        if !full, let held = volumeUse, held.root == root, Date().timeIntervalSince(held.allMeasured) < 300 {
             let space = await Task.detached(priority: .utility) { measuresSpace(root) }.value
-            guard let space, let current = self.volumeUse, current.root == root, self.result?.root.path == root else { return }
-            self.volumeUse = (root, current.use.with(space))
+            return VolumeFigures(root: root, use: space.map(held.use.with) ?? held.use, allMeasured: held.allMeasured)
+        }
+        let measured = Date()
+        let use = await Task.detached(priority: .utility) { measures(root) }.value
+        return use.map { VolumeFigures(root: root, use: $0, allMeasured: measured) }
+    }
+
+    /// Measures all the volume's own figures again and sets them against the map shown, without a new map. Every map goes
+    /// out with figures measured for it; the smoke test calls this when it gives figures of its own, and when it takes
+    /// them back.
+    func refreshAccounting() {
+        guard let root = result?.root.path else { volumeUse = nil; return }
+        Task {
+            let figures = await self.figures(for: root, full: true)
+            guard self.result?.root.path == root else { return }
+            volumeUse = figures
         }
     }
 

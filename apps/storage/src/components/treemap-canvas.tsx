@@ -143,6 +143,11 @@ interface Props {
    * as the map learns one. Without it the map keeps them in the page's own storage.
    */
   hints?: MapHints;
+  /**
+   * A scan is running, which the host shows over this map, dimmed, taking no clicks on it until the scan ends, as Pith
+   * does: the hover card offers none meanwhile.
+   */
+  scanning?: boolean;
 }
 
 /** Labels are Monaspace Neon at 11 px, the size of the native data captions. */
@@ -607,6 +612,7 @@ export function TreemapCanvas({
   onUnmeasured,
   padlocks = false,
   hints,
+  scanning = false,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -898,13 +904,13 @@ export function TreemapCanvas({
   // A share of the folder the block was laid out in: a steady map can show an older map than `root` for a moment.
   const card =
     pointed && layout && pointer
-      ? describe(
-          pointed,
-          folderToOpenAt(layout, pointer.x, pointer.y),
+      ? describe(pointed, {
+          open: folderToOpenAt(layout, pointer.x, pointer.y),
           layout,
-          !(learned.selected && learned.opened),
+          hints: !(learned.selected && learned.opened),
+          clicks: !scanning,
           change,
-        )
+        })
       : null;
   const ink = (tile: Tile) =>
     tile.kind === "file"

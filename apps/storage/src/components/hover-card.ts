@@ -40,7 +40,10 @@ export interface Card {
    * with its Not measured block.
    */
   readonly share: string;
-  /** What clicks do; null once the user has done both. */
+  /**
+   * What clicks do there, until the person has done both, and what a block that opens nothing is. While the map takes
+   * no clicks, it says nothing of them.
+   */
   readonly hint: string | null;
   /** Folders inside it the scan couldn't read, e.g. "2 folders inside couldn't be read". */
   readonly unreadable: string | null;
@@ -69,23 +72,38 @@ function unreadableInside(node: DirNode): string | null {
   return `${count} ${count === 1 ? "folder" : "folders"} inside couldn’t be read`;
 }
 
+/** What a card is said in, beside its block. */
+export interface CardContext {
+  /** The folder a double-click there opens, which a file's or a group's card names, or null. */
+  readonly open: DirNode | null;
+  /** The layout the block was laid out in, whose folder or volume its share is of. */
+  readonly layout: TreemapLayout;
+  /** Whether to say what clicks do: until the person has clicked and double-clicked. */
+  readonly hints: boolean;
+  /**
+   * Whether the map takes clicks. A host can take none for a while, as Pith does while a scan runs, showing the earlier
+   * map dimmed, and the card then offers none.
+   */
+  readonly clicks: boolean;
+  /** How much the block changed since the last scan, e.g. "+12.3 GB since Nov 3". */
+  readonly change: string | null;
+}
+
 /**
- * What the card says of `tile`, laid out in `layout`. A share is of the layout's folder, or, where the host accounted
- * for the whole volume's used space, of that used space (`shareOf`).
+ * What the card says of `tile`. A share is of the layout's folder, or, where the host accounted for the whole volume's
+ * used space, of that used space (`shareOf`).
  */
 export function describe(
   tile: Tile,
-  open: DirNode | null,
-  layout: TreemapLayout,
-  hints: boolean,
-  change: string | null,
+  { open, layout, hints, clicks, change }: CardContext,
 ): Card {
   const size = formatBytes(tileSize(tile));
   const share = shareOf(tile, layout);
-  const openFolder = open ? ` Double-click to open ${open.name}/.` : "";
+  const openFolder =
+    open && clicks ? ` Double-click to open ${open.name}/.` : "";
   const title = middleTruncate(tileName(tile), 34);
   const fill = (category: Category) => `var(${CATEGORY_VAR[category]})`;
-  const hint = (text: string) => (hints ? text : null);
+  const hint = (text: string) => (hints && clicks ? text : null);
   switch (tile.kind) {
     case "unmeasured":
       return {
@@ -94,7 +112,9 @@ export function describe(
         size,
         share,
         // Always said: a click here opens no item, so nothing about it is learned.
-        hint: "Space the scan couldn’t see. Click to see why.",
+        hint: clicks
+          ? "Space the scan couldn’t see. Click to see why."
+          : "Space the scan couldn’t see.",
         unreadable: null,
         change: null,
       };
@@ -128,7 +148,7 @@ export function describe(
         kind: null,
         size,
         share,
-        hint: hint(`Too small to show one by one.${openFolder}`),
+        hint: hints ? `Too small to show one by one.${openFolder}` : null,
         unreadable: null,
         change,
       };

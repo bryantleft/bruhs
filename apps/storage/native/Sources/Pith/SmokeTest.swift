@@ -7,6 +7,8 @@ extension AppDelegate {
     /// Runs the real packaged renderer and scanner against a caller-supplied fixture.
     /// No Trash operation touches the person's Trash, and no system setting is changed by this diagnostic.
     func smokeTest(root: URL, report: URL) async {
+        // A line at a time, so a run its caller stops still leaves what it printed.
+        setvbuf(stdout, nil, _IOLBF, 0)
         var checks: [String: Bool] = [:]
         // The fixture's scans are kept in a folder of the smoke test's own, never the user's, and what it moves to the
         // Trash goes to another of its own, never the user's Trash. Both go when it ends.
@@ -136,6 +138,7 @@ extension AppDelegate {
             checks.merge(await checkSideLists(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkPlaces(fixture, report: report, panes: panes), uniquingKeysWith: { _, new in new })
             checks.merge(await checkNotMeasured(fixture, report: report), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkRefreshedVolume(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkAskingNotice(panes), uniquingKeysWith: { _, new in new })
             checks.merge(await checkIconsReachEveryPage(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkIconRoute(fixture), uniquingKeysWith: { _, new in new })
