@@ -9,7 +9,18 @@ extension AppDelegate {
     func smokeTest(root: URL, report: URL) async {
         // A line at a time, so a run its caller stops still leaves what it printed.
         setvbuf(stdout, nil, _IOLBF, 0)
-        var checks: [String: Bool] = [:]
+        // Each check's time, from the one before it, and what it found, printed as it lands, so a run shows where its time
+        // goes, and one its caller stops still shows what it found.
+        let began = ContinuousClock.now
+        var lap = began
+        var checks: [String: Bool] = [:] {
+            didSet {
+                let now = ContinuousClock.now
+                let found = checks.keys.filter { oldValue[$0] != checks[$0] }.sorted().map { "\($0) \(checks[$0] == true)" }
+                print("took \(Self.seconds(lap.duration(to: now))) s: \(found.isEmpty ? "a check again, unchanged" : found.joined(separator: ", "))")
+                lap = now
+            }
+        }
         // The fixture's scans are kept in a folder of the smoke test's own, never the user's, and what it moves to the
         // Trash goes to another of its own, never the user's Trash. Both go when it ends.
         let scans = FileManager.default.temporaryDirectory.appendingPathComponent("pith-smoke-scans-\(UUID().uuidString)")
@@ -171,8 +182,8 @@ extension AppDelegate {
             // An identity, not a reference: holding the view here would keep it alive past the window's close.
             let shown = webView.map(ObjectIdentifier.init)
             main.show(.activity)
-            try await Task.sleep(for: .milliseconds(200))
-            checks["disk_kept_across_tabs"] = shown != nil && webView.map(ObjectIdentifier.init) == shown && webView?.isHidden == true
+            let hidden = await eventually { self.webView?.isHidden == true }
+            checks["disk_kept_across_tabs"] = shown != nil && webView.map(ObjectIdentifier.init) == shown && hidden
             showDisk()
             main.window.performClose(nil)
             checks["disk_webview_released"] = await eventually { self.webView == nil }
@@ -195,6 +206,7 @@ extension AppDelegate {
             let data = try JSONSerialization.data(withJSONObject: checks, options: [.prettyPrinted, .sortedKeys])
             try data.write(to: report)
             print(String(decoding: data, as: UTF8.self))
+            print("smoke test took \(Self.seconds(began.duration(to: .now))) s for \(checks.count) checks")
             if checks.values.contains(false) { exit(1) }
             NSApp.terminate(nil)
         } catch {
@@ -226,19 +238,22 @@ extension AppDelegate {
         let mapHeight = "return document.querySelector('canvas').getBoundingClientRect().height"
         // The canvas draws before the page finishes laying it out, which a slow first launch makes visible: the height is
         // read once two readings a tenth of a second apart agree.
-        var before = try await web.callAsyncJavaScript(mapHeight, in: nil, contentWorld: .page) as? Double
-        for _ in 0..<50 {
-            try await Task.sleep(for: .milliseconds(100))
-            let again = try await web.callAsyncJavaScript(mapHeight, in: nil, contentWorld: .page) as? Double
-            if let again, again > 0, again == before { break }
-            before = again
+        func steadyHeight() async throws -> Double? {
+            var height = try await web.callAsyncJavaScript(mapHeight, in: nil, contentWorld: .page) as? Double
+            for _ in 0..<50 {
+                try await Task.sleep(for: .milliseconds(100))
+                let again = try await web.callAsyncJavaScript(mapHeight, in: nil, contentWorld: .page) as? Double
+                if let again, again > 0, again == height { break }
+                height = again
+            }
+            return height
         }
+        let before = try await steadyHeight()
         _ = try await web.callAsyncJavaScript("document.querySelector('aside button')?.click()", in: nil, contentWorld: .page)
-        try await Task.sleep(for: .milliseconds(400))
-        let selection = !disk.selection.isEmpty
+        let selection = await eventually { !self.disk.selection.isEmpty }
         // The bundled scanner measures what deleting the selection frees, beside the scan's own runner.
         let frees = await eventually { self.disk.selectedFrees != nil }
-        let after = try await web.callAsyncJavaScript(mapHeight, in: nil, contentWorld: .page) as? Double
+        let after = try await steadyHeight()
         print("map height before selection=\(before ?? -1) after=\(after ?? -1)")
         let icon = await checkSelectionIcon()
         // Bigger Text zooms the map's page too. The step is undone, so the page is back at its usual zoom before anything
@@ -1335,19 +1350,18 @@ extension AppDelegate {
                                                isARepeat: false, keyCode: code) else { return false }
             return NSApp.mainMenu?.performKeyEquivalent(with: event) == true
         }
-        // SwiftUI syncs the field with Activity's search between steps, so each step waits for it.
-        let settle = { try? await Task.sleep(for: .milliseconds(250)) }
+        // SwiftUI syncs the field with Activity's search between steps, so each step waits for the two to agree.
+        let search = main.state.activity
         main.window.makeFirstResponder(field)
-        await settle()
+        let editing = await eventually { field.currentEditor() != nil && main.window.firstResponder === field.currentEditor() }
         field.currentEditor()?.insertText("pith smoke")
-        await settle()
+        let typed = await eventually { field.stringValue == "pith smoke" && search.search == "pith smoke" }
         field.currentEditor()?.selectAll(nil)
-        let pressedCut = press("x", 7)
-        await settle()
-        let cut = pressedCut && field.stringValue.isEmpty && pasteboard.string(forType: .string) == "pith smoke"
+        let pressedCut = editing && typed && press("x", 7)
+        let cut = await eventually { field.stringValue.isEmpty && search.search.isEmpty && search.canUndoSearch }
+            && pressedCut && pasteboard.string(forType: .string) == "pith smoke"
         let pressedUndo = press("z", 6)
-        await settle()
-        let undone = pressedUndo && field.stringValue == "pith smoke"
+        let undone = await eventually { field.stringValue == "pith smoke" && search.search == "pith smoke" } && pressedUndo
         print("search cut=\(cut) undo=\(undone) field=\"\(field.stringValue)\"")
         field.currentEditor()?.selectAll(nil)
         field.currentEditor()?.delete(nil)
@@ -1357,6 +1371,11 @@ extension AppDelegate {
 
     /// Diagnostic budget: 20 seconds covers startup, scan and WebKit initialization.
     private static let patience: TimeInterval = 20
+
+    /// `duration` in seconds, to a tenth.
+    private static func seconds(_ duration: Duration) -> String {
+        String(format: "%.1f", Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18)
+    }
 
     /// Waits for a prerequisite; the run stops, naming what never happened.
     private func waitUntil(_ what: String, _ predicate: () -> Bool) async throws {
