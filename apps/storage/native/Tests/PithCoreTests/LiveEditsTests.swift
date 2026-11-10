@@ -116,6 +116,21 @@ final class LiveEditsTests: XCTestCase {
         XCTAssertNil(shown.map.root.node(at: folded.path))
     }
 
+    /// An item put back whose folder a newer map doesn't draw, as after an Undo made with a folder above it open, goes into
+    /// the smaller items of the deepest folder that map draws on its way, as Undo puts it on the map open then, rather
+    /// than leaving the maps before the index lists it.
+    func testAnItemPutBackWhoseFolderTheMapDoesntDrawGoesIntoTheSmallerItemsAboveIt() throws {
+        let item = DiskNode(kind: .file, name: "x.bin", path: "/r/b/sub/x.bin", size: 6, children: nil)
+        var edits = LiveEdits()
+        edits.putBack([.init(node: item, topFiles: [], places: [])])
+        let shown = edits.apply(to: map(), places: places, answer: .init(asked: [item.path], unlisted: [item.path]))
+        XCTAssertTrue(shown.changed)
+        XCTAssertEqual(shown.map.root.size, 66)
+        XCTAssertEqual(shown.map.item(at: "/r/b")?.children?.first { $0.kind == .aggregate }?.size, 16, "in b's smaller items")
+        // Undo puts it on the map open then the same way.
+        XCTAssertEqual(map().puttingBack(.init(node: item, topFiles: [], places: []))?.root, shown.map.root)
+    }
+
     func testAPlaceInsideAnItemMovedToTheTrashLeavesPlacesUntilTheIndexHasIt() throws {
         let a = try XCTUnwrap(map().item(at: "/r/a"))
         var edits = LiveEdits()

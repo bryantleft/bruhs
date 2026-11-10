@@ -1,5 +1,16 @@
 import Foundation
 
+extension DiskResult {
+    /// The map with `item`, which Undo put back, where it was (`restoring`): in its folder, or in that folder's smaller
+    /// items when the map had it there. A map that doesn't draw its folder, as a newer one may not, has it in the smaller
+    /// items of the deepest folder it draws on the way. Undo puts it on the map open then this way, and so do the live
+    /// map's maps before its index lists it. Nil when the map has nowhere to put it.
+    public func puttingBack(_ item: LiveEdits.Restored) -> DiskResult? {
+        let back = { (folding: Bool) in self.restoring(item.node, topFiles: item.topFiles, unreadable: item.unreadable, folding: folding) }
+        return back(item.folded) ?? (item.folded ? nil : back(true))
+    }
+}
+
 /// The person's own changes to the live map, Move to Trash and its Undo, held over the maps the live map sends until its
 /// index has them. Pith has each folder they changed listed again at once, but a map asked for before that listing
 /// lands comes from the index as it was, with an item moved to the Trash still in it or one put back still missing,
@@ -123,9 +134,7 @@ public struct LiveEdits: Sendable, Equatable {
                 let kept = places.filter { !DiskChanges.isInside($0.path, node.path) }
                 if kept != places { places = kept; changed = true }
             case .back(let restored) where unlisted:
-                if let with = map.restoring(restored.node, topFiles: restored.topFiles, unreadable: restored.unreadable, folding: restored.folded) {
-                    map = with; changed = true
-                }
+                if let with = map.puttingBack(restored) { map = with; changed = true }
                 let missing = restored.places.filter { place in !places.contains { $0.path == place.path } }
                 if !missing.isEmpty { places += missing; changed = true }
             case .back:

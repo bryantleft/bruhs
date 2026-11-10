@@ -1076,10 +1076,7 @@ enum MapCommand: Equatable {
             followChange(moved)
         }
         if let current = result {
-            result = items.reduce(current) { map, item in
-                let back = { (folding: Bool) in map.restoring(item.node, topFiles: item.topFiles, unreadable: item.unreadable, folding: folding) }
-                return back(item.folded) ?? back(true) ?? map
-            }
+            result = items.reduce(current) { map, item in map.puttingBack(item) ?? map }
         }
         for item in items { sideColumn.putBack(item.places) }
         mapAnswersPerson = true
