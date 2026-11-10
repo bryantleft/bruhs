@@ -208,9 +208,10 @@ public struct DiskResult: Codable, Sendable {
     /// parent's listing and not listed it yet, or beside what's in its folder. Every folder above it grows by the
     /// difference, and its largest files, `topFiles`, go back in the largest-files list. An item the map had folded into
     /// its folder's smaller items, `folding`, goes back into the smaller items of the deepest folder the tree shows on its
-    /// way, as `removing(_:folded:)` and a file shown only in Largest files take one out of them, unless the tree shows
-    /// the item itself now. The folders inside it the map couldn't read, `unreadable`, go back in their list. Nil when the
-    /// tree doesn't show the folder it goes in, nor smaller items to fold it into.
+    /// way, never a folder's above that (`grow`), as `removing(_:folded:)` and a file shown only in Largest files take one
+    /// out of them, unless the tree shows the item itself now, or its own folder with nothing in it, which takes it as a
+    /// block. The folders inside it the map couldn't read, `unreadable`, go back in their list. Nil when the tree shows
+    /// neither the folder it goes in nor a folder on its way, as inside a folder the map couldn't read.
     public func restoring(_ item: DiskNode, topFiles restored: [DiskFile], unreadable: [DiskUnreadableFolder] = [], folding: Bool = false) -> DiskResult? {
         guard item.path != root.path, item.isItem, DiskChanges.isInside(item.path, root.path) else { return nil }
         let old = root.node(at: item.path)
@@ -280,19 +281,32 @@ public struct DiskResult: Codable, Sendable {
     }
 
     /// Grows the folders above `path` and the aggregate of the deepest one the tree shows, for an item put back that the
-    /// tree folds away: `shrink` the other way.
+    /// tree folds away: `shrink` the other way. The deepest folder takes it, never one above it, which would show the item
+    /// in the wrong folder's smaller items. Without smaller items of its own, as when it's drawn with blocks alone, or with
+    /// nothing in it above the item's own folder, it gets some, and one drawn with a size but no detail holds it as it
+    /// holds the rest. The item's own folder drawn with nothing in it, as a scan of the folder made after the item left
+    /// draws it, has nothing to fold it into: nil, and `restoring` gives the item a block of its own there, as `insert`
+    /// does for an item put back on its own. So is one inside a folder the map couldn't read, which can't show it.
     private static func grow(_ node: DiskNode, toward path: String, size: UInt64, files: UInt64) -> DiskNode? {
         let children = node.children ?? []
         var updated = children
-        if let index = children.firstIndex(where: { path.hasPrefix($0.path + "/") && $0.kind == .dir }), let child = grow(children[index], toward: path, size: size, files: files) {
+        if children.contains(where: { path.hasPrefix($0.path + "/") && $0.kind == .unreadable }) { return nil }
+        if let index = children.firstIndex(where: { path.hasPrefix($0.path + "/") && $0.kind == .dir }) {
+            guard let child = grow(children[index], toward: path, size: size, files: files) else { return nil }
             updated[index] = child
         } else if let index = children.firstIndex(where: { $0.kind == .aggregate }) {
             let aggregate = children[index]
             updated[index] = aggregate.with(size: aggregate.size + size, files: aggregate.files.map { $0 + files }, children: nil)
+        } else if children.isEmpty, node.size > 0 {
+            // Drawn with a size but no detail: it stays so.
+        } else if !children.isEmpty || (path as NSString).deletingLastPathComponent != node.path {
+            // As the scanner names a folder's smaller items, `<folder>/__other__`, its root's included.
+            updated.append(DiskNode(kind: .aggregate, name: "(smaller items)", path: node.path + "/__other__", size: size, files: files, children: nil))
+            updated.sort { $0.size > $1.size }
         } else {
             return nil
         }
-        return node.with(size: node.size + size, files: node.files.map { $0 + files }, children: updated)
+        return node.with(size: node.size + size, files: node.files.map { $0 + files }, children: node.children == nil && updated.isEmpty ? nil : updated)
     }
 
     /// Shrinks the folders above `path` and the aggregate holding it, for an item the tree folded away.

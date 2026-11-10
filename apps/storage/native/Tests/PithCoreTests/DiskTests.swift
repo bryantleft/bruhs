@@ -145,6 +145,56 @@ final class DiskTests: XCTestCase {
         XCTAssertNil(undetailed.restoring(file, topFiles: []), "a folder drawn without its detail")
     }
 
+    /// An item put back from its folder's smaller items goes back into its own folder, never into the smaller items of a
+    /// folder above it: into a folder the map now draws with nothing in it, as a scan of that folder made after the move
+    /// draws it, it goes as its only block, as an item drawn on its own does; into one drawn with blocks and no smaller
+    /// items, it goes into new smaller items there; and above a folder of its own the map doesn't draw, into the smaller
+    /// items of the deepest folder the map draws on its way.
+    func testAnItemPutBackFromTheSmallerItemsGoesBackIntoItsOwnFolder() throws {
+        let other = DiskNode(kind: .aggregate, name: "(smaller items)", path: "/r/__other__", size: 4, files: 2, children: nil)
+        func map(_ a: DiskNode) -> DiskResult {
+            DiskResult(root: DiskNode(kind: .dir, name: "r", path: "/r", size: a.size + 4, files: (a.files ?? 0) + 2, children: [other, a]),
+                       topFiles: [], summary: summary(bytes: a.size + 4, files: (a.files ?? 0) + 2, errors: 0))
+        }
+        let file = DiskNode(kind: .file, name: "x.bin", path: "/r/a/x.bin", size: 6, children: nil)
+        // Its folder drawn with nothing in it: x takes a block of its own there.
+        let empty = map(DiskNode(kind: .dir, name: "a", path: "/r/a", size: 0, files: 0, children: nil))
+        for back in [try XCTUnwrap(empty.restoring(file, topFiles: [], folding: true)), try XCTUnwrap(empty.puttingBack(.init(node: file, topFiles: [], places: [], folded: true)))] {
+            XCTAssertEqual(back.item(at: file.path), file)
+            XCTAssertEqual(back.item(at: "/r/a")?.size, 6)
+            XCTAssertEqual(back.item(at: "/r/a")?.files, 1)
+            XCTAssertEqual(back.root.size, 10)
+            XCTAssertEqual(back.root.children?.first { $0.kind == .aggregate }, other, "the root's smaller items stay as they were")
+        }
+        // Its folder drawn with a block and no smaller items: x goes into new smaller items there, as the map had it.
+        let big = DiskNode(kind: .file, name: "big.bin", path: "/r/a/big.bin", size: 30, children: nil)
+        let blocks = map(DiskNode(kind: .dir, name: "a", path: "/r/a", size: 30, files: 1, children: [big]))
+        let intoBlocks = try XCTUnwrap(blocks.restoring(file, topFiles: [], folding: true))
+        XCTAssertEqual(intoBlocks.item(at: "/r/a")?.size, 36)
+        XCTAssertEqual(intoBlocks.item(at: "/r/a")?.files, 2)
+        XCTAssertEqual(intoBlocks.item(at: "/r/a")?.children?.map(\.path), ["/r/a/big.bin", "/r/a/__other__"])
+        XCTAssertEqual(intoBlocks.item(at: "/r/a")?.children?.last?.size, 6)
+        XCTAssertEqual(intoBlocks.item(at: "/r/a")?.children?.last?.files, 1)
+        XCTAssertEqual(intoBlocks.root.children?.first { $0.kind == .aggregate }, other)
+        XCTAssertEqual(intoBlocks.root.size, 40)
+        // A file inside a folder of its own the map doesn't draw, below one it draws with nothing in it.
+        let deeper = DiskNode(kind: .file, name: "y.bin", path: "/r/a/b/y.bin", size: 6, children: nil)
+        let above = try XCTUnwrap(empty.restoring(deeper, topFiles: [], folding: true))
+        XCTAssertEqual(above.item(at: "/r/a")?.size, 6)
+        XCTAssertEqual(above.item(at: "/r/a")?.children?.map(\.path), ["/r/a/__other__"], "a's smaller items hold it")
+        XCTAssertEqual(above.root.children?.first { $0.kind == .aggregate }, other)
+        XCTAssertEqual(above.root.size, 10)
+        XCTAssertEqual(above.summary.files, 3)
+        // Its folder drawn with a size but no detail holds it, still without detail.
+        let undetailed = try XCTUnwrap(map(DiskNode(kind: .dir, name: "a", path: "/r/a", size: 10, files: 2, children: nil)).restoring(file, topFiles: [], folding: true))
+        XCTAssertEqual(undetailed.item(at: "/r/a"), DiskNode(kind: .dir, name: "a", path: "/r/a", size: 16, files: 3, children: nil))
+        XCTAssertEqual(undetailed.root.children?.first { $0.kind == .aggregate }, other)
+        // Inside a folder the map couldn't read, it can't be shown at all.
+        let locked = DiskNode(kind: .unreadable, name: "a", path: "/r/a", size: 0, reason: .protected, children: nil)
+        XCTAssertNil(map(locked).restoring(file, topFiles: [], folding: true))
+        XCTAssertNil(map(locked).puttingBack(.init(node: file, topFiles: [], places: [])), "nor on its own")
+    }
+
     /// A folder put back brings the folders inside it that the map couldn't read back to the map's list of them, as its
     /// move took them off it.
     func testAFolderPutBackBringsItsUnreadableFoldersBack() throws {
