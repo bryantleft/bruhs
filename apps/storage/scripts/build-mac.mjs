@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { archiveName, currentRelease, FEED_URL, PUBLIC_KEY } from "./pith-release.mjs";
+import { writeNotices } from "./third-party-notices.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 function run(command, args, capture = false) {
@@ -72,9 +73,11 @@ try {
     if (!existsSync(path.join(resources, compiled))) throw new Error(`actool did not produce ${compiled} from native/Brand/AppIcon.icon.`);
   }
   cpSync(path.join(root, "native/Brand/StatusGlyph.svg"), path.join(resources, "StatusGlyph.svg"));
-  // The licences of the work by others that Pith ships: the Heroicons its disk map draws its kinds' glyphs from, and the
-  // Monaspace fonts. The page's minifier drops the source's legal comments, so this file is the notice the app carries.
-  cpSync(path.join(root, "native/ThirdPartyNotices.txt"), path.join(resources, "ThirdPartyNotices.txt"));
+  // The licences of the work by others that Pith ships, written for this build from what it bundles: the npm packages
+  // in pith.js, whose minifier drops their legal comments, by the bundler's own list of the modules it took in; the
+  // scanner's crates; and Sparkle. Heroicons, which the disk map draws its kinds' glyphs from, and the Monaspace fonts
+  // head it from native/ThirdPartyNotices.txt. A dependency whose licence can't be found stops the build.
+  writeNotices({ modulesFile: path.join(build, "web-modules.json"), out: path.join(resources, "ThirdPartyNotices.txt") });
   // Sparkle compares CFBundleVersion, so it carries the changelog's version too. A release also names its feed and key,
   // and turns on both of Sparkle's stricter checks: the feed must be signed, and so must an archive before it's unpacked.
   // It records the commit it was built from, which publishing checks GitHub has, marked when the files Pith builds from

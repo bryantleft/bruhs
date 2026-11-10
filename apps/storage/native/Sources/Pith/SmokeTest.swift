@@ -24,10 +24,15 @@ extension AppDelegate {
         // The fallback symbol is a template image too, so the SVG itself has to decode.
         let glyph = Bundle.main.url(forResource: "StatusGlyph", withExtension: "svg").flatMap(NSImage.init(contentsOf:))
         checks["status_glyph_bundled"] = glyph?.isValid == true && statusItem?.image?.isTemplate == true
-        // The licences of the work by others that Pith ships go with it: Heroicons' and Monaspace's.
+        // The licences of the work by others that Pith ships go with it: Heroicons' and Monaspace's, kept by hand, and those
+        // the build writes from what it bundles: the page's npm packages, the scanner's crates and Sparkle, each by name.
         let notices = Bundle.main.url(forResource: "ThirdPartyNotices", withExtension: "txt").flatMap { try? String(contentsOf: $0, encoding: .utf8) }
+        let shipped = ["react", "react-dom", "scheduler", "d3-hierarchy", "serde", "serde_json", "rayon", "rayon-core", "libc", "trash", "objc2", "Sparkle"]
+        let named = shipped.filter { name in notices?.range(of: "\n\(name) [0-9]", options: .regularExpression) != nil }
+        print("third-party notices: \(notices?.utf8.count ?? 0) bytes, naming \(named.count) of \(shipped.count) checked")
         checks["third_party_notices_bundled"] = notices?.contains("Copyright (c) Tailwind Labs, Inc.") == true
-            && notices?.contains("SIL Open Font License, Version 1.1") == true
+            && notices?.contains("SIL Open Font License, Version 1.1") == true && named == shipped
+            && notices?.contains("Copyright (c) Meta Platforms, Inc. and affiliates.") == true && notices?.contains("Andy Matuschak") == true
         // The smoke test never starts Sparkle, so it can't go online, ask the permission question or change the person's
         // update settings. The bundle's setup is checked as it stands instead.
         checks["updater_idle_in_smoke_test"] = !updates.isAvailable
