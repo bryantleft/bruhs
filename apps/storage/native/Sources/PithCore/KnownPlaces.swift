@@ -93,8 +93,14 @@ public struct KnownPlaces: Sendable {
             // The Music and TV apps keep their libraries and media in these folders unless the person moves them.
             ("music", "Music", folder(.musicDirectory, "Music"), [.app("com.apple.Music")], false),
             ("tv", "TV", folder(.moviesDirectory, "TV"), [.app("com.apple.TV")], false),
-            // Apple doesn't document where Books and Podcasts keep what they download. These are the folders known to
-            // hold the books added to Books and Podcasts' downloaded episodes, in other apps' data, which macOS guards.
+            // Apple doesn't document where Books and Podcasts keep what they download, but their own code says, as
+            // read from their signatures and binaries on macOS 26.3, never from their data. Books' library agent,
+            // BookKit's sandboxed com.apple.BKAgentService, registers its Documents folder's iBooks as the default
+            // library (BKBookLibraryPath) and keeps the books in the library's Books, beside Books.plist; the person
+            // can move the library elsewhere, which this path then misses. Podcasts' one app group is
+            // 243LU875E5.groups.com.apple.podcasts, and its downloads are that group's Library/Cache
+            // (MTConstants.sharedCacheDirectory), which its Storage extension measures. Both lie in other apps'
+            // data, which macOS guards.
             ("books", "Books", library.appendingPathComponent("Containers/com.apple.BKAgentService/Data/Documents/iBooks/Books"),
              [.app("com.apple.iBooksX")], true),
             ("podcasts", "Podcasts", library.appendingPathComponent("Group Containers/243LU875E5.groups.com.apple.podcasts/Library/Cache"),
