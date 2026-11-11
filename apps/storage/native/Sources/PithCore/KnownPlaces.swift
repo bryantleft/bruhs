@@ -224,8 +224,8 @@ public struct KnownPlaces: Sendable {
     /// listed itself, as empty, and macOS may be holding that listing, which a lookup by its path could wait on too.
     /// Such a folder, an empty one, and a folder the map couldn't read show a plain folder, and the map's smaller items
     /// show a group. The Trash shows macOS's empty Trash while it holds nothing, by the scanner's word (`trashIsEmpty`,
-    /// from `trashHoldsNothing`), and `item` draws nothing in it; otherwise the full Trash, as when the map couldn't read
-    /// it or hasn't listed it yet, which leaves it looking empty. An item that may come from an earlier map is judged by
+    /// from `trashHoldsNothing`), and `item` draws nothing in it but Finder's `.DS_Store`; otherwise the full Trash, as
+    /// when the map couldn't read it or hasn't listed it yet, which leaves it looking empty. An item that may come from an earlier map is judged by
     /// the map as it is now (`iconKey(for:in:asking:trashIsEmpty:)`), which says what the rule does once the person
     /// withdraws Pith's access.
     public func iconKey(for item: DiskNode, asking: Bool, trashIsEmpty: Bool = false) -> IconKey {
@@ -272,35 +272,48 @@ public struct KnownPlaces: Sendable {
         folder.size > 0 || (folder.files ?? 0) > 0 || !(folder.children ?? []).isEmpty
     }
 
-    /// Whether `folder` is a folder drawn with nothing in it: no size and no children, as the scanner writes an empty
-    /// folder, and as one it hasn't listed yet looks.
+    /// Whether `folder` is a folder drawn with nothing in it but Finder's `.DS_Store`: no size and no children, as the
+    /// scanner writes an empty folder, and as one it hasn't listed yet looks, or children that are each a file of that
+    /// name, as an emptied Trash holds once Finder has shown it, which the Dock shows empty. Finder keeps the folder's view
+    /// settings in it.
     private static func drawsNothing(_ folder: DiskNode) -> Bool {
-        folder.kind == .dir && folder.size == 0 && (folder.children ?? []).isEmpty
+        guard folder.kind == .dir else { return false }
+        guard let children = folder.children, !children.isEmpty else { return folder.size == 0 }
+        return children.allSatisfy { $0.kind == .file && $0.name == dsStore }
     }
+
+    /// What Finder writes in a folder it has shown, to keep the folder's view settings.
+    static let dsStore = ".DS_Store"
 
     /// Whether the Trash holds nothing, by what the scanner says of it with the map `tree`.
     ///
+    /// Finder's `.DS_Store`, which keeps a folder's view settings, is all an emptied Trash holds once Finder has shown
+    /// it, and the Dock shows that Trash empty, so Pith does too: holding nothing here means holding nothing but that.
+    ///
     /// A map a scan made, `scan` its summary, lists every folder it can read and folds one too small for a block into its
     /// folder's smaller items, and an empty folder into nothing, so only a scan of the Trash itself draws it with nothing
-    /// in it. It holds nothing when that scan's own folder draws nothing and the scan listed no folder or file below it,
-    /// nor found a folder only in the cloud or an entry macOS wouldn't describe. A scan counts a symbolic link nowhere, so
+    /// in it. It holds nothing when that scan's own folder draws nothing in it but Finder's `.DS_Store`, which a scan of
+    /// so small a folder draws on its own, and the scan listed no folder below it, counted no file it doesn't draw so,
+    /// and found no folder only in the cloud or entry macOS wouldn't describe. A scan counts a symbolic link nowhere, so
     /// a scanned Trash holding only one shows empty.
     ///
     /// A live map's tree draws a Trash found and not listed yet as one holding nothing, so for any other map its index
-    /// says: it has listed the Trash and holds no bytes, files or folders there, and its listing had no entry at all (its
-    /// place in `live`, the places that came with the tree, which name no Trash found and not listed yet), and the tree,
-    /// where it draws the Trash, draws nothing in it. Bytes alone can't say so: the index counts a clone copy whose bytes
-    /// another copy holds, and an empty file, in its files and not its bytes, and counts a symbolic link, or a hard link
-    /// counted at another link, nowhere. With no places, as before a live map's first tree, or a place that doesn't say
-    /// what it holds, nothing says so. The Trash's icon shows this state wherever it shows
-    /// (`iconKey(for:asking:trashIsEmpty:)`, `placesTable`, and the page's rule, which gets it with `iconRule`).
+    /// says: it has listed the Trash and holds no folders there, and its listing had no entry beside Finder's
+    /// `.DS_Store` (its place in `live`, the places that came with the tree, which name no Trash found and not listed
+    /// yet), and the tree, where it draws the Trash, draws nothing in it but that. Bytes and files can't say so: the
+    /// `.DS_Store` adds to both, the index counts a clone copy whose bytes another copy holds, and an empty file, in its
+    /// files and not its bytes, and it counts a symbolic link, or a hard link counted at another link, nowhere. With no
+    /// places, as before a live map's first tree, or a place that doesn't say what it holds, nothing says so. The Trash's
+    /// icon shows this state wherever it shows (`iconKey(for:asking:trashIsEmpty:)`, `placesTable`, and the page's rule,
+    /// which gets it with `iconRule`).
     public func trashHoldsNothing(in tree: DiskNode?, scan: DiskSummary?, live: [LivePlace]) -> Bool {
         guard let trash = place(id: Self.trashID) else { return false }
         let node = tree?.node(at: trash.path)
         if let node, !Self.drawsNothing(node) { return false }
-        // A scan's count of the folders it listed includes its own.
+        // A scan's count of the folders it listed includes its own, and its files are the .DS_Store files its folder draws.
         if let scan {
-            return node != nil && tree?.path == trash.path && scan.dirs <= 1 && scan.files == 0 && scan.entryErrors == 0 && scan.cloudOnly.folders == 0
+            guard let node, tree?.path == trash.path else { return false }
+            return scan.dirs <= 1 && scan.files == UInt64(node.children?.count ?? 0) && scan.entryErrors == 0 && scan.cloudOnly.folders == 0
         }
         return live.first { $0.path == trash.path }?.holdsNothing ?? false
     }

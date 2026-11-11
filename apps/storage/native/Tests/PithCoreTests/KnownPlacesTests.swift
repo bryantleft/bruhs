@@ -172,6 +172,18 @@ final class KnownPlacesTests: XCTestCase {
         XCTAssertFalse(table.trashHoldsNothing(in: folded, scan: nil, live: [LivePlace(path: trash, size: nil)]), "the map can't read it")
         XCTAssertFalse(table.trashHoldsNothing(in: folded, scan: nil, live: [LivePlace(path: trash, size: 2_000_000_000, files: 3, subfolders: false)]))
         XCTAssertFalse(table.trashHoldsNothing(in: emptyFiles, scan: nil, live: [holdsNothing]), "it draws empty files in it")
+        // Finder's .DS_Store, all an emptied Trash holds once Finder has shown it, and a Trash the Dock shows empty, adds a
+        // file and its bytes, and no entry beside it.
+        let finders = LivePlace(path: trash, size: 8192, files: 1, subfolders: false, entries: false)
+        let dsStore = DiskNode(kind: .file, name: ".DS_Store", path: trash + "/.DS_Store", size: 8192, children: nil)
+        XCTAssertTrue(table.trashHoldsNothing(in: folded, scan: nil, live: [finders]), "only Finder's .DS_Store, folded away")
+        XCTAssertTrue(table.trashHoldsNothing(in: inHome([DiskNode(kind: .dir, name: ".Trash", path: trash, size: 8192, files: 1, children: [dsStore])]),
+                                              scan: nil, live: [finders]), "drawn holding only Finder's .DS_Store")
+        let notes = DiskNode(kind: .file, name: "notes.txt", path: trash + "/notes.txt", size: 8192, children: nil)
+        XCTAssertFalse(table.trashHoldsNothing(in: inHome([DiskNode(kind: .dir, name: ".Trash", path: trash, size: 16384, files: 2, children: [dsStore, notes])]),
+                                               scan: nil, live: [finders]), "it draws a file beside it")
+        XCTAssertFalse(table.trashHoldsNothing(in: folded, scan: nil, live: [LivePlace(path: trash, size: 8192, files: 1, subfolders: false, entries: true)]),
+                       "a file beside it")
         XCTAssertFalse(table.trashHoldsNothing(in: nil, scan: nil, live: []), "no map")
         XCTAssertFalse(KnownPlaces(home: home, searchPaths: [:]) { _ in nil }.trashHoldsNothing(in: drawn, scan: nil, live: [holdsNothing]), "no Trash")
     }
@@ -192,6 +204,17 @@ final class KnownPlacesTests: XCTestCase {
         XCTAssertFalse(table.trashHoldsNothing(in: own, scan: scan(dirs: 1, cloudFolders: 1), live: []), "a folder only in the cloud")
         XCTAssertFalse(table.trashHoldsNothing(in: own, scan: scan(dirs: 1, entryErrors: 1), live: []), "an entry macOS wouldn't describe")
         XCTAssertFalse(table.trashHoldsNothing(in: own, scan: scan(dirs: 1, files: 1), live: []), "a file it counted")
+        // Finder's .DS_Store, which a scan of so small a folder draws on its own.
+        let dsStore = DiskNode(kind: .file, name: ".DS_Store", path: trash + "/.DS_Store", size: 8192, children: nil)
+        let finders = DiskNode(kind: .dir, name: ".Trash", path: trash, size: 8192, files: 1, children: [dsStore])
+        XCTAssertTrue(table.trashHoldsNothing(in: finders, scan: scan(dirs: 1, files: 1), live: []), "only Finder's .DS_Store")
+        XCTAssertFalse(table.trashHoldsNothing(in: finders, scan: scan(dirs: 1, files: 2), live: []), "a file it counted and doesn't draw")
+        let notes = DiskNode(kind: .file, name: "notes.txt", path: trash + "/notes.txt", size: 8192, children: nil)
+        XCTAssertFalse(table.trashHoldsNothing(in: DiskNode(kind: .dir, name: ".Trash", path: trash, size: 16384, files: 2, children: [dsStore, notes]),
+                                               scan: scan(dirs: 1, files: 2), live: []), "a file beside it")
+        let named = DiskNode(kind: .dir, name: ".DS_Store", path: trash + "/.DS_Store", size: 8192, files: 1, children: [])
+        XCTAssertFalse(table.trashHoldsNothing(in: DiskNode(kind: .dir, name: ".Trash", path: trash, size: 8192, files: 1, children: [named]),
+                                               scan: scan(dirs: 2, files: 1), live: []), "a folder named .DS_Store")
         let copy = DiskNode(kind: .dir, name: ".Trash", path: trash, size: 0, files: 1, children: [
             DiskNode(kind: .aggregate, name: "(smaller items)", path: trash + "/__other__", size: 0, files: 1, clones: 4096, children: nil),
         ])
@@ -237,6 +260,14 @@ final class KnownPlacesTests: XCTestCase {
             try files.copyItem(at: original, to: trash.appendingPathComponent("original copy.bin"))
         }
         XCTAssertFalse(copy, "a Finder copy whose bytes its original holds")
+        // What Finder leaves in a Trash it has shown, in a folder of the test's own, never the person's Trash.
+        let finders = try await holdsNothing { try Data(count: 6_148).write(to: trash.appendingPathComponent(".DS_Store")) }
+        XCTAssertTrue(finders, "only Finder's .DS_Store")
+        let beside = try await holdsNothing {
+            try Data(count: 6_148).write(to: trash.appendingPathComponent(".DS_Store"))
+            try Data().write(to: trash.appendingPathComponent("empty.txt"))
+        }
+        XCTAssertFalse(beside, "an empty file beside it")
     }
 
     /// The Trash shows macOS's empty Trash while it holds nothing, by the scanner's word (`trashHoldsNothing`), and the

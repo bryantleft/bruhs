@@ -26,13 +26,17 @@ export interface IconRule {
   /** Whether macOS may be holding some of the map's folders: it's asking about some, or the map is catching up. */
   readonly asking: boolean;
   /**
-   * Whether the Trash holds nothing, by the scanner's word: it has listed the Trash and holds no bytes, files or
-   * folders there (`KnownPlaces.trashHoldsNothing`). A Trash found and not listed yet looks empty too, and isn't.
+   * Whether the Trash holds nothing, by the scanner's word: it has listed the Trash and holds no folders there, and its
+   * listing had no entry beside Finder's `.DS_Store` (`KnownPlaces.trashHoldsNothing`). A Trash found and not listed
+   * yet looks empty too, and isn't.
    */
   readonly emptyTrash: boolean;
 }
 
-/** What the rule reads of an item: its kind and path, and of a folder whether the map has listed it. */
+/**
+ * What the rule reads of an item: its kind and path, and of a folder whether the map has listed it and, for the Trash,
+ * what the map draws in it.
+ */
 export type IconItem =
   | Pick<
       FileNode | AggregateNode | UnreadableNode | VolumeNode,
@@ -108,12 +112,21 @@ function isGuarded(path: string, rule: IconRule): boolean {
 const isListed = (folder: Pick<DirNode, "size" | "files" | "children">) =>
   folder.size > 0 || folder.files > 0 || folder.children.length > 0;
 
+/** What Finder writes in a folder it has shown, to keep the folder's view settings. */
+const DS_STORE = ".DS_Store";
+
 /**
- * Whether `item` is a folder drawn with nothing in it: no size and no children, as the scanner writes an empty folder,
- * and as one it hasn't listed yet looks.
+ * Whether `item` is a folder drawn with nothing in it but Finder's `.DS_Store`: no size and no children, as the scanner
+ * writes an empty folder, and as one it hasn't listed yet looks, or children that are each a file of that name, as an
+ * emptied Trash holds once Finder has shown it, which the Dock shows empty.
  */
 const drawsNothing = (item: IconItem) =>
-  item.kind === "dir" && item.size === 0 && item.children.length === 0;
+  item.kind === "dir" &&
+  (item.children.length === 0
+    ? item.size === 0
+    : item.children.every(
+        (child) => child.kind === "file" && child.name === DS_STORE,
+      ));
 
 /**
  * `item`'s icon key by Pith's icon rule, as `KnownPlaces.iconKey(for:asking:)` gives it, so the page asks the route
@@ -121,7 +134,8 @@ const drawsNothing = (item: IconItem) =>
  * its own, and so does a folder, package or app outside the locations macOS guards. Inside one, a folder shows its own
  * only once the map has listed it and while macOS can't be holding it; otherwise, as for a folder the map couldn't
  * read, a plain folder. The map's smaller items show a group. The Trash shows macOS's empty Trash while it holds
- * nothing, by the scanner's word (`rule.emptyTrash`), and `item` draws nothing in it, and the full Trash otherwise.
+ * nothing, by the scanner's word (`rule.emptyTrash`), and `item` draws nothing in it but Finder's `.DS_Store`, and the
+ * full Trash otherwise.
  */
 export function iconKey(item: IconItem, rule: IconRule): string {
   const path = item.path.normalize("NFC");

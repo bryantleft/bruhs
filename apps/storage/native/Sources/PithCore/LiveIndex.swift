@@ -88,8 +88,9 @@ public struct LivePlace: Decodable, Sendable, Equatable {
     public let files: UInt64?
     /// Whether it holds a folder, an empty one included. Nil where the scanner doesn't say.
     public let subfolders: Bool?
-    /// Whether its listing had any entry at all, those no total counts included: a symbolic link, a hard link counted at
-    /// another link, or one macOS wouldn't describe. Nil where the scanner doesn't say.
+    /// Whether its listing had any entry beside Finder's `.DS_Store`, those no total counts included: a symbolic link, a
+    /// hard link counted at another link, or one macOS wouldn't describe. A folder the scanner restored from its saved
+    /// map counts its files, a `.DS_Store` among them, until it's listed again. Nil where the scanner doesn't say.
     public let entries: Bool?
     /// It, or a folder above it, waits on the person's answer to macOS's question about Pith, which is all it takes.
     public let asking: Bool
@@ -98,9 +99,10 @@ public struct LivePlace: Decodable, Sendable, Equatable {
         self.path = path; self.size = size; self.files = files; self.subfolders = subfolders; self.entries = entries; self.asking = asking
     }
 
-    /// The scanner has listed it and says it holds nothing: no bytes, files or folders, and its listing had no entry at
-    /// all. One that doesn't say what it holds holds something, as far as Pith knows.
-    public var holdsNothing: Bool { size == 0 && files == 0 && subfolders == false && entries == false }
+    /// The scanner has listed it and says it holds nothing but Finder's `.DS_Store`, all an emptied Trash holds once
+    /// Finder has shown it: no folders, and its listing had no entry beside that file, whose bytes and file it counts.
+    /// One that doesn't say what it holds holds something, as far as Pith knows.
+    public var holdsNothing: Bool { subfolders == false && entries == false }
 
     enum CodingKeys: String, CodingKey { case path, size, files, subfolders, entries, asking }
 

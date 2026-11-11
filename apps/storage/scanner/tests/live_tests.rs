@@ -618,6 +618,27 @@ fn a_snapshot_reopens_as_it_was_and_keeps_counting() {
     remove(&root);
 }
 
+/// The saved map keeps no word of what a folder's files were, so a folder it restores holding only Finder's
+/// `.DS_Store` counts that file as an entry, as any file, until it's listed again: the Trash it is shows full until then.
+#[test]
+fn a_restored_folder_counts_finders_ds_store_until_it_is_listed_again() {
+    let root = fixture("a_restored_folder_counts_finders_ds_store_until_it_is_listed_again");
+    fs::create_dir_all(root.join("emptied")).unwrap();
+    fs::write(root.join("emptied/.DS_Store"), vec![0u8; 6_148]).unwrap();
+    let live = Live::build(&root);
+    let emptied = [root.join("emptied").to_string_lossy().into_owned()];
+    assert_eq!(live.index.places(&emptied, &|_| false)[0].entries, Some(false));
+    let file = std::env::temp_dir().join(format!("pith-live-{}-restored.bin", std::process::id()));
+    snapshot::write(&file, &live.index, 42, "VOLUME", 1_700_000_000).unwrap();
+    let (index, _) = snapshot::read(&file, root.to_str().unwrap(), Some("VOLUME")).unwrap();
+    let mut reopened = Live::open(&root, index);
+    assert_eq!(reopened.index.places(&emptied, &|_| false)[0].entries, Some(true), "restored, its file counts");
+    reopened.changed(&[root.join("emptied")], &mut Rng(12));
+    assert_eq!(reopened.index.places(&emptied, &|_| false)[0].entries, Some(false), "listed again");
+    let _ = fs::remove_file(&file);
+    remove(&root);
+}
+
 #[test]
 fn the_map_has_the_scan_results_shape() {
     let root = fixture("the_map_has_the_scan_results_shape");
@@ -784,9 +805,11 @@ fn serve_gives_each_place_its_size_in_the_map_it_answers_with() {
 #[test]
 fn serve_says_what_each_place_holds_beside_its_size() {
     let root = fixture("serve_says_what_each_place_holds_beside_its_size");
-    for folder in ["kept", "empty", "copies", "blank", "folders/inner", "pointing"] {
+    for folder in ["kept", "empty", "copies", "blank", "folders/inner", "pointing", "emptied"] {
         fs::create_dir_all(root.join(folder)).unwrap();
     }
+    // What Finder leaves in a folder it has shown, as in an emptied Trash.
+    fs::write(root.join("emptied/.DS_Store"), vec![0u8; 6_148]).unwrap();
     fs::write(root.join("kept/original.bin"), vec![b'o'; 70_000]).unwrap();
     // The copy is made after the original, so the original, the lower inode, holds the bytes.
     assert!(clone_file(&root.join("kept/original.bin"), &root.join("copies/duplicate.bin")));
@@ -798,7 +821,7 @@ fn serve_says_what_each_place_holds_beside_its_size() {
     serve.send(serde_json::json!({ "cmd": "walk", "since": 100 }));
     serve.until("walked");
     let at = |path: &str| root.join(path).to_string_lossy().into_owned();
-    let places = [at("kept"), at("empty"), at("copies"), at("blank"), at("folders"), at("pointing")];
+    let places = [at("kept"), at("empty"), at("copies"), at("blank"), at("folders"), at("pointing"), at("emptied")];
     serve.send(serde_json::json!({ "cmd": "tree", "path": root, "focus": null, "request": 3, "places": places }));
     let tree = serve.until("tree");
     let answered: HashMap<String, serde_json::Value> =
@@ -815,9 +838,10 @@ fn serve_says_what_each_place_holds_beside_its_size() {
     assert_eq!(held("blank"), (Some(0), Some(1), Some(false)), "an empty file");
     assert_eq!(held("folders"), (Some(0), Some(0), Some(true)), "an empty folder");
     assert_eq!(held("pointing"), (Some(0), Some(0), Some(false)), "a symbolic link, which no total counts");
+    assert_eq!(held("emptied").1, Some(1), "Finder's .DS_Store, a file like any other");
     let entries = |path: &str| answered[&at(path)]["entries"].as_bool();
-    assert_eq!(["kept", "empty", "copies", "blank", "folders", "pointing"].map(entries), [true, false, true, true, true, true].map(Some),
-               "whether each listing had any entry at all");
+    assert_eq!(["kept", "empty", "copies", "blank", "folders", "pointing", "emptied"].map(entries), [true, false, true, true, true, true, false].map(Some),
+               "whether each listing had any entry beside Finder's .DS_Store");
     serve.close();
     remove(&root);
 }

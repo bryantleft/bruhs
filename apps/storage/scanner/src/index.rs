@@ -37,6 +37,15 @@ const BLOCK: u64 = 4096;
 /// The largest files a map lists, as the walk's `TOP_FILES_GLOBAL`.
 const TOP_FILES: usize = 200;
 
+/// What Finder writes in a folder it has shown, to keep the folder's view settings: all an emptied Trash still holds
+/// once Finder has shown it, a Trash the Dock shows empty.
+const DS_STORE: &str = ".DS_Store";
+/// `Folder::listing`: the folder was listed this session, so the bit beside it says what its listing had.
+const LISTED: u8 = 1;
+/// `Folder::listing`: its last listing had an entry beside its folders and Finder's `.DS_Store`: a file, or one its
+/// totals leave out, as a symbolic link is, or a hard link counted at another link.
+const BESIDE_DS_STORE: u8 = 2;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Status {
@@ -79,10 +88,11 @@ pub(crate) struct Folder {
     pub(crate) clone_files: u32,
     pub(crate) name_len: u16,
     pub(crate) status: Status,
-    /// Its last listing had an entry its totals leave out: neither a file they count nor a folder, as a symbolic link
-    /// is, or a hard link counted at another link. Kept in the byte the struct has spare, and not saved with the map, so
-    /// a folder restored from it says nothing of them until it's listed again.
-    pub(crate) uncounted: bool,
+    /// What its last listing this session had beside its folders, as `LISTED` and `BESIDE_DS_STORE` say, which its
+    /// totals can't: they count Finder's `.DS_Store` as a file like any other, and leave out a symbolic link and a hard
+    /// link counted at another link. Kept in the byte the struct has spare, and not saved with the map, so a folder
+    /// restored from it says nothing of them until it's listed again.
+    pub(crate) listing: u8,
     pub(crate) inode: u64,
     pub(crate) size: u64,
     /// Bytes of clone copies that `size` leaves out, because another copy holds them.
@@ -438,7 +448,7 @@ impl Index {
             clone_files: 0,
             name_len,
             status: Status::Pending,
-            uncounted: false,
+            listing: 0,
             inode,
             size: 0,
             clones: 0,
@@ -784,7 +794,7 @@ impl Index {
         let mut big = Vec::new();
         let mut cloud = Cloud::default();
         let mut errors = 0u32;
-        let mut uncounted = false;
+        let mut beside = false;
         for entry in entries {
             if entry.error != 0 {
                 // One entry macOS wouldn't describe; the rest of the folder still counts.
@@ -802,16 +812,14 @@ impl Index {
                 continue;
             }
             if !entry.is_file {
-                uncounted = true;
+                beside = true;
                 continue;
             }
+            beside |= entry.name != DS_STORE;
             if entry.nlink > 1 {
                 match self.links.get(&entry.inode) {
                     // Counted at another link, or at an earlier one in this listing.
-                    Some(link) if self.current(link.folder, link.gen) => {
-                        uncounted = true;
-                        continue;
-                    }
+                    Some(link) if self.current(link.folder, link.gen) => continue,
                     _ => {
                         self.links.insert(entry.inode, Link { folder: id, gen });
                     }
@@ -850,7 +858,7 @@ impl Index {
         } else {
             self.entry_errors.insert(id, errors);
         }
-        self.folders[id as usize].uncounted = uncounted;
+        self.folders[id as usize].listing = LISTED | if beside { BESIDE_DS_STORE } else { 0 };
         subfolders
     }
 
@@ -969,7 +977,7 @@ impl Index {
         self.big.remove(&id);
         self.cloud.remove(&id);
         self.entry_errors.remove(&id);
-        self.folders[id as usize].uncounted = false;
+        self.folders[id as usize].listing = 0;
     }
 
     /// Takes a folder out of its parent's children, and its totals out of every folder above.
@@ -1152,8 +1160,9 @@ impl Index {
     /// when the folder waits on macOS's question about Pith (`asking`), which the place then says, or when a folder above
     /// it did either, so the map can't tell whether it's there. A path its listed parent doesn't have isn't there, and
     /// gives nothing; so does a path outside the index, or one found but waiting its turn to be listed. A folder listed
-    /// says too how many files it holds and whether it holds folders, which its size alone doesn't, as the Trash's icon
-    /// needs to show it empty only when it holds nothing.
+    /// says too how many files it holds, whether it holds folders, and whether its listing had any entry beside Finder's
+    /// `.DS_Store`, which its size alone doesn't, as the Trash's icon needs to show it empty only when it holds nothing
+    /// but that.
     pub fn places(&self, paths: &[String], asking: &dyn Fn(u32) -> bool) -> Vec<Place> {
         paths
             .iter()
@@ -1168,7 +1177,9 @@ impl Index {
                 };
                 let listed = exact && folder.status == Status::Listed;
                 let subfolders = listed && (self.children(id).next().is_some() || self.cloud.get(&id).is_some_and(|cloud| cloud.folders > 0));
-                let entries = folder.files > 0 || subfolders || folder.uncounted || self.entry_errors.contains_key(&id);
+                // A folder restored from the saved map, not listed since, has only its counts to go by.
+                let beside = if folder.listing & LISTED != 0 { folder.listing & BESIDE_DS_STORE != 0 } else { folder.files > 0 };
+                let entries = beside || subfolders || self.entry_errors.contains_key(&id);
                 Some(Place {
                     path: path.clone(),
                     size,
@@ -1596,7 +1607,7 @@ impl Folder {
             clone_files: u32::try_from(own.clone_files).unwrap_or(u32::MAX),
             name_len,
             status,
-            uncounted: false,
+            listing: 0,
             inode,
             size: own.size,
             clones: own.clones,
@@ -1619,8 +1630,9 @@ pub struct Place {
     /// Whether it holds a folder, an empty one, one not listed yet or one only in the cloud included.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub subfolders: Option<bool>,
-    /// Whether its listing had any entry at all, those its totals leave out included: a symbolic link, a hard link
-    /// counted at another link, or one macOS wouldn't describe.
+    /// Whether its listing had any entry beside Finder's `.DS_Store` (`DS_STORE`), those its totals leave out included: a
+    /// symbolic link, a hard link counted at another link, or one macOS wouldn't describe. A folder restored from the
+    /// saved map counts its files, a `.DS_Store` among them, until it's listed again.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entries: Option<bool>,
     /// It, or a folder above it, waits on macOS's question about Pith, which the person's answer settles: sent only
@@ -1864,6 +1876,32 @@ mod tests {
         // Listed again without the link, it holds nothing.
         list(&mut index, "/x/Symlinked", 5, vec![]);
         assert_eq!(index.places(&[format!("/x/Symlinked")], &|_| false)[0].entries, Some(false));
+    }
+
+    /// Finder's `.DS_Store`, which keeps a folder's view settings, is all an emptied Trash still holds once Finder has
+    /// shown it, and the Dock shows that Trash empty, so a place says its listing had an entry only for one beside it.
+    /// A `.DS_Store` that isn't a file is an entry like any other.
+    #[test]
+    fn a_place_leaves_finders_ds_store_out_of_its_entries() {
+        let mut index = Index::new("/x", HashMap::new());
+        list(&mut index, "/x", 2, vec![folder("Emptied", 3), folder("Beside", 4), folder("Pointing", 5), folder("Named", 6)]);
+        list(&mut index, "/x/Emptied", 3, vec![file(".DS_Store", 30, 8_192)]);
+        list(&mut index, "/x/Beside", 4, vec![file(".DS_Store", 31, 8_192), file("notes.txt", 32, 4_096)]);
+        list(&mut index, "/x/Pointing", 5, vec![crate::walk::Entry { is_dir: false, is_file: false, ..folder(".DS_Store", 33) }]);
+        list(&mut index, "/x/Named", 6, vec![folder(".DS_Store", 34)]);
+        let paths = ["Emptied", "Beside", "Pointing", "Named"].map(|name| format!("/x/{name}"));
+        let found = index.places(&paths, &|_| false);
+        let held: HashMap<&str, (Option<u64>, Option<bool>, Option<bool>)> =
+            found.iter().map(|place| (place.path.trim_start_matches("/x/"), (place.files, place.subfolders, place.entries))).collect();
+        assert_eq!(held["Emptied"], (Some(1), Some(false), Some(false)), "only Finder's .DS_Store");
+        assert_eq!(held["Beside"], (Some(2), Some(false), Some(true)));
+        assert_eq!(held["Pointing"], (Some(0), Some(false), Some(true)), "a symbolic link named .DS_Store");
+        assert_eq!(held["Named"], (Some(0), Some(true), Some(true)), "a folder named .DS_Store");
+        // Listed again with something beside it, then without.
+        list(&mut index, "/x/Emptied", 3, vec![file(".DS_Store", 30, 8_192), file("old.zip", 35, 4_096)]);
+        assert_eq!(index.places(&[format!("/x/Emptied")], &|_| false)[0].entries, Some(true));
+        list(&mut index, "/x/Emptied", 3, vec![file(".DS_Store", 30, 8_192)]);
+        assert_eq!(index.places(&[format!("/x/Emptied")], &|_| false)[0].entries, Some(false));
     }
 
     #[test]

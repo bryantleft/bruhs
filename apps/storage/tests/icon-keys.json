@@ -634,6 +634,77 @@
       "key": "place/trash"
     },
     {
+      "why": "A Trash the map draws holding only Finder's .DS_Store, all an emptied Trash holds once Finder has shown it and a Trash the Dock shows empty, shows macOS's empty Trash once the scanner says it holds nothing beside it.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 8192,
+        "files": 1,
+        "children": [
+          {
+            "kind": "file",
+            "name": ".DS_Store",
+            "path": "/Users/zoë/.Trash/.DS_Store",
+            "size": 8192
+          }
+        ]
+      },
+      "asking": false,
+      "emptyTrash": true,
+      "key": "place/trash-empty"
+    },
+    {
+      "why": "A Trash the map draws holding a file beside Finder's .DS_Store shows full.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 16384,
+        "files": 2,
+        "children": [
+          {
+            "kind": "file",
+            "name": ".DS_Store",
+            "path": "/Users/zoë/.Trash/.DS_Store",
+            "size": 8192
+          },
+          {
+            "kind": "file",
+            "name": "notes.txt",
+            "path": "/Users/zoë/.Trash/notes.txt",
+            "size": 8192
+          }
+        ]
+      },
+      "asking": false,
+      "emptyTrash": true,
+      "key": "place/trash"
+    },
+    {
+      "why": "A folder named .DS_Store is no Finder's .DS_Store, so a Trash the map draws holding one shows full.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 0,
+        "files": 0,
+        "children": [
+          {
+            "kind": "dir",
+            "name": ".DS_Store",
+            "path": "/Users/zoë/.Trash/.DS_Store",
+            "size": 0,
+            "files": 0,
+            "children": []
+          }
+        ]
+      },
+      "asking": false,
+      "emptyTrash": true,
+      "key": "place/trash"
+    },
+    {
       "why": "A Trash the map couldn't read shows full, as it always did: nothing says it's empty.",
       "node": {
         "kind": "unreadable",
@@ -660,7 +731,7 @@
       "key": "place/trash-empty"
     },
     {
-      "why": "A Trash the map doesn't draw, as a map folds a Trash of no bytes into its folder's smaller items, shows empty when the scanner's place for it says it holds no bytes, files or folders, and its listing had no entry at all.",
+      "why": "A Trash the map doesn't draw, as a map folds a Trash of no bytes into its folder's smaller items, shows empty when the scanner's place for it says it holds no folders and its listing had no entry, here none at all.",
       "node": {
         "kind": "dir",
         "name": ".Trash",
@@ -670,6 +741,21 @@
         "children": []
       },
       "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 0, "subfolders": false, "entries": false },
+      "asking": false,
+      "emptyTrash": true,
+      "key": "place/trash-empty"
+    },
+    {
+      "why": "A Trash the map doesn't draw that holds only Finder's .DS_Store has its bytes and a file, but its listing had no entry beside it, so it shows empty.",
+      "node": {
+        "kind": "dir",
+        "name": ".Trash",
+        "path": "/Users/zoë/.Trash",
+        "size": 0,
+        "files": 0,
+        "children": []
+      },
+      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 8192, "files": 1, "subfolders": false, "entries": false },
       "asking": false,
       "emptyTrash": true,
       "key": "place/trash-empty"
