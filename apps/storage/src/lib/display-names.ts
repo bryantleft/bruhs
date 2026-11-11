@@ -75,13 +75,21 @@ export function splitName(name: string): { head: string; tail: string } {
   };
 }
 
-/** The folder holding `path`. Inside `base` it starts at the base folder's own name. */
-export function parentFolder(path: string, base?: string): string {
+/** The folder holding `path`, whole. */
+export function parentFolder(path: string): string {
   const cut = path.lastIndexOf("/");
-  const folder = cut <= 0 ? "/" : path.slice(0, cut);
-  if (!base || base === "/") return folder;
-  if (folder !== base && !folder.startsWith(`${base}/`)) return folder;
-  return base.slice(base.lastIndexOf("/") + 1) + folder.slice(base.length);
+  return cut <= 0 ? "/" : path.slice(0, cut);
+}
+
+/**
+ * The folder holding `path` from below `base` on, for a list of what's inside `base`, a folder whose own name a path bar
+ * shows already: none for an item right in `base`, and the whole folder for one outside it.
+ */
+export function folderBelow(path: string, base: string): string | null {
+  const folder = parentFolder(path);
+  if (folder === base) return null;
+  const prefix = base === "/" ? "/" : `${base}/`;
+  return folder.startsWith(prefix) ? folder.slice(prefix.length) : folder;
 }
 
 /** Split a folder path so its last folder stays whole when the rest is cut. */

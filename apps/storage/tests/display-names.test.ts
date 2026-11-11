@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   endTruncate,
+  folderBelow,
   middleTruncate,
   parentFolder,
   splitFolder,
@@ -86,27 +87,9 @@ describe("splitName", () => {
 });
 
 describe("parentFolder", () => {
-  test("is the absolute folder without a base", () => {
+  test("is the absolute folder", () => {
     assert.equal(parentFolder("/Users/me/Movies/trip.mov"), "/Users/me/Movies");
     assert.equal(parentFolder("/swapfile"), "/");
-  });
-
-  test("starts at the base folder's name inside the base", () => {
-    assert.equal(
-      parentFolder("/Users/me/bruhs/apps/storage/a.ts", "/Users/me/bruhs"),
-      "bruhs/apps/storage",
-    );
-    assert.equal(
-      parentFolder("/Users/me/bruhs/a.ts", "/Users/me/bruhs"),
-      "bruhs",
-    );
-  });
-
-  test("stays absolute outside the base or when the base is the disk", () => {
-    assert.equal(parentFolder("/opt/x/a.ts", "/Users/me"), "/opt/x");
-    assert.equal(parentFolder("/Users/me/a.ts", "/"), "/Users/me");
-    // A sibling whose name starts with the base's name isn't inside it.
-    assert.equal(parentFolder("/Users/me2/a.ts", "/Users/me"), "/Users/me2");
   });
 });
 
@@ -118,5 +101,29 @@ describe("splitFolder", () => {
     });
     assert.deepEqual(splitFolder("/"), { head: "", tail: "/" });
     assert.deepEqual(splitFolder("bruhs"), { head: "", tail: "bruhs" });
+  });
+});
+
+describe("folderBelow", () => {
+  test("starts below the folder a list is of, whose own name the path bar shows", () => {
+    assert.equal(
+      folderBelow("/Users/me/bruhs/apps/storage/a.ts", "/Users/me/bruhs"),
+      "apps/storage",
+    );
+    assert.equal(
+      folderBelow("/Users/me/Movies/trip.mov", "/"),
+      "Users/me/Movies",
+    );
+  });
+
+  test("is none for an item right in that folder", () => {
+    assert.equal(folderBelow("/Users/me/bruhs/a.ts", "/Users/me/bruhs"), null);
+    assert.equal(folderBelow("/swapfile", "/"), null);
+  });
+
+  test("is the whole folder for an item outside it", () => {
+    assert.equal(folderBelow("/opt/x/a.ts", "/Users/me"), "/opt/x");
+    // A sibling whose name starts with the base's name isn't inside it.
+    assert.equal(folderBelow("/Users/me2/a.ts", "/Users/me"), "/Users/me2");
   });
 });

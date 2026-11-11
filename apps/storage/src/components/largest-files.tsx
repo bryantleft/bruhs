@@ -1,5 +1,10 @@
 import { type ReactNode, useMemo } from "react";
-import { parentFolder, splitFolder, splitName } from "~/lib/display-names";
+import {
+  folderBelow,
+  parentFolder,
+  splitFolder,
+  splitName,
+} from "~/lib/display-names";
 import { CATEGORY_VAR, categoryForName, formatBytes } from "~/lib/format";
 import type { FileEntry } from "~/lib/types";
 import { PathRow } from "./path-row";
@@ -18,7 +23,11 @@ interface Props {
   hoveredPath?: string | null;
   /** The row under the pointer or keyboard focus changed, for linking the map. */
   onHoverPath?: (path: string | null) => void;
-  /** Show each file's folder from this folder down; otherwise its full path. */
+  /**
+   * The folder the list is of, whose own name the host's path bar shows: each file's folder line then starts below it,
+   * and a file right in it has none. Without it, each file's folder shows whole, as the browser storage app lists the
+   * scan's largest files, wherever they are.
+   */
   base?: string;
   /** Right-click on a row: show the file's actions. Without it there's no menu. */
   onMenu?: (file: FileEntry) => void;
@@ -53,12 +62,15 @@ export function LargestFiles({
   const rows = useMemo(
     () =>
       files.map((file) => {
-        const folderPath = parentFolder(file.path, base);
+        const folderPath =
+          base === undefined
+            ? parentFolder(file.path)
+            : folderBelow(file.path, base);
         return {
           file,
           folderPath,
           name: splitName(file.name),
-          folder: splitFolder(folderPath),
+          folder: folderPath === null ? null : splitFolder(folderPath),
           size: formatBytes(file.size),
           color: `var(${CATEGORY_VAR[categoryForName(file.name)]})`,
         };
@@ -78,7 +90,11 @@ export function LargestFiles({
               name={name}
               folder={folder}
               figure={size}
-              label={`${f.name}, ${size}, in ${folderPath}`}
+              label={
+                folderPath === null
+                  ? `${f.name}, ${size}`
+                  : `${f.name}, ${size}, in ${folderPath}`
+              }
               title={f.path}
               selected={selectedPaths.includes(f.path)}
               highlighted={hoveredPath !== null && inside(f.path, hoveredPath)}

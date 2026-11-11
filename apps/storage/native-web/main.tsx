@@ -28,7 +28,7 @@ import type {
   ResultEvent,
   TreeNode,
 } from "../src/lib/types";
-import { grewRows } from "./grew-since";
+import { grewRows, writersHeading } from "./grew-since";
 import { useLearnedHints } from "./hints";
 import { GROUP_KEY, itemAt, itemKey } from "./icon-rule";
 import { KindLegend } from "./kind-legend";
@@ -610,7 +610,7 @@ function DiskMap() {
                   id="writers-heading"
                   className="text-eyebrow text-(--role-text-tertiary)"
                 >
-                  Wrote the most since {growth.writersSince ?? growth.since}
+                  {writersHeading(growth.since, growth.writersSince)}
                 </h2>
                 <ul className="space-y-px">
                   {growth.writers.map((writer, index) => (
@@ -666,8 +666,7 @@ function DiskMap() {
                 </ul>
                 {unreadable.length > UNREADABLE_SHOWN && (
                   <p className="text-label-sm text-(--role-text-tertiary)">
-                    And {unreadable.length - UNREADABLE_SHOWN} more. Pith’s
-                    notice above lists them all.
+                    And {unreadable.length - UNREADABLE_SHOWN} more.
                   </p>
                 )}
               </section>

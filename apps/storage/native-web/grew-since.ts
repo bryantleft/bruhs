@@ -1,4 +1,4 @@
-import { parentFolder } from "../src/lib/display-names.ts";
+import { folderBelow } from "../src/lib/display-names.ts";
 import { formatBytes } from "../src/lib/format.ts";
 import { GREW_SHOWN } from "./side-lists.ts";
 
@@ -11,8 +11,8 @@ export interface GrewRow {
   /** Its own name, the last part of its path, which the row leads with. */
   readonly name: string;
   /**
-   * The folder it's in, as Largest files gives a file's (`parentFolder`): from the open folder's own name on, or whole at
-   * the disk's root. Null for an item right in the open folder, whose row is its name alone.
+   * The folder it's in, as Largest files gives a file's (`folderBelow`): from below the open folder on, whose own name
+   * the path bar shows. Null for an item right in the open folder, whose row is its name alone.
    */
   readonly folder: string | null;
   /** How much it grew, with a plus. */
@@ -37,8 +37,7 @@ export function grewRows(
     .slice(0, shown)
     .map(([path, delta]) => {
       const name = path.slice(path.lastIndexOf("/") + 1);
-      const folder =
-        path.indexOf("/", prefix.length) < 0 ? null : parentFolder(path, here);
+      const folder = folderBelow(path, here);
       const figure = `+${formatBytes(delta)}`;
       const label =
         folder === null
@@ -46,4 +45,15 @@ export function grewRows(
           : `${name}, ${figure}, in ${folder}`;
       return { path, name, folder, figure, label };
     });
+}
+
+/**
+ * Wrote the most since's heading, which follows Grew since's, of the date of the baseline `since`: since then, when the
+ * apps' stretch begins with it, rather than the date again, or since the day Pith's history begins, `writersSince`,
+ * when that's later.
+ */
+export function writersHeading(since: string, writersSince?: string): string {
+  return writersSince === undefined || writersSince === since
+    ? "Wrote the most since then"
+    : `Wrote the most since ${writersSince}`;
 }
