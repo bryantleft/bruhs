@@ -151,6 +151,7 @@ extension AppDelegate {
             checks.merge(try await inspectDisk(), uniquingKeysWith: { _, new in new })
             // Before the icon route's check, which stops every load the page has going.
             checks.merge(await checkListIcons(), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkNoGenericIcons(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkMapMarks(), uniquingKeysWith: { _, new in new })
             // Before anything clicks the map, which would learn the hints.
             let hints = await learnHints(fixture)

@@ -469,6 +469,19 @@ final class SystemIconTests: XCTestCase {
         }
     }
 
+    /// The smoke test's check of the generic document (`genericDrawings`) names a type nothing claims, which macOS draws
+    /// as that blank page, in each appearance, and a place the table doesn't have, which draws nothing, while the types
+    /// macOS declares itself and the places of a table pass.
+    func testTheGenericDocumentIsNamedWhereItDraws() async {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("pith-test-home")
+        let places = KnownPlaces(home: home, searchPaths: [.trashDirectory: home.appendingPathComponent(".Trash")]) { _ in nil }
+        let store = IconStore(renderer: SystemIconRenderer(places: places))
+        let keys: [IconKey] = [.type("pdf"), .type("mov"), .type("pith-nothing-claims-this"), .place("trash"), .place("nowhere")]
+        let found = await store.genericDrawings(of: keys, size: size)
+        XCTAssertEqual(found.map(\.description), ["type/pith-nothing-claims-this in light", "place/nowhere in light, drawing nothing",
+                                                  "type/pith-nothing-claims-this in dark", "place/nowhere in dark, drawing nothing"])
+    }
+
     /// Each of the Trash's keys draws one state of macOS's Trash, the same art every time, so the store can keep it by its
     /// key: a full Trash never draws as an empty one, nor the other way round.
     func testEachOfTheTrashsKeysDrawsItsOwnState() async throws {
