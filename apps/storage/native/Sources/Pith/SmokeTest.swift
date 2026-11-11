@@ -10,15 +10,18 @@ extension AppDelegate {
         // A line at a time, so a run its caller stops still leaves what it printed.
         setvbuf(stdout, nil, _IOLBF, 0)
         // Each check's time, from the one before it, and what it found, printed as it lands, so a run shows where its time
-        // goes, and one its caller stops still shows what it found.
+        // goes, and one its caller stops still shows what it found. The report on disk holds every check as it lands too,
+        // as a run that hasn't finished, so one its caller's alarm stops still leaves every result it had (`SmokeReport`).
         let began = ContinuousClock.now
         var lap = began
+        let partial = SmokeReport(url: report)
         var checks: [String: Bool] = [:] {
             didSet {
                 let now = ContinuousClock.now
                 let found = checks.keys.filter { oldValue[$0] != checks[$0] }.sorted().map { "\($0) \(checks[$0] == true)" }
                 print("took \(Self.seconds(lap.duration(to: now))) s: \(found.isEmpty ? "a check again, unchanged" : found.joined(separator: ", "))")
                 lap = now
+                partial.landed(checks)
             }
         }
         // The fixture's scans are kept in a folder of the smoke test's own, never the user's, and what it moves to the
@@ -218,6 +221,10 @@ extension AppDelegate {
             print("the person's state: \(changes.isEmpty ? "as it was" : "changed \(changes)"); their Scans folder holds "
                   + "\(memories.isEmpty ? "no scan memory for \(roots)" : "a scan memory for \(memories)")")
             checks["left_the_persons_state_alone"] = changes.isEmpty && memories.isEmpty
+            // The report on disk held every check as it landed, as a run stopped now would leave it, before the finished
+            // run's report is written over it.
+            let landed = (try? Data(contentsOf: report)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            checks["report_holds_every_check_as_it_lands"] = landed?["checks"] as? [String: Bool] == checks && landed?["error"] is String
             forgetFolders()
             let data = try JSONSerialization.data(withJSONObject: checks, options: [.prettyPrinted, .sortedKeys])
             try data.write(to: report)
