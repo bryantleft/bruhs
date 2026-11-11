@@ -284,21 +284,39 @@ extension AppDelegate {
             "map_follows_text_size": zooms, "map_keeps_size_on_select": before != nil && before == after, "remote_navigation_blocked": web.url?.scheme == "pith"]
     }
 
-    /// Switches the window to light and then to dark: the bar under the map draws the selection's icon again for
-    /// each, off the main thread. The window goes back to following the system after.
+    /// Selects the fixture's sub folder, as a click does, since macOS draws a folder unlike in light and dark, where it
+    /// can draw a file's type alike, then switches the window to light and then to dark: for each, the bar under the map
+    /// shows the folder's icon as the store draws it in that appearance, off the main thread, as the window's own pixels
+    /// show, and not the drawing for the other appearance, where the two differ. The selection and the window's
+    /// appearance are as they were after.
     private func checkSelectionIcon() async -> Bool {
-        guard let window = mainWindow?.window, let item = disk.selectedItems.first else { return false }
+        guard let window = mainWindow?.window, let root = disk.result?.root.path else { return false }
+        let folder = (root as NSString).appendingPathComponent("sub"), selected = disk.selection.paths
+        defer { disk.select(selected) }
+        disk.select([folder])
+        guard await eventually({ self.disk.selectedItems.map(\.path) == [folder] }), let item = disk.selectedItems.first else { return false }
         let key = disk.iconKey(for: item)
         let size = IconSize(points: 16, scale: window.backingScaleFactor)
         let chosen = window.appearance
         defer { window.appearance = chosen }
-        var drawn: [IconAppearance] = []
+        var shown: [IconAppearance] = [], seen: [String] = []
         for appearance in IconAppearance.allCases {
             window.appearance = NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
-            if await eventually({ Icons.store.cachedIcon(for: IconRequest(key, size: size, appearance: appearance)) != nil }) { drawn.append(appearance) }
+            guard let own = await Icons.store.icon(for: IconRequest(key, size: size, appearance: appearance)),
+                  let other = await Icons.store.icon(for: IconRequest(key, size: size, appearance: appearance == .dark ? .light : .dark)) else { continue }
+            let alike = own.image.dataProvider?.data as Data? == other.image.dataProvider?.data as Data?
+            var found: [Double] = []
+            // Out of 255 a channel: the window's pixels and the store's drawing go through the same colour conversion, so
+            // the drawing shown differs from them by rounding alone.
+            let showsIt = await eventually {
+                found = Self.cornerShows([own.image, other.image], in: window) ?? []
+                return found.count == 2 && found[0] < 4 && (alike || found[0] + 0.5 < found[1])
+            }
+            seen.append("\(appearance.rawValue) \(found.map { String(format: "%.1f", $0) })\(alike ? ", its drawings alike" : "")")
+            if showsIt { shown.append(appearance) }
         }
-        print("selection icon \(key.string) drawn for \(drawn.map(\.rawValue))")
-        return drawn == IconAppearance.allCases
+        print("selection icon \(key.string): the bar shows the drawing for \(shown.map(\.rawValue)); differences from it and the other appearance's \(seen)")
+        return shown == IconAppearance.allCases
     }
 
     /// The side lists and the hover card lead with macOS's icons, which the page loads from Pith's route at its own

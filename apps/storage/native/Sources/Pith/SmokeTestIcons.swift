@@ -22,4 +22,55 @@ extension AppDelegate {
     /// Types macOS declares itself, which most files on a disk are: documents, pictures, films, music, archives, disk
     /// images and text.
     static let commonTypes = ["pdf", "png", "jpeg", "mov", "mp3", "zip", "dmg", "txt"]
+
+    /// How closely `window`'s bottom left corner, where the bar under the map leads with the selection's icon, shows
+    /// each of `drawings`, as the window's pixels are composited now (`cacheDisplay`): for each, the least mean difference,
+    /// out of 255 a channel, over the pixels its drawing covers whole, at the place it matches best. Only those pixels are
+    /// compared, so the bar's own colour, which follows the appearance too, counts for nothing. Each drawing is put in the
+    /// window's colour space first, as macOS does to show it. Nil when the window can't be read.
+    static func cornerShows(_ drawings: [CGImage], in window: NSWindow) -> [Double]? {
+        guard let content = window.contentView, let picture = content.bitmapImageRepForCachingDisplay(in: content.bounds) else { return nil }
+        content.cacheDisplay(in: content.bounds, to: picture)
+        guard let shot = picture.cgImage, let space = shot.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB),
+              let screen = Self.rgba(shot, in: space) else { return nil }
+        let scale = Double(shot.width) / Double(content.bounds.width)
+        // The bar is 52 pt high at least; its icon comes after its padding, well inside the first 200 pt.
+        let columns = 0..<min(screen.width, Int(200 * scale)), rows = max(0, screen.height - Int(80 * scale))..<screen.height
+        return drawings.map { drawing in
+            guard let icon = Self.rgba(drawing, in: space) else { return .infinity }
+            // The pixels it covers whole, each as its offset in the drawing.
+            var covered: [(x: Int, y: Int)] = []
+            for y in 0..<icon.height {
+                for x in 0..<icon.width where icon.bytes[(y * icon.width + x) * 4 + 3] == 255 { covered.append((x, y)) }
+            }
+            guard !covered.isEmpty else { return .infinity }
+            let channels = Double(covered.count * 3)
+            var best = Double.infinity
+            for top in rows where top + icon.height <= screen.height {
+                for left in columns where left + icon.width <= screen.width {
+                    let limit = best * channels
+                    var sum = 0
+                    for pixel in covered {
+                        let at = ((top + pixel.y) * screen.width + left + pixel.x) * 4, own = (pixel.y * icon.width + pixel.x) * 4
+                        for channel in 0..<3 { sum += abs(Int(screen.bytes[at + channel]) - Int(icon.bytes[own + channel])) }
+                        if Double(sum) >= limit { break }
+                    }
+                    best = min(best, Double(sum) / channels)
+                }
+            }
+            return best
+        }
+    }
+
+    /// `image`'s pixels, premultiplied RGBA, its top row first, in the colour space `space`.
+    private static func rgba(_ image: CGImage, in space: CGColorSpace) -> (width: Int, height: Int, bytes: [UInt8])? {
+        var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        let drawn = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                                          space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+            return true
+        }
+        return drawn ? (image.width, image.height, bytes) : nil
+    }
 }
