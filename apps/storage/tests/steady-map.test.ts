@@ -227,6 +227,21 @@ describe("nextStep", () => {
     assert.equal(nextStep(shown, grown, false), "show");
   });
 
+  test("holds back a layout laid out with the labels' new metrics, as once their font has loaded, and shows it otherwise", () => {
+    const root = map(1_000_000);
+    const kinds = kindBytesByFolder(root);
+    const marked = (charWidth: number) =>
+      layoutTreemap(root, 400, 300, kinds, undefined, {
+        icons: false,
+        glyphs: true,
+        metrics: { charWidth, lineHeight: 13, padX: 4, padY: 3 },
+      });
+    const standIn = marked(6);
+    const loaded = marked(6.5);
+    assert.equal(nextStep(standIn, loaded, true), "wait");
+    assert.equal(nextStep(standIn, loaded, false), "show");
+  });
+
   test("holds back the Not measured block coming, or a padlock, as any change it can see", () => {
     const root = map(1_000_000);
     const kinds = kindBytesByFolder(root);

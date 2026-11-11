@@ -41,6 +41,7 @@ import {
   type Kind,
   type LabelMarks,
   type LabelMetrics,
+  labelMetricsOf,
   labelMiddle,
   markRoom,
   nodeOf,
@@ -336,9 +337,9 @@ export function kindLabel(kind: Kind): string {
 }
 
 /**
- * Paints `layout`, its labels, once their font has loaded, with `metrics`, and its marks: each file block's kind
- * glyph, and the icons `icons` has loaded, from its cache. It asks for the icons it lacks, keeping their room empty,
- * and returns those, for painting as they come.
+ * Paints `layout`, its labels, once their font has loaded, with `metrics`, the metrics the layout was laid out with
+ * (`labelMetricsOf`), and its marks: each file block's kind glyph, and the icons `icons` has loaded, from its cache. It
+ * asks for the icons it lacks, keeping their room empty, and returns those, for painting as they come.
  */
 function drawMap(
   canvas: HTMLCanvasElement,
@@ -647,7 +648,10 @@ export function TreemapCanvas({
   const { layout, drew } = shownLayout;
 
   // Paint when the layout, colours, label font, highlight or icons change. An icon that comes later is no change to the
-  // layout: it's painted into the room the layout kept for it, without drawing the map again or holding it still.
+  // layout: it's painted into the room the layout kept for it, without drawing the map again or holding it still. A
+  // layout's labels are cut with the metrics it was laid out with, as its marks' room was kept by them: new metrics,
+  // as once the labels' font loads, make a new layout, which shows as any newer one does, so a layout held still
+  // meanwhile keeps every label its marks left room for.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !layout || !("palette" in colors) || !metrics) return;
@@ -657,7 +661,7 @@ export function TreemapCanvas({
       colors.palette,
       highlightKind,
       ratio,
-      metrics,
+      labelMetricsOf(layout, metrics),
       fontSettled,
       mapIcons,
     );

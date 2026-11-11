@@ -224,6 +224,12 @@ export interface TreemapLayout {
    * `unmeasured`, and the root's shares are shares of `used`.
    */
   readonly usedSpace?: UsedSpace;
+  /**
+   * The labels' metrics it was laid out with, its marks' (`LabelMarks`), by which it kept their room: its labels are
+   * cut with them too, whatever the host's are by the time it's drawn (`labelMetricsOf`). None when it keeps no room
+   * for marks.
+   */
+  readonly metrics?: LabelMetrics;
   /** The current folder's own items; folders hold theirs in `children`. */
   readonly tiles: readonly Tile[];
 }
@@ -638,6 +644,7 @@ export function layoutTreemap(
     width,
     height,
     ...(accounted ? { usedSpace: accounted } : {}),
+    ...(marks ? { metrics: marks.metrics } : {}),
     tiles: layoutItems(
       root,
       box,
@@ -717,7 +724,8 @@ function keepPlaces(
  * one, and so does a folder's count of folders inside it that couldn't be read, so the hover card of a layout kept
  * never shows a size or a count the map has moved past. An icon arriving changes no layout: the map paints it into
  * the room its layout kept. A header's padlock coming or going draws differently, and so does the root's Not measured
- * block, with the used space the root's shares are of printing another size.
+ * block, with the used space the root's shares are of printing another size. So does a layout laid out with other
+ * labels' metrics, as once the labels' font has loaded, whose labels are cut with them.
  */
 export function drawsTheSame(
   shown: TreemapLayout,
@@ -727,6 +735,7 @@ export function drawsTheSame(
     shown.root.path === next.root.path &&
     shown.width === next.width &&
     shown.height === next.height &&
+    sameMetrics(shown.metrics, next.metrics) &&
     printSame(
       shown.usedSpace?.unmeasured ?? 0,
       next.usedSpace?.unmeasured ?? 0,
@@ -735,6 +744,16 @@ export function drawsTheSame(
     sameTiles(shown.tiles, next.tiles)
   );
 }
+
+/** Labels' metrics that cut every label alike: the same, or measured again to the same figures. */
+const sameMetrics = (a?: LabelMetrics, b?: LabelMetrics) =>
+  a === b ||
+  (a !== undefined &&
+    b !== undefined &&
+    a.charWidth === b.charWidth &&
+    a.lineHeight === b.lineHeight &&
+    a.padX === b.padX &&
+    a.padY === b.padY);
 
 function sameTiles(a: readonly Tile[], b: readonly Tile[]): boolean {
   return a.length === b.length && a.every((tile, i) => sameTile(tile, b[i]));
@@ -914,6 +933,17 @@ export interface LabelMetrics {
   readonly padX: number;
   readonly padY: number;
 }
+
+/**
+ * The metrics `layout`'s labels are cut and its marks placed with: those it was laid out with, which kept its marks'
+ * room, so a label that fit beside its mark then still shows, though the host's metrics have changed since, as when
+ * the labels' font loads while the map holds still. A layout of the new metrics comes after, and shows as any newer
+ * layout does (`drawsTheSame`). A layout that keeps no room for marks has its labels cut with the host's `current`.
+ */
+export const labelMetricsOf = (
+  layout: TreemapLayout,
+  current: LabelMetrics,
+): LabelMetrics => layout.metrics ?? current;
 
 export interface TileLabel {
   readonly name: string;

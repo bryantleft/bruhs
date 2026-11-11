@@ -12,6 +12,7 @@ import {
   headerLabel,
   kindBytesByFolder,
   type LabelMarks,
+  labelMetricsOf,
   labelMiddle,
   layoutTreemap,
   MIN_TILE,
@@ -720,6 +721,65 @@ function marked(
     { icons: false, glyphs: false, metrics: METRICS, ...marks },
   );
 }
+
+describe("a layout's labels' metrics", () => {
+  /** The labels' metrics once the web font has loaded, wider than the face that stood in for it. */
+  const WIDER = { ...METRICS, charWidth: 6.5 };
+
+  test("a layout keeps the metrics it was laid out with, and one that keeps no room for marks has none", () => {
+    const root = dir("/r", [file("/r/report.pdf", 1000)]);
+    assert.deepEqual(marked(root, 300, 200, { glyphs: true }).metrics, METRICS);
+    assert.equal(layout(root, 300, 200).metrics, undefined);
+  });
+
+  test("a block in the band between the two fonts' thresholds keeps its label with the metrics its layout kept its glyph's room by", () => {
+    // 56 px painted: 30 px after the padding, the glyph and its gap, room for five characters of 6 px but not of 6.5.
+    const root = dir("/r", [file("/r/report.pdf", 1000)]);
+    const held = marked(root, 57, 40, { glyphs: true });
+    const tile = held.tiles[0];
+    assert.ok(tile.kind === "file");
+    assert.equal(tile.slot, 14, "the layout kept the glyph's room");
+    assert.equal(
+      tileLabel(tile, WIDER),
+      null,
+      "cut with the wider metrics, nothing is left",
+    );
+    assert.equal(labelMetricsOf(held, WIDER), held.metrics);
+    assert.deepEqual(tileLabel(tile, labelMetricsOf(held, WIDER)), {
+      name: "repo…",
+      size: "1.00 KB",
+      lines: 2,
+    });
+  });
+
+  test("a layout keeping no room for marks has its labels cut with the metrics the host has now", () => {
+    const plain = layout(dir("/r", [file("/r/report.pdf", 1000)]), 57, 40);
+    assert.equal(labelMetricsOf(plain, WIDER), WIDER);
+  });
+
+  test("layouts laid out with other metrics don't draw the same, though their blocks and marks are alike", () => {
+    const root = dir("/r", [file("/r/report.pdf", 1000)]);
+    const before = marked(root, 300, 200, { glyphs: true });
+    const after = layoutTreemap(
+      root,
+      300,
+      200,
+      kindBytesByFolder(root),
+      undefined,
+      { icons: false, glyphs: true, metrics: WIDER },
+    );
+    assert.equal(before.tiles[0].slot, after.tiles[0].slot);
+    assert.equal(drawsTheSame(before, after), false);
+    assert.equal(
+      drawsTheSame(
+        before,
+        marked(root, 300, 200, { glyphs: true, metrics: { ...METRICS } }),
+      ),
+      true,
+      "the same metrics, measured again",
+    );
+  });
+});
 
 describe("packages", () => {
   const xcode = dir("/r/Xcode.app", [
