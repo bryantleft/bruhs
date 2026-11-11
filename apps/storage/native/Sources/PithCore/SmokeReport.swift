@@ -2,8 +2,8 @@ import Foundation
 
 /// The smoke test's report on disk, at `url`, which its caller reads once the run is over. It's written as each check
 /// lands (`landed`), so a run stopped on its way, as its caller's alarm stops one that runs too long, still leaves every
-/// check it finished, marked as a run that didn't finish, so nobody takes it for one that passed. The finished run writes
-/// its report over it, as it always has.
+/// check it finished, marked as a run that didn't finish, so nobody takes it for one that passed. The run's last report,
+/// finished or stopped on an error, is written over it whole too (`write`).
 public struct SmokeReport: Sendable {
     public let url: URL
 
@@ -16,5 +16,12 @@ public struct SmokeReport: Sendable {
         let report: [String: Any] = ["checks": checks, "error": "The smoke test hadn't finished when this was written: \(landed)."]
         guard let data = try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]) else { return }
         try? data.write(to: url, options: .atomic)
+    }
+
+    /// Writes `report`, the finished run's report or that of a run stopped on an error, over the one written as its checks
+    /// landed. Written whole, as `landed` writes, so a run stopped while it's written still leaves the report before it,
+    /// never half of either.
+    public func write(_ report: Data) throws {
+        try report.write(to: url, options: .atomic)
     }
 }

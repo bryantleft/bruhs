@@ -228,7 +228,8 @@ extension AppDelegate {
             checks["report_holds_every_check_as_it_lands"] = landed?["checks"] as? [String: Bool] == checks && landed?["error"] is String
             forgetFolders()
             let data = try JSONSerialization.data(withJSONObject: checks, options: [.prettyPrinted, .sortedKeys])
-            try data.write(to: report)
+            // Whole, so a run stopped while it's written still leaves the report of every check that landed.
+            try partial.write(data)
             print(String(decoding: data, as: UTF8.self))
             print("smoke test took \(Self.seconds(began.duration(to: .now))) s for \(checks.count) checks")
             if checks.values.contains(false) { exit(1) }
@@ -236,7 +237,7 @@ extension AppDelegate {
         } catch {
             forgetFolders()
             let failure: [String: Any] = ["checks": checks, "error": error.localizedDescription]
-            if let data = try? JSONSerialization.data(withJSONObject: failure, options: [.prettyPrinted, .sortedKeys]) { try? data.write(to: report); print(String(decoding: data, as: UTF8.self)) }
+            if let data = try? JSONSerialization.data(withJSONObject: failure, options: [.prettyPrinted, .sortedKeys]) { try? partial.write(data); print(String(decoding: data, as: UTF8.self)) }
             exit(1)
         }
     }

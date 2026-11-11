@@ -15,4 +15,22 @@ final class SmokeReportTests: XCTestCase {
         XCTAssertEqual(written["checks"] as? [String: Bool], ["native_metrics": true, "tab_switches": false])
         XCTAssertEqual(written["error"] as? String, "The smoke test hadn't finished when this was written: 2 checks had landed.")
     }
+
+    /// The run's last report, finished or stopped on an error, replaces the one written as the checks landed without
+    /// writing into it, so a run stopped while it's written still leaves that one whole: a reader that opened the report
+    /// before reads every check that had landed, and the report there now is the last one.
+    func testTheLastReportReplacesTheOneThatLandedWithoutWritingIntoIt() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("pith-test-report-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let report = SmokeReport(url: folder.appendingPathComponent("smoke.json"))
+        report.landed(["native_metrics": true])
+        let landed = try Data(contentsOf: report.url)
+        let reader = try FileHandle(forReadingFrom: report.url)
+        defer { try? reader.close() }
+        let last = try JSONSerialization.data(withJSONObject: ["native_metrics": true, "tab_switches": true], options: [.prettyPrinted, .sortedKeys])
+        try report.write(last)
+        XCTAssertEqual(try reader.readToEnd(), landed)
+        XCTAssertEqual(try Data(contentsOf: report.url), last)
+    }
 }
