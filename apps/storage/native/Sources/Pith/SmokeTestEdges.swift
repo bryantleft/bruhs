@@ -690,7 +690,9 @@ extension AppDelegate {
     func checkAccessHoldLifts() async -> [String: Bool] {
         let check = "access_hold_lifts_with_the_listing"
         guard let live = disk.live, let walked = live.listedEveryFolderSince, await eventually({ !self.disk.iconRule.asking }) else { return [check: false] }
-        // The loss falls between the map's walk and now, at least a second and a half after each.
+        // The loss falls halfway between the map's walk and now, three seconds apart at least, so a second and a half
+        // from each: more than the second the slept-through check says it ran, so a start worked out from its end would
+        // fall after the loss, and the check holds only if Pith takes the start the report gives.
         if Date().timeIntervalSince(walked) < 3 { try? await Task.sleep(for: .seconds(3)) }
         let was = disk.diskAccess, now = Date()
         let lost = walked.addingTimeInterval(now.timeIntervalSince(walked) / 2)
