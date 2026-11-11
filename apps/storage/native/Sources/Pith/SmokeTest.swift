@@ -199,10 +199,22 @@ extension AppDelegate {
             checks["menu_panel_opens"] = statusItem?.panelWindow?.isVisible == true
             statusItem?.togglePanel()
             // Last, after everything the run did: the person's settings and the files Pith keeps for them, their history
-            // among them, are as they were before it began.
-            let changes = stateAtLaunch.map { PersistedState.read().differences(from: $0) } ?? ["nothing read at launch"]
-            print("the person's state: \(changes.isEmpty ? "as it was" : "changed \(changes)")")
-            checks["left_the_persons_state_alone"] = changes.isEmpty
+            // among them, are as they were before it began. The person's own Pith, running meanwhile, saves its history
+            // each minute, so while it runs what it writes is left out, and said to be. Their Scans folder holds no scan
+            // memory for the fixture's root, which a run that kept its scans there would have left.
+            let now = PersistedState.read()
+            let found = stateAtLaunch.map { now.differences(from: $0) }
+            let changes = found?.changes ?? ["nothing read at launch"]
+            let others = Set((stateAtLaunch?.othersRunning ?? []) + now.othersRunning).sorted()
+            if !others.isEmpty {
+                print("another Pith runs (process \(others.map(String.init).joined(separator: ", "))), so its history and the folder that holds it are left out: "
+                      + "\((found?.leftOut ?? []).isEmpty ? "neither changed" : "\(found?.leftOut ?? []) changed")")
+            }
+            let roots = Array(Set([root.path, fixture])).sorted()
+            let memories = PersistedState.scanMemories(of: roots, in: PersistedState.personsScans)
+            print("the person's state: \(changes.isEmpty ? "as it was" : "changed \(changes)"); their Scans folder holds "
+                  + "\(memories.isEmpty ? "no scan memory for \(roots)" : "a scan memory for \(memories)")")
+            checks["left_the_persons_state_alone"] = changes.isEmpty && memories.isEmpty
             forgetFolders()
             let data = try JSONSerialization.data(withJSONObject: checks, options: [.prettyPrinted, .sortedKeys])
             try data.write(to: report)
@@ -1473,20 +1485,23 @@ extension AppDelegate {
     }
 }
 
-/// The person's state that a run of Pith could change, read without changing anything: Pith's defaults as saved, and
-/// when each file and folder Pith keeps for them last changed, their Activity history among them. Their scans are left
-/// out: their own Pith keeps those current while it runs, and the smoke test keeps its own in a folder of its own.
-struct PersistedState {
-    /// Pith's defaults domain as saved.
-    let defaults: NSDictionary
-    /// When each file and folder last changed, by path.
-    let changed: [String: Date]
+/// The person's state that a run of Pith could change (`PersistedState`), read without changing anything: Pith's defaults
+/// as saved, when each file and folder Pith keeps for them last changed, their Activity history among them, and the
+/// other copies of Pith running now, as the person's own is while they use it. Their scans are left out: their own Pith
+/// keeps those current while it runs, and the smoke test keeps its own in a folder of its own.
+extension PersistedState {
+    private static var library: URL { FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library") }
+
+    /// Pith's own folder in Application Support, where the person's history and scans are kept.
+    private static var pithSupport: URL { library.appendingPathComponent("Application Support/Pith") }
+
+    /// The person's Scans folder, Pith's own, where their Pith keeps its scans and the live map.
+    static var personsScans: URL { pithSupport.appendingPathComponent("Scans") }
 
     static func read() -> PersistedState {
         let files = FileManager.default
         let bundle = Bundle.main.bundleIdentifier ?? "app.bruhs.pith"
-        let library = files.homeDirectoryForCurrentUser.appendingPathComponent("Library")
-        let support = library.appendingPathComponent("Application Support/Pith"), scans = support.appendingPathComponent("Scans")
+        let support = pithSupport, scans = personsScans
         var changed: [String: Date] = [:]
         func note(_ url: URL) {
             if let date = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate { changed[url.path] = date }
@@ -1500,15 +1515,10 @@ struct PersistedState {
                 note(item)
             }
         }
-        return PersistedState(defaults: (UserDefaults.standard.persistentDomain(forName: bundle) ?? [:]) as NSDictionary, changed: changed)
-    }
-
-    /// What differs from `earlier`: each default whose value changed, came or went, and each file or folder that did.
-    func differences(from earlier: PersistedState) -> [String] {
-        let keys = Set((defaults.allKeys + earlier.defaults.allKeys).compactMap { $0 as? String })
-        let settings = keys.filter { defaults[$0] as? NSObject != earlier.defaults[$0] as? NSObject }.map { "default \($0)" }
-        let paths = Set(changed.keys).union(earlier.changed.keys).filter { changed[$0] != earlier.changed[$0] }.map { "file \($0)" }
-        return (settings + paths).sorted()
+        let own = ProcessInfo.processInfo.processIdentifier
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).map(\.processIdentifier).filter { $0 != own }
+        return PersistedState(defaults: (UserDefaults.standard.persistentDomain(forName: bundle) ?? [:]) as NSDictionary, changed: changed,
+                              support: support.path, othersRunning: others)
     }
 }
 
