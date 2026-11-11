@@ -8,8 +8,9 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 import { LargestFiles } from "../src/components/largest-files";
-import { SELECTED_SAID, selectedRow } from "../src/components/map-selection";
+import { PathRow } from "../src/components/path-row";
 import { TreemapCanvas } from "../src/components/treemap-canvas";
+import { splitFolder, splitName } from "../src/lib/display-names";
 import { formatBytes } from "../src/lib/format";
 import { LARGEST_FILES_SHOWN, largestFilesIn } from "../src/lib/largest-files";
 import type { HintStep } from "../src/lib/map-hints";
@@ -26,6 +27,7 @@ import type {
   ResultEvent,
   TreeNode,
 } from "../src/lib/types";
+import { grewRows } from "./grew-since";
 import { useLearnedHints } from "./hints";
 import { GROUP_KEY, itemAt, itemKey } from "./icon-rule";
 import { KindLegend } from "./kind-legend";
@@ -34,7 +36,7 @@ import { type NavigationAction, NO_MAP, navigate } from "./navigation";
 import { placesIn, unreadableBesides } from "./places";
 import { Places, usePlaces } from "./places-section";
 import { type SelectMessage, selectMessage, useSelection } from "./selection";
-import { GREW_SHOWN, UNREADABLE_SHOWN, WRITERS_SHOWN } from "./side-lists";
+import { UNREADABLE_SHOWN, WRITERS_SHOWN } from "./side-lists";
 import { useUsedSpace } from "./used-space";
 import "./styles.css";
 
@@ -465,13 +467,7 @@ function DiskMap() {
   // Places names already.
   const unreadable = unreadableBesides(current.children, shownPlaces);
   // What grew most inside the open folder since the last scan of the scan's folder.
-  const prefix = current.path === "/" ? "/" : `${current.path}/`;
-  const grew = growth
-    ? [...growth.changes]
-        .filter(([path, delta]) => delta > 0 && path.startsWith(prefix))
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, GREW_SHOWN)
-    : [];
+  const grew = growth ? grewRows(growth.changes, current.path) : [];
 
   return (
     <main className="flex h-full min-h-0 flex-col gap-2 px-4 pt-3 pb-4">
@@ -550,36 +546,38 @@ function DiskMap() {
                 Grew since {growth.since}
               </h2>
               <ul className="-mx-2 space-y-px">
-                {grew.map(([path, delta]) => (
-                  <li key={path}>
-                    <button
-                      type="button"
-                      title={path}
-                      onClick={(event) =>
-                        event.metaKey ? toggleClicked(path) : select(path)
+                {grew.map((row) => (
+                  <li key={row.path}>
+                    <PathRow
+                      name={splitName(row.name)}
+                      folder={
+                        row.folder === null ? null : splitFolder(row.folder)
                       }
-                      onMouseEnter={() => setHovered(path)}
-                      onMouseLeave={() => setHovered(null)}
-                      {...selectedRow(selected.includes(path))}
-                      className="menu-item gap-2 px-2 py-1 data-selected:bg-(--role-selection)"
-                    >
-                      {icons && (
-                        <MapIcon
-                          url={icons.item(
-                            itemAt(current, path, result.topFiles),
-                          )}
-                        />
-                      )}
-                      <span className="text-code-sm min-w-0 flex-1 truncate text-(--role-text)">
-                        {path.slice(prefix.length)}
-                      </span>
-                      <span className="text-code-sm shrink-0 text-(--role-text-secondary) tabular-nums">
-                        +{formatBytes(delta)}
-                      </span>
-                      {selected.includes(path) && (
-                        <span className="sr-only">{SELECTED_SAID}</span>
-                      )}
-                    </button>
+                      figure={row.figure}
+                      label={row.label}
+                      title={row.path}
+                      selected={selected.includes(row.path)}
+                      lead={
+                        icons && (
+                          <span
+                            aria-hidden="true"
+                            className="mt-px flex size-4 shrink-0 items-center justify-center"
+                          >
+                            <MapIcon
+                              url={icons.item(
+                                itemAt(current, row.path, result.topFiles),
+                              )}
+                            />
+                          </span>
+                        )
+                      }
+                      onClick={(event) =>
+                        event.metaKey
+                          ? toggleClicked(row.path)
+                          : select(row.path)
+                      }
+                      onHover={(on) => setHovered(on ? row.path : null)}
+                    />
                   </li>
                 ))}
               </ul>

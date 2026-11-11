@@ -2,7 +2,7 @@ import { type ReactNode, useMemo } from "react";
 import { parentFolder, splitFolder, splitName } from "~/lib/display-names";
 import { CATEGORY_VAR, categoryForName, formatBytes } from "~/lib/format";
 import type { FileEntry } from "~/lib/types";
-import { rowLabel, selectedRow } from "./map-selection";
+import { PathRow } from "./path-row";
 
 interface Props {
   files: readonly FileEntry[];
@@ -33,8 +33,10 @@ const inside = (path: string, folder: string) =>
   path === folder || path.startsWith(folder === "/" ? "/" : `${folder}/`);
 
 /**
- * Colours use the host's semantic roles when it defines them (Pith's web view follows the
- * system appearance) and fall back to bruhs's dark tokens.
+ * The largest files, each a row of its name over the folder it's in, and its size (`PathRow`). Where its parent gives
+ * it a height, as the browser storage app's column does, its list scrolls inside it; in a column that scrolls as a
+ * whole, as Pith's does, it takes its natural height. Colours use the host's semantic roles when it defines them (Pith's
+ * web view follows the system appearance) and fall back to bruhs's dark tokens.
  */
 export function LargestFiles({
   files,
@@ -70,42 +72,18 @@ export function LargestFiles({
         Largest files
       </h2>
       <ul className="-mx-2 min-h-0 flex-1 space-y-px overflow-y-auto">
-        {rows.map(({ file: f, folderPath, name, folder, size, color }) => {
-          return (
-            <li key={f.path}>
-              <button
-                type="button"
-                onClick={(event) =>
-                  event.metaKey && onToggle ? onToggle(f) : onSelect(f)
-                }
-                onContextMenu={
-                  onMenu
-                    ? (event) => {
-                        event.preventDefault();
-                        // A file selected already keeps the selection, whose items the menu acts on.
-                        if (!selectedPaths.includes(f.path)) onSelect(f);
-                        onMenu(f);
-                      }
-                    : undefined
-                }
-                onMouseEnter={() => onHoverPath?.(f.path)}
-                onMouseLeave={() => onHoverPath?.(null)}
-                onFocus={() => onHoverPath?.(f.path)}
-                onBlur={() => onHoverPath?.(null)}
-                aria-label={rowLabel(
-                  `${f.name}, ${size}, in ${folderPath}`,
-                  selectedPaths.includes(f.path),
-                )}
-                {...selectedRow(selectedPaths.includes(f.path))}
-                data-highlighted={
-                  hoveredPath !== null && inside(f.path, hoveredPath)
-                    ? ""
-                    : undefined
-                }
-                title={f.path}
-                className="menu-item items-start gap-2 px-2 py-1 data-selected:bg-(--role-selection,var(--color-persimmon-950))"
-              >
-                {icon ? (
+        {rows.map(({ file: f, folderPath, name, folder, size, color }) => (
+          <li key={f.path}>
+            <PathRow
+              name={name}
+              folder={folder}
+              figure={size}
+              label={`${f.name}, ${size}, in ${folderPath}`}
+              title={f.path}
+              selected={selectedPaths.includes(f.path)}
+              highlighted={hoveredPath !== null && inside(f.path, hoveredPath)}
+              lead={
+                icon ? (
                   // The swatch, when it stands in, keeps the icon's room, so the names stay in line.
                   <span
                     aria-hidden="true"
@@ -125,30 +103,25 @@ export function LargestFiles({
                     className="rounded-seed mt-1 size-2.5 shrink-0"
                     style={{ background: color }}
                   />
-                )}
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="text-code-sm flex min-w-0 text-(--role-text,var(--color-rambutan-200))">
-                    <span className="min-w-0 overflow-hidden text-ellipsis whitespace-pre">
-                      {name.head}
-                    </span>
-                    <span className="shrink-0 whitespace-pre">{name.tail}</span>
-                  </span>
-                  <span className="text-code-sm flex min-w-0 text-(--role-text-tertiary,var(--color-rambutan-500))">
-                    <span className="min-w-0 overflow-hidden text-ellipsis whitespace-pre">
-                      {folder.head}
-                    </span>
-                    <span className="max-w-full min-w-0 shrink-0 overflow-hidden text-ellipsis whitespace-pre">
-                      {folder.tail}
-                    </span>
-                  </span>
-                </span>
-                <span className="text-code-sm shrink-0 text-(--role-text-secondary,var(--color-rambutan-400)) tabular-nums">
-                  {size}
-                </span>
-              </button>
-            </li>
-          );
-        })}
+                )
+              }
+              onClick={(event) =>
+                event.metaKey && onToggle ? onToggle(f) : onSelect(f)
+              }
+              onContextMenu={
+                onMenu
+                  ? (event) => {
+                      event.preventDefault();
+                      // A file selected already keeps the selection, whose items the menu acts on.
+                      if (!selectedPaths.includes(f.path)) onSelect(f);
+                      onMenu(f);
+                    }
+                  : undefined
+              }
+              onHover={(on) => onHoverPath?.(on ? f.path : null)}
+            />
+          </li>
+        ))}
       </ul>
     </section>
   );
