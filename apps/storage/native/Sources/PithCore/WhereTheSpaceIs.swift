@@ -58,7 +58,7 @@ extension DiskAccounting {
     /// "Where the space is" for `result`, the map it accounts for, in order: the disk's used space, then each part of
     /// it there's something to say about. `trash` is the Trash's size as that map shows it, or nil when the map can't
     /// read the Trash: its row shows only when the map can, and the Trash holds something. `disk` is the disk's icon as
-    /// Pith's rule gives it (`KnownPlaces.volumeKey`): its own, or macOS's volume type icon for a disk macOS guards.
+    /// Pith's rule gives it (`KnownPlaces.volumeKey`): its own, or the drive for a disk macOS guards.
     public func rows(result: DiskResult?, trash: UInt64?, disk: IconKey) -> [SpaceRow] {
         var rows = [
             SpaceRow("Used on this disk", .bytes(used), note: nil, icon: .item(disk), isTotal: true),

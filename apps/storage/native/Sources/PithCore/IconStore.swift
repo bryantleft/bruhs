@@ -5,8 +5,9 @@ import UniformTypeIdentifiers
 /// What an icon shows, and where macOS's icon for it comes from, so asking for one never makes Pith open an item:
 /// `type/<extension>` is a file's type, from its extension alone; `item/<absolute path>` is a real item's own icon,
 /// as Finder shows it; `place/<id>` is a known place's (`KnownPlaces`); `folder` is a plain folder; `group` stands
-/// for several items, as the map's smaller items do; and `volume` is macOS's icon for the volume type, which a volume
-/// macOS guards shows while Pith hasn't Full Disk Access (`KnownPlaces.typedVolumes`).
+/// for several items, as the map's smaller items do; and `symbol/<name>` is an SF Symbol, drawn by macOS at runtime
+/// in the secondary text colour, so it reads as a symbol beside real icons, never as a type's: the external drive a
+/// volume macOS guards shows while Pith hasn't Full Disk Access (`drive`, `KnownPlaces.guardedVolumes`).
 ///
 /// `string` is how a key travels in a URL's path. Its payload is percent-encoded, everything but ASCII letters, digits
 /// and `-._~`, an item path's slashes included, so a key stays whole: WebKit can't resolve a `..` out of it on the way.
@@ -22,7 +23,10 @@ public enum IconKey: Hashable, Sendable {
     case place(String)
     case folder
     case group
-    case volume
+    case symbol(String)
+
+    /// The drive a volume macOS guards shows while Pith hasn't Full Disk Access, in place of its own icon.
+    public static let drive = IconKey.symbol("externaldrive")
 
     /// The key as one string. Only a key whose item path is absolute and canonical, and whose place has an id, reads
     /// back with `init(string:)`.
@@ -33,18 +37,17 @@ public enum IconKey: Hashable, Sendable {
         case .place(let id): "place/" + Self.escape(id)
         case .folder: "folder"
         case .group: "group"
-        case .volume: "volume"
+        case .symbol(let name): "symbol/" + Self.escape(name)
         }
     }
 
     /// The key `string` spells, or nil for anything else: an unknown kind, an item path that isn't absolute or that
-    /// has an empty, `.` or `..` component, a type or place with a slash, a NUL, or any other spelling of a key, such
-    /// as a lowercase or needless escape. Each key has one spelling, so it reads back exactly as it was written.
+    /// has an empty, `.` or `..` component, a type, place or symbol with a slash, a NUL, or any other spelling of a key,
+    /// such as a lowercase or needless escape. Each key has one spelling, so it reads back exactly as it was written.
     public init?(string: String) {
         switch string {
         case "folder": self = .folder; return
         case "group": self = .group; return
-        case "volume": self = .volume; return
         default: break
         }
         guard let slash = string.firstIndex(of: "/"), let payload = string[string.index(after: slash)...].removingPercentEncoding,
@@ -53,6 +56,7 @@ public enum IconKey: Hashable, Sendable {
         switch string[..<slash] {
         case "type" where !payload.contains("/"): key = .type(payload)
         case "place" where !payload.isEmpty && !payload.contains("/"): key = .place(payload)
+        case "symbol" where !payload.isEmpty && !payload.contains("/"): key = .symbol(payload)
         case "item" where Self.isCanonical(payload): key = .item(payload)
         default: return nil
         }
@@ -364,7 +368,8 @@ public final class IconStore: @unchecked Sendable {
 /// its type, never from opening it, and a place's from its special folder's type or the app it belongs to.
 public struct SystemIconRenderer: IconRenderer {
     public let places: KnownPlaces
-    /// The colour of a symbol standing in where macOS has no icon, as for iCloud Drive without its app.
+    /// The colour of a symbol, resolved in the appearance each drawing is asked for: one standing in where macOS has no
+    /// icon, as for iCloud Drive without its app, and a symbol key's, as the drive's. Pith gives its secondary text colour.
     public let symbolColor: NSColor
 
     public init(places: KnownPlaces, symbolColor: NSColor = .secondaryLabelColor) {
@@ -389,10 +394,9 @@ public struct SystemIconRenderer: IconRenderer {
             return workspace.icon(forFile: path)
         case .folder:
             return workspace.icon(for: .folder)
-        case .volume:
-            // The type macOS declares for a volume, `public.volume`, drawn from the type alone: nothing on any volume is
-            // opened. macOS 26.3 draws it with the folder's art, without the tint a plain folder takes.
-            return workspace.icon(for: .volume)
+        case .symbol(let name):
+            // A template, which `render` fills with the symbol colour in the appearance asked for.
+            return NSImage(systemSymbolName: name, accessibilityDescription: nil)
         case .group:
             // A copy: the named image is shared, and drawings run on several threads at once.
             return NSImage(named: NSImage.multipleDocumentsName)?.copy() as? NSImage

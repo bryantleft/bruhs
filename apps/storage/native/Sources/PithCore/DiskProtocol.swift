@@ -652,6 +652,8 @@ public final class IconPolicy {
 
     /// The known places, whose ids the page may ask for and which Pith's icon rule needs.
     private let places: KnownPlaces
+    /// The SF Symbols the page may load, by name: the drive a volume macOS guards shows (`IconKey.drive`).
+    public static let symbols: Set<String> = ["externaldrive"]
     /// The tree of the map the page shows, or none.
     public var map: DiskNode?
     /// The roots of the disks the disk menu lists.
@@ -670,8 +672,8 @@ public final class IconPolicy {
     /// it first would turn an item path's escaped slashes into the URL's own. `asking` is whether macOS may be holding
     /// some of the map's folders, as `KnownPlaces.iconKey(for:asking:)` takes it, and `rule` the known places as Pith's
     /// rule has them for the map now, with a held disk among the locations macOS guards (`KnownPlaces.holding`) and the
-    /// volumes it draws by their type (`KnownPlaces.typingGuardedVolumes`), or the policy's own places. Both can change
-    /// between requests.
+    /// volumes that show the drive (`KnownPlaces.guardingVolumes`), or the policy's own places. Both can change between
+    /// requests.
     public func request(for url: URL, asking: Bool, by rule: KnownPlaces? = nil) -> IconRequest? {
         guard url.scheme == "pith", url.host == "app", url.user == nil, url.password == nil, url.port == nil, url.query == nil, url.fragment == nil,
               let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath,
@@ -683,19 +685,21 @@ public final class IconPolicy {
         return IconRequest(key, size: size, appearance: appearance)
     }
 
-    /// Whether the page may have `key`'s icon. A file type, the plain folder, the group, the volume type and a known place
-    /// need no path, so any of them may load. An item's own icon is looked up by its path, so it loads only for a folder,
-    /// package, app or volume the map shows with that very key by Pith's icon rule, a disk the disk menu lists that the
-    /// rule doesn't draw by its type, or an app on the page that Pith may look up, on the startup disk outside the
-    /// locations macOS guards. A folder the map couldn't read, one macOS may be holding, a volume drawn by its type, a
-    /// known place or a path the map doesn't show never gets looked up by its path. The rule goes by `rule`, the known
-    /// places with any map held among the locations macOS guards and the volumes drawn by their type.
+    /// Whether the page may have `key`'s icon. A file type, the plain folder, the group and a known place need no path,
+    /// so any of them may load, and so may a symbol on the route's list (`symbols`). An item's own icon is looked up by
+    /// its path, so it loads only for a folder, package, app or volume the map shows with that very key by Pith's icon
+    /// rule, a disk the disk menu lists that doesn't show the drive, or an app on the page that Pith may look up, on the
+    /// startup disk outside the locations macOS guards. A folder the map couldn't read, one macOS may be holding, a
+    /// volume that shows the drive, a known place or a path the map doesn't show never gets looked up by its path. The
+    /// rule goes by `rule`, the known places with any map held among the locations macOS guards and the volumes that
+    /// show the drive.
     private func allows(_ key: IconKey, asking: Bool, by rule: KnownPlaces) -> Bool {
         switch key {
-        case .type, .folder, .group, .volume: return true
+        case .type, .folder, .group: return true
+        case .symbol(let name): return Self.symbols.contains(name)
         case .place(let id): return rule.place(id: id) != nil
         case .item(let path):
-            if (volumes.contains(path) && !rule.typedVolumes.contains(path)) || (apps.contains(path) && rule.mayShowApp(path)) { return true }
+            if (volumes.contains(path) && !rule.guardedVolumes.contains(path)) || (apps.contains(path) && rule.mayShowApp(path)) { return true }
             return item(at: path).map { rule.iconKey(for: $0, asking: asking) == key } ?? false
         }
     }

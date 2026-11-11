@@ -900,8 +900,7 @@ enum MapCommand: Equatable {
     }
 
     /// The icon of the disk mounted at `root`, wherever a disk's icon shows outside the map, as the rule draws it
-    /// (`KnownPlaces.volumeKey`): its own, or macOS's volume type icon for one macOS guards while Pith hasn't Full Disk
-    /// Access.
+    /// (`KnownPlaces.volumeKey`): its own, or the drive for one macOS guards while Pith hasn't Full Disk Access.
     func volumeKey(for root: String) -> IconKey { rulePlaces.volumeKey(for: root) }
 
     /// Pith's icon rule as the map's page applies it, which goes to the page with the icons' base, so the page gives
@@ -961,10 +960,10 @@ enum MapCommand: Equatable {
     }
 
     /// The places Pith's icon rule goes by for the map shown: the known places, with a held disk among the locations
-    /// macOS guards (`heldDisk`), and the volumes macOS guards drawn by their type while Pith hasn't Full Disk Access, by
-    /// the probe (`KnownPlaces.typingGuardedVolumes`).
+    /// macOS guards (`heldDisk`), and the volumes macOS guards showing the drive while Pith hasn't Full Disk Access, by
+    /// the probe (`KnownPlaces.guardingVolumes`).
     private var rulePlaces: KnownPlaces {
-        (heldDisk.map(Icons.places.holding) ?? Icons.places).typingGuardedVolumes(fullDiskAccess: diskAccess.granted)
+        (heldDisk.map(Icons.places.holding) ?? Icons.places).guardingVolumes(fullDiskAccess: diskAccess.granted)
     }
 
     /// Whether Pith still has Full Disk Access, as the probe last found, kept across launches in Pith's settings.

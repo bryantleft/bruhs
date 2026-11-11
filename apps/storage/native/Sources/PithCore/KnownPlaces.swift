@@ -57,10 +57,10 @@ public struct KnownPlaces: Sendable {
     private let containers: String
     /// The file systems mounted now, which say whether an app lies on the startup disk, and which volumes macOS guards.
     private let mounts: @Sendable () -> MountTable
-    /// The roots of the volumes the rule draws by their type, macOS's volume icon (`IconKey.volume`), rather than looking
-    /// each up by its path: the volumes macOS guards while Pith hasn't Full Disk Access (`typingGuardedVolumes`). None in
-    /// the table itself.
-    public private(set) var typedVolumes: [String] = []
+    /// The roots of the volumes that show the drive (`IconKey.drive`) rather than their own icons, which are looked up by
+    /// their paths: the volumes macOS guards, while Pith hasn't Full Disk Access (`guardingVolumes`). None in the table
+    /// itself.
+    public private(set) var guardedVolumes: [String] = []
 
     /// The places the disk map's Places section offers, by id: the ones the design spec names, where Apple's Storage pane
     /// finds space, and the iPhone and iPad backups Apple's own checklist names. The table also keeps Desktop, Music, TV,
@@ -198,28 +198,27 @@ public struct KnownPlaces: Sendable {
     /// Whether `path` lies on the startup disk, by the file systems mounted now (`MountTable.isOnStartupDisk`).
     public func isOnStartupDisk(_ path: String) -> Bool { mounts().isOnStartupDisk(path) }
 
-    /// Whether macOS guards the volume mounted at `root`: a removable, external or network volume, which is any but the
-    /// startup disk and the other volumes of its APFS container. The kernel's mount table says, by what each file system
-    /// is mounted from (`MountTable.isOnStartupDisk`): reading it copies the kernel's list of mounts and asks no file
-    /// system, so it opens nothing on the volume, and macOS asks its question only of access to what's on one.
-    public func guardsVolume(_ root: String) -> Bool { !isOnStartupDisk(root) }
+    /// Whether macOS guards the volume mounted at `root`: a network volume, or one on a removable or external disk or a
+    /// disk image, as the kernel's mount table and DiskArbitration's descriptions of the disks say (`MountTable.guards`).
+    /// Neither opens anything on a volume, and macOS asks its question about one only when something on it is accessed.
+    public func guardsVolume(_ root: String) -> Bool { mounts().guards(root) }
 
     /// These places as the rule has them while Pith has Full Disk Access or hasn't (`fullDiskAccess`, as `DiskAccessWatch`
-    /// last found): without it, every volume mounted now that macOS guards (`guardsVolume`) shows macOS's volume type icon
-    /// wherever its own would show (`typedVolumes`), since its own is looked up by its path, which can read the volume's
-    /// custom icon and other files at its root, and so bring macOS's question about the volume. With it, macOS asks
-    /// nothing, and each shows its own.
-    public func typingGuardedVolumes(fullDiskAccess: Bool) -> KnownPlaces {
-        var typed = self
+    /// last found): without it, every volume mounted now that macOS guards (`guardsVolume`) shows the drive wherever its
+    /// own icon would show (`guardedVolumes`), since its own is looked up by its path, which can read the volume's custom
+    /// icon and other files at its root, and so bring macOS's question about the volume. With it, macOS asks nothing, and
+    /// each shows its own.
+    public func guardingVolumes(fullDiskAccess: Bool) -> KnownPlaces {
+        var guarding = self
         let table = mounts()
-        typed.typedVolumes = fullDiskAccess ? [] : table.mounts.map(\.path).filter { !table.isOnStartupDisk($0) }
-        return typed
+        guarding.guardedVolumes = fullDiskAccess ? [] : table.mounts.map(\.path).filter(table.guards)
+        return guarding
     }
 
     /// The icon of the volume mounted at `root`, wherever a disk's icon shows outside the map: the disk menu, the path
-    /// bar, the list of disks and Where the space is. Its own, by its path, or macOS's volume type icon for one the rule
-    /// draws by its type (`typedVolumes`).
-    public func volumeKey(for root: String) -> IconKey { typedVolumes.contains(root) ? .volume : .item(root) }
+    /// bar, the list of disks and Where the space is. Its own, by its path, or the drive for one macOS guards while Pith
+    /// hasn't Full Disk Access (`guardedVolumes`).
+    public func volumeKey(for root: String) -> IconKey { guardedVolumes.contains(root) ? .drive : .item(root) }
 
     private static func isProtected(_ path: String, guarded: [String]) -> Bool {
         let inside = { (folder: String) in path == folder || path.hasPrefix(folder + "/") }
@@ -241,13 +240,13 @@ public struct KnownPlaces: Sendable {
     /// takes them.
     public func iconRule(asking: Bool, trashIsEmpty: Bool = false) -> IconRule {
         IconRule(places: places.map { IconRule.Place(id: $0.id, path: $0.path) }, guarded: guarded, asking: asking, emptyTrash: trashIsEmpty,
-                 typedVolumes: typedVolumes)
+                 guardedVolumes: guardedVolumes)
     }
 
     /// The icon key for an item of the map, by Pith's icon rule. A known place shows its own icon, read or not, and a
     /// file its type's, so Pith never opens it. A volume shows its own icon, by its path, and so does a folder, package
-    /// or app outside the locations macOS guards, but for a volume the rule draws by its type (`typedVolumes`), whose
-    /// block, or a map of it with its root for its own, shows macOS's volume type icon. Inside one, Pith looks a folder up by its path only when the map
+    /// or app outside the locations macOS guards, but for a volume macOS guards while Pith hasn't Full Disk Access
+    /// (`guardedVolumes`), whose block, or a map of it with its root for its own, shows the drive. Inside one, Pith looks a folder up by its path only when the map
     /// shows it has listed it, with a size, files or contents, and only while `asking` is false, when macOS can't be
     /// holding any of the map's folders. The live map shows a folder it has found in its parent's listing, but not yet
     /// listed itself, as empty, and macOS may be holding that listing, which a lookup by its path could wait on too.
@@ -261,7 +260,7 @@ public struct KnownPlaces: Sendable {
         if let place = place(at: item.path) {
             return .place(place.id == Self.trashID && trashIsEmpty && Self.drawsNothing(item) ? emptyTrash?.id ?? place.id : place.id)
         }
-        if item.kind == .dir || item.kind == .volume, typedVolumes.contains(item.path) { return .volume }
+        if item.kind == .dir || item.kind == .volume, guardedVolumes.contains(item.path) { return .drive }
         switch item.kind {
         case .file: return .type((item.path as NSString).pathExtension.lowercased())
         case .unreadable: return .folder
@@ -452,7 +451,7 @@ public struct PlacesTable: Encodable, Equatable, Sendable {
 /// Pith's icon rule as the disk map's page applies it (`iconKey` in native-web/icon-rule.ts), which native sends with the
 /// icons' base: the known places by path, the locations macOS guards, whether macOS may be holding some of the map's
 /// folders, whether the Trash holds nothing, by the scanner's word (`KnownPlaces.trashHoldsNothing`), and the volumes
-/// drawn by their type while Pith hasn't Full Disk Access. With it the page gives each item the key
+/// that show the drive while Pith hasn't Full Disk Access. With it the page gives each item the key
 /// `KnownPlaces.iconKey(for:asking:trashIsEmpty:)` gives it, so it asks the icon route for no icon the route would
 /// refuse. tests/icon-keys.json holds both to the same cases.
 public struct IconRule: Codable, Equatable, Sendable {
@@ -465,6 +464,6 @@ public struct IconRule: Codable, Equatable, Sendable {
     public let guarded: [String]
     public let asking: Bool
     public let emptyTrash: Bool
-    /// The roots of the volumes drawn by their type (`KnownPlaces.typedVolumes`).
-    public let typedVolumes: [String]
+    /// The roots of the volumes that show the drive (`KnownPlaces.guardedVolumes`).
+    public let guardedVolumes: [String]
 }

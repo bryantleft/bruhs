@@ -116,13 +116,13 @@ final class WhereTheSpaceIsTests: XCTestCase {
     }
 
     /// The disk's row leads with the disk's icon as Pith's rule gives it (`KnownPlaces.volumeKey`): another disk's own, by
-    /// its path, while Pith has Full Disk Access, and macOS's volume type icon while it hasn't, as macOS guards the disk.
+    /// its path, while Pith has Full Disk Access, and the drive symbol while it hasn't, as macOS guards the disk.
     func testAnotherVolumesDiskShowsTheIconTheRuleGivesIt() {
         let usb = DiskResult(root: DiskNode(kind: .dir, name: "USB", path: "/Volumes/USB", size: 5, files: 1, children: []), topFiles: [],
                              summary: map().summary)
         let accounting = DiskAccounting(used: 10, walkedVolumes: [8], result: usb, snapshots: nil, purgeable: nil)
         XCTAssertEqual(accounting.rows(result: usb, trash: nil, disk: .item("/Volumes/USB")).first?.icon, .item(.item("/Volumes/USB")))
-        XCTAssertEqual(accounting.rows(result: usb, trash: nil, disk: .volume).first?.icon, .item(.volume))
+        XCTAssertEqual(accounting.rows(result: usb, trash: nil, disk: .drive).first?.icon, .item(.drive))
     }
 
     func testEveryFactShowsOnceWithoutSeparatorGlyphs() {

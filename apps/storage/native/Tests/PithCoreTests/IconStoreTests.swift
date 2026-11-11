@@ -11,7 +11,7 @@ final class IconKeyTests: XCTestCase {
         XCTAssertEqual(IconKey.place("photos-library").string, "place/photos-library")
         XCTAssertEqual(IconKey.folder.string, "folder")
         XCTAssertEqual(IconKey.group.string, "group")
-        XCTAssertEqual(IconKey.volume.string, "volume")
+        XCTAssertEqual(IconKey.symbol("externaldrive").string, "symbol/externaldrive")
         XCTAssertEqual(IconKey.item("/").string, "item/%2F")
         // Slashes are escaped too, so a key stays whole in a URL and WebKit can't resolve `..` out of it on the way.
         XCTAssertEqual(IconKey.item("/Applications/Xcode.app").string, "item/%2FApplications%2FXcode.app")
@@ -22,7 +22,7 @@ final class IconKeyTests: XCTestCase {
             "/", "/Users/me/My Folder", "/Volumes/Untitled 1/日本語/naïve résumé.pdf", "/tmp/100% done?#&+=;,@!'()$*[]:.txt",
             "/Users/me/Cafe\u{301}", "/Users/me/Caf\u{e9}", "/a/..b/c../...", "/a/.hidden/~tilde", "/emoji/☕️ 👩🏽‍💻",
         ]
-        let keys = paths.map(IconKey.item) + [.type("pdf"), .type("TAR"), .type(""), .type("weird ext%"), .place("documents"), .folder, .group, .volume]
+        let keys = paths.map(IconKey.item) + [.type("pdf"), .type("TAR"), .type(""), .type("weird ext%"), .place("documents"), .folder, .group, .symbol("externaldrive")]
         for key in keys {
             let string = key.string
             XCTAssertEqual(IconKey(string: string), key, string)
@@ -57,6 +57,7 @@ final class IconKeyTests: XCTestCase {
             "item/%2F%41", "type/p%64f", // needless escapes
             "item/%2F%zz", "item/%2F%", "item/%2F%FF", // broken escapes and bytes that aren't UTF-8
             "type/a%2Fb", "place/", "place/a%2Fb", "place/a/b", // a type or place with a slash, or no place at all
+            "symbol/", "symbol/a%2Fb", "symbol/a/b", "symbol", "volume", // a symbol with a slash, or none, and a bare kind
             "thing/x", "folder/", "Folder", "group/x", "", "/", "type", // unknown kinds and stray text
         ]
         for string in refused { XCTAssertNil(IconKey(string: string), string) }
@@ -406,7 +407,7 @@ final class SystemIconTests: XCTestCase {
 
     func testEveryKindOfKeyDraws() async {
         for key: IconKey in [.type("pdf"), .type(""), .type("no-such-extension-pith"), .item("/Applications"), .item("/"), .folder, .group,
-                             .volume, .place("documents")] {
+                             .symbol("externaldrive"), .place("documents")] {
             let drawn = await draw(key, .dark)
             XCTAssertNotNil(drawn, key.string)
         }
@@ -414,18 +415,30 @@ final class SystemIconTests: XCTestCase {
         XCTAssertNil(unknown, "a place the table doesn't have has no icon")
     }
 
-    /// A volume macOS guards shows macOS's icon for the volume type, which macOS declares, `public.volume`, and draws
-    /// from the type alone, with no path, so nothing on the volume is opened: never the generic document. macOS 26.3
-    /// draws it with the folder's art, without the tint a plain folder takes, so it's not compared with the folder.
-    func testAVolumeMacOSGuardsIsDrawnByItsDeclaredType() async throws {
-        let declared = try XCTUnwrap(UTType("public.volume"))
-        XCTAssertEqual(declared, .volume)
-        XCTAssertFalse(declared.isDynamic)
-        for appearance in IconAppearance.allCases {
-            let drawnVolume = await draw(.volume, appearance), drawnDocument = await draw(.type(""), appearance)
-            let volume = try XCTUnwrap(drawnVolume), document = try XCTUnwrap(drawnDocument)
-            XCTAssertNotEqual(pixels(volume.image), pixels(document.image), "\(appearance) draws a volume as the generic document")
+    /// A volume macOS guards shows the SF Symbol of an external drive, which macOS draws at runtime, at the size asked
+    /// for and in the appearance's secondary text colour (`SystemIconRenderer.symbolColor`), so it reads as a symbol
+    /// beside the real icons rather than as any type's icon. Drawn with a colour of the test's own for each appearance,
+    /// red in dark and blue in light, what it paints takes the colour of the appearance it's drawn in.
+    func testTheDriveSymbolIsDrawnInTheAppearancesSecondaryTextColour() async throws {
+        let tint = NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1) : NSColor(srgbRed: 0, green: 0, blue: 1, alpha: 1)
         }
+        let places = KnownPlaces(home: URL(fileURLWithPath: "/Users/tester", isDirectory: true), searchPaths: [:]) { _ in nil }
+        let store = IconStore(renderer: SystemIconRenderer(places: places, symbolColor: tint))
+        for appearance in IconAppearance.allCases {
+            let drawn = await store.icon(for: IconRequest(.drive, size: IconSize(points: 16, scale: 2), appearance: appearance))
+            let icon = try XCTUnwrap(drawn, appearance.rawValue)
+            XCTAssertEqual([icon.image.width, icon.image.height], [32, 32])
+            let bytes = try XCTUnwrap(pixels(icon.image))
+            var red = 0, blue = 0
+            for pixel in stride(from: 0, to: bytes.count, by: 4) where bytes[pixel + 3] > 128 {
+                if bytes[pixel] > bytes[pixel + 2] { red += 1 } else { blue += 1 }
+            }
+            XCTAssertGreaterThan(red + blue, 40, "\(appearance): the symbol paints")
+            XCTAssertEqual(appearance == .dark ? blue : red, 0, "\(appearance): every pixel painted takes the appearance's colour")
+        }
+        let drive = await draw(.drive, .dark), document = await draw(.type(""), .dark)
+        XCTAssertNotEqual(pixels(try XCTUnwrap(drive).image), pixels(try XCTUnwrap(document).image), "not the generic document")
     }
 
     /// A special folder's type, or an app, that this macOS draws as a blank document would show a place as nothing.

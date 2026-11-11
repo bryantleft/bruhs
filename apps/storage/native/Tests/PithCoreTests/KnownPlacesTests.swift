@@ -511,40 +511,41 @@ final class KnownPlacesTests: XCTestCase {
         XCTAssertTrue(table.mayShowApp("/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app"))
     }
 
-    /// A volume macOS guards, removable, external or network, is any but the startup disk and the other volumes of its
-    /// APFS container, as the kernel's mount table says, which names no file on any volume (`MountTable`). While Pith
-    /// hasn't Full Disk Access, such a volume shows macOS's volume type icon wherever its own would show, the map's block
-    /// of it and a map of it, whose root is the volume's, included. A folder the scan listed on it keeps the rule for
-    /// folders: the listing had macOS's answer.
-    func testAVolumeMacOSGuardsIsDrawnByItsTypeUnlessPithHasFullDiskAccess() {
+    /// A volume macOS guards, a network volume or one on a disk DiskArbitration doesn't say is internal, as the mount
+    /// table and DiskArbitration's descriptions say (`MountTable.guards`), shows the drive symbol while Pith hasn't Full
+    /// Disk Access, wherever its own icon would show: the map's block of it, and a map of it, whose root is the volume's,
+    /// included. The startup disk's container and an internal disk of another container keep their own. A folder the scan
+    /// listed on a guarded volume keeps the rule for folders: the listing had macOS's answer.
+    func testAVolumeMacOSGuardsShowsADriveUnlessPithHasFullDiskAccess() {
         let table = KnownPlaces(home: home, searchPaths: [:], mounts: { MountTableTests.table }) { _ in nil }
-        let startup = ["/", "/System/Volumes/Data", "/System/Volumes/Preboot", "/System/Volumes/VM"]
-        let others = ["/Volumes/Archive", "/Volumes/share", "/Volumes/Installer", "/System/Volumes/Data/home", "/System/Volumes/xarts"]
-        for root in startup { XCTAssertFalse(table.guardsVolume(root), root) }
+        let own = ["/", "/System/Volumes/Data", "/System/Volumes/Preboot", "/System/Volumes/VM", "/System/Volumes/xarts"]
+        let others = ["/Volumes/Archive", "/Volumes/share", "/Volumes/Installer", "/System/Volumes/Data/home"]
+        for root in own { XCTAssertFalse(table.guardsVolume(root), root) }
         for root in others { XCTAssertTrue(table.guardsVolume(root), root) }
-        let typed = table.typingGuardedVolumes(fullDiskAccess: false), granted = table.typingGuardedVolumes(fullDiskAccess: true)
-        XCTAssertEqual(typed.typedVolumes, ["/dev", "/System/Volumes/xarts", "/System/Volumes/Data/home", "/Volumes/Archive", "/Volumes/share", "/Volumes/Installer"],
-                       "every file system mounted outside the startup disk's container, in the table's order")
-        XCTAssertEqual(granted.typedVolumes, [], "with Full Disk Access, none")
-        XCTAssertEqual(table.typedVolumes, [], "the table itself draws none by type")
-        for root in startup {
-            XCTAssertEqual(typed.volumeKey(for: root), .item(root), root)
+        let guarding = table.guardingVolumes(fullDiskAccess: false), granted = table.guardingVolumes(fullDiskAccess: true)
+        XCTAssertEqual(guarding.guardedVolumes, ["/dev", "/System/Volumes/Data/home", "/Volumes/Archive", "/Volumes/share", "/Volumes/Installer"],
+                       "every file system mounted now that macOS guards, in the table's order")
+        XCTAssertEqual(granted.guardedVolumes, [], "with Full Disk Access, none")
+        XCTAssertEqual(table.guardedVolumes, [], "the table itself guards none")
+        for root in own {
+            XCTAssertEqual(guarding.volumeKey(for: root), .item(root), root)
         }
         for root in others {
-            XCTAssertEqual(typed.volumeKey(for: root), .volume, root)
+            XCTAssertEqual(guarding.volumeKey(for: root), .symbol("externaldrive"), root)
             XCTAssertEqual(granted.volumeKey(for: root), .item(root), "\(root), with Full Disk Access")
         }
-        XCTAssertEqual(typed.iconRule(asking: false).typedVolumes, typed.typedVolumes, "the page's rule carries them")
-        XCTAssertEqual(typed.holding("/Volumes/Archive").typedVolumes, typed.typedVolumes, "a held disk's places keep them")
+        XCTAssertEqual(IconKey.drive, .symbol("externaldrive"))
+        XCTAssertEqual(guarding.iconRule(asking: false).guardedVolumes, guarding.guardedVolumes, "the page's rule carries them")
+        XCTAssertEqual(guarding.holding("/Volumes/Archive").guardedVolumes, guarding.guardedVolumes, "a held disk's places keep them")
         let block = DiskNode(kind: .volume, name: "Archive", path: "/Volumes/Archive", size: 4096, children: nil)
-        let own = DiskNode(kind: .dir, name: "Archive", path: "/Volumes/Archive", size: 4096, files: 1, children: [])
-        let preboot = DiskNode(kind: .volume, name: "Preboot", path: "/System/Volumes/Preboot", size: 4096, children: nil)
+        let root = DiskNode(kind: .dir, name: "Archive", path: "/Volumes/Archive", size: 4096, files: 1, children: [])
+        let xarts = DiskNode(kind: .volume, name: "xarts", path: "/System/Volumes/xarts", size: 4096, children: nil)
         let photos = DiskNode(kind: .dir, name: "Photos", path: "/Volumes/Archive/Photos", size: 4096, files: 1, children: [])
-        XCTAssertEqual(typed.iconKey(for: block, asking: false), .volume, "the map's block of it")
-        XCTAssertEqual(typed.iconKey(for: own, asking: true), .volume, "a map of it, at its root")
+        XCTAssertEqual(guarding.iconKey(for: block, asking: false), .drive, "the map's block of it")
+        XCTAssertEqual(guarding.iconKey(for: root, asking: true), .drive, "a map of it, at its root")
         XCTAssertEqual(granted.iconKey(for: block, asking: false), .item(block.path))
-        XCTAssertEqual(typed.iconKey(for: preboot, asking: false), .item(preboot.path))
-        XCTAssertEqual(typed.iconKey(for: photos, asking: false), .item(photos.path), "a folder the scan listed on it")
+        XCTAssertEqual(guarding.iconKey(for: xarts, asking: false), .item(xarts.path), "an internal disk of another container")
+        XCTAssertEqual(guarding.iconKey(for: photos, asking: false), .item(photos.path), "a folder the scan listed on it")
     }
 
     /// Activity's app icons follow the Disk tab's rule: an app Pith may look up by its bundle's path (`mayShowApp`) shows

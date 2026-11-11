@@ -180,27 +180,29 @@ final class IconPolicyTests: XCTestCase {
         XCTAssertNotNil(policy.request(for: try held(.folder), asking: true, by: holding))
     }
 
-    /// A volume macOS guards whose icon the rule draws by its type while Pith hasn't Full Disk Access
-    /// (`KnownPlaces.typingGuardedVolumes`) loads no icon by its path, whether the disk menu lists it, the map draws a
-    /// block of it, or the map is of it, and the type's icon loads with no path at all. With Full Disk Access each loads
-    /// its own again.
-    func testAVolumeDrawnByTypeLoadsNoIconByItsPath() throws {
+    /// A volume macOS guards shows the drive symbol while Pith hasn't Full Disk Access (`KnownPlaces.guardingVolumes`),
+    /// and loads no icon by its path, whether the disk menu lists it, the map draws a block of it, or the map is of it.
+    /// The route serves only the symbols on its list, the drive alone. With Full Disk Access each volume loads its own.
+    func testAGuardedVolumeLoadsNoIconByItsPath() throws {
         let places = KnownPlaces(home: URL(fileURLWithPath: home, isDirectory: true), searchPaths: [:], mounts: { MountTableTests.table }) { _ in nil }
-        let typed = places.typingGuardedVolumes(fullDiskAccess: false), granted = places.typingGuardedVolumes(fullDiskAccess: true)
+        let guarding = places.guardingVolumes(fullDiskAccess: false), granted = places.guardingVolumes(fullDiskAccess: true)
         let policy = IconPolicy(places: places, map: folder("/Volumes", [node(.volume, "/Volumes/Archive"), node(.volume, "/Volumes/share")]),
                                 volumes: ["/", "/Volumes/Archive", "/Volumes/Installer"])
         func loads(_ key: IconKey, by rule: KnownPlaces) throws -> Bool {
             policy.request(for: try XCTUnwrap(URL(string: url(key.string))), asking: false, by: rule) != nil
         }
         for root in ["/Volumes/Archive", "/Volumes/share", "/Volumes/Installer"] {
-            XCTAssertFalse(try loads(.item(root), by: typed), root)
+            XCTAssertFalse(try loads(.item(root), by: guarding), root)
             XCTAssertTrue(try loads(.item(root), by: granted), "\(root), with Full Disk Access")
         }
-        XCTAssertTrue(try loads(.item("/"), by: typed), "the startup disk")
-        XCTAssertTrue(try loads(.volume, by: typed))
+        XCTAssertTrue(try loads(.item("/"), by: guarding), "the startup disk")
+        XCTAssertTrue(try loads(.drive, by: guarding))
+        for symbol in ["internaldrive", "trash", "externaldrive.fill", "folder"] {
+            XCTAssertFalse(try loads(.symbol(symbol), by: guarding), "\(symbol), off the route's list")
+        }
         policy.map = folder("/Volumes/Archive", [folder("/Volumes/Archive/Photos")])
-        XCTAssertFalse(try loads(.item("/Volumes/Archive"), by: typed), "a map of it, whose root is the volume's")
-        XCTAssertTrue(try loads(.item("/Volumes/Archive/Photos"), by: typed), "a folder the scan listed on it")
+        XCTAssertFalse(try loads(.item("/Volumes/Archive"), by: guarding), "a map of it, whose root is the volume's")
+        XCTAssertTrue(try loads(.item("/Volumes/Archive/Photos"), by: guarding), "a folder the scan listed on it")
     }
 
     /// What the policy found in a map lasts until the map changes, and the disks and apps it allows are the ones set
