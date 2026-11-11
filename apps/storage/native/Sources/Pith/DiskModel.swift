@@ -424,10 +424,17 @@ enum MapCommand: Equatable {
     /// The person's own changes to the live map, Move to Trash and Undo, which the maps it sends show until its index has
     /// them (`LiveEdits`).
     @ObservationIgnored private var liveEdits = LiveEdits()
-    /// How many live maps were shown, and how many of them came from an index that didn't show the person's changes yet
-    /// and showed them all the same, which the smoke test reports.
+    /// How many live maps were shown, which the smoke test counts.
     @ObservationIgnored private(set) var liveMapsShown = 0
-    @ObservationIgnored private(set) var mapsShowingChanges = 0
+
+    /// The smoke test's seam: in the very turn Pith follows the person's change, once the map asked for before is dropped
+    /// and before the folders the change touched are listed again (`followChange`), it asks for the next map at once, so
+    /// that map comes from an index that hasn't listed the change, as any map asked for meanwhile can, and the person's
+    /// change has to hold on it. Off but in the smoke test.
+    @ObservationIgnored var smokeTestAsksBeforeRelisting = false
+    /// The smoke test sees each live map as it's shown, as the person's changes have it, with what the scanner said of
+    /// those changes: which it was asked about, and which of those its index doesn't show yet.
+    @ObservationIgnored var smokeTestSawLiveMap: ((DiskResult, LiveEdits.Answer) -> Void)?
 
     /// A live map came. Its volume's figures are measured off the main thread first, and whether the items the person
     /// changed are on the disk, and then the map goes out with its figures, as the person's changes have it.
@@ -464,7 +471,7 @@ enum MapCommand: Equatable {
         // scanner's own JSON.
         let edited = liveEdits.apply(to: tree.map, places: tree.places, answer: tree.answer)
         liveMapsShown += 1
-        if edited.changed { mapsShowingChanges += 1 }
+        smokeTestSawLiveMap?(edited.map, tree.answer)
         if let live { sideColumn.liveTreeArrived(root: live.root, places: edited.places) }
         settingLive = true
         volumeUse = figures
@@ -488,6 +495,7 @@ enum MapCommand: Equatable {
         guard let live, liveView != nil else { return }
         liveMaps += 1
         live.dropTree()
+        if smokeTestAsksBeforeRelisting { refreshLive(now: true) }
         var folders = moves.map { $0.plan.target.deletingLastPathComponent().path }
         if trashOnMap != nil { folders += moves.compactMap { $0.trashed?.deletingLastPathComponent().path } }
         var asked = Set<String>()
