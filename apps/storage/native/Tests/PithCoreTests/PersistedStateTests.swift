@@ -57,6 +57,27 @@ final class PersistedStateTests: XCTestCase {
         XCTAssertEqual(found.leftOut, ["file \(support)", "file \(history)"], "still left out, and said to be")
     }
 
+    /// Foundation's atomic save writes `history.json` whole beside the old one first, as `.dat.nosync`, the saving
+    /// process's ID in hexadecimal, a dot and six letters and digits, then puts it in the old one's place. A reading in
+    /// those milliseconds sees it, so while another copy runs, that copy's own such file is left out too, and said to be.
+    /// One of another process, one not of that form, or one with no other copy running, still counts.
+    func testTheTemporaryFileOfAnotherPithsAtomicSaveIsLeftOut() {
+        let saving = support + "/.dat.nosyncE7DC.Ab12Cd"
+        let found = state([support: then, history: then, cache: then, saving: then + 60], others: [59356]).differences(from: before)
+        XCTAssertEqual(found.changes, [])
+        XCTAssertEqual(found.leftOut, ["file \(saving)"])
+        let gone = state([support: then, history: then, cache: then], others: [59356])
+            .differences(from: state([support: then, history: then, cache: then, saving: then + 60]))
+        XCTAssertEqual(gone.leftOut, ["file \(saving)"], "seen at launch and gone since")
+        for other in [support + "/.dat.nosyncE7DD.Ab12Cd", support + "/.dat.nosyncE7DC.Ab12C", support + "/.dat.nosyncE7DC.Ab12C!",
+                      support + "/dat.nosyncE7DC.Ab12Cd", support + "/Scans/.dat.nosyncE7DC.Ab12Cd"] {
+            let counted = state([support: then, history: then, cache: then, other: then + 60], others: [59356]).differences(from: before)
+            XCTAssertEqual(counted.changes, ["file \(other)"], other)
+        }
+        let alone = state([support: then, history: then, cache: then, saving: then + 60]).differences(from: before)
+        XCTAssertEqual(alone.changes, ["file \(saving)"], "no other copy of Pith running")
+    }
+
     func testOnlyWhatChangedIsSaidToBeLeftOut() {
         let found = state([support: then, history: then, cache: then], others: [4242]).differences(from: before)
         XCTAssertEqual(found.changes, [])

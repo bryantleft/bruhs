@@ -24,15 +24,32 @@ public struct PersistedState {
     /// new file put in the old one's place, which changes the date of the folder that holds it too.
     var writtenByAnotherPith: Set<String> { [(support as NSString).appendingPathComponent("history.json"), support] }
 
+    /// Whether `path` is the file Foundation's atomic save of `history.json` writes first, in a copy of Pith whose process
+    /// ID is among `others`, while that save is under way. `Data.write(to:options: .atomic)` writes the new file whole
+    /// beside the old one, as `.dat.nosync`, the saving process's ID in hexadecimal, a dot and six letters and digits,
+    /// then renames it over `history.json`, so a reading in those milliseconds sees it there. Confirmed on macOS 26.3 by
+    /// saving a 32 MB `history.json` ten times in a folder of the test's own, as Pith saves it, while another thread
+    /// listed that folder: every other name it saw was of that form, with the saving process's ID (VERIFICATION.md).
+    static func isAtomicSaveOfHistory(_ path: String, in support: String, by others: Set<Int32>) -> Bool {
+        guard (path as NSString).deletingLastPathComponent == support else { return false }
+        let name = (path as NSString).lastPathComponent, prefix = ".dat.nosync"
+        guard name.hasPrefix(prefix) else { return false }
+        let parts = name.dropFirst(prefix.count).split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 2, let process = Int32(parts[0], radix: 16), others.contains(process), parts[0].allSatisfy(\.isHexDigit) else { return false }
+        return parts[1].count == 6 && parts[1].allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
+    }
+
     /// What differs from `earlier`: each default whose value changed, came or went, and each file or folder that did.
-    /// While another copy of Pith ran, at either reading, exactly what it writes meanwhile (`writtenByAnotherPith`) is
-    /// left out, and `leftOut` names what of it changed. Anything else that changed counts all the same.
+    /// While another copy of Pith ran, at either reading, exactly what it writes meanwhile is left out: its history and
+    /// its folder's date (`writtenByAnotherPith`), and the file its atomic save of the history writes first
+    /// (`isAtomicSaveOfHistory`). `leftOut` names what of it changed. Anything else that changed counts all the same.
     public func differences(from earlier: PersistedState) -> (changes: [String], leftOut: [String]) {
         let keys = Set((defaults.allKeys + earlier.defaults.allKeys).compactMap { $0 as? String })
         let settings = keys.filter { defaults[$0] as? NSObject != earlier.defaults[$0] as? NSObject }.map { "default \($0)" }
         let paths = Set(changed.keys).union(earlier.changed.keys).filter { changed[$0] != earlier.changed[$0] }
-        let another = othersRunning.isEmpty && earlier.othersRunning.isEmpty ? [] : writtenByAnotherPith
-        return ((settings + paths.subtracting(another).map { "file \($0)" }).sorted(), paths.intersection(another).map { "file \($0)" }.sorted())
+        let others = Set(othersRunning + earlier.othersRunning)
+        let written = others.isEmpty ? [] : paths.filter { writtenByAnotherPith.contains($0) || Self.isAtomicSaveOfHistory($0, in: support, by: others) }
+        return ((settings + paths.subtracting(written).map { "file \($0)" }).sorted(), written.map { "file \($0)" }.sorted())
     }
 
     /// Which of `roots` the person's Scans folder `scans`, Pith's own, holds a scan memory for (`ScanMemory.file(for:in:)`),
