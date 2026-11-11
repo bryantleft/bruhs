@@ -159,6 +159,7 @@ extension AppDelegate {
             checks.merge(await checkNotMeasured(fixture, report: report), uniquingKeysWith: { _, new in new })
             checks.merge(await checkRefreshedVolume(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkAskingNotice(panes), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkAccessHoldLifts(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkIconsReachEveryPage(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkIconRoute(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkPathBar(fixture, in: main), uniquingKeysWith: { _, new in new })

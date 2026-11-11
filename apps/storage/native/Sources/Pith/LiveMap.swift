@@ -63,6 +63,9 @@ import PithCore
     var treeFailed: ((Int, String) -> Void)?
     /// The person's Check Again has landed: the folder, and everything in it, listed again (`checkAgain`).
     var checkedAgain: (() -> Void)?
+    /// A walk or a check of every folder ended, which began at the time given, by the wall clock, as losing Full Disk
+    /// Access asks (`DiskAccessWatch.listedEveryFolder(since:)`).
+    var listedEveryFolder: ((Date) -> Void)?
 
     private var process: LiveProcess?
     private var stream: LiveStream?
@@ -268,6 +271,7 @@ import PithCore
             self.asking = asking
             listedAt = Date()
             listedEveryFolderSince = report.listedEveryFolderSince
+            if let since = listedEveryFolderSince { listedEveryFolder?(since) }
             rebuildReason = nil
             updatedAt = Date()
             state = .live(0)
@@ -303,6 +307,7 @@ import PithCore
             lastCheck = check
             listedAt = Date()
             listedEveryFolderSince = report.listedEveryFolderSince
+            if let since = listedEveryFolderSince { listedEveryFolder?(since) }
             if checks.checked() { endDailyCheck(.finished) }
             NSLog("Pith: checked \(check.folders) folders in \(check.ms) ms; \(check.corrected) had changed without an event, by \(check.bytes) bytes.")
         case .stats(let line):

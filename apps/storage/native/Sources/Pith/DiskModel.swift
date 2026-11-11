@@ -335,6 +335,7 @@ enum MapCommand: Equatable {
         live.changed = { [weak self] in self?.refreshLive() }
         // Check Again's map comes at once, past the wait between refreshes, and shows at once, as Refresh's does.
         live.checkedAgain = { [weak self] in self?.refreshLive(now: true, checkedAgain: true) }
+        live.listedEveryFolder = { [weak self] since in self?.listedEveryFolder(since: since) }
         self.live = live
         liveView = root
         scope = root
@@ -961,7 +962,7 @@ enum MapCommand: Equatable {
     /// Whether Pith still has Full Disk Access, as the probe last found, kept across launches in Pith's settings.
     private(set) var diskAccess = DiskModel.keptDiskAccess()
 
-    /// What Pith kept of its watch on Full Disk Access when it last changed, in its settings (`probeDiskAccess`).
+    /// What Pith kept of its watch on Full Disk Access when it last changed, in its settings (`keepDiskAccess`).
     nonisolated private static func keptDiskAccess() -> DiskAccessWatch {
         let settings = UserDefaults.standard, lostAt = settings.double(forKey: Setting.fullDiskAccessLostAt.rawValue)
         return DiskAccessWatch(granted: settings.bool(forKey: Setting.hadFullDiskAccess.rawValue), lostAt: lostAt > 0 ? Date(timeIntervalSince1970: lostAt) : nil,
@@ -973,7 +974,20 @@ enum MapCommand: Equatable {
     func probeDiskAccess() {
         var watch = diskAccess
         watch.probed(DiskAccessWatch.probe(DiskAccessWatch.probePath(home: NSHomeDirectory())), at: Date())
-        if let since = live?.listedEveryFolderSince { watch.listedEveryFolder(since: since) }
+        keepDiskAccess(watch)
+    }
+
+    /// The live map, the startup disk's, listed every folder again, in a walk or a check that began at `since`: one
+    /// begun since Pith lost Full Disk Access lifts the startup disk's hold as its report comes, and Pith keeps that for
+    /// the next launch, where the map it opens on lists nothing again until something changes.
+    private func listedEveryFolder(since: Date) {
+        var watch = diskAccess
+        watch.listedEveryFolder(since: since)
+        keepDiskAccess(watch)
+    }
+
+    /// Keeps `watch` as Pith's watch on Full Disk Access, and in Pith's settings, which an automated run keeps in memory.
+    func keepDiskAccess(_ watch: DiskAccessWatch) {
         guard watch != diskAccess else { return }
         diskAccess = watch
         UserDefaults.standard.set(watch.granted, for: .hadFullDiskAccess)

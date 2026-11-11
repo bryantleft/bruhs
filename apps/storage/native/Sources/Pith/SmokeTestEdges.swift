@@ -680,4 +680,34 @@ extension AppDelegate {
               + "the notice gone again \(gone), the icons' rule back \(ruleBack)")
         return [check: named && caption == captionBefore && upToDate && asked && gone && ruleBack]
     }
+
+    /// Losing Full Disk Access holds the live map's guarded locations until a walk or check of every folder that began
+    /// since has ended: the scanner's report of its end lifts the hold at once, with no probe after it, and Pith keeps
+    /// the lift, so the next launch's map isn't held (`DiskAccessWatch`). A check that began before the loss keeps the
+    /// hold, though it says it ran a second, as the scanner, whose clock stops while the Mac sleeps, says of a check the
+    /// Mac slept through. The loss and the checks are handed to Pith, the run keeps its settings in memory, and Pith's
+    /// watch is as it was after.
+    func checkAccessHoldLifts() async -> [String: Bool] {
+        let check = "access_hold_lifts_with_the_listing"
+        guard let live = disk.live, let walked = live.listedEveryFolderSince, await eventually({ !self.disk.iconRule.asking }) else { return [check: false] }
+        // The loss falls between the map's walk and now, at least a second and a half after each.
+        if Date().timeIntervalSince(walked) < 3 { try? await Task.sleep(for: .seconds(3)) }
+        let was = disk.diskAccess, now = Date()
+        let lost = walked.addingTimeInterval(now.timeIntervalSince(walked) / 2)
+        var watch = DiskAccessWatch(granted: true)
+        watch.probed(.denied, at: lost)
+        disk.keepDiskAccess(watch)
+        let held = disk.iconRule.asking
+        live.handle(.checked(LiveCheck(folders: 1, corrected: 0, bytes: 0, ms: 1_000, startedAt: walked)))
+        let heldThroughSleep = disk.iconRule.asking
+        live.handle(.checked(LiveCheck(folders: 1, corrected: 0, bytes: 0, ms: 0, startedAt: Date())))
+        let lifted = !disk.iconRule.asking && disk.diskAccess.relisted
+        let kept = UserDefaults.standard.bool(forKey: Setting.listedSinceFullDiskAccessLost.rawValue)
+        disk.keepDiskAccess(was)
+        let restored = disk.diskAccess == was && !disk.iconRule.asking
+            && UserDefaults.standard.bool(forKey: Setting.listedSinceFullDiskAccessLost.rawValue) == was.relisted
+        print("access hold: held once lost \(held), through a check begun before the loss that the Mac slept through \(heldThroughSleep), "
+              + "lifted by a check begun since \(lifted), the lift kept \(kept), Pith's watch as it was \(restored)")
+        return [check: held && heldThroughSleep && lifted && kept && restored]
+    }
 }
