@@ -145,7 +145,7 @@ extension AppDelegate {
                   files.createFile(atPath: (trash as NSString).appendingPathComponent("old.bin"), contents: Data(count: 1 << 20)),
                   // 1 MiB, the least the live map lists by name, so the file has a block of its own to take off the map.
                   files.createFile(atPath: item, contents: Data(count: 1 << 20)),
-                  await eventually({ (self.disk.trashOnMap ?? 0) >= 1 << 20 && self.disk.result?.item(at: item) != nil }), await mapSettles(),
+                  await liveMapShows({ (self.disk.trashOnMap ?? 0) >= 1 << 20 && self.disk.result?.item(at: item) != nil }), await mapSettles(),
                   let walked = disk.result?.summary.bytes else {
                 return Dictionary(uniqueKeysWithValues: names.map { ($0, false) })
             }
@@ -211,12 +211,12 @@ extension AppDelegate {
             let keeping = await keepNotMeasuredSent(web)
             let written = files.createFile(atPath: outside, contents: Data(count: 1 << 20))
             let grown = used.map { $0 + (1 << 20) }
-            let onTheMap = await eventually { self.disk.result?.item(at: outside) != nil }
+            let onTheMap = await liveMapShows { self.disk.result?.item(at: outside) != nil }
             let grew = await eventually { self.disk.notMeasured?.used == grown }
             let usedWhileWritten = disk.notMeasured?.used, held = disk.notMeasured?.bytes
             let heldOnThePage = await pageAnswer(web, Self.notMeasuredItem) { (text: String?) in text == figure.map { "Not measured " + $0 } }
             let deleted = (try? files.removeItem(atPath: outside)) != nil
-            let offTheMap = await eventually { self.disk.result != nil && self.disk.result?.item(at: outside) == nil }
+            let offTheMap = await liveMapShows { self.disk.result != nil && self.disk.result?.item(at: outside) == nil }
             let shrank = await eventually { self.disk.notMeasured?.used == used }
             let heldAfter = disk.notMeasured?.bytes
             let heldAfterOnThePage = await pageAnswer(web, Self.notMeasuredItem) { (text: String?) in text == figure.map { "Not measured " + $0 } }
@@ -251,7 +251,7 @@ extension AppDelegate {
         let gone = await pageAnswer(web, Self.notMeasuredItem) { (text: String?) in text == nil } == nil
         // The run's own files went too. Once the live map has listed the fixture without them, no status line about them
         // is still to come, to take the place of the one the next check hands the live map.
-        let cleared = await eventually { self.disk.result != nil && [trash, item, outside].allSatisfy { self.disk.result?.item(at: $0) == nil } }
+        let cleared = await liveMapShows { self.disk.result != nil && [trash, item, outside].allSatisfy { self.disk.result?.item(at: $0) == nil } }
         let settled = await mapSettles()
         print("not measured once the volume's figures went: gone \(gone), the run's files off the map \(cleared), settled \(settled)")
         checks[names[0]] = checks[names[0]] == true && gone && settled

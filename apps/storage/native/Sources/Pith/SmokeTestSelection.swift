@@ -30,7 +30,7 @@ extension AppDelegate {
         defer { for path in [first, second] { try? files.removeItem(atPath: path) } }
         // 1 MiB, the least the live map lists by name (`BIG_FILE`), so each file has a block and a row of its own.
         guard let web = webView, [first, second].allSatisfy({ files.createFile(atPath: $0, contents: Data(count: 1 << 20)) }),
-              await eventually({ [first, second].allSatisfy { self.disk.result?.item(at: $0) != nil } }), await mapSettles() else {
+              await liveMapShows({ [first, second].allSatisfy { self.disk.result?.item(at: $0) != nil } }), await mapSettles() else {
             print("several selected: the check's files never reached the map")
             return false
         }
@@ -88,7 +88,7 @@ extension AppDelegate {
         _ = try? await web.callAsyncJavaScript(Self.escapeOnTheMap, in: nil, contentWorld: .page)
         let cleared = await eventually { self.disk.selection.isEmpty }
         for path in [first, second] { try? files.removeItem(atPath: path) }
-        let gone = await eventually { [first, second].allSatisfy { self.disk.result?.item(at: $0) == nil } }
+        let gone = await liveMapShows { [first, second].allSatisfy { self.disk.result?.item(at: $0) == nil } }
         let settled = await mapSettles()
         return one && two && inner && nested && out && added && takenOut && grown && Self.shows(grownShown, extended) && measured
             && frees?.files == counted && bar && cleared && gone && settled
@@ -114,7 +114,7 @@ extension AppDelegate {
         // Run before the removal above, which an immutable file would refuse.
         defer { try? files.setAttributes([.immutable: false], ofItemAtPath: items[1]) }
         guard let web = webView, items.allSatisfy({ files.createFile(atPath: $0, contents: Data(count: 1 << 20)) }),
-              await eventually({ items.allSatisfy { self.disk.result?.item(at: $0) != nil } }), await mapSettles() else {
+              await liveMapShows({ items.allSatisfy { self.disk.result?.item(at: $0) != nil } }), await mapSettles() else {
             print("several trashed: the check's files never reached the map")
             return Dictionary(uniqueKeysWithValues: names.map { ($0, false) })
         }
@@ -185,7 +185,7 @@ extension AppDelegate {
         let clearedAgain = await eventually { self.disk.selection.isEmpty }
         try? files.setAttributes([.immutable: false], ofItemAtPath: items[1])
         for path in items { try? files.removeItem(atPath: path) }
-        let gone = await eventually { items.allSatisfy { self.disk.result?.item(at: $0) == nil } }
+        let gone = await liveMapShows { items.allSatisfy { self.disk.result?.item(at: $0) == nil } }
         let settled = await mapSettles()
         return [names[0]: whole && gone && settled,
                 names[1]: locked && repicked && stopped && firstOnly && noted && said && stayed && partwayAction == "Move to Trash" && firstBack
@@ -215,7 +215,7 @@ extension AppDelegate {
         // 1 MiB, the least the live map lists by name, so the item has a block of its own. Two seconds with no map, so
         // the next one is asked for at once, not after the wait between maps.
         guard let web = webView, files.createFile(atPath: item, contents: Data(count: 1 << 20)),
-              await eventually({ self.disk.result?.item(at: item) != nil }), await mapSettles(quiet: 2.2) else {
+              await liveMapShows({ self.disk.result?.item(at: item) != nil }), await mapSettles(quiet: 2.2) else {
             print("trash holds: the check's file never reached the map")
             return [name: false]
         }
@@ -265,7 +265,7 @@ extension AppDelegate {
               + "didn't have it yet, the item on every one \(back.held), on the page \(back.page)")
         try? files.removeItem(atPath: item)
         try? files.removeItem(atPath: other)
-        let cleared = await eventually { self.disk.result?.item(at: item) == nil && self.disk.result?.item(at: other) == nil }
+        let cleared = await liveMapShows { self.disk.result?.item(at: item) == nil && self.disk.result?.item(at: other) == nil }
         let settled = await mapSettles()
         return [name: moved && gone.held && gone.maps > 0 && gone.page && quiet && action == "Move to Trash" && restored && back.held && back.maps > 0
                 && back.page && cleared && settled]
@@ -291,7 +291,7 @@ extension AppDelegate {
         // 1 MiB each, the least the live map lists by name.
         guard let web = webView, let window = web.window, let undo = window.undoManager,
               items.allSatisfy({ files.createFile(atPath: $0, contents: Data(count: 1 << 20)) }),
-              await eventually({ items.allSatisfy { self.disk.result?.item(at: $0) != nil } }), await mapSettles() else {
+              await liveMapShows({ items.allSatisfy { self.disk.result?.item(at: $0) != nil } }), await mapSettles() else {
             print("each undo: the check's files never reached the map")
             return [name: false, waits: false]
         }
@@ -355,7 +355,7 @@ extension AppDelegate {
               + "off \(noteWaits), ⌘Z taken by the menu \(pressed), it landed \(thenLanded) and nothing came back \(held); the note's Undo put "
               + "the last back \(noted), then ⌘Z the middle \(middle) and the first \(first); Redo offered \(redo)")
         for path in items { try? files.removeItem(atPath: path) }
-        let cleared = await eventually { items.allSatisfy { self.disk.result?.item(at: $0) == nil } }
+        let cleared = await liveMapShows { items.allSatisfy { self.disk.result?.item(at: $0) == nil } }
         let settled = await mapSettles()
         return [name: focused && moved && named && last && before && again && noted && middle && first && !redo && cleared && settled,
                 waits: menuWaits && noteWaits && pressed && thenLanded && held]

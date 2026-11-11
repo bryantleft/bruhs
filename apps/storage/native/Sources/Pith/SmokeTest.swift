@@ -430,7 +430,7 @@ extension AppDelegate {
               (try? files.createDirectory(at: locked, withIntermediateDirectories: false, attributes: [.posixPermissions: 0])) != nil else {
             return Dictionary(uniqueKeysWithValues: names.map { ($0, false) })
         }
-        let listed = await eventually { self.disk.result?.root.children?.contains { $0.path == locked.path && $0.kind == .unreadable } == true }
+        let listed = await liveMapShows { self.disk.result?.root.children?.contains { $0.path == locked.path && $0.kind == .unreadable } == true }
         let sub = (fixture as NSString).appendingPathComponent("sub"), app = "/System/Library/CoreServices/Finder.app"
         let kept = (writers: disk.writers, growth: disk.growth, since: disk.growthSince)
         disk.writers = { since in
@@ -505,7 +505,7 @@ extension AppDelegate {
             $0 == "com.apple.mail" ? URL(fileURLWithPath: finder) : nil
         }
         func place(_ id: String) -> PlacesTable.Place? { disk.placesTable?.places.first { $0.id == id } }
-        guard made, let web = webView, await eventually({
+        guard made, let web = webView, await liveMapShows({
             place("messages") != nil && place("downloads") != nil && place("developer")?.size != nil && place("mail")?.size != nil
         }) else {
             return Dictionary(uniqueKeysWithValues: names.map { ($0, false) })
@@ -547,7 +547,7 @@ extension AppDelegate {
         disk.pageCommand?(.open(fixture))
         let back = await eventually { self.disk.openFolder == fixture }
         cleanUp()
-        let cleared = await eventually { self.disk.result?.root.children?.contains { $0.path == home } != true }
+        let cleared = await liveMapShows { self.disk.result?.root.children?.contains { $0.path == home } != true }
         let settled = await mapSettles()
         print("places: Messages and Downloads \(unreadable ? "can't be read" : "have sizes"), shown at the root \(showsTheUnreadable(atRoot)) and at home "
               + "\(showsTheUnreadable(atHome)), Downloads named once \(namedOnce), gone further down \(gone); Developer "
@@ -928,7 +928,7 @@ extension AppDelegate {
             (try? files.createDirectory(atPath: folder, withIntermediateDirectories: false)) != nil
                 && files.createFile(atPath: (folder as NSString).appendingPathComponent("item.bin"), contents: Data(count: 4096))
         }
-        guard let web = webView, made, await eventually({ folders.allSatisfy(listed) }), disk.openFolder == fixture, await mapSettles(),
+        guard let web = webView, made, await liveMapShows({ folders.allSatisfy(listed) }), disk.openFolder == fixture, await mapSettles(),
               let payload = disk.resultJSON else {
             return Dictionary(uniqueKeysWithValues: names.map { ($0, false) })
         }
@@ -956,7 +956,7 @@ extension AppDelegate {
               + "\((landed as NSString).lastPathComponent)")
 
         for folder in folders { try? files.removeItem(atPath: folder) }
-        let gone = await eventually { !folders.contains(where: listed) }
+        let gone = await liveMapShows { !folders.contains(where: listed) }
         var draws: [String: Int]?
         if gone, await mapSettles(), let pristine = disk.resultJSON {
             draws = try? await web.callAsyncJavaScript(Self.unchangedMaps, arguments: ["payload": pristine], in: nil, contentWorld: .page) as? [String: Int]
@@ -986,7 +986,7 @@ extension AppDelegate {
             disk.dismissTrashNote()
         }
         // 1 MiB, the least the live map lists by name (`BIG_FILE`), so the item has a block of its own.
-        guard files.createFile(atPath: item, contents: Data(count: 1 << 20)), let web = webView, await eventually(listed), await mapSettles(),
+        guard files.createFile(atPath: item, contents: Data(count: 1 << 20)), let web = webView, await liveMapShows(listed), await mapSettles(),
               let payload = disk.resultJSON else {
             return Dictionary(uniqueKeysWithValues: names.map { ($0, false) })
         }
@@ -1020,7 +1020,7 @@ extension AppDelegate {
                   + "\(rest?["waited"] as? Bool == true): the item came back \(restored), its block under the pointer \(took.map { "\(Int($0)) ms" } ?? "never") after")
         }
         try? files.removeItem(atPath: item)
-        let gone = await eventually { !listed() }
+        let gone = await liveMapShows { !listed() }
         let settled = await mapSettles()
         // The live map's own map again, for whatever comes next.
         disk.revision = UUID()
@@ -1051,14 +1051,14 @@ extension AppDelegate {
         if made { made = Self.fill((heavy as NSString).appendingPathComponent("fill.bin"), mebibytes: 100) }
         // The map around the folder has its 2 MiB file and a group of the parts.
         func folded() -> Bool { disk.result?.item(at: folder)?.children?.count == 2 }
-        guard made, let web = webView, await eventually({ listed(heavy) && folded() }), await mapSettles() else { return [check: false] }
+        guard made, let web = webView, await liveMapShows({ listed(heavy) && folded() }), await mapSettles() else { return [check: false] }
         let answer = try? await web.callAsyncJavaScript(Self.openAndWatch, arguments: ["name": (folder as NSString).lastPathComponent, "path": folder,
                                                                                      "items": parts + 1], in: nil, contentWorld: .page) as? [String: Any]
         let opened = await eventually { self.disk.openFolder == folder }
         disk.pageCommand?(.open(fixture))
         let back = await eventually { self.disk.openFolder == fixture }
         for made in [heavy, folder] { try? files.removeItem(atPath: made) }
-        let gone = await eventually { !listed(heavy) && !listed(folder) }
+        let gone = await liveMapShows { !listed(heavy) && !listed(folder) }
         let settled = await mapSettles()
         let coarse = answer?["coarse"] as? Bool == true, received = answer?["received"] as? Double, drawn = answer?["drawn"] as? Double
         print("double-click opened the folder \(opened) and drew it at once \(coarse); its finer tree came "
@@ -1309,9 +1309,9 @@ extension AppDelegate {
         write.standardError = FileHandle.nullDevice
         try write.run()
         write.waitUntilExit()
-        let grew = await eventually { (model.result?.root.size ?? 0) >= before + 262_144 }
+        let grew = await liveMapShows(in: model) { (model.result?.root.size ?? 0) >= before + 262_144 }
         try FileManager.default.removeItem(at: added)
-        let shrank = await eventually { model.result?.root.size == before }
+        let shrank = await liveMapShows(in: model) { model.result?.root.size == before }
         print("\(prefix): before \(before), grew \(grew), back \(shrank) at \(model.result?.root.size ?? 0)")
         return ["\(prefix)_follows_a_new_file": grew, "\(prefix)_follows_a_deletion": shrank]
     }
@@ -1412,6 +1412,32 @@ extension AppDelegate {
             guard Date() < deadline, (try? await Task.sleep(for: .milliseconds(100))) != nil else { return false }
         }
         return true
+    }
+
+    /// Waits for `model`'s live map, the run's own unless another is given, to show a change a check made on the disk,
+    /// as `eventually` waits, but with the patience counted only while the live map has no folder waiting to be listed
+    /// (`LiveMapPatience`): on a loaded Mac a slow listing's cooldown can hold the fixture's folder past the whole
+    /// patience while the map is only behind. A change that never shows still fails the wait, once nothing has waited
+    /// for the whole patience, or after `LiveEdits.longestHold` in all, as long as Pith itself holds a change of the
+    /// person's for the live map's index to show. A passing wait ends as soon as the change shows, as before.
+    func liveMapShows(in model: DiskModel? = nil, _ predicate: () -> Bool) async -> Bool {
+        let model = model ?? disk
+        var patience = LiveMapPatience(patience: Self.patience, longest: LiveEdits.longestHold, at: Date())
+        while !predicate() {
+            guard patience.mayGoOn(at: Date(), waiting: Self.hasFoldersWaiting(model.live)),
+                  (try? await Task.sleep(for: .milliseconds(100))) != nil else { return false }
+        }
+        return true
+    }
+
+    /// Whether `live` has folders waiting to be listed, as the scanner's last status line counts them, its cooldowns'
+    /// included, or is still making or catching up its map: a change on the disk is on its way to the map.
+    private static func hasFoldersWaiting(_ live: LiveMap?) -> Bool {
+        switch live?.state {
+        case .live(let waiting)?: waiting > 0
+        case .opening?, .mapping?, .catchingUp?: true
+        case .off?, .unmapped?, .failed?, nil: false
+        }
     }
 
     /// What `script` returns in the map's page, given `arguments`, once `done` holds for it or the smoke test's patience
