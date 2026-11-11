@@ -176,6 +176,31 @@ pub fn run() -> i32 {
     0
 }
 
+/// When a walk or a check began: by `Instant`, for how long it ran, and by the wall clock, which Pith compares with its
+/// own times. `Instant` stops while the Mac sleeps, so a start worked out from the time now and how long one ran falls
+/// as much later than it began as the Mac slept meanwhile.
+#[derive(Clone, Copy)]
+struct Began {
+    instant: Instant,
+    wall: SystemTime,
+}
+
+impl Began {
+    fn now() -> Began {
+        Began { instant: Instant::now(), wall: SystemTime::now() }
+    }
+
+    /// How long it has run, the Mac's sleep left out.
+    fn ms(&self) -> u64 {
+        self.instant.elapsed().as_millis() as u64
+    }
+
+    /// When it began, in seconds since 1970, as `savedAt` is written but to the microsecond.
+    fn at(&self) -> f64 {
+        self.wall.duration_since(UNIX_EPOCH).map(|since| since.as_secs_f64()).unwrap_or(0.0)
+    }
+}
+
 struct Server {
     tx: Sender<Msg>,
     root: String,
@@ -187,8 +212,8 @@ struct Server {
     snapshot: Option<PathBuf>,
     _lock: Option<File>,
     volume: String,
-    walking: Option<Instant>,
-    check_started: Option<Instant>,
+    walking: Option<Began>,
+    check_started: Option<Began>,
     history_done: bool,
     /// Something the map shows changed since the last status.
     changed: bool,
@@ -384,7 +409,7 @@ impl Server {
         self.sched.reset(since);
         self.check_started = None;
         self.history_done = false;
-        self.walking = Some(Instant::now());
+        self.walking = Some(Began::now());
         self.last_progress = Instant::now();
         if let Some(request) = self.sched.submit(ROOT, PathBuf::from(&self.root), Purpose::Walk, false, None) {
             self.run(request);
@@ -487,8 +512,12 @@ impl Server {
             index.repair();
             index.compact();
         }
-        let ms = self.check_started.take().map(|started| started.elapsed().as_millis() as u64).unwrap_or(0);
-        send(&serde_json::json!({ "type": "checked", "folders": report.folders, "corrected": report.corrected, "bytes": report.drift, "ms": ms }).to_string());
+        let started = self.check_started.take();
+        send(&serde_json::json!({
+            "type": "checked", "folders": report.folders, "corrected": report.corrected, "bytes": report.drift,
+            "ms": started.map_or(0, |started| started.ms()), "startedAt": started.map(|started| started.at()),
+        })
+        .to_string());
         self.save_quietly();
     }
 
@@ -519,13 +548,14 @@ impl Server {
             return;
         }
         self.walking = None;
-        let ms = started.elapsed().as_millis() as u64;
+        let ms = started.ms();
         let index = self.index.as_mut().unwrap();
         index.walk_ms = ms;
         index.compact();
         let totals = index.totals(ROOT);
         send(&serde_json::json!({
-            "type": "walked", "ms": ms, "folders": index.folder_count(), "files": totals.files, "bytes": totals.size, "asking": asking.len(),
+            "type": "walked", "ms": ms, "startedAt": started.at(), "folders": index.folder_count(), "files": totals.files, "bytes": totals.size,
+            "asking": asking.len(),
         })
         .to_string());
         self.changed = true;
@@ -540,7 +570,7 @@ impl Server {
     /// Starts listing every folder again, unless a check is under way.
     fn begin_check(&mut self) {
         if let Some(request) = self.index.as_ref().and_then(|index| self.sched.start_check(index)) {
-            self.check_started = Some(Instant::now());
+            self.check_started = Some(Began::now());
             self.run(request);
         }
     }

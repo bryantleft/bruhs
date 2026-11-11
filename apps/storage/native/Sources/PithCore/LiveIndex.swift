@@ -6,8 +6,9 @@ public enum LiveReport: Sendable {
     case opened(LiveOpened)
     /// A walk's progress: folders listed, the files and bytes found so far, and folders waiting on macOS.
     case progress(dirs: UInt64, files: UInt64, bytes: UInt64, errors: UInt64, asking: Int)
-    /// The walk is over but for the folders waiting on macOS, which join the map once the person answers.
-    case walked(ms: UInt64, folders: UInt64, files: UInt64, bytes: UInt64, asking: Int)
+    /// The walk is over but for the folders waiting on macOS, which join the map once the person answers. It ran `ms`,
+    /// the Mac's sleep left out, and began at `startedAt` by the wall clock.
+    case walked(ms: UInt64, folders: UInt64, files: UInt64, bytes: UInt64, asking: Int, startedAt: Date?)
     case status(LiveStatus)
     /// FSEvents finished replaying what changed while Pith wasn't watching.
     case historyDone
@@ -25,6 +26,17 @@ public enum LiveReport: Sendable {
     case failed(request: Int?, reason: String)
     /// The scanner couldn't run at all.
     case fatal(String)
+
+    /// When the walk or the check of every folder this reports the end of began, by the wall clock, as the scanner says:
+    /// what it measures how long one ran by stops while the Mac sleeps, so a start worked out from the time it ended
+    /// falls as much later than it began as the Mac slept meanwhile. Nil for any other report, or one that doesn't say.
+    public var listedEveryFolderSince: Date? {
+        switch self {
+        case .walked(_, _, _, _, _, let startedAt): startedAt
+        case .checked(let check): check.startedAt
+        default: nil
+        }
+    }
 }
 
 public struct LiveOpened: Sendable, Equatable {
@@ -104,12 +116,18 @@ public struct LivePlace: Decodable, Sendable, Equatable {
     }
 }
 
-/// What a check of every folder found: how many folders FSEvents hadn't reported changes in, and how many bytes.
+/// What a check of every folder found: how many folders FSEvents hadn't reported changes in, and how many bytes. It ran
+/// `ms`, the Mac's sleep left out, and began at `startedAt` by the wall clock.
 public struct LiveCheck: Sendable, Equatable {
     public let folders: UInt64
     public let corrected: UInt64
     public let bytes: UInt64
     public let ms: UInt64
+    public let startedAt: Date?
+
+    public init(folders: UInt64, corrected: UInt64, bytes: UInt64, ms: UInt64, startedAt: Date?) {
+        self.folders = folders; self.corrected = corrected; self.bytes = bytes; self.ms = ms; self.startedAt = startedAt
+    }
 }
 
 public enum LiveDecoder {
@@ -138,9 +156,9 @@ public enum LiveDecoder {
             let p = try decoder.decode(Progress.self, from: line)
             return .progress(dirs: p.dirs, files: p.files, bytes: p.bytes, errors: p.errors, asking: p.asking)
         case "walked":
-            struct Walked: Decodable { let ms: UInt64; let folders: UInt64; let files: UInt64; let bytes: UInt64; let asking: Int }
+            struct Walked: Decodable { let ms: UInt64; let startedAt: Double?; let folders: UInt64; let files: UInt64; let bytes: UInt64; let asking: Int }
             let w = try decoder.decode(Walked.self, from: line)
-            return .walked(ms: w.ms, folders: w.folders, files: w.files, bytes: w.bytes, asking: w.asking)
+            return .walked(ms: w.ms, folders: w.folders, files: w.files, bytes: w.bytes, asking: w.asking, startedAt: w.startedAt.map(Date.init(timeIntervalSince1970:)))
         case "status":
             struct Status: Decodable { let through: UInt64; let pending: Int; let changed: Bool; let checking: Bool; let historyDone: Bool; let asking: Int }
             let s = try decoder.decode(Status.self, from: line)
@@ -163,9 +181,9 @@ public enum LiveDecoder {
             let s = try decoder.decode(Saved.self, from: line)
             return .saved(through: s.through, bytes: s.bytes, ms: s.ms)
         case "checked":
-            struct Checked: Decodable { let folders: UInt64; let corrected: UInt64; let bytes: UInt64; let ms: UInt64 }
+            struct Checked: Decodable { let folders: UInt64; let corrected: UInt64; let bytes: UInt64; let ms: UInt64; let startedAt: Double? }
             let c = try decoder.decode(Checked.self, from: line)
-            return .checked(LiveCheck(folders: c.folders, corrected: c.corrected, bytes: c.bytes, ms: c.ms))
+            return .checked(LiveCheck(folders: c.folders, corrected: c.corrected, bytes: c.bytes, ms: c.ms, startedAt: c.startedAt.map(Date.init(timeIntervalSince1970:))))
         case "stats":
             return .stats(String(decoding: line, as: UTF8.self))
         case "error":

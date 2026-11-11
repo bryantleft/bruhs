@@ -17,7 +17,7 @@ final class LiveIndexTests: XCTestCase {
             return XCTFail("not a status")
         }
         XCTAssertEqual(status, LiveStatus(through: 9, pending: 3, changed: true, checking: false, historyDone: true, asking: 2))
-        guard case .walked(_, let folders, _, _, let asking) = try decode(#"{"type":"walked","ms":5,"folders":7,"files":3,"bytes":10,"asking":4}"#) else {
+        guard case .walked(_, let folders, _, _, let asking, _) = try decode(#"{"type":"walked","ms":5,"folders":7,"files":3,"bytes":10,"asking":4}"#) else {
             return XCTFail("not a walk's end")
         }
         XCTAssertEqual(folders, 7)
@@ -35,6 +35,31 @@ final class LiveIndexTests: XCTestCase {
         XCTAssertThrowsError(try decode(#"{"type":"surprise"}"#))
         guard case .relisted(let relisted) = try decode(#"{"type":"relisted","request":12}"#) else { return XCTFail("not a relist's end") }
         XCTAssertEqual(relisted, 12)
+    }
+
+    /// A walk or a check of every folder began when the scanner says, by the wall clock (`startedAt`): it measures how
+    /// long one ran (`ms`) by a clock that stops while the Mac sleeps. A check that began before Pith lost Full Disk
+    /// Access, which the Mac slept through for an hour, says it ran ten minutes, so a start worked out from its end falls
+    /// after the loss, as if it had listed every folder since, and would lift the hold on folders it listed while Pith
+    /// still had access.
+    func testAWalkOrCheckBeganWhenTheScannerSaysHoweverLongTheMacSlept() throws {
+        let decode = { (line: String) in try LiveDecoder.decode(Data(line.utf8)) }
+        let began = Date(timeIntervalSince1970: 1_800_000_000.25)
+        let check = try decode(#"{"type":"checked","folders":100,"corrected":0,"bytes":0,"ms":600000,"startedAt":1800000000.25}"#)
+        XCTAssertEqual(check.listedEveryFolderSince, began)
+        let walk = try decode(#"{"type":"walked","ms":5,"startedAt":1800000100.5,"folders":7,"files":3,"bytes":10,"asking":0}"#)
+        XCTAssertEqual(walk.listedEveryFolderSince, Date(timeIntervalSince1970: 1_800_000_100.5))
+        XCTAssertNil(try decode(#"{"type":"checked","folders":1,"corrected":0,"bytes":0,"ms":0,"startedAt":null}"#).listedEveryFolderSince,
+                     "a check whose start the scanner doesn't know")
+        XCTAssertNil(try decode(#"{"type":"historyDone"}"#).listedEveryFolderSince)
+        // Pith lost Full Disk Access half an hour in, and the check ended an hour and seven minutes after it began.
+        var access = DiskAccessWatch(granted: true, lostAt: nil)
+        access.probed(.denied, at: began.addingTimeInterval(1_800))
+        let ended = began.addingTimeInterval(4_000)
+        XCTAssertGreaterThan(ended.addingTimeInterval(-600), try XCTUnwrap(access.lostAt), "worked out from its end, it began after the loss")
+        let since = try XCTUnwrap(check.listedEveryFolderSince)
+        access.listedEveryFolder(since: since)
+        XCTAssertTrue(access.countsAsAsking(listedSince: since), "it listed folders while Pith still had access, so the hold stays")
     }
 
     /// The real scanner says when the relist Check Again asks for has landed, the folder and everything in it listed

@@ -10,7 +10,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use storage_scanner::index::{Index, Status, ROOT};
 use storage_scanner::listing::list;
@@ -661,6 +661,29 @@ fn serve_checks_every_folder_when_fsevents_loses_track_of_the_map() {
     assert!(checked["folders"].as_u64() >= walked["folders"].as_u64(), "checked {checked}, walked {walked}");
     assert_eq!(checked["corrected"], 0);
     serve.close();
+}
+
+/// Review finding: Pith worked a walk's or a check's start out from how long the scanner said it ran, which `Instant`
+/// measures, and `Instant` stops while the Mac sleeps, so a check the Mac slept through seemed to begin as much later
+/// than it did as the sleep was long. Each says when it began by the wall clock, in seconds since 1970.
+#[test]
+fn a_walk_and_a_check_say_when_they_began_by_the_wall_clock() {
+    let root = fixture("a_walk_and_a_check_say_when_they_began_by_the_wall_clock");
+    seeded(&root);
+    let now = || SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64();
+    let mut serve = Serve::start();
+    serve.send(serde_json::json!({ "cmd": "open", "root": root, "snapshot": null, "volume": "V" }));
+    serve.until("opened");
+    for (command, report) in [(serde_json::json!({ "cmd": "walk", "since": 100 }), "walked"), (serde_json::json!({ "cmd": "check" }), "checked")] {
+        let before = now();
+        serve.send(command);
+        let line = serve.until(report);
+        let after = now();
+        let began = line["startedAt"].as_f64().unwrap_or_else(|| panic!("no start: {line}"));
+        assert!(before <= began && began <= after, "{report} began at {began}, outside {before} to {after}");
+    }
+    serve.close();
+    remove(&root);
 }
 
 /// `serve` over its pipes: walk, report, apply events, answer for the map, save and reopen.

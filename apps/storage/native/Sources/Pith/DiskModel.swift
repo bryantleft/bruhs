@@ -63,6 +63,9 @@ enum MapCommand: Equatable {
     @ObservationIgnored private var settingLive = false
     /// When a scan made the map; nil while the map is the live one, which says when it was last brought up to date.
     var scannedAt: Date?
+    /// When that scan began, by Pith's clock as it started the scanner: a start worked out from how long the scanner
+    /// says it ran falls as much later as the Mac slept meanwhile, since the scanner's clock stops while the Mac sleeps.
+    private var scanBegan: Date?
     /// True once a scanned map has changed since its scan: an item moved to the Trash, or a folder scanned again.
     private(set) var edited = false
     /// The items selected on the map, in the order they were picked, none inside another (`DiskSelection`). Pith keeps
@@ -355,7 +358,7 @@ enum MapCommand: Equatable {
         changes = DiskChanges()
         generation = UUID()
         isScanning = false; rescanning = nil; progress = nil
-        problem = nil; note = nil; scannedAt = nil; edited = false; trashed = nil
+        problem = nil; note = nil; scannedAt = nil; scanBegan = nil; edited = false; trashed = nil
         if result?.root.path != path {
             select([])
             result = nil
@@ -627,7 +630,7 @@ enum MapCommand: Equatable {
         let shown = scope
         scope = root.path
         // Watching from before the scan begins catches what changes while it runs.
-        let since = DiskWatcher.currentEventID
+        let since = DiskWatcher.currentEventID, began = Date()
         operation = Task {
             defer { if generation == id { isScanning = false } }
             await runner.cancel()
@@ -644,7 +647,7 @@ enum MapCommand: Equatable {
                 // The page opens a map of another folder at its root; a new scan of the same one stays where it was.
                 if result?.root.path != value.root.path { mapStartsOver() }
                 volumeUse = figures
-                result = value; scannedAt = Date(); edited = false; trashed = nil
+                result = value; scannedAt = Date(); scanBegan = began; edited = false; trashed = nil
                 compareWithLastScan(value)
                 // The person asked for this scan: a folder they chose or opened, Refresh, or Scan Again, or the tree it
                 // stands in for.
@@ -936,10 +939,11 @@ enum MapCommand: Equatable {
         return live.asking > 0
     }
 
-    /// When the map's folders began to be listed: the live map's last walk or check of every folder, or the scan's start.
+    /// When the map's folders began to be listed, by the wall clock: the live map's last walk or check of every folder,
+    /// or the scan's start.
     private var mapListedSince: Date? {
         if let live, liveView != nil { return live.listedEveryFolderSince }
-        return scannedAt.map { $0.addingTimeInterval(-Double(result?.summary.elapsedMs ?? 0) / 1000) }
+        return scanBegan
     }
 
     /// Whether Pith still has Full Disk Access, as the probe last found, kept across launches in Pith's settings.
