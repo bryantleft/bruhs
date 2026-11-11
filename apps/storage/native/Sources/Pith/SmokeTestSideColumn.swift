@@ -18,7 +18,8 @@ extension AppDelegate {
     /// - Grew since leads each row with the item's name and the folder it's in on a second line, as Largest files does, the
     ///   growth where Largest files has the size, and VoiceOver hears the three; an item right in the open folder has no
     ///   folder line.
-    func checkSideColumn(_ fixture: String) async -> [String: Bool] {
+    /// A picture of the window, the column scrolled to Largest files, is saved at `picture`.
+    func checkSideColumn(_ fixture: String, picture: URL) async -> [String: Bool] {
         let names = ["side_column_scrolls_as_one", "side_column_says_each_fact_once", "grew_since_rows_lead_with_the_name"]
         let files = FileManager.default, mark = UUID().uuidString.prefix(8).lowercased()
         let tall = (fixture as NSString).appendingPathComponent("pith-smoke-tall-\(mark)")
@@ -55,6 +56,13 @@ extension AppDelegate {
         let scrolls = column.map { column in flags.allSatisfy { column[$0] as? Bool == true } && column["scrollers"] as? Int == 0 } ?? false
         print("side column: \(column?["rows"] as? Int ?? 0) rows in Largest files; "
               + flags.map { "\($0) \(column?[$0] as? Bool == true)" }.joined(separator: ", ") + ", \(column?["scrollers"] as? Int ?? -1) lists scrolling on their own")
+        _ = try? await web.callAsyncJavaScript(Self.scrollColumn, arguments: ["toLargest": true], in: nil, contentWorld: .page)
+        try? await Task.sleep(for: .milliseconds(200))
+        if let view = web.window?.contentView, let image = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+            view.cacheDisplay(in: view.bounds, to: image)
+            try? image.representation(using: .png, properties: [:])?.write(to: picture)
+        }
+        _ = try? await web.callAsyncJavaScript(Self.scrollColumn, arguments: ["toLargest": false], in: nil, contentWorld: .page)
 
         let copy = await pageAnswer(web, Self.sideColumnCopy) { (copy: [String: Any]?) in keepGrowth(); return copy != nil }
         let note = ["macOS doesn’t say which folders they wrote to."]
@@ -135,6 +143,13 @@ extension AppDelegate {
           return { lines: [...text.children].map((line) => line.textContent), figure: figure.textContent, label: button.getAttribute("aria-label") };
         });
         return { kinds: sentences("kinds-heading"), writers: sentences("writers-heading"), grew };
+        """
+
+    /// Scrolls the column beside the map to Largest files, or back to its top.
+    private static let scrollColumn = """
+        const largest = document.querySelector('[aria-label="Largest files"]');
+        if (toLargest) largest?.scrollIntoView({ block: "start" });
+        else largest?.closest("div.overflow-y-auto")?.scrollTo({ top: 0 });
         """
 
     /// Whether Grew since and Wrote the most since show.
