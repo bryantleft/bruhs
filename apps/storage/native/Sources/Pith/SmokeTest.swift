@@ -156,6 +156,7 @@ extension AppDelegate {
             // Before anything clicks the map, which would learn the hints.
             let hints = await learnHints(fixture)
             checks.merge(await checkSideLists(fixture), uniquingKeysWith: { _, new in new })
+            checks.merge(await checkSideColumn(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(await checkPlaces(fixture, report: report, panes: panes), uniquingKeysWith: { _, new in new })
             checks.merge(await checkNotMeasured(fixture, report: report), uniquingKeysWith: { _, new in new })
             checks.merge(await checkRefreshedVolume(fixture), uniquingKeysWith: { _, new in new })
