@@ -515,176 +515,178 @@ function DiskMap() {
             }
           />
         </section>
-        <div className="flex min-h-0 flex-col gap-5">
-          {shownPlaces.length > 0 && (
-            <Places
-              places={shownPlaces}
-              icons={icons}
-              onOpen={openPlace}
-              onNeedsAccess={askForAccess}
-            />
-          )}
-          {kindBytes && (
-            <KindLegend
-              bytes={kindBytes}
-              glyphs={glyphs}
-              active={shownKind}
-              onToggle={(kind) =>
-                setHighlight(kind === shownKind ? null : kind)
-              }
-            />
-          )}
-          {grew.length > 0 && growth && (
-            <section
-              aria-labelledby="grew-heading"
-              className="flex shrink-0 flex-col gap-1.5"
-            >
-              <h2
-                id="grew-heading"
-                className="text-eyebrow text-(--role-text-tertiary)"
-              >
-                Grew since {growth.since}
-              </h2>
-              <ul className="-mx-2 space-y-px">
-                {grew.map((row) => (
-                  <li key={row.path}>
-                    <PathRow
-                      name={splitName(row.name)}
-                      folder={
-                        row.folder === null ? null : splitFolder(row.folder)
-                      }
-                      figure={row.figure}
-                      label={row.label}
-                      title={row.path}
-                      selected={selected.includes(row.path)}
-                      lead={
-                        icons && (
-                          <span
-                            aria-hidden="true"
-                            className="mt-px flex size-4 shrink-0 items-center justify-center"
-                          >
-                            <MapIcon
-                              url={icons.item(
-                                itemAt(current, row.path, result.topFiles),
-                              )}
-                            />
-                          </span>
-                        )
-                      }
-                      onClick={(event) =>
-                        event.metaKey
-                          ? toggleClicked(row.path)
-                          : select(row.path)
-                      }
-                      onHover={(on) => setHovered(on ? row.path : null)}
-                    />
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          {grew.length > 0 && growth && growth.writers.length > 0 && (
-            <section
-              aria-labelledby="writers-heading"
-              className="flex shrink-0 flex-col gap-1.5"
-            >
-              <h2
-                id="writers-heading"
-                className="text-eyebrow text-(--role-text-tertiary)"
-              >
-                Wrote the most since {growth.writersSince ?? growth.since}
-              </h2>
-              <ul className="space-y-px">
-                {growth.writers.map((writer, index) => (
-                  <li
-                    key={writer.name}
-                    className="flex items-baseline gap-2 py-1"
-                  >
-                    {showsWriterIcons && (
-                      <MapIcon
-                        url={writerIcons[index]}
-                        className="self-center"
-                      />
-                    )}
-                    <span className="text-body-sm min-w-0 flex-1 truncate text-(--role-text)">
-                      {writer.name}
-                    </span>
-                    <span className="text-code-sm shrink-0 text-(--role-text-secondary) tabular-nums">
-                      {formatBytes(writer.bytes)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <p className="text-body-sm text-(--role-text-tertiary)">
-                macOS doesn’t say which folders they wrote to.
-              </p>
-            </section>
-          )}
-          {unreadable.length > 0 && (
-            <section
-              aria-labelledby="unreadable-heading"
-              className="flex shrink-0 flex-col gap-1.5"
-            >
-              <h2
-                id="unreadable-heading"
-                className="text-eyebrow text-(--role-text-tertiary)"
-              >
-                Couldn’t read
-              </h2>
-              <ul className="space-y-0.5">
-                {unreadable.slice(0, UNREADABLE_SHOWN).map((folder) => (
-                  <li
-                    key={folder.path}
-                    title={folder.path}
-                    className="text-code-sm flex items-center gap-2 text-(--role-text-secondary)"
-                  >
-                    {/* The app the folder belongs to, when Pith can tell; else its place's icon or a plain folder. */}
-                    {icons && (
-                      <MapIcon url={icons.unreadable(folder, owners)} />
-                    )}
-                    <span className="min-w-0 truncate">{folder.name}</span>
-                  </li>
-                ))}
-              </ul>
-              {unreadable.length > UNREADABLE_SHOWN && (
-                <p className="text-label-sm text-(--role-text-tertiary)">
-                  And {unreadable.length - UNREADABLE_SHOWN} more. Pith’s notice
-                  above lists them all.
-                </p>
-              )}
-            </section>
-          )}
-          <aside
-            aria-label="Largest files"
-            className="flex min-h-0 flex-1 flex-col"
-          >
-            {files.length > 0 ? (
-              <LargestFiles
-                files={files}
-                base={current.path}
-                selectedPaths={selected}
-                hoveredPath={hovered}
-                onHoverPath={setHovered}
-                onSelect={selectFile}
-                onToggle={toggleFile}
-                onMenu={(file) => showMenu(file.path)}
-                icon={
-                  icons
-                    ? (file, swatch) => (
-                        <MapIcon
-                          url={icons.item({ kind: "file", path: file.path })}
-                          fallback={swatch}
-                        />
-                      )
-                    : undefined
+        {/* One scroll area, the theme's scroll bars, in which every section takes its natural height, Largest files
+            included, so each row of each is reachable by scrolling, by keyboard, as focus scrolls a row into view,
+            and by VoiceOver. It reaches the rows' hover edges, which stand out half a rem either side. */}
+        <div className="-mx-2 min-h-0 scroll-py-1 overflow-y-auto px-2">
+          <div className="flex flex-col gap-5">
+            {shownPlaces.length > 0 && (
+              <Places
+                places={shownPlaces}
+                icons={icons}
+                onOpen={openPlace}
+                onNeedsAccess={askForAccess}
+              />
+            )}
+            {kindBytes && (
+              <KindLegend
+                bytes={kindBytes}
+                glyphs={glyphs}
+                active={shownKind}
+                onToggle={(kind) =>
+                  setHighlight(kind === shownKind ? null : kind)
                 }
               />
-            ) : (
-              <p className="text-body-sm text-pretty text-(--role-text-secondary)">
-                No file here is big enough to list on its own.
-              </p>
             )}
-          </aside>
+            {grew.length > 0 && growth && (
+              <section
+                aria-labelledby="grew-heading"
+                className="flex shrink-0 flex-col gap-1.5"
+              >
+                <h2
+                  id="grew-heading"
+                  className="text-eyebrow text-(--role-text-tertiary)"
+                >
+                  Grew since {growth.since}
+                </h2>
+                <ul className="-mx-2 space-y-px">
+                  {grew.map((row) => (
+                    <li key={row.path}>
+                      <PathRow
+                        name={splitName(row.name)}
+                        folder={
+                          row.folder === null ? null : splitFolder(row.folder)
+                        }
+                        figure={row.figure}
+                        label={row.label}
+                        title={row.path}
+                        selected={selected.includes(row.path)}
+                        lead={
+                          icons && (
+                            <span
+                              aria-hidden="true"
+                              className="mt-px flex size-4 shrink-0 items-center justify-center"
+                            >
+                              <MapIcon
+                                url={icons.item(
+                                  itemAt(current, row.path, result.topFiles),
+                                )}
+                              />
+                            </span>
+                          )
+                        }
+                        onClick={(event) =>
+                          event.metaKey
+                            ? toggleClicked(row.path)
+                            : select(row.path)
+                        }
+                        onHover={(on) => setHovered(on ? row.path : null)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {grew.length > 0 && growth && growth.writers.length > 0 && (
+              <section
+                aria-labelledby="writers-heading"
+                className="flex shrink-0 flex-col gap-1.5"
+              >
+                <h2
+                  id="writers-heading"
+                  className="text-eyebrow text-(--role-text-tertiary)"
+                >
+                  Wrote the most since {growth.writersSince ?? growth.since}
+                </h2>
+                <ul className="space-y-px">
+                  {growth.writers.map((writer, index) => (
+                    <li
+                      key={writer.name}
+                      className="flex items-baseline gap-2 py-1"
+                    >
+                      {showsWriterIcons && (
+                        <MapIcon
+                          url={writerIcons[index]}
+                          className="self-center"
+                        />
+                      )}
+                      <span className="text-body-sm min-w-0 flex-1 truncate text-(--role-text)">
+                        {writer.name}
+                      </span>
+                      <span className="text-code-sm shrink-0 text-(--role-text-secondary) tabular-nums">
+                        {formatBytes(writer.bytes)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-body-sm text-(--role-text-tertiary)">
+                  macOS doesn’t say which folders they wrote to.
+                </p>
+              </section>
+            )}
+            {unreadable.length > 0 && (
+              <section
+                aria-labelledby="unreadable-heading"
+                className="flex shrink-0 flex-col gap-1.5"
+              >
+                <h2
+                  id="unreadable-heading"
+                  className="text-eyebrow text-(--role-text-tertiary)"
+                >
+                  Couldn’t read
+                </h2>
+                <ul className="space-y-0.5">
+                  {unreadable.slice(0, UNREADABLE_SHOWN).map((folder) => (
+                    <li
+                      key={folder.path}
+                      title={folder.path}
+                      className="text-code-sm flex items-center gap-2 text-(--role-text-secondary)"
+                    >
+                      {/* The app the folder belongs to, when Pith can tell; else its place's icon or a plain folder. */}
+                      {icons && (
+                        <MapIcon url={icons.unreadable(folder, owners)} />
+                      )}
+                      <span className="min-w-0 truncate">{folder.name}</span>
+                    </li>
+                  ))}
+                </ul>
+                {unreadable.length > UNREADABLE_SHOWN && (
+                  <p className="text-label-sm text-(--role-text-tertiary)">
+                    And {unreadable.length - UNREADABLE_SHOWN} more. Pith’s
+                    notice above lists them all.
+                  </p>
+                )}
+              </section>
+            )}
+            <aside aria-label="Largest files">
+              {files.length > 0 ? (
+                <LargestFiles
+                  files={files}
+                  base={current.path}
+                  selectedPaths={selected}
+                  hoveredPath={hovered}
+                  onHoverPath={setHovered}
+                  onSelect={selectFile}
+                  onToggle={toggleFile}
+                  onMenu={(file) => showMenu(file.path)}
+                  icon={
+                    icons
+                      ? (file, swatch) => (
+                          <MapIcon
+                            url={icons.item({ kind: "file", path: file.path })}
+                            fallback={swatch}
+                          />
+                        )
+                      : undefined
+                  }
+                />
+              ) : (
+                <p className="text-body-sm text-pretty text-(--role-text-secondary)">
+                  No file here is big enough to list on its own.
+                </p>
+              )}
+            </aside>
+          </div>
         </div>
       </div>
     </main>
