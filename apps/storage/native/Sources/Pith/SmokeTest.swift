@@ -301,7 +301,8 @@ extension AppDelegate {
         let size = IconSize(points: 16, scale: window.backingScaleFactor)
         let chosen = window.appearance
         defer { window.appearance = chosen }
-        var shown: [IconAppearance] = [], seen: [String] = []
+        let macOS = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+        var verdicts: [IconAppearance: AppearanceShown] = [:], seen: [String] = []
         for appearance in IconAppearance.allCases {
             window.appearance = NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
             guard let own = await Icons.store.icon(for: IconRequest(key, size: size, appearance: appearance)),
@@ -310,15 +311,20 @@ extension AppDelegate {
             var found: [Double] = []
             // Out of 255 a channel: the window's pixels and the store's drawing go through the same colour conversion, so
             // the drawing shown differs from them by rounding alone.
-            let showsIt = await eventually {
+            let matches = await eventually {
                 found = Self.cornerShows([own.image, other.image], in: window) ?? []
                 return found.count == 2 && found[0] < 4 && (alike || found[0] + 0.5 < found[1])
             }
+            verdicts[appearance] = AppearanceShown.judge(matches: matches, alike: alike, macOSMajor: macOS)
             seen.append("\(appearance.rawValue) \(found.map { String(format: "%.1f", $0) })\(alike ? ", its drawings alike" : "")")
-            if showsIt { shown.append(appearance) }
         }
-        print("selection icon \(key.string): the bar shows the drawing for \(shown.map(\.rawValue)); differences from it and the other appearance's \(seen)")
-        return shown == IconAppearance.allCases
+        print("selection icon \(key.string): \(IconAppearance.allCases.map { "\($0.rawValue) \(verdicts[$0].map { "\($0)" } ?? "not drawn")" }); "
+              + "differences from the drawing of each appearance and the other's \(seen)")
+        if verdicts.values.contains(.notProvenHere) {
+            print("selection icon: appearance not proven here: macOS \(macOS) draws the folder alike in light and dark, so the bar showing its "
+                  + "drawing can't tell which appearance it follows")
+        }
+        return IconAppearance.allCases.allSatisfy { verdicts[$0] == .shown || verdicts[$0] == .notProvenHere }
     }
 
     /// The side lists and the hover card lead with macOS's icons, which the page loads from Pith's route at its own

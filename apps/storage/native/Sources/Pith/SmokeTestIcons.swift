@@ -1,7 +1,9 @@
 import AppKit
 import PithCore
 
-/// The smoke test's check that the icons Pith shows by type are macOS's own art, never the generic document.
+/// The smoke test's checks of the icons Pith shows: known places and the types most files are draw as macOS's own art,
+/// never the generic document, and the bar under the map shows the store's drawing for the window's appearance, as
+/// the window's own pixels have it (`cornerShows`).
 extension AppDelegate {
     /// Every known place this Mac has, and the types macOS declares itself that most files on a disk are, draw as more
     /// than the generic document: macOS draws a type it has no icon for, or a special folder's type it doesn't declare,

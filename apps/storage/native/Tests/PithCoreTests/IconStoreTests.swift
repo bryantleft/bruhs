@@ -482,6 +482,23 @@ final class SystemIconTests: XCTestCase {
                                                   "type/pith-nothing-claims-this in dark", "place/nowhere in dark, drawing nothing"])
     }
 
+    /// The comparison needs the generic document itself: where it draws nothing there's nothing to compare with, which
+    /// is named as a failure, in each appearance, rather than passing every key.
+    func testTheGenericDocumentDrawingNothingIsNamed() async {
+        final class NoGenericDocument: IconRenderer, @unchecked Sendable {
+            func render(_ request: IconRequest) -> CGImage? {
+                guard request.key != .type(""), let space = CGColorSpace(name: CGColorSpace.sRGB),
+                      let context = CGContext(data: nil, width: request.size.pixels, height: request.size.pixels, bitsPerComponent: 8, bytesPerRow: 0,
+                                              space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+                context.setFillColor(CGColor(srgbRed: 1, green: 0.5, blue: 0, alpha: 1))
+                context.fill(CGRect(x: 0, y: 0, width: request.size.pixels, height: request.size.pixels))
+                return context.makeImage()
+            }
+        }
+        let found = await IconStore(renderer: NoGenericDocument()).genericDrawings(of: [.type("pdf"), .place("trash")], size: size)
+        XCTAssertEqual(found.map(\.description), ["the generic document in light, drawing nothing", "the generic document in dark, drawing nothing"])
+    }
+
     /// Each of the Trash's keys draws one state of macOS's Trash, the same art every time, so the store can keep it by its
     /// key: a full Trash never draws as an empty one, nor the other way round.
     func testEachOfTheTrashsKeysDrawsItsOwnState() async throws {
