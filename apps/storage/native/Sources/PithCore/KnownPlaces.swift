@@ -50,7 +50,7 @@ public struct KnownPlaces: Sendable {
     public let emptyTrash: Place?
     /// The locations macOS guards: the protected places, then other apps' containers and the cloud storage folders. A
     /// Photos library is guarded wherever it is, which `isProtected` knows by its extension.
-    public let guarded: [String]
+    public private(set) var guarded: [String]
     /// The home folder the places are in.
     public let home: String
     /// Other apps' containers, `~/Library/Containers`, each named by its app's bundle ID.
@@ -183,6 +183,17 @@ public struct KnownPlaces: Sendable {
     /// library, or it's inside one.
     public func isProtected(_ path: String) -> Bool { Self.isProtected(path, guarded: guarded) }
 
+    /// These places with `folder` among the locations macOS guards too, as a map a scan made of another disk counts while
+    /// losing Full Disk Access holds it (`DiskAccessWatch.holdsScan(of:listedSince:onStartupDisk:)`).
+    public func holding(_ folder: String) -> KnownPlaces {
+        var held = self
+        held.guarded.append(folder)
+        return held
+    }
+
+    /// Whether `path` lies on the startup disk, by the file systems mounted now (`MountTable.isOnStartupDisk`).
+    public func isOnStartupDisk(_ path: String) -> Bool { mounts().isOnStartupDisk(path) }
+
     private static func isProtected(_ path: String, guarded: [String]) -> Bool {
         let inside = { (folder: String) in path == folder || path.hasPrefix(folder + "/") }
         return guarded.contains(where: inside) || path.split(separator: "/").contains { $0.hasSuffix(".photoslibrary") }
@@ -239,7 +250,8 @@ public struct KnownPlaces: Sendable {
     /// it opened Desktop, Documents, Downloads, other apps' data and removable and network volumes without an answer for
     /// each, so once it's off they have none, and macOS asks at the next access, which a lookup by path could be. Pith
     /// probes for that loss as it becomes active and with each live map, and from then the locations macOS guards count
-    /// as asking (`asking`, `DiskAccessWatch`) until the scanner has listed them again. A reset of Pith's permissions
+    /// as asking (`asking`, `DiskAccessWatch`), a map a scan made of another disk among them (`holding`), until the
+    /// scanner has listed them again. A reset of Pith's permissions
     /// leaves the locations unanswered too; Pith can't tell one from the person's own answers, but the question a lookup
     /// could bring is the one the scanner's next listing there brings, and from the moment macOS is asking it, the rule
     /// looks nothing up there.

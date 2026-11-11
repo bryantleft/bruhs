@@ -166,6 +166,19 @@ final class IconPolicyTests: XCTestCase {
         XCTAssertTrue(try loads(.item("/Applications/Safari.app"), policy))
     }
 
+    /// A scan of another disk counts among the locations macOS guards while losing Full Disk Access holds it
+    /// (`DiskAccessWatch.holdsScan`), so the route serves none of its folders by their paths then, as the page's rule asks
+    /// for none.
+    func testAHeldDisksFoldersLoadNoIcon() throws {
+        let photos = folder("/Volumes/Archive/Photos")
+        let policy = IconPolicy(places: places, map: folder("/Volumes/Archive", [photos]))
+        XCTAssertTrue(try loads(.item(photos.path), policy, asking: true), "unheld, it isn't where macOS guards")
+        let held = { (key: IconKey) in try XCTUnwrap(URL(string: self.url(key.string))) }
+        XCTAssertNil(policy.request(for: try held(.item(photos.path)), asking: true, holding: "/Volumes/Archive"))
+        XCTAssertNil(policy.request(for: try held(.item("/Volumes/Archive")), asking: true, holding: "/Volumes/Archive"))
+        XCTAssertNotNil(policy.request(for: try held(.folder), asking: true, holding: "/Volumes/Archive"))
+    }
+
     /// What the policy found in a map lasts until the map changes, and the disks and apps it allows are the ones set
     /// last, so nothing an earlier map, disk or app allowed lets a path through after a change.
     func testAChangeDropsWhatTheLastMapDisksAndAppsAllowed() throws {

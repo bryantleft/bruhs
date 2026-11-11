@@ -668,14 +668,17 @@ public final class IconPolicy {
     /// The icon `url` asks for, or nil when Pith refuses it, as it does anything that isn't an icon's URL in its one
     /// spelling at a size the store draws. The key is read from the URL's path as it arrives, still escaped: decoding
     /// it first would turn an item path's escaped slashes into the URL's own. `asking` is whether macOS may be holding
-    /// some of the map's folders, as `KnownPlaces.iconKey(for:asking:)` takes it, which can change between requests.
-    public func request(for url: URL, asking: Bool) -> IconRequest? {
+    /// some of the map's folders, as `KnownPlaces.iconKey(for:asking:)` takes it, and `holding` a map a scan made of
+    /// another disk that counts among the locations macOS guards meanwhile (`KnownPlaces.holding`), as losing Full Disk
+    /// Access holds it, which can both change between requests.
+    public func request(for url: URL, asking: Bool, holding: String? = nil) -> IconRequest? {
         guard url.scheme == "pith", url.host == "app", url.user == nil, url.password == nil, url.port == nil, url.query == nil, url.fragment == nil,
               let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath,
               path.hasPrefix("/icon/"), path.hasSuffix(".png") else { return nil }
         let parts = path.dropFirst("/icon/".count).dropLast(".png".count).split(separator: "/", maxSplits: 3, omittingEmptySubsequences: false)
         guard parts.count == 4, Self.number(parts[0]) != nil, let appearance = IconAppearance(rawValue: String(parts[1])),
-              let size = Self.size(parts[2]), let key = IconKey(string: String(parts[3])), allows(key, asking: asking) else { return nil }
+              let size = Self.size(parts[2]), let key = IconKey(string: String(parts[3])),
+              allows(key, asking: asking, by: holding.map(places.holding) ?? places) else { return nil }
         return IconRequest(key, size: size, appearance: appearance)
     }
 
@@ -684,13 +687,14 @@ public final class IconPolicy {
     /// or volume the map shows with that very key by Pith's icon rule, a disk the disk menu lists, or an app on the
     /// page that Pith may look up, on the startup disk outside the locations macOS guards. A folder the map couldn't
     /// read, one macOS may be holding, a known place or a path the map doesn't show never gets looked up by its path.
-    private func allows(_ key: IconKey, asking: Bool) -> Bool {
+    /// The rule goes by `rule`, the known places with any map held among the locations macOS guards.
+    private func allows(_ key: IconKey, asking: Bool, by rule: KnownPlaces) -> Bool {
         switch key {
         case .type, .folder, .group: return true
-        case .place(let id): return places.place(id: id) != nil
+        case .place(let id): return rule.place(id: id) != nil
         case .item(let path):
-            if volumes.contains(path) || (apps.contains(path) && places.mayShowApp(path)) { return true }
-            return item(at: path).map { places.iconKey(for: $0, asking: asking) == key } ?? false
+            if volumes.contains(path) || (apps.contains(path) && rule.mayShowApp(path)) { return true }
+            return item(at: path).map { rule.iconKey(for: $0, asking: asking) == key } ?? false
         }
     }
 

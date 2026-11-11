@@ -513,7 +513,7 @@ enum MapCommand: Equatable {
     /// where the map can't read now, or macOS may be holding it, isn't looked at, and stays (`DiskSelection.mayLook`).
     private func dropGone(_ unshown: [String]) {
         let asking = macOSMayHoldFolders
-        let paths = unshown.filter { DiskSelection.mayLook(for: $0, in: result, asking: asking, isGuarded: Icons.places.isProtected) }
+        let paths = unshown.filter { DiskSelection.mayLook(for: $0, in: result, asking: asking, isGuarded: rulePlaces.isProtected) }
         guard !paths.isEmpty else { return }
         let picked = selection.paths
         Task {
@@ -878,7 +878,7 @@ enum MapCommand: Equatable {
     /// The icon for an item of the map, or one kept from an earlier map, by Pith's icon rule as the map shown has it now
     /// (`KnownPlaces.iconKey(for:in:asking:trashIsEmpty:)`).
     func iconKey(for item: DiskNode) -> IconKey {
-        Icons.places.iconKey(for: item, in: result, asking: macOSMayHoldFolders, trashIsEmpty: trashIsEmpty)
+        rulePlaces.iconKey(for: item, in: result, asking: macOSMayHoldFolders, trashIsEmpty: trashIsEmpty)
     }
 
     /// Whether the Trash holds nothing, by what the scanner says of it with the map shown (`KnownPlaces.trashHoldsNothing`):
@@ -895,12 +895,12 @@ enum MapCommand: Equatable {
 
     /// The icon the page asks for at `url` on Pith's icon route, or nil when it may not have it.
     func iconRequest(for url: URL) -> IconRequest? {
-        icons.request(for: url, asking: macOSMayHoldFolders)
+        icons.request(for: url, asking: macOSMayHoldFolders, holding: heldDisk)
     }
 
     /// Pith's icon rule as the map's page applies it, which goes to the page with the icons' base, so the page gives
     /// each item the key `iconKey(for:)` gives it.
-    var iconRule: IconRule { Icons.places.iconRule(asking: macOSMayHoldFolders, trashIsEmpty: trashIsEmpty) }
+    var iconRule: IconRule { rulePlaces.iconRule(asking: macOSMayHoldFolders, trashIsEmpty: trashIsEmpty) }
 
     /// The disk map's click hints the person has learned, kept in Pith's settings, which an automated run keeps in
     /// memory (`Setting`), so they stay learned in the next window and at the next launch.
@@ -931,9 +931,9 @@ enum MapCommand: Equatable {
     /// Whether macOS may be holding some of the live map's folders: it's asking about some, or the map is catching up
     /// after a launch, listing again what changed meanwhile and what was waiting on macOS when it was saved. Pith having
     /// lost Full Disk Access since the map's folders were listed counts too, as it leaves the locations macOS guards
-    /// unanswered (`DiskAccessWatch`).
+    /// unanswered (`DiskAccessWatch`), a scan of another disk among them (`heldDisk`).
     private var macOSMayHoldFolders: Bool {
-        if diskAccess.countsAsAsking(listedSince: mapListedSince) { return true }
+        if diskAccess.countsAsAsking(listedSince: mapListedSince) || heldDisk != nil { return true }
         guard let live, liveView != nil else { return false }
         if case .catchingUp = live.state { return true }
         return live.asking > 0
@@ -946,10 +946,27 @@ enum MapCommand: Equatable {
         return scanBegan
     }
 
+    /// The root of a map a scan made of another disk than the startup disk while losing Full Disk Access holds it, which
+    /// counts among the locations macOS guards throughout then (`DiskAccessWatch.holdsScan`).
+    private var heldDisk: String? {
+        guard liveView == nil, let root = result?.root.path,
+              diskAccess.holdsScan(of: root, listedSince: mapListedSince, onStartupDisk: Icons.places.isOnStartupDisk) else { return nil }
+        return root
+    }
+
+    /// The places Pith's icon rule goes by for the map shown: the known places, with a held disk among the locations
+    /// macOS guards (`heldDisk`).
+    private var rulePlaces: KnownPlaces { heldDisk.map(Icons.places.holding) ?? Icons.places }
+
     /// Whether Pith still has Full Disk Access, as the probe last found, kept across launches in Pith's settings.
-    private(set) var diskAccess = DiskAccessWatch(granted: UserDefaults.standard.bool(forKey: Setting.hadFullDiskAccess.rawValue),
-                                                  lostAt: UserDefaults.standard.double(forKey: Setting.fullDiskAccessLostAt.rawValue) > 0
-                                                      ? Date(timeIntervalSince1970: UserDefaults.standard.double(forKey: Setting.fullDiskAccessLostAt.rawValue)) : nil)
+    private(set) var diskAccess = DiskModel.keptDiskAccess()
+
+    /// What Pith kept of its watch on Full Disk Access when it last changed, in its settings (`probeDiskAccess`).
+    nonisolated private static func keptDiskAccess() -> DiskAccessWatch {
+        let settings = UserDefaults.standard, lostAt = settings.double(forKey: Setting.fullDiskAccessLostAt.rawValue)
+        return DiskAccessWatch(granted: settings.bool(forKey: Setting.hadFullDiskAccess.rawValue), lostAt: lostAt > 0 ? Date(timeIntervalSince1970: lostAt) : nil,
+                               relisted: settings.bool(forKey: Setting.listedSinceFullDiskAccessLost.rawValue))
+    }
 
     /// Looks whether Pith still has Full Disk Access, as Pith becomes active and with each live map: an open and a close
     /// of a file only it opens, 8 to 11 µs (`DiskAccessWatch.probe`), which never brings a question.
@@ -961,6 +978,7 @@ enum MapCommand: Equatable {
         diskAccess = watch
         UserDefaults.standard.set(watch.granted, for: .hadFullDiskAccess)
         UserDefaults.standard.set(watch.lostAt?.timeIntervalSince1970 ?? 0, for: .fullDiskAccessLostAt)
+        UserDefaults.standard.set(watch.relisted, for: .listedSinceFullDiskAccessLost)
     }
 
     /// What moving the items at `paths` to the Trash would do, or why they can't go (`TrashBatch.plan`), planned off the
