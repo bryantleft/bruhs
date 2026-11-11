@@ -776,16 +776,11 @@ struct DiskWebView: NSViewRepresentable {
                 let growth = model.growthSince.map { since in
                     var growth: [String: Any] = ["since": Self.day(since), "changes": model.growth]
                     // Who wrote while it grew: a correlation, which the page words as one. Each app comes with its bundle,
-                    // for its icon.
-                    switch model.writers?(since) {
-                    case .apps(let apps, let from)?:
+                    // for its icon. Without a week of history kept there are none, and the page shows no such section.
+                    if case .apps(let apps, let from)? = model.writers?(since) {
                         writers = apps
                         growth["writers"] = apps.map { ["name": $0.name, "bytes": $0.bytes, "bundle": $0.bundle as Any? ?? NSNull()] as [String: Any] }
                         growth["writersSince"] = Self.day(from)
-                    case .historyOff?:
-                        growth["writersHint"] = "Turn on Keep a week of history in Settings to see which apps wrote the most since then."
-                    case .empty?, nil:
-                        break
                     }
                     return growth
                 }

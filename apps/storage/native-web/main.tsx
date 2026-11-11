@@ -77,16 +77,14 @@ interface Growth {
   writers: readonly Writer[];
   /** When that history begins, if later than `since`. */
   writersSince?: string;
-  /** Why there are no writers to show, when that's worth saying. */
-  writersHint?: string;
 }
 
+/** What grew, as Pith sends it: with the writers only while Pith keeps a week of Activity's history to find them in. */
 interface GrowthMessage {
   since: string;
   changes: Record<string, number>;
   writers?: unknown;
   writersSince?: unknown;
-  writersHint?: unknown;
 }
 
 /** The writers Pith sent, each with a name and a byte count and maybe its app's bundle, or none, as many as the list shows. */
@@ -279,8 +277,6 @@ function DiskMap() {
           typeof value.writersSince === "string"
             ? value.writersSince
             : undefined,
-        writersHint:
-          typeof value.writersHint === "string" ? value.writersHint : undefined,
       });
     };
     post({ action: "ready" });
@@ -589,54 +585,43 @@ function DiskMap() {
               </ul>
             </section>
           )}
-          {grew.length > 0 &&
-            growth &&
-            (growth.writers.length > 0 || growth.writersHint) && (
-              <section
-                aria-labelledby="writers-heading"
-                className="flex shrink-0 flex-col gap-1.5"
+          {grew.length > 0 && growth && growth.writers.length > 0 && (
+            <section
+              aria-labelledby="writers-heading"
+              className="flex shrink-0 flex-col gap-1.5"
+            >
+              <h2
+                id="writers-heading"
+                className="text-eyebrow text-(--role-text-tertiary)"
               >
-                <h2
-                  id="writers-heading"
-                  className="text-eyebrow text-(--role-text-tertiary)"
-                >
-                  Wrote the most since {growth.writersSince ?? growth.since}
-                </h2>
-                {growth.writers.length > 0 ? (
-                  <>
-                    <ul className="space-y-px">
-                      {growth.writers.map((writer, index) => (
-                        <li
-                          key={writer.name}
-                          className="flex items-baseline gap-2 py-1"
-                        >
-                          {showsWriterIcons && (
-                            <MapIcon
-                              url={writerIcons[index]}
-                              className="self-center"
-                            />
-                          )}
-                          <span className="text-body-sm min-w-0 flex-1 truncate text-(--role-text)">
-                            {writer.name}
-                          </span>
-                          <span className="text-code-sm shrink-0 text-(--role-text-secondary) tabular-nums">
-                            {formatBytes(writer.bytes)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="text-body-sm text-(--role-text-tertiary)">
-                      Apps writing to disk while it grew. macOS doesn’t say
-                      which folders they wrote to.
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-body-sm text-(--role-text-tertiary)">
-                    {growth.writersHint}
-                  </p>
-                )}
-              </section>
-            )}
+                Wrote the most since {growth.writersSince ?? growth.since}
+              </h2>
+              <ul className="space-y-px">
+                {growth.writers.map((writer, index) => (
+                  <li
+                    key={writer.name}
+                    className="flex items-baseline gap-2 py-1"
+                  >
+                    {showsWriterIcons && (
+                      <MapIcon
+                        url={writerIcons[index]}
+                        className="self-center"
+                      />
+                    )}
+                    <span className="text-body-sm min-w-0 flex-1 truncate text-(--role-text)">
+                      {writer.name}
+                    </span>
+                    <span className="text-code-sm shrink-0 text-(--role-text-secondary) tabular-nums">
+                      {formatBytes(writer.bytes)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-body-sm text-(--role-text-tertiary)">
+                macOS doesn’t say which folders they wrote to.
+              </p>
+            </section>
+          )}
           {unreadable.length > 0 && (
             <section
               aria-labelledby="unreadable-heading"

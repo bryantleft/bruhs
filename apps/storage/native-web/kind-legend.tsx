@@ -44,6 +44,7 @@ function KindGlyph({ kind }: { kind: Category }) {
 /**
  * What each colour means and how much of the folder it holds. Each row also highlights
  * its kind on the map. Grouped small items come last: the scan doesn't know their kinds.
+ * What an outlined block is, a folder or a package, its hover card says.
  */
 export function KindLegend({ bytes, glyphs, active, onToggle }: Props) {
   const rows = KINDS.filter((kind) => bytes[kind] > 0).sort(
@@ -101,9 +102,6 @@ export function KindLegend({ bytes, glyphs, active, onToggle }: Props) {
           </li>
         ))}
       </ul>
-      <p className="text-label-sm text-pretty text-(--role-text-tertiary)">
-        Outlined blocks are folders, or packages such as apps.
-      </p>
     </section>
   );
 }

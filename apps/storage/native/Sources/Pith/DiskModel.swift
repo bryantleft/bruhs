@@ -21,9 +21,7 @@ struct DiskProblem: Equatable {
 /// which folder without administrator access, so this says who was writing then, not who grew a folder.
 enum DiskWriters: Equatable {
     case apps([DiskWriter], since: Date)
-    /// History isn't kept, so there's no record of who wrote.
-    case historyOff
-    /// History holds nothing for the stretch.
+    /// No record of who wrote: history holds nothing for the stretch, or isn't kept at all.
     case empty
 }
 
