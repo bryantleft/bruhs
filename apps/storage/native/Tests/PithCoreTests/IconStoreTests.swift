@@ -157,6 +157,22 @@ final class IconStoreTests: XCTestCase {
         XCTAssertEqual(renderer.recorded.first?.materializing, IOPOL_MATERIALIZE_DATALESS_FILES_OFF)
     }
 
+    /// A drawing turns its thread's materializing of dataless files off, so looking an icon up never downloads a file,
+    /// and puts back whatever the thread had once it's done, since the store's threads go on to run other work. Drawn
+    /// here on the test's own thread, from each setting a thread can have, the process's own setting untouched.
+    func testADrawingPutsItsThreadsDownloadPolicyBack() {
+        let materializing = { (scope: Int32) in getiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES, scope) }
+        let process = materializing(IOPOL_SCOPE_PROCESS), thread = materializing(IOPOL_SCOPE_THREAD)
+        defer { setiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES, IOPOL_SCOPE_THREAD, thread) }
+        for earlier in [IOPOL_MATERIALIZE_DATALESS_FILES_DEFAULT, IOPOL_MATERIALIZE_DATALESS_FILES_ON, IOPOL_MATERIALIZE_DATALESS_FILES_OFF] {
+            XCTAssertEqual(setiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES, IOPOL_SCOPE_THREAD, earlier), 0, "the thread set to \(earlier)")
+            let during = IconStore.withoutDownloads { materializing(IOPOL_SCOPE_THREAD) }
+            XCTAssertEqual(during, IOPOL_MATERIALIZE_DATALESS_FILES_OFF, "off while it draws, from \(earlier)")
+            XCTAssertEqual(materializing(IOPOL_SCOPE_THREAD), earlier, "back to \(earlier) after")
+        }
+        XCTAssertEqual(materializing(IOPOL_SCOPE_PROCESS), process, "the process's own setting")
+    }
+
     func testEachDrawingIsKeptByKeyAppearanceAndSize() {
         let renderer = RecordingRenderer()
         let store = IconStore(renderer: renderer)
