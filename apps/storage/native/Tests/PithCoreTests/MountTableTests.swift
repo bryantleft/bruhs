@@ -68,9 +68,12 @@ final class MountTableTests: XCTestCase {
 
     /// The reader marks each file system local as the kernel does, and asks DiskArbitration about each disk a file system
     /// is mounted from, by its BSD name, once while the table stays as it was, and again once it changes, as when one
-    /// disk is ejected and another mounted where it was. A file system mounted from no disk is never asked about.
+    /// disk is ejected and another mounted where it was. A disk image, which DiskArbitration describes with no word of
+    /// where it's attached, is described all the same, and asked about once too. A file system mounted from no disk is
+    /// never asked about.
     func testTheReaderAsksAboutEachDiskOnceWhileTheTableStays() {
-        let said: [String: Bool] = ["disk3s1s1": true, "disk3s5": true, "disk4s1": false]
+        let said: [String: MountTable.Described] = ["disk3s1s1": .init(isInternal: true), "disk3s5": .init(isInternal: true),
+                                                    "disk4s1": .init(isInternal: false), "disk12s1": .init(isInternal: nil)]
         let asked = Asked()
         let kernel = Kernel([.init(path: "/", from: "/dev/disk3s1s1"), .init(path: "/dev", from: "devfs"), .init(path: "/System/Volumes/Data", from: "/dev/disk3s5"),
                              .init(path: "/Volumes/share", from: "//me@nas.local/share", isLocal: false), .init(path: "/Volumes/Archive", from: "/dev/disk4s1"),
@@ -86,14 +89,34 @@ final class MountTableTests: XCTestCase {
         XCTAssertEqual(asked.disks.suffix(3), ["disk3s1s1", "disk3s5", "disk5s1"], "asked again once the table changed")
     }
 
+    /// A disk the kernel lists before diskarbitrationd has described it, as one just attached, has no answer from
+    /// DiskArbitration yet, so it's guarded for now and asked about again at the next read, not kept guarded until the
+    /// mount table changes. Once DiskArbitration describes it, its answer is kept. A disk image's description, with no
+    /// word of where it's attached, is an answer, kept as one.
+    func testADiskDiskArbitrationHasntDescribedYetIsAskedAboutAgain() {
+        let asked = Asked()
+        let answers = Answers(["disk3s1s1": .init(isInternal: true), "disk3s5": .init(isInternal: true), "disk12s1": .init(isInternal: nil)])
+        let kernel = Kernel([.init(path: "/", from: "/dev/disk3s1s1"), .init(path: "/System/Volumes/Data", from: "/dev/disk3s5"),
+                             .init(path: "/Volumes/Second", from: "/dev/disk7s1"), .init(path: "/Volumes/Installer", from: "/dev/disk12s1")])
+        let reader = MountTable.Reader(fsstat: { kernel.fsstat($0, $1, $2) }) { disk in asked.add(disk); return answers[disk] }
+        let first = reader.current()
+        XCTAssertTrue(first.guards("/Volumes/Second"), "no answer yet")
+        XCTAssertTrue(first.guards("/Volumes/Installer"), "a disk image")
+        answers["disk7s1"] = .init(isInternal: true)
+        XCTAssertFalse(reader.current().guards("/Volumes/Second"), "described as internal at the next read, with the table as it was")
+        XCTAssertFalse(reader.current().guards("/Volumes/Second"))
+        XCTAssertTrue(reader.current().guards("/Volumes/Installer"))
+        XCTAssertEqual(asked.disks, ["disk3s1s1", "disk3s5", "disk7s1", "disk12s1", "disk7s1"], "asked again only while it had no answer")
+    }
+
     /// DiskArbitration says this Mac's startup disk is internal, read from its description alone, and has no word of a
     /// disk that isn't there.
     func testDiskArbitrationSaysThisMacsStartupDiskIsInternal() throws {
         let startup = try XCTUnwrap(MountTable.current().mounts.first { $0.path == "/" })
         XCTAssertTrue(startup.from.hasPrefix("/dev/disk"), startup.from)
         XCTAssertEqual(startup.isInternal, true)
-        XCTAssertEqual(MountTable.diskArbitrationSaysInternal(String(startup.from.dropFirst("/dev/".count))), true)
-        XCTAssertNil(MountTable.diskArbitrationSaysInternal("disk999s9"))
+        XCTAssertEqual(MountTable.diskArbitrationDescribes(String(startup.from.dropFirst("/dev/".count))), .init(isInternal: true))
+        XCTAssertNil(MountTable.diskArbitrationDescribes("disk999s9"), "no description of a disk it doesn't know")
     }
 
     /// One disk ejected and another mounted where it was, between two looks, leave as many file systems mounted as
@@ -107,6 +130,19 @@ final class MountTableTests: XCTestCase {
         XCTAssertFalse(reader.current().isOnStartupDisk("/Volumes/Fast/Xcode.app"), "another disk, mounted where it was")
         kernel.mounts = startup
         XCTAssertEqual(reader.current(), MountTable(startup), "and ejected")
+    }
+
+    /// What DiskArbitration describes each disk as, which a test changes as diskarbitrationd describes one.
+    private final class Answers: @unchecked Sendable {
+        private let lock = NSLock()
+        private var answers: [String: MountTable.Described]
+
+        init(_ answers: [String: MountTable.Described]) { self.answers = answers }
+
+        subscript(disk: String) -> MountTable.Described? {
+            get { lock.lock(); defer { lock.unlock() }; return answers[disk] }
+            set { lock.lock(); answers[disk] = newValue; lock.unlock() }
+        }
     }
 
     /// The disks DiskArbitration was asked about, in order.

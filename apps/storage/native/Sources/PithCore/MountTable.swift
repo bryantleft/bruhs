@@ -16,9 +16,9 @@ public struct MountTable: Sendable, Equatable {
         public let from: String
         /// The kernel marks the file system local (`MNT_LOCAL`), as a network volume or an automount it isn't.
         public let isLocal: Bool
-        /// Whether DiskArbitration says the disk it's mounted from is internal (`MountTable.diskArbitrationSaysInternal`).
-        /// Nil where it doesn't say, as of a disk image, which it describes with no word of where it's attached, and for a
-        /// file system mounted from no disk.
+        /// Whether DiskArbitration says the disk it's mounted from is internal (`MountTable.diskArbitrationDescribes`).
+        /// Nil where it doesn't say, as of a disk image, which it describes with no word of where it's attached, or a disk
+        /// it hasn't described yet, and for a file system mounted from no disk.
         public let isInternal: Bool?
 
         public init(path: String, from: String, isLocal: Bool = true, isInternal: Bool? = nil) {
@@ -35,21 +35,29 @@ public struct MountTable: Sendable, Equatable {
     /// another mounted between two calls, and an app on the new disk counted as on the startup disk.
     public static func current() -> MountTable { kernel.current() }
 
+    /// What DiskArbitration's description of a disk says of where it's attached: whether it's internal, or nil where the
+    /// description has no word of it, as a disk image's hasn't.
+    struct Described: Sendable, Equatable {
+        let isInternal: Bool?
+    }
+
     /// Reads the kernel's table through `fsstat`, which is `getfsstat` but in a test, every time it's asked, and asks
-    /// `isInternal`, which is DiskArbitration but in a test, whether each disk a file system is mounted from is internal,
-    /// by its BSD name: once for each disk while the table reads as it did, and again for all of them once it doesn't,
-    /// as when one disk is ejected and another mounted. 56 µs a disk, median of 11 on the development Mac (VERIFICATION.md).
+    /// `describe`, which is DiskArbitration but in a test, for each disk a file system is mounted from, by its BSD name:
+    /// once for each disk while the table reads as it did, and again for all of them once it doesn't, as when one disk is
+    /// ejected and another mounted. A disk it has no description of yet, as one the kernel lists before diskarbitrationd
+    /// has described it, has no answer, so it's guarded, and is asked about again at the next read rather than kept
+    /// guarded until the table changes. 56 µs a disk, median of 11 on the development Mac (VERIFICATION.md).
     final class Reader: @unchecked Sendable {
         let fsstat: @Sendable (UnsafeMutablePointer<statfs>?, Int32, Int32) -> Int32
-        let isInternal: @Sendable (String) -> Bool?
+        let describe: @Sendable (String) -> Described?
         private let lock = NSLock()
-        /// The table as the kernel gave it last, and what `isInternal` said of each of its disks.
+        /// The table as the kernel gave it last, and what `describe` said of each of its disks it described.
         private var read: [Mount] = []
-        private var said: [String: Bool?] = [:]
+        private var said: [String: Described] = [:]
 
-        init(fsstat: @escaping @Sendable (UnsafeMutablePointer<statfs>?, Int32, Int32) -> Int32, isInternal: @escaping @Sendable (String) -> Bool?) {
+        init(fsstat: @escaping @Sendable (UnsafeMutablePointer<statfs>?, Int32, Int32) -> Int32, describe: @escaping @Sendable (String) -> Described?) {
             self.fsstat = fsstat
-            self.isInternal = isInternal
+            self.describe = describe
         }
 
         func current() -> MountTable {
@@ -63,29 +71,28 @@ public struct MountTable: Sendable, Equatable {
             return MountTable(kernel.map { mount in
                 guard mount.from.hasPrefix("/dev/disk") else { return mount }
                 let disk = String(mount.from.dropFirst("/dev/".count))
-                let answer: Bool?
-                if let known = said[disk] {
-                    answer = known
-                } else {
-                    answer = isInternal(disk)
-                    said.updateValue(answer, forKey: disk)
+                var described = said[disk]
+                if described == nil {
+                    described = describe(disk)
+                    if let described { said[disk] = described }
                 }
-                return Mount(path: mount.path, from: mount.from, isLocal: mount.isLocal, isInternal: answer)
+                return Mount(path: mount.path, from: mount.from, isLocal: mount.isLocal, isInternal: described?.isInternal)
             })
         }
     }
 
-    private static let kernel = Reader(fsstat: { getfsstat($0, $1, $2) }, isInternal: diskArbitrationSaysInternal)
+    private static let kernel = Reader(fsstat: { getfsstat($0, $1, $2) }, describe: diskArbitrationDescribes)
 
-    /// Whether DiskArbitration says the disk `bsdName` names, such as "disk4s1", is internal, or nil where it doesn't say:
-    /// of a disk image, which it describes with no word of where it's attached, and of a disk it doesn't know. Its
-    /// description is what diskarbitrationd recorded of the device when it appeared, from IOKit's registry: the media and
-    /// the interconnect the device is attached by. Asking for it is a message to that daemon, which opens nothing on any
-    /// volume, and macOS asks its question about a volume only when something on it is accessed.
-    static func diskArbitrationSaysInternal(_ bsdName: String) -> Bool? {
+    /// What DiskArbitration says of the disk `bsdName` names, such as "disk4s1": whether it's internal, with no word of it
+    /// for a disk image, which it describes without saying where it's attached; or nil when it has no description of the
+    /// disk, as of one it doesn't know or hasn't described yet. Its description is what diskarbitrationd recorded of the
+    /// device when it appeared, from IOKit's registry: the media and the interconnect the device is attached by. Asking
+    /// for it is a message to that daemon, which opens nothing on any volume, and macOS asks its question about a volume
+    /// only when something on it is accessed.
+    static func diskArbitrationDescribes(_ bsdName: String) -> Described? {
         guard let session = DASessionCreate(kCFAllocatorDefault), let disk = DADiskCreateFromBSDName(kCFAllocatorDefault, session, bsdName),
               let description = DADiskCopyDescription(disk) as? [CFString: Any] else { return nil }
-        return description[kDADiskDescriptionDeviceInternalKey] as? Bool
+        return Described(isInternal: description[kDADiskDescriptionDeviceInternalKey] as? Bool)
     }
 
     /// Whether macOS guards the volume `path` lies on, the file system mounted deepest above it: a network volume, which
