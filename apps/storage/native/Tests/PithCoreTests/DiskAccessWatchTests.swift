@@ -53,7 +53,7 @@ final class DiskAccessWatchTests: XCTestCase {
     func testAScanOfAnotherDiskIsHeldUntilAScanOfItSince() {
         let places = KnownPlaces(home: URL(fileURLWithPath: "/Users/tester", isDirectory: true), searchPaths: [:], mounts: { MountTableTests.table }) { _ in nil }
         let scanned = start, lost = start.addingTimeInterval(600)
-        let holds = { (watch: DiskAccessWatch, root: String, since: Date?) in watch.holdsScan(of: root, listedSince: since, onStartupDisk: places.isOnStartupDisk) }
+        let holds = { (watch: DiskAccessWatch, root: String, since: Date?) in watch.holdsScan(of: root, listedSince: since, guards: places.guardsVolume) }
         var watch = DiskAccessWatch(granted: true, lostAt: nil)
         XCTAssertFalse(holds(watch, "/Volumes/Archive", scanned), "Pith has it")
         watch.probed(.denied, at: lost)
@@ -73,6 +73,21 @@ final class DiskAccessWatchTests: XCTestCase {
         XCTAssertTrue(holds(relaunched, "/Volumes/Archive", nil))
         watch.probed(.granted, at: lost.addingTimeInterval(120))
         XCTAssertFalse(holds(watch, "/Volumes/Archive", scanned), "Full Disk Access back")
+    }
+
+    /// The hold follows the icons' own test of where macOS guards (`MountTable.guards`): an internal disk of another
+    /// container, which macOS doesn't guard, isn't held after the loss, while a disk image is, as an external disk is.
+    func testAScanOfAnInternalDiskOfAnotherContainerIsntHeld() {
+        let table = MountTable(MountTableTests.table.mounts + [.init(path: "/Volumes/Second", from: "/dev/disk6s1", isInternal: true)])
+        let places = KnownPlaces(home: URL(fileURLWithPath: "/Users/tester", isDirectory: true), searchPaths: [:], mounts: { table }) { _ in nil }
+        var watch = DiskAccessWatch(granted: true, lostAt: nil)
+        watch.probed(.denied, at: start.addingTimeInterval(600))
+        let holds = { (root: String) in watch.holdsScan(of: root, listedSince: self.start, guards: places.guardsVolume) }
+        XCTAssertFalse(holds("/Volumes/Second"), "an internal disk of another container")
+        XCTAssertFalse(holds("/Volumes/Second/Projects"))
+        XCTAssertFalse(holds("/System/Volumes/xarts"), "the internal system container")
+        XCTAssertTrue(holds("/Volumes/Installer"), "a disk image")
+        XCTAssertTrue(holds("/Volumes/Archive/Photos"), "an external disk")
     }
 
     /// The icon rule follows: a held scan counts among the locations macOS guards, so while it's held no folder of it is

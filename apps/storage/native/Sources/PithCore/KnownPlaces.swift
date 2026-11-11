@@ -187,8 +187,8 @@ public struct KnownPlaces: Sendable {
     /// library, or it's inside one.
     public func isProtected(_ path: String) -> Bool { Self.isProtected(path, guarded: guarded) }
 
-    /// These places with `folder` among the locations macOS guards too, as a map a scan made of another disk counts while
-    /// losing Full Disk Access holds it (`DiskAccessWatch.holdsScan(of:listedSince:onStartupDisk:)`).
+    /// These places with `folder` among the locations macOS guards too, as a map a scan made of a volume macOS guards
+    /// counts while losing Full Disk Access holds it (`DiskAccessWatch.holdsScan(of:listedSince:guards:)`).
     public func holding(_ folder: String) -> KnownPlaces {
         var held = self
         held.guarded.append(folder)
@@ -198,10 +198,11 @@ public struct KnownPlaces: Sendable {
     /// Whether `path` lies on the startup disk, by the file systems mounted now (`MountTable.isOnStartupDisk`).
     public func isOnStartupDisk(_ path: String) -> Bool { mounts().isOnStartupDisk(path) }
 
-    /// Whether macOS guards the volume mounted at `root`: a network volume, or one on a removable or external disk or a
-    /// disk image, as the kernel's mount table and DiskArbitration's descriptions of the disks say (`MountTable.guards`).
-    /// Neither opens anything on a volume, and macOS asks its question about one only when something on it is accessed.
-    public func guardsVolume(_ root: String) -> Bool { mounts().guards(root) }
+    /// Whether macOS guards the volume `path` lies on, such as the one mounted at it: a network volume, or one on a
+    /// removable or external disk or a disk image, as the kernel's mount table and DiskArbitration's descriptions of the
+    /// disks say (`MountTable.guards`). Neither opens anything on a volume, and macOS asks its question about one only
+    /// when something on it is accessed.
+    public func guardsVolume(_ path: String) -> Bool { mounts().guards(path) }
 
     /// These places as the rule has them while Pith has Full Disk Access or hasn't (`fullDiskAccess`, as `DiskAccessWatch`
     /// last found): without it, every volume mounted now that macOS guards (`guardsVolume`) shows the drive wherever its

@@ -13,9 +13,9 @@ import Foundation
 /// macOS guards count as asking (`countsAsAsking(listedSince:onStartupDisk:)`), as while macOS asks: no icon is looked
 /// up by its path there. On the startup disk that lasts until the scanner has listed every folder of it again since, in
 /// a walk or a check of the live map, which asks macOS whatever it needs to and settles each folder as readable,
-/// unreadable or asked about (`relisted`). The live map lists no other disk, so a map a scan made of one counts as
-/// guarded throughout (`holdsScan(of:listedSince:onStartupDisk:)`) until a scan of it since. Both end once Pith has Full
-/// Disk Access again. A map a scan made since the loss lists its folders as they are, so it isn't held back.
+/// unreadable or asked about (`relisted`). The live map lists no other disk, so a map a scan made of a volume macOS
+/// guards counts as guarded throughout (`holdsScan(of:listedSince:guards:)`) until a scan of it since. Both end once
+/// Pith has Full Disk Access again. A map a scan made since the loss lists its folders as they are, so it isn't held back.
 public struct DiskAccessWatch: Equatable, Sendable {
     /// What a probe found.
     public enum Probe: Equatable, Sendable {
@@ -74,11 +74,12 @@ public struct DiskAccessWatch: Equatable, Sendable {
     }
 
     /// Whether a map a scan made of `root`, whose folders were listed from `listedSince` on, counts as guarded throughout:
-    /// it lies on another disk than the startup disk (`onStartupDisk`), as a removable or network volume does, which macOS
-    /// guards whole, and Pith lost Full Disk Access after it was listed. Listing the startup disk asks macOS nothing of
-    /// another disk, so only a scan of it since, or Full Disk Access back, ends it. `onStartupDisk` is asked only then.
-    public func holdsScan(of root: String, listedSince: Date?, onStartupDisk: (String) -> Bool) -> Bool {
-        countsAsAsking(listedSince: listedSince, onStartupDisk: false) && !onStartupDisk(root)
+    /// it lies on a volume macOS guards whole (`guards`, the icons' own test, `MountTable.guards`), a removable, external,
+    /// disk image or network volume, and Pith lost Full Disk Access after it was listed. The startup disk and an internal
+    /// disk of another container aren't guarded so. Listing the startup disk asks macOS nothing of another disk, so only a
+    /// scan of it since, or Full Disk Access back, ends it. `guards` is asked only then.
+    public func holdsScan(of root: String, listedSince: Date?, guards: (String) -> Bool) -> Bool {
+        countsAsAsking(listedSince: listedSince, onStartupDisk: false) && guards(root)
     }
 
     /// Opens `path` and closes it at once, reading nothing: whether macOS let Pith open it, refused it, or neither, as when

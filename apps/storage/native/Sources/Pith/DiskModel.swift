@@ -951,11 +951,12 @@ enum MapCommand: Equatable {
         return scanBegan
     }
 
-    /// The root of a map a scan made of another disk than the startup disk while losing Full Disk Access holds it, which
-    /// counts among the locations macOS guards throughout then (`DiskAccessWatch.holdsScan`).
+    /// The root of a map a scan made of a volume macOS guards, by the icons' own test (`KnownPlaces.guardsVolume`), while
+    /// losing Full Disk Access holds it, which counts among the locations macOS guards throughout then
+    /// (`DiskAccessWatch.holdsScan`).
     private var heldDisk: String? {
         guard liveView == nil, let root = result?.root.path,
-              diskAccess.holdsScan(of: root, listedSince: mapListedSince, onStartupDisk: Icons.places.isOnStartupDisk) else { return nil }
+              diskAccess.holdsScan(of: root, listedSince: mapListedSince, guards: Icons.places.guardsVolume) else { return nil }
         return root
     }
 
