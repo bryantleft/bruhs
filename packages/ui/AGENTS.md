@@ -783,7 +783,7 @@ Dither is the brand texture: the Bruh and small indicators drawn in dots. The Br
 
 | Piece | Where it lives | Use for |
 |---|---|---|
-| `bruhDots()`, `drawDots()` | `@bruhs/theme/dither` | A dot Bruh on a canvas. It reads `bruhGeometry`, so it always matches the logo, and picks its own dot spacing for the size |
+| `bruhDots()`, `drawDots()` | `@bruhs/theme/dither` | A dot Bruh on a canvas. It reads `bruhGeometry`, so it always matches the logo, and fits its dot grid to the size so the eye and mouth lines land exactly where the logo has them (`gridFor()`) |
 | `lookX`, `lookY` | `bruhDots()` face options | Turning the head in 3D: the features ride the sphere and the ball leans the way it looks |
 | `meterDots()` + `.braille-meter` | dither module + component class | A live level, such as microphone input, as one braille cell |
 | `.dither-rule` | component class | A dotted divider between sections of a brand page |

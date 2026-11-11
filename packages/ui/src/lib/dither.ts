@@ -78,11 +78,29 @@ const AMBIENT = 0.25;
 const RIM = 0.35;
 
 /**
- * Grid spacing for a face radius: about 15 dots per radius on a large face,
- * down to 9 on a small one (fewer turns the outline into a hexagon).
+ * Target grid spacing for a face radius: about 15 dots per radius on a large
+ * face, down to 9 on a small one (fewer turns the outline into a hexagon).
+ * {@link gridFor} tightens it a little so the features land exactly.
  */
 export function pitchFor(r: number): number {
   return r / Math.max(9, Math.min(15, r / 10));
+}
+
+/**
+ * The hex grid for a face radius, fitted to the mascot: the eye line and the
+ * mouth line both fall exactly on a row, where the logo puts them, at every
+ * size. The rows between them are a whole number (rounded up from
+ * {@link pitchFor}'s density, so the grid only gets finer), and the rows are
+ * anchored on the eye line instead of the ball's center. Columns still start
+ * at the center, so the face stays mirror-symmetric. Row n sits at
+ * `cy + phase + n * rowH`.
+ */
+export function gridFor(r: number): { pitch: number; rowH: number; phase: number } {
+  const gap = (MOUTH_AT.y - LEFT_EYE.y) * r;
+  const target = (pitchFor(r) * Math.sqrt(3)) / 2;
+  const rowH = gap / Math.max(1, Math.ceil(gap / target - 1e-9));
+  const eyeY = LEFT_EYE.y * r;
+  return { pitch: (2 * rowH) / Math.sqrt(3), rowH, phase: eyeY - Math.round(eyeY / rowH) * rowH };
 }
 
 /** Brightness (0 to 1) of the sphere at a point in face radii, or `null` outside it. */
@@ -95,8 +113,8 @@ export function shade(dx: number, dy: number): number | null {
 }
 
 /**
- * Every dot of a Bruh in a `width` × `height` box. The hex grid is anchored on
- * the ball's center, so a face looking straight ahead is exactly symmetric.
+ * Every dot of a Bruh in a `width` × `height` box, on the grid {@link gridFor}
+ * fits to the face. A face looking straight ahead is exactly symmetric.
  */
 export function bruhDots(width: number, height: number, face: BrailleBruh): Dot[] {
   const { r } = face;
@@ -104,8 +122,7 @@ export function bruhDots(width: number, height: number, face: BrailleBruh): Dot[
   const lookY = Math.max(-1, Math.min(1, face.lookY ?? 0));
   const cx = face.cx + lookX * LEAN * r;
   const cy = face.cy + lookY * LEAN * r;
-  const pitch = pitchFor(r);
-  const rowH = (pitch * Math.sqrt(3)) / 2;
+  const { pitch, rowH, phase } = gridFor(r);
   const head = rotation(lookX * MAX_YAW, lookY * MAX_PITCH);
   // Features are anti-aliased: each dot shrinks (eyes) or reddens (mouth) by
   // how much of the feature covers it, so a turning face glides through the
@@ -116,7 +133,8 @@ export function bruhDots(width: number, height: number, face: BrailleBruh): Dot[
   const soft = (pitch * 0.6) / r;
   const land = (at: Point, rx: number) => {
     const seen = head.toScreen(lift(at));
-    const restLine = (Math.round((at.y * r) / rowH) * rowH) / r;
+    // On the grid gridFor fits, this is exactly `at.y` for the eyes and mouth.
+    const restLine = (phase + Math.round((at.y * r - phase) / rowH) * rowH) / r;
     // Fade a feature out as it turns round the rim rather than popping.
     return { at, rx, line: seen.y + restLine - at.y, fade: smoothstep(0.05, 0.3, seen.z) };
   };
@@ -131,10 +149,10 @@ export function bruhDots(width: number, height: number, face: BrailleBruh): Dot[
   };
 
   const dots: Dot[] = [];
-  const rows = Math.ceil(r / rowH) + 1;
+  const rows = Math.ceil(r / rowH) + 2;
   const cols = Math.ceil(r / pitch) + 1;
   for (let row = -rows; row <= rows; row++) {
-    const y = cy + row * rowH;
+    const y = cy + phase + row * rowH;
     if (y < -pitch || y > height + pitch) continue;
     for (let col = -cols; col <= cols; col++) {
       // Offsets in whole half-steps, so a dot and its mirror twin get exactly
@@ -143,7 +161,7 @@ export function bruhDots(width: number, height: number, face: BrailleBruh): Dot[
       const x = cx + (halfSteps * pitch) / 2;
       if (x < -pitch || x > width + pitch) continue;
       const dx = (halfSteps * pitch) / (2 * r);
-      const dy = (row * rowH) / r;
+      const dy = (phase + row * rowH) / r;
       let value = shade(dx, dy);
       if (value === null) continue;
       // The point of the head's own (unturned) surface now under this dot.
