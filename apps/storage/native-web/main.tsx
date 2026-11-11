@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
@@ -366,6 +367,13 @@ function DiskMap() {
   }, []);
   const current = nav.trail.at(-1) ?? null;
   const here = current?.path;
+  // The column beside the map starts at its top in each folder opened, Back and Forward included, as a page of its own
+  // would. A newer map of the same folder, as the live map sends every two seconds while the disk changes, keeps its
+  // place: this runs as the folder changes, not with each map, and before the browser paints the new folder.
+  const column = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (here !== undefined) column.current?.scrollTo({ top: 0 });
+  }, [here]);
   // The map opens a folder further down one level at a time, all from here: one step back.
   const openFolder = useCallback(
     (folder: DirNode) => go({ type: "open", path: folder.path, from: here }),
@@ -517,8 +525,14 @@ function DiskMap() {
         </section>
         {/* One scroll area, the theme's scroll bars, in which every section takes its natural height, Largest files
             included, so each row of each is reachable by scrolling, by keyboard, as focus scrolls a row into view,
-            and by VoiceOver. It reaches the rows' hover edges, which stand out half a rem either side. */}
-        <div className="-mx-2 min-h-0 scroll-py-1 overflow-y-auto px-2">
+            and by VoiceOver. It reaches the rows' hover edges, which stand out half a rem either side. Its scroll bar's
+            room is kept whether the column overflows or not, so its rows never take another width, and other cuts, as
+            a newer map tips it over: the theme's 10 px bar, which WebKit reserves for a scroll area that scrolls
+            always, and draws nothing in while it fits, where `scrollbar-gutter` reserves its own, wider bar's room. */}
+        <div
+          ref={column}
+          className="-mx-2 min-h-0 scroll-py-1 overflow-y-scroll px-2"
+        >
           <div className="flex flex-col gap-5">
             {shownPlaces.length > 0 && (
               <Places
