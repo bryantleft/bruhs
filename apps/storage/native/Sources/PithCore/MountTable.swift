@@ -3,8 +3,9 @@ import Foundation
 
 /// The file systems mounted on this Mac, as the kernel's mount table lists them: each one's mount point and what it's
 /// mounted from. Reading the table asks no file system, a network one included (`MNT_NOWAIT`), as the scanner reads it
-/// (scanner/src/volumes.rs). Pith looks an app's icon up by its bundle's path only on the startup disk, since macOS
-/// guards removable and network volumes, and the table says which disk a path is on without touching it.
+/// (scanner/src/volumes.rs). Pith looks an app's icon up by its bundle's path only on the startup disk, and draws a
+/// volume on another disk by its type while it hasn't Full Disk Access, since macOS guards removable and network
+/// volumes, and the table says which disk a path is on without touching it.
 public struct MountTable: Sendable, Equatable {
     public struct Mount: Sendable, Equatable {
         /// Where it's mounted.

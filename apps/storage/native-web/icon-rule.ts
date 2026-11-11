@@ -31,6 +31,11 @@ export interface IconRule {
    * yet looks empty too, and isn't.
    */
   readonly emptyTrash: boolean;
+  /**
+   * The roots of the volumes macOS guards, composed, which show macOS's volume type icon rather than their own while
+   * Pith hasn't Full Disk Access (`KnownPlaces.typedVolumes`): their own is looked up by the volume's path.
+   */
+  readonly typedVolumes: ReadonlySet<string>;
 }
 
 /**
@@ -47,6 +52,8 @@ export type IconItem =
 const FOLDER_KEY = "folder";
 /** The key of the map's smaller items, which show a group. */
 export const GROUP_KEY = "group";
+/** The key of macOS's volume type icon, which a volume the rule draws by its type shows. */
+const VOLUME_KEY = "volume";
 /**
  * The Trash's place id, and the one its key has while it holds nothing: macOS's empty Trash, under a key of its own so
  * each key always draws the same art (`KnownPlaces.emptyTrash`).
@@ -131,7 +138,9 @@ const drawsNothing = (item: IconItem) =>
 /**
  * `item`'s icon key by Pith's icon rule, as `KnownPlaces.iconKey(for:asking:)` gives it, so the page asks the route
  * for no icon it would refuse. A known place shows its own icon, read or not, and a file its type's. A volume shows
- * its own, and so does a folder, package or app outside the locations macOS guards. Inside one, a folder shows its own
+ * its own, and so does a folder, package or app outside the locations macOS guards, but for a volume the rule draws by
+ * its type (`rule.typedVolumes`), whose block, or a map of it with its root for its own, shows macOS's volume type
+ * icon. Inside a location macOS guards, a folder shows its own
  * only once the map has listed it and while macOS can't be holding it; otherwise, as for a folder the map couldn't
  * read, a plain folder. The map's smaller items show a group. The Trash shows macOS's empty Trash while it holds
  * nothing, by the scanner's word (`rule.emptyTrash`), and `item` draws nothing in it but Finder's `.DS_Store`, and the
@@ -146,6 +155,12 @@ export function iconKey(item: IconItem, rule: IconRule): string {
         ? EMPTY_TRASH
         : place,
     );
+  }
+  if (
+    (item.kind === "dir" || item.kind === "volume") &&
+    rule.typedVolumes.has(path)
+  ) {
+    return VOLUME_KEY;
   }
   switch (item.kind) {
     case "file":
@@ -173,7 +188,7 @@ export function readIconRule(text: unknown): IconRule | null {
     return null;
   }
   if (typeof value !== "object" || value === null) return null;
-  const { places, guarded, asking, emptyTrash } = value as Record<
+  const { places, guarded, asking, emptyTrash, typedVolumes } = value as Record<
     string,
     unknown
   >;
@@ -181,7 +196,8 @@ export function readIconRule(text: unknown): IconRule | null {
     !Array.isArray(places) ||
     !Array.isArray(guarded) ||
     typeof asking !== "boolean" ||
-    typeof emptyTrash !== "boolean"
+    typeof emptyTrash !== "boolean" ||
+    !Array.isArray(typedVolumes)
   ) {
     return null;
   }
@@ -199,7 +215,18 @@ export function readIconRule(text: unknown): IconRule | null {
     if (typeof folder !== "string") return null;
     folders.push(folder.normalize("NFC"));
   }
-  return { places: byPath, guarded: folders, asking, emptyTrash };
+  const typed = new Set<string>();
+  for (const root of typedVolumes) {
+    if (typeof root !== "string") return null;
+    typed.add(root.normalize("NFC"));
+  }
+  return {
+    places: byPath,
+    guarded: folders,
+    asking,
+    emptyTrash,
+    typedVolumes: typed,
+  };
 }
 
 /** No owners: each folder the map couldn't read keeps the rule's key. */

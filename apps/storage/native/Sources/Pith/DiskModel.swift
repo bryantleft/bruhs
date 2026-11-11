@@ -896,8 +896,13 @@ enum MapCommand: Equatable {
 
     /// The icon the page asks for at `url` on Pith's icon route, or nil when it may not have it.
     func iconRequest(for url: URL) -> IconRequest? {
-        icons.request(for: url, asking: macOSMayHoldFolders, holding: heldDisk)
+        icons.request(for: url, asking: macOSMayHoldFolders, by: rulePlaces)
     }
+
+    /// The icon of the disk mounted at `root`, wherever a disk's icon shows outside the map, as the rule draws it
+    /// (`KnownPlaces.volumeKey`): its own, or macOS's volume type icon for one macOS guards while Pith hasn't Full Disk
+    /// Access.
+    func volumeKey(for root: String) -> IconKey { rulePlaces.volumeKey(for: root) }
 
     /// Pith's icon rule as the map's page applies it, which goes to the page with the icons' base, so the page gives
     /// each item the key `iconKey(for:)` gives it.
@@ -956,8 +961,11 @@ enum MapCommand: Equatable {
     }
 
     /// The places Pith's icon rule goes by for the map shown: the known places, with a held disk among the locations
-    /// macOS guards (`heldDisk`).
-    private var rulePlaces: KnownPlaces { heldDisk.map(Icons.places.holding) ?? Icons.places }
+    /// macOS guards (`heldDisk`), and the volumes macOS guards drawn by their type while Pith hasn't Full Disk Access, by
+    /// the probe (`KnownPlaces.typingGuardedVolumes`).
+    private var rulePlaces: KnownPlaces {
+        (heldDisk.map(Icons.places.holding) ?? Icons.places).typingGuardedVolumes(fullDiskAccess: diskAccess.granted)
+    }
 
     /// Whether Pith still has Full Disk Access, as the probe last found, kept across launches in Pith's settings.
     private(set) var diskAccess = DiskModel.keptDiskAccess()
@@ -1260,7 +1268,7 @@ enum MapCommand: Equatable {
 
     /// "Where the space is" for a map of a whole volume, row by row, the Trash's from the map when the map can read it.
     var spaceRows: [SpaceRow]? {
-        accounting?.rows(result: result, trash: trashOnMap)
+        accounting.map { $0.rows(result: result, trash: trashOnMap, disk: volumeKey(for: $0.root)) }
     }
 
     /// The Trash's size as the map shows it, when the map can read the Trash: on the live map, the figure Places gives

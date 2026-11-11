@@ -1,5 +1,5 @@
 {
-  "about": "Pith's icon rule, KnownPlaces.iconKey(for:asking:trashIsEmpty:) in native/Sources/PithCore/KnownPlaces.swift, and the disk map page's copy of it, iconKey in native-web/icon-rule.ts, both give each of these items its key, with asking, and emptyTrash where a case gives it, in the rule. The rule is the table native sends the page for a test home, /Users/zo\u00eb, with the places' paths as URL spells them, decomposed. A case with a place gives what the scanner says of the Trash beside a map that doesn't draw it, from which Swift's rule finds emptyTrash (KnownPlaces.trashHoldsNothing). IconRuleTests.swift and icon-rule.test.ts read this file.",
+  "about": "Pith's icon rule, KnownPlaces.iconKey(for:asking:trashIsEmpty:) in native/Sources/PithCore/KnownPlaces.swift, and the disk map page's copy of it, iconKey in native-web/icon-rule.ts, both give each of these items its key, with asking, and emptyTrash where a case gives it, in the rule. The rule is the table native sends the page for a test home, /Users/zo\u00eb, with the places' paths as URL spells them, decomposed, and the volumes it draws by their type while Pith hasn't Full Disk Access, those the test Mac's mount table puts outside its startup disk's container: another disk and a share (typedVolumes). A case with a place gives what the scanner says of the Trash beside a map that doesn't draw it, from which Swift's rule finds emptyTrash (KnownPlaces.trashHoldsNothing). IconRuleTests.swift and icon-rule.test.ts read this file.",
   "home": "/Users/zo\u00eb",
   "rule": {
     "places": [
@@ -51,7 +51,8 @@
       "/Users/zoe\u0308/Library/CloudStorage"
     ],
     "asking": false,
-    "emptyTrash": false
+    "emptyTrash": false,
+    "typedVolumes": ["/Volumes/Archive", "/Volumes/share"]
   },
   "cases": [
     {
@@ -899,7 +900,7 @@
       "key": "group"
     },
     {
-      "why": "A volume shows its own icon.",
+      "why": "A volume of the startup disk's own container shows its own icon: macOS doesn't guard it, so the rule doesn't draw it by its type.",
       "node": {
         "kind": "volume",
         "name": "Preboot",
@@ -911,7 +912,7 @@
       "key": "item/%2FSystem%2FVolumes%2FPreboot"
     },
     {
-      "why": "A volume shows its own icon even where macOS guards.",
+      "why": "A volume the rule doesn't draw by its type shows its own icon, even inside a location macOS guards.",
       "node": {
         "kind": "volume",
         "name": "GoogleDrive",
@@ -921,6 +922,56 @@
       },
       "asking": true,
       "key": "item/%2FUsers%2Fzo%C3%AB%2FLibrary%2FCloudStorage%2FGoogleDrive"
+    },
+    {
+      "why": "A volume macOS guards, another disk than the startup disk, shows macOS's volume type icon while Pith hasn't Full Disk Access, as the rule's typedVolumes say: its own icon would be looked up by its path, on the volume.",
+      "node": {
+        "kind": "volume",
+        "name": "Archive",
+        "path": "/Volumes/Archive",
+        "size": 4096,
+        "sharesDisk": false
+      },
+      "asking": false,
+      "key": "volume"
+    },
+    {
+      "why": "A network share is a volume macOS guards too.",
+      "node": {
+        "kind": "volume",
+        "name": "share",
+        "path": "/Volumes/share",
+        "size": 4096,
+        "sharesDisk": false
+      },
+      "asking": false,
+      "key": "volume"
+    },
+    {
+      "why": "A map a scan made of a volume macOS guards has the volume's root for its own, which shows the volume's type icon too.",
+      "node": {
+        "kind": "dir",
+        "name": "Archive",
+        "path": "/Volumes/Archive",
+        "size": 4096,
+        "files": 1,
+        "children": []
+      },
+      "asking": true,
+      "key": "volume"
+    },
+    {
+      "why": "A folder the scan listed on a volume drawn by its type keeps the rule for folders: the listing had macOS's answer.",
+      "node": {
+        "kind": "dir",
+        "name": "Photos",
+        "path": "/Volumes/Archive/Photos",
+        "size": 4096,
+        "files": 1,
+        "children": []
+      },
+      "asking": false,
+      "key": "item/%2FVolumes%2FArchive%2FPhotos"
     }
   ]
 }

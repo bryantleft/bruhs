@@ -511,6 +511,42 @@ final class KnownPlacesTests: XCTestCase {
         XCTAssertTrue(table.mayShowApp("/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app"))
     }
 
+    /// A volume macOS guards, removable, external or network, is any but the startup disk and the other volumes of its
+    /// APFS container, as the kernel's mount table says, which names no file on any volume (`MountTable`). While Pith
+    /// hasn't Full Disk Access, such a volume shows macOS's volume type icon wherever its own would show, the map's block
+    /// of it and a map of it, whose root is the volume's, included. A folder the scan listed on it keeps the rule for
+    /// folders: the listing had macOS's answer.
+    func testAVolumeMacOSGuardsIsDrawnByItsTypeUnlessPithHasFullDiskAccess() {
+        let table = KnownPlaces(home: home, searchPaths: [:], mounts: { MountTableTests.table }) { _ in nil }
+        let startup = ["/", "/System/Volumes/Data", "/System/Volumes/Preboot", "/System/Volumes/VM"]
+        let others = ["/Volumes/Archive", "/Volumes/share", "/Volumes/Installer", "/System/Volumes/Data/home", "/System/Volumes/xarts"]
+        for root in startup { XCTAssertFalse(table.guardsVolume(root), root) }
+        for root in others { XCTAssertTrue(table.guardsVolume(root), root) }
+        let typed = table.typingGuardedVolumes(fullDiskAccess: false), granted = table.typingGuardedVolumes(fullDiskAccess: true)
+        XCTAssertEqual(typed.typedVolumes, ["/dev", "/System/Volumes/xarts", "/System/Volumes/Data/home", "/Volumes/Archive", "/Volumes/share", "/Volumes/Installer"],
+                       "every file system mounted outside the startup disk's container, in the table's order")
+        XCTAssertEqual(granted.typedVolumes, [], "with Full Disk Access, none")
+        XCTAssertEqual(table.typedVolumes, [], "the table itself draws none by type")
+        for root in startup {
+            XCTAssertEqual(typed.volumeKey(for: root), .item(root), root)
+        }
+        for root in others {
+            XCTAssertEqual(typed.volumeKey(for: root), .volume, root)
+            XCTAssertEqual(granted.volumeKey(for: root), .item(root), "\(root), with Full Disk Access")
+        }
+        XCTAssertEqual(typed.iconRule(asking: false).typedVolumes, typed.typedVolumes, "the page's rule carries them")
+        XCTAssertEqual(typed.holding("/Volumes/Archive").typedVolumes, typed.typedVolumes, "a held disk's places keep them")
+        let block = DiskNode(kind: .volume, name: "Archive", path: "/Volumes/Archive", size: 4096, children: nil)
+        let own = DiskNode(kind: .dir, name: "Archive", path: "/Volumes/Archive", size: 4096, files: 1, children: [])
+        let preboot = DiskNode(kind: .volume, name: "Preboot", path: "/System/Volumes/Preboot", size: 4096, children: nil)
+        let photos = DiskNode(kind: .dir, name: "Photos", path: "/Volumes/Archive/Photos", size: 4096, files: 1, children: [])
+        XCTAssertEqual(typed.iconKey(for: block, asking: false), .volume, "the map's block of it")
+        XCTAssertEqual(typed.iconKey(for: own, asking: true), .volume, "a map of it, at its root")
+        XCTAssertEqual(granted.iconKey(for: block, asking: false), .item(block.path))
+        XCTAssertEqual(typed.iconKey(for: preboot, asking: false), .item(preboot.path))
+        XCTAssertEqual(typed.iconKey(for: photos, asking: false), .item(photos.path), "a folder the scan listed on it")
+    }
+
     /// Activity's app icons follow the Disk tab's rule: an app Pith may look up by its bundle's path (`mayShowApp`) shows
     /// its own icon, any other app the generic application icon, running or not, since macOS's icon for a running app
     /// is drawn from its bundle's path too, and anything else the generic executable's.

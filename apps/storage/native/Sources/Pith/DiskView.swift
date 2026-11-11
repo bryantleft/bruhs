@@ -359,7 +359,7 @@ private struct DiskVolumeList: View {
                 ForEach(model.choices) { volume in
                     HStack(spacing: 14) {
                         // Drawn off the main thread by the icon store, as every icon on Disk is.
-                        SystemIconView(key: .item(volume.url.path), size: 32)
+                        SystemIconView(key: model.volumeKey(for: volume.url.path), size: 32)
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 Text(volume.name).font(BruhsType.label).foregroundStyle(BruhsColor.text).lineLimit(1)

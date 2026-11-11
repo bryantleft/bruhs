@@ -30,7 +30,7 @@ final class WhereTheSpaceIsTests: XCTestCase {
                                              ([12 * gb, 840 * gb], nil)]
         for (walked, expected) in cases {
             let accounting = accounting(walked: walked)
-            let shown = row("Not measured", in: accounting.rows(result: map(), trash: nil))
+            let shown = row("Not measured", in: accounting.rows(result: map(), trash: nil, disk: .item("/")))
             XCTAssertEqual(accounting.notMeasuredBlock, expected, "walked \(walked)")
             XCTAssertEqual(shown?.figure, expected.map(SpaceRow.Figure.bytes), "walked \(walked)")
         }
@@ -52,7 +52,7 @@ final class WhereTheSpaceIsTests: XCTestCase {
         // so they join Not measured at once, and leave On the map.
         let after = DiskAccounting(use, result: trashed)
         XCTAssertEqual(after.notMeasuredBlock, 36 * gb)
-        XCTAssertEqual(row("On the map", in: after.rows(result: trashed, trash: nil))?.figure, .bytes(865 * gb))
+        XCTAssertEqual(row("On the map", in: after.rows(result: trashed, trash: nil, disk: .item("/")))?.figure, .bytes(865 * gb))
         XCTAssertEqual(after.used, 904 * gb, "the volume's used space doesn't move")
         // Undo puts the map from before back, and Not measured with it.
         XCTAssertEqual(DiskAccounting(use, result: before).notMeasuredBlock, 31 * gb)
@@ -76,7 +76,7 @@ final class WhereTheSpaceIsTests: XCTestCase {
     }
 
     func testTheRowsAccountForTheDiskInOrder() {
-        let rows = accounting().rows(result: map(), trash: 5 * gb)
+        let rows = accounting().rows(result: map(), trash: 5 * gb, disk: .item("/"))
         XCTAssertEqual(rows.map(\.label), ["Used on this disk", "On the map", "In the Trash", "Hidden volumes", "Not measured", "Local snapshots",
                                            "Clones counted once", "Purgeable", "Only in iCloud"])
         XCTAssertEqual(rows.map(\.figure), [.bytes(904 * gb), .bytes(870 * gb), .bytes(5 * gb), .bytes(3 * gb), .bytes(31 * gb), .count(2),
@@ -87,18 +87,18 @@ final class WhereTheSpaceIsTests: XCTestCase {
     func testARowShowsOnlyWhenItHasSomethingToSay() {
         // The volumes use just what the walk found, so nothing is not measured; 34 GB is on hidden volumes.
         let rows = accounting(map(errors: 0, clones: 0, cloud: 0), walked: [12 * gb, 848 * gb], snapshots: 0, purgeable: 0)
-            .rows(result: map(errors: 0, clones: 0, cloud: 0), trash: nil)
+            .rows(result: map(errors: 0, clones: 0, cloud: 0), trash: nil, disk: .item("/"))
         XCTAssertEqual(rows.map(\.label), ["Used on this disk", "On the map", "Hidden volumes"])
     }
 
     func testTheTrashShowsOnlyWhenTheMapCanReadItAndItHoldsSomething() {
-        XCTAssertNil(row("In the Trash", in: accounting().rows(result: map(), trash: nil)), "the map can't read it")
-        XCTAssertNil(row("In the Trash", in: accounting().rows(result: map(), trash: 0)), "it's empty")
-        XCTAssertEqual(row("In the Trash", in: accounting().rows(result: map(), trash: 1))?.figure, .bytes(1))
+        XCTAssertNil(row("In the Trash", in: accounting().rows(result: map(), trash: nil, disk: .item("/"))), "the map can't read it")
+        XCTAssertNil(row("In the Trash", in: accounting().rows(result: map(), trash: 0, disk: .item("/"))), "it's empty")
+        XCTAssertEqual(row("In the Trash", in: accounting().rows(result: map(), trash: 1, disk: .item("/")))?.figure, .bytes(1))
     }
 
     func testEachRowLeadsWithItsIcon() {
-        let icons = Dictionary(uniqueKeysWithValues: accounting().rows(result: map(), trash: 5 * gb).map { ($0.label, $0.icon) })
+        let icons = Dictionary(uniqueKeysWithValues: accounting().rows(result: map(), trash: 5 * gb, disk: .item("/")).map { ($0.label, $0.icon) })
         // Real things on this Mac, as macOS draws them: the disk by its path, as the disk menu shows it, and the Trash
         // and iCloud Drive as their known places.
         XCTAssertEqual(icons["Used on this disk"], .item(.item("/")))
@@ -111,25 +111,28 @@ final class WhereTheSpaceIsTests: XCTestCase {
         XCTAssertEqual(icons["Local snapshots"], .symbol("clock.arrow.circlepath"))
         XCTAssertEqual(icons["Clones counted once"], .symbol("square.on.square"))
         XCTAssertEqual(icons["Purgeable"], .symbol("arrow.3.trianglepath"))
-        let overcounted = DiskAccounting(used: 100, walkedVolumes: [90], result: map(), snapshots: nil, purgeable: nil).rows(result: map(), trash: nil)
+        let overcounted = DiskAccounting(used: 100, walkedVolumes: [90], result: map(), snapshots: nil, purgeable: nil).rows(result: map(), trash: nil, disk: .item("/"))
         XCTAssertEqual(row("Counted twice", in: overcounted)?.icon, .symbol("plus.square.on.square"))
     }
 
-    func testAnotherVolumesDiskShowsItsOwnIcon() {
+    /// The disk's row leads with the disk's icon as Pith's rule gives it (`KnownPlaces.volumeKey`): another disk's own, by
+    /// its path, while Pith has Full Disk Access, and macOS's volume type icon while it hasn't, as macOS guards the disk.
+    func testAnotherVolumesDiskShowsTheIconTheRuleGivesIt() {
         let usb = DiskResult(root: DiskNode(kind: .dir, name: "USB", path: "/Volumes/USB", size: 5, files: 1, children: []), topFiles: [],
                              summary: map().summary)
-        let rows = DiskAccounting(used: 10, walkedVolumes: [8], result: usb, snapshots: nil, purgeable: nil).rows(result: usb, trash: nil)
-        XCTAssertEqual(rows.first?.icon, .item(.item("/Volumes/USB")))
+        let accounting = DiskAccounting(used: 10, walkedVolumes: [8], result: usb, snapshots: nil, purgeable: nil)
+        XCTAssertEqual(accounting.rows(result: usb, trash: nil, disk: .item("/Volumes/USB")).first?.icon, .item(.item("/Volumes/USB")))
+        XCTAssertEqual(accounting.rows(result: usb, trash: nil, disk: .volume).first?.icon, .item(.volume))
     }
 
     func testEveryFactShowsOnceWithoutSeparatorGlyphs() {
-        let rows = accounting().rows(result: map(), trash: 5 * gb)
+        let rows = accounting().rows(result: map(), trash: 5 * gb, disk: .item("/"))
         // The snapshots' count is their row's figure, so Not measured names them without it.
         let notMeasured = row("Not measured", in: rows)?.note ?? ""
         XCTAssertEqual(notMeasured, "Space the scan couldn’t see: 12 folders Pith couldn’t read and the file system’s own records. "
                        + "macOS doesn’t say how much each takes.")
         XCTAssertFalse(notMeasured.contains("snapshot"), notMeasured)
-        let readAll = accounting(map(errors: 0)).rows(result: map(errors: 0), trash: nil)
+        let readAll = accounting(map(errors: 0)).rows(result: map(errors: 0), trash: nil, disk: .item("/"))
         XCTAssertEqual(row("Not measured", in: readAll)?.note, "Space the scan couldn’t see: the file system’s own records. macOS doesn’t say how much they take.")
         XCTAssertTrue(row("Local snapshots", in: rows)?.note?.contains("Not measured") == true)
         let separators = CharacterSet(charactersIn: "•·—–‒―‧∙›»")
@@ -138,7 +141,7 @@ final class WhereTheSpaceIsTests: XCTestCase {
             XCTAssertNil(row.note?.rangeOfCharacter(from: separators), row.note ?? "")
         }
         // Without a Not measured row, the snapshots say what's true of them on their own.
-        let rest = accounting(walked: [12 * gb, 848 * gb]).rows(result: map(), trash: nil)
+        let rest = accounting(walked: [12 * gb, 848 * gb]).rows(result: map(), trash: nil, disk: .item("/"))
         XCTAssertNil(row("Not measured", in: rest))
         XCTAssertFalse(row("Local snapshots", in: rest)?.note?.contains("Not measured") ?? true)
     }

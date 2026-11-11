@@ -17,7 +17,7 @@ struct DiskPathBar: View {
         let path = model.folderPath
         let folders = path?.nodes(in: model.result?.root) ?? []
         let appearance = IconAppearance(colorScheme)
-        let menuIcons = model.choices.map { DiskModel.menuIconRequest($0.url.path, appearance: appearance, scale: displayScale) }
+        let menuIcons = model.choices.map { model.menuIconRequest($0.url.path, appearance: appearance, scale: displayScale) }
         PathRow(spacing: 2) {
             DiskMenuButton(model: model, volume: path?.volume)
             ForEach(Array(folders.enumerated()), id: \.element.path) { index, folder in
@@ -86,7 +86,7 @@ private struct DiskMenuButton: View {
             anchor.popUp(model.diskMenu(appearance: IconAppearance(colorScheme), scale: displayScale))
         } label: {
             HStack(spacing: 5) {
-                if let volume { SystemIconView(key: .item(volume.path)) }
+                if let volume { SystemIconView(key: model.volumeKey(for: volume.path)) }
                 // Before any map there's no disk to name, only the list of them.
                 Text(verbatim: volume?.name ?? "Disks")
                     .font(BruhsType.label)
@@ -237,10 +237,10 @@ final class DiskMenuAnchor: NSView {
 }
 
 extension DiskModel {
-    /// A disk's icon in the disk menu, at the menu's 16 pt, as the icon store draws it. The path bar asks for it ahead of
-    /// time, so the menu usually finds it drawn.
-    static func menuIconRequest(_ path: String, appearance: IconAppearance, scale: CGFloat) -> IconRequest {
-        IconRequest(.item(path), size: IconSize(points: 16, scale: scale), appearance: appearance)
+    /// A disk's icon in the disk menu, at the menu's 16 pt, as the icon store draws it, by the rule's key for the disk
+    /// (`volumeKey`). The path bar asks for it ahead of time, so the menu usually finds it drawn.
+    func menuIconRequest(_ path: String, appearance: IconAppearance, scale: CGFloat) -> IconRequest {
+        IconRequest(volumeKey(for: path), size: IconSize(points: 16, scale: scale), appearance: appearance)
     }
 
     /// The disk menu: each disk Disk lists, with its icon and free space, then Choose Folder. The startup disk shows
@@ -253,7 +253,7 @@ extension DiskModel {
         let shown = folderPath?.volume.path
         for volume in choices {
             let item = menu.add(volume, enabled: !busy) { [weak self] in self?.show(volume.url.path) }
-            let icon = Self.menuIconRequest(volume.url.path, appearance: appearance, scale: scale)
+            let icon = menuIconRequest(volume.url.path, appearance: appearance, scale: scale)
             if let drawn = Icons.store.cachedIcon(for: icon) {
                 item.image = drawn.nsImage
             } else {

@@ -82,6 +82,10 @@ describe("iconKey", () => {
 describe("readIconRule", () => {
   test("reads the table as native sends it", () => {
     assert.equal(readIconRule(sent())?.asking, false);
+    assert.deepEqual(
+      [...(readIconRule(sent())?.typedVolumes ?? [])],
+      ["/Volumes/Archive", "/Volumes/share"],
+    );
     assert.equal(
       readIconRule(sent({ ...fixture.rule, asking: true }))?.asking,
       true,
@@ -109,6 +113,9 @@ describe("readIconRule", () => {
       sent({ ...fixture.rule, asking: undefined }),
       sent({ ...fixture.rule, emptyTrash: "yes" }),
       sent({ ...fixture.rule, emptyTrash: undefined }),
+      sent({ ...fixture.rule, typedVolumes: "/Volumes/Archive" }),
+      sent({ ...fixture.rule, typedVolumes: ["/Volumes/Archive", 3] }),
+      sent({ ...fixture.rule, typedVolumes: undefined }),
     ]) {
       assert.equal(readIconRule(text), null, String(text));
     }

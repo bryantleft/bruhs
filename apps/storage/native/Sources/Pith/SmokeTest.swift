@@ -786,7 +786,7 @@ extension AppDelegate {
         // The path bar draws the disks' icons for the menu ahead of time.
         let appearance = IconAppearance(main.window.effectiveAppearance), scale = main.window.backingScaleFactor
         let drawn = await eventually {
-            self.disk.choices.allSatisfy { Icons.store.cachedIcon(for: DiskModel.menuIconRequest($0.url.path, appearance: appearance, scale: scale)) != nil }
+            self.disk.choices.allSatisfy { Icons.store.cachedIcon(for: self.disk.menuIconRequest($0.url.path, appearance: appearance, scale: scale)) != nil }
         }
         // A disk's item reads its name, then its free space: "Macintosh HD", a tab, "Free 49.3 GB".
         let items = disk.diskMenu(appearance: appearance, scale: scale).menu.items

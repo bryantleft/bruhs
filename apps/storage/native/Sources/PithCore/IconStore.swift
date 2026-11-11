@@ -4,8 +4,9 @@ import UniformTypeIdentifiers
 
 /// What an icon shows, and where macOS's icon for it comes from, so asking for one never makes Pith open an item:
 /// `type/<extension>` is a file's type, from its extension alone; `item/<absolute path>` is a real item's own icon,
-/// as Finder shows it; `place/<id>` is a known place's (`KnownPlaces`); `folder` is a plain folder; and `group` stands
-/// for several items, as the map's smaller items do.
+/// as Finder shows it; `place/<id>` is a known place's (`KnownPlaces`); `folder` is a plain folder; `group` stands
+/// for several items, as the map's smaller items do; and `volume` is macOS's icon for the volume type, which a volume
+/// macOS guards shows while Pith hasn't Full Disk Access (`KnownPlaces.typedVolumes`).
 ///
 /// `string` is how a key travels in a URL's path. Its payload is percent-encoded, everything but ASCII letters, digits
 /// and `-._~`, an item path's slashes included, so a key stays whole: WebKit can't resolve a `..` out of it on the way.
@@ -21,6 +22,7 @@ public enum IconKey: Hashable, Sendable {
     case place(String)
     case folder
     case group
+    case volume
 
     /// The key as one string. Only a key whose item path is absolute and canonical, and whose place has an id, reads
     /// back with `init(string:)`.
@@ -31,6 +33,7 @@ public enum IconKey: Hashable, Sendable {
         case .place(let id): "place/" + Self.escape(id)
         case .folder: "folder"
         case .group: "group"
+        case .volume: "volume"
         }
     }
 
@@ -41,6 +44,7 @@ public enum IconKey: Hashable, Sendable {
         switch string {
         case "folder": self = .folder; return
         case "group": self = .group; return
+        case "volume": self = .volume; return
         default: break
         }
         guard let slash = string.firstIndex(of: "/"), let payload = string[string.index(after: slash)...].removingPercentEncoding,
@@ -385,6 +389,10 @@ public struct SystemIconRenderer: IconRenderer {
             return workspace.icon(forFile: path)
         case .folder:
             return workspace.icon(for: .folder)
+        case .volume:
+            // The type macOS declares for a volume, `public.volume`, drawn from the type alone: nothing on any volume is
+            // opened. macOS 26.3 draws it with the folder's art, without the tint a plain folder takes.
+            return workspace.icon(for: .volume)
         case .group:
             // A copy: the named image is shared, and drawings run on several threads at once.
             return NSImage(named: NSImage.multipleDocumentsName)?.copy() as? NSImage

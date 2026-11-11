@@ -11,6 +11,7 @@ final class IconKeyTests: XCTestCase {
         XCTAssertEqual(IconKey.place("photos-library").string, "place/photos-library")
         XCTAssertEqual(IconKey.folder.string, "folder")
         XCTAssertEqual(IconKey.group.string, "group")
+        XCTAssertEqual(IconKey.volume.string, "volume")
         XCTAssertEqual(IconKey.item("/").string, "item/%2F")
         // Slashes are escaped too, so a key stays whole in a URL and WebKit can't resolve `..` out of it on the way.
         XCTAssertEqual(IconKey.item("/Applications/Xcode.app").string, "item/%2FApplications%2FXcode.app")
@@ -21,7 +22,7 @@ final class IconKeyTests: XCTestCase {
             "/", "/Users/me/My Folder", "/Volumes/Untitled 1/日本語/naïve résumé.pdf", "/tmp/100% done?#&+=;,@!'()$*[]:.txt",
             "/Users/me/Cafe\u{301}", "/Users/me/Caf\u{e9}", "/a/..b/c../...", "/a/.hidden/~tilde", "/emoji/☕️ 👩🏽‍💻",
         ]
-        let keys = paths.map(IconKey.item) + [.type("pdf"), .type("TAR"), .type(""), .type("weird ext%"), .place("documents"), .folder, .group]
+        let keys = paths.map(IconKey.item) + [.type("pdf"), .type("TAR"), .type(""), .type("weird ext%"), .place("documents"), .folder, .group, .volume]
         for key in keys {
             let string = key.string
             XCTAssertEqual(IconKey(string: string), key, string)
@@ -405,12 +406,26 @@ final class SystemIconTests: XCTestCase {
 
     func testEveryKindOfKeyDraws() async {
         for key: IconKey in [.type("pdf"), .type(""), .type("no-such-extension-pith"), .item("/Applications"), .item("/"), .folder, .group,
-                             .place("documents")] {
+                             .volume, .place("documents")] {
             let drawn = await draw(key, .dark)
             XCTAssertNotNil(drawn, key.string)
         }
         let unknown = await draw(.place("nowhere"), .dark)
         XCTAssertNil(unknown, "a place the table doesn't have has no icon")
+    }
+
+    /// A volume macOS guards shows macOS's icon for the volume type, which macOS declares, `public.volume`, and draws
+    /// from the type alone, with no path, so nothing on the volume is opened: never the generic document. macOS 26.3
+    /// draws it with the folder's art, without the tint a plain folder takes, so it's not compared with the folder.
+    func testAVolumeMacOSGuardsIsDrawnByItsDeclaredType() async throws {
+        let declared = try XCTUnwrap(UTType("public.volume"))
+        XCTAssertEqual(declared, .volume)
+        XCTAssertFalse(declared.isDynamic)
+        for appearance in IconAppearance.allCases {
+            let drawnVolume = await draw(.volume, appearance), drawnDocument = await draw(.type(""), appearance)
+            let volume = try XCTUnwrap(drawnVolume), document = try XCTUnwrap(drawnDocument)
+            XCTAssertNotEqual(pixels(volume.image), pixels(document.image), "\(appearance) draws a volume as the generic document")
+        }
     }
 
     /// A special folder's type, or an app, that this macOS draws as a blank document would show a place as nothing.
