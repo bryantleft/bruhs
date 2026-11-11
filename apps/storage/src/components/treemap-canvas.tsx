@@ -35,29 +35,29 @@ import {
 import {
   CATEGORIES,
   folderToOpenAt,
-  GAP,
-  headerLabel,
   isFolderLike,
   type Kind,
   type LabelMarks,
   type LabelMetrics,
   labelMetricsOf,
-  labelMiddle,
-  markRoom,
   nodeOf,
   type Tile,
   type TreemapLayout,
   tileAt,
   tileForPath,
-  tileLabel,
   type UsedSpace,
 } from "~/lib/treemap-layout";
 import type { DirNode, TreeNode } from "~/lib/types";
 import { describe } from "./hover-card";
 import {
+  type Drawn,
+  drawnBox,
+  paintBlockLabel,
+  paintHeaderLabel,
+} from "./map-labels";
+import {
   browserFrames,
   drawMark,
-  drawPadlock,
   iconArrivals,
   iconPaint,
   type MapIcons,
@@ -307,21 +307,6 @@ function useLabelFont(font: string | null) {
   return state;
 }
 
-interface Drawn {
-  readonly x: number;
-  readonly y: number;
-  readonly w: number;
-  readonly h: number;
-}
-
-/** A tile's painted area: its box less the gap on the right and bottom. */
-const drawnBox = (tile: Tile): Drawn => ({
-  x: tile.x0,
-  y: tile.y0,
-  w: tile.x1 - tile.x0 - GAP,
-  h: tile.y1 - tile.y0 - GAP,
-});
-
 function matchesKind(tile: Tile, kind: Kind): boolean {
   if (tile.kind === "group") return kind === "grouped";
   if (tile.kind === "volume") return kind === "volume";
@@ -338,8 +323,9 @@ export function kindLabel(kind: Kind): string {
 
 /**
  * Paints `layout`, its labels, once their font has loaded, with `metrics`, the metrics the layout was laid out with
- * (`labelMetricsOf`), and its marks: each file block's kind glyph, and the icons `icons` has loaded, from its cache. It
- * asks for the icons it lacks, keeping their room empty, and returns those, for painting as they come.
+ * (`labelMetricsOf`), each no wider than its room (map-labels.ts), and its marks: each file block's kind glyph, and the
+ * icons `icons` has loaded, from its cache. It asks for the icons it lacks, keeping their room empty, and returns those,
+ * for painting as they come.
  */
 function drawMap(
   canvas: HTMLCanvasElement,
@@ -362,20 +348,6 @@ function drawMap(
   const fonts = {
     name: `500 ${LABEL.size}px ${palette.font}`,
     size: `400 ${LABEL.size}px ${palette.font}`,
-  };
-
-  const text = (
-    value: string,
-    x: number,
-    y: number,
-    font: string,
-    color: string,
-    align: CanvasTextAlign,
-  ) => {
-    ctx.font = font;
-    ctx.fillStyle = color;
-    ctx.textAlign = align;
-    ctx.fillText(value, x, y);
   };
 
   const clipTo = (box: Drawn, paint: () => void) => {
@@ -414,38 +386,13 @@ function drawMap(
     ctx.fillStyle = palette.role.well;
     ctx.fillRect(box.x, box.y, box.w, box.h);
     outline(box, palette.role.hairline);
-    const middle = labelMiddle(tile, metrics);
     drawMark(ctx, tile, metrics, paint, palette.role.text);
-    const label = labels ? headerLabel(tile, metrics) : null;
-    if (!label) return;
-    clipTo({ ...box, h: tile.header }, () => {
-      text(
-        label.name,
-        box.x + LABEL.padX + markRoom(tile),
-        middle,
-        fonts.name,
-        palette.role.text,
-        "left",
-      );
-      // After the name as drawn, in the room its layout kept, as the size beside it is drawn.
-      drawPadlock(
-        ctx,
-        tile,
-        metrics,
-        ctx.measureText(label.name).width,
-        palette.role.textSecondary,
-      );
-      if (label.size) {
-        text(
-          label.size,
-          box.x + box.w - LABEL.padX,
-          middle,
-          fonts.size,
-          palette.role.textSecondary,
-          "right",
-        );
-      }
-    });
+    if (labels) {
+      paintHeaderLabel(ctx, tile, metrics, fonts, {
+        name: palette.role.text,
+        size: palette.role.textSecondary,
+      });
+    }
   };
 
   const drawBlock = (tile: Exclude<Tile, { kind: "folder" }>, dim: boolean) => {
@@ -482,41 +429,8 @@ function drawMap(
       ctx.fillRect(box.x, box.y, box.w, box.h);
       hatch(box);
     }
-    const first = labelMiddle(tile, metrics);
     drawMark(ctx, tile, metrics, paint, ink);
-    const label = labels ? tileLabel(tile, metrics) : null;
-    if (label) {
-      clipTo(box, () => {
-        text(
-          label.name,
-          box.x + LABEL.padX + markRoom(tile),
-          first,
-          fonts.name,
-          ink,
-          "left",
-        );
-        if (!label.size) return;
-        if (label.lines === 2) {
-          text(
-            label.size,
-            box.x + LABEL.padX,
-            first + LABEL.lineHeight,
-            fonts.size,
-            ink,
-            "left",
-          );
-        } else {
-          text(
-            label.size,
-            box.x + box.w - LABEL.padX,
-            first,
-            fonts.size,
-            ink,
-            "right",
-          );
-        }
-      });
-    }
+    if (labels) paintBlockLabel(ctx, tile, metrics, fonts, ink);
     ctx.globalAlpha = 1;
   };
 
