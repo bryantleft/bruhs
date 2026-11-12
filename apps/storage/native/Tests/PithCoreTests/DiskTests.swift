@@ -144,6 +144,34 @@ final class DiskTests: XCTestCase {
                      "an item outside the map")
     }
 
+    /// An item the selection keeps from an earlier map, folded into its folder's smaller items since, can say more than
+    /// they hold now, as when its contents were deleted outside Pith. Move to Trash takes no more out of the folders above
+    /// it than the smaller items it comes out of held, and the item as it left the map, of what they gave, is what its
+    /// Undo puts back into them, so the map is as it was.
+    func testAKeptItemTakesNoMoreThanTheSmallerItemsItComesOutOfHeld() throws {
+        let original = sample()
+        // Kept at 25 B in 4 files, where b's smaller items hold 10 B in 2 files now.
+        let kept = DiskNode(kind: .dir, name: "shrunk", path: "/r/b/shrunk", size: 25, files: 4, children: [])
+        let gone = try XCTUnwrap(original.removing(kept.path, folded: kept))
+        let b = try XCTUnwrap(gone.root.children?.first { $0.path == "/r/b" })
+        XCTAssertEqual([b.size, b.files], [10, 1], "b loses what its smaller items held, no more")
+        XCTAssertEqual(b.children?.first { $0.kind == .aggregate }.map { [$0.size, $0.files] }, [0, 0])
+        XCTAssertEqual([gone.root.size, gone.root.files], [50, 3])
+        XCTAssertEqual([gone.summary.bytes, gone.summary.files], [50, 3])
+        XCTAssertEqual(gone.item(at: "/r/a")?.size, 40, "the folders beside it stay as they were")
+        let taken = try XCTUnwrap(original.taking(kept.path, folded: kept))
+        XCTAssertEqual(taken.map.root, gone.root)
+        XCTAssertEqual(taken.item, DiskNode(kind: .dir, name: "shrunk", path: "/r/b/shrunk", size: 10, files: 2, children: nil), "of what they gave")
+        let back = try XCTUnwrap(taken.map.puttingBack(LiveEdits.Restored(node: taken.item, topFiles: [], places: [], folded: true)))
+        XCTAssertEqual(back.root, original.root)
+        XCTAssertEqual(back.summary, original.summary)
+        // An item they hold all of leaves as the map had it, and one the tree draws as the tree draws it.
+        let tiny = DiskNode(kind: .dir, name: "tiny", path: "/r/b/tiny", size: 6, files: 2, children: [])
+        XCTAssertEqual(original.taking(tiny.path, folded: tiny)?.item, tiny)
+        XCTAssertEqual(original.taking("/r/a")?.item, original.item(at: "/r/a"))
+        XCTAssertEqual(original.taking("/r/b/hidden.log")?.item, original.item(at: "/r/b/hidden.log"), "a file shown only in Largest files")
+    }
+
     /// An item put back into a folder the map draws with nothing in it, as a scan made after the move writes the folder it
     /// left, leaving an empty folder's children out, gets a block of its own there, and every folder above it grows by it.
     /// A folder drawn with a size but no detail doesn't take it as its only block.

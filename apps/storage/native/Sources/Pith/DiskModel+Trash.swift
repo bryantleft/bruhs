@@ -91,14 +91,18 @@ extension DiskModel {
             let path = move.plan.target.path
             // As the map shows it, or as it last showed it, for a selected item it folds into its folder's smaller items.
             let node = result.item(at: path) ?? selection.shown[path] ?? Self.node(of: move.plan)
-            nodes.append(node)
+            // One the tree folds away takes its size out of the smaller items that count it, no more than they hold, so
+            // an item kept with the size an earlier map showed takes only what's there, and what it took is what its Undo
+            // puts back, and what the live map's maps after it leave out.
+            let taken = updated.taking(path, folded: node)
+            updated = taken?.map ?? updated
+            let left = taken?.item ?? node
+            nodes.append(left)
             // A place it held leaves Places with it, its largest files leave Largest files, and the folders in it the map
             // couldn't read leave their list, until Undo puts them back.
             let inside = { (other: String) in DiskChanges.isInside(other, path) }
-            items[path] = LiveEdits.Restored(node: node, topFiles: result.topFiles.filter { inside($0.path) }, places: sideColumn.tookOff(path),
+            items[path] = LiveEdits.Restored(node: left, topFiles: result.topFiles.filter { inside($0.path) }, places: sideColumn.tookOff(path),
                                              folded: result.root.node(at: path) == nil, unreadable: result.unreadableFolders.filter { inside($0.path) })
-            // One the tree folds away takes its size out of the smaller items that count it.
-            updated = updated.removing(path, folded: node) ?? updated
         }
         if liveView != nil {
             liveEdits.trashed(nodes)

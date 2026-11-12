@@ -249,23 +249,42 @@ public struct DiskResult: Codable, Sendable {
 
     /// The scan with the item at `path` gone, as after moving it to the Trash: every folder above it shrinks by its size
     /// and files. An item the tree folds into its folder's smaller items, `folded`, as the map had it, comes out of them,
-    /// for a tree known to count it there. Nil when the tree doesn't hold the item.
+    /// for a tree known to count it there, and takes no more than they hold. Nil when the tree doesn't hold the item.
     public func removing(_ path: String, folded: DiskNode? = nil) -> DiskResult? {
+        taking(path, folded: folded)?.map
+    }
+
+    /// The scan with the item at `path` gone, as `removing(_:folded:)` has it, and the item as it left the map: as the
+    /// tree draws it, or, for one the tree folds into its folder's smaller items, with the size and files that came out
+    /// of them. Those can be fewer than the item says, as for one the selection keeps from an earlier map whose contents
+    /// were deleted since, outside Pith (`DiskSelection`): the folders above it lose what the smaller items held, no more,
+    /// and putting the item as it left back into them (`restoring`) leaves the map as it was. Nil when the tree doesn't
+    /// hold the item.
+    public func taking(_ path: String, folded: DiskNode? = nil) -> (map: DiskResult, item: DiskNode)? {
         let inside = { (other: String) in other == path || other.hasPrefix(path + "/") }
         guard path != root.path, let (tree, removed) = Self.remove(path, from: root) else {
             // A file shown only in the largest-files list lies inside an aggregate, which already counts it.
-            if let file = topFiles.first(where: { $0.path == path }), let tree = Self.shrink(root, toward: path, size: file.size, files: 1) {
-                return DiskResult(root: tree, topFiles: topFiles.filter { $0.path != path }, volumes: volumes, unreadableFolders: unreadableFolders,
-                                  summary: summary.with(bytes: tree.size, files: summary.files.saturatingSubtract(1)))
+            if let file = topFiles.first(where: { $0.path == path }), let (tree, size, files) = Self.shrink(root, toward: path, size: file.size, files: 1) {
+                return (DiskResult(root: tree, topFiles: topFiles.filter { $0.path != path }, volumes: volumes, unreadableFolders: unreadableFolders,
+                                   summary: summary.with(bytes: tree.size, files: summary.files.saturatingSubtract(files))),
+                        DiskNode(kind: .file, name: file.name, path: file.path, size: size, children: nil))
             }
             guard path != root.path, let folded, folded.path == path, folded.isItem,
-                  let tree = Self.shrink(root, toward: path, size: folded.size, files: folded.fileCount) else { return nil }
-            return DiskResult(root: tree, topFiles: topFiles.filter { !inside($0.path) }, volumes: volumes, unreadableFolders: unreadableFolders.filter { !inside($0.path) },
-                              summary: summary.with(bytes: tree.size, files: summary.files.saturatingSubtract(folded.fileCount)))
+                  let (tree, size, files) = Self.shrink(root, toward: path, size: folded.size, files: folded.fileCount) else { return nil }
+            return (DiskResult(root: tree, topFiles: topFiles.filter { !inside($0.path) }, volumes: volumes, unreadableFolders: unreadableFolders.filter { !inside($0.path) },
+                               summary: summary.with(bytes: tree.size, files: summary.files.saturatingSubtract(files))),
+                    Self.left(folded, size: size, files: files))
         }
         let unreadable = unreadableFolders.filter { !inside($0.path) }
-        return DiskResult(root: tree, topFiles: topFiles.filter { !inside($0.path) }, volumes: volumes.filter { !inside($0.path) }, unreadableFolders: unreadable,
-                          summary: summary.with(bytes: tree.size, files: summary.files.saturatingSubtract(removed.fileCount)))
+        return (DiskResult(root: tree, topFiles: topFiles.filter { !inside($0.path) }, volumes: volumes.filter { !inside($0.path) }, unreadableFolders: unreadable,
+                           summary: summary.with(bytes: tree.size, files: summary.files.saturatingSubtract(removed.fileCount))), removed)
+    }
+
+    /// `item`, folded into smaller items that gave up `size` and `files` for it: itself when they gave all it says, and
+    /// otherwise of that size, a folder of those files and without its detail, since what it held then was more.
+    private static func left(_ item: DiskNode, size: UInt64, files: UInt64) -> DiskNode {
+        guard size != item.size || files != item.fileCount else { return item }
+        return DiskNode(kind: item.kind, name: item.name, path: item.path, size: size, files: item.kind == .dir ? files : nil, children: nil)
     }
 
     /// The map with `item` back where it was, as after Undo put it back, for a tree whose index hasn't listed it again:
@@ -374,19 +393,26 @@ public struct DiskResult: Codable, Sendable {
         return node.with(size: node.size + size, files: node.files.map { $0 + files }, children: node.children == nil && updated.isEmpty ? nil : updated)
     }
 
-    /// Shrinks the folders above `path` and the aggregate holding it, for an item the tree folded away.
-    private static func shrink(_ node: DiskNode, toward path: String, size: UInt64, files: UInt64) -> DiskNode? {
+    /// Shrinks the aggregate holding `path`, of the deepest folder the tree draws on its way, for an item the tree folded
+    /// away, by its `size` and `files` but no more than the aggregate holds, and every folder above it by what the
+    /// aggregate gave, which comes back with the tree.
+    private static func shrink(_ node: DiskNode, toward path: String, size: UInt64, files: UInt64) -> (node: DiskNode, size: UInt64, files: UInt64)? {
         let children = node.children ?? []
         var updated = children
-        if let index = children.firstIndex(where: { path.hasPrefix($0.path + "/") && $0.kind == .dir }), let child = shrink(children[index], toward: path, size: size, files: files) {
+        let gave: (size: UInt64, files: UInt64)
+        if let index = children.firstIndex(where: { path.hasPrefix($0.path + "/") && $0.kind == .dir }),
+           let (child, size, files) = shrink(children[index], toward: path, size: size, files: files) {
             updated[index] = child
+            gave = (size, files)
         } else if let index = children.firstIndex(where: { $0.kind == .aggregate }) {
             let aggregate = children[index]
-            updated[index] = aggregate.with(size: aggregate.size.saturatingSubtract(size), files: aggregate.files.map { $0.saturatingSubtract(files) }, children: nil)
+            gave = (min(size, aggregate.size), aggregate.files.map { min(files, $0) } ?? files)
+            updated[index] = aggregate.with(size: aggregate.size - gave.size, files: aggregate.files.map { $0 - gave.files }, children: nil)
         } else {
             return nil
         }
-        return node.with(size: node.size.saturatingSubtract(size), files: node.files.map { $0.saturatingSubtract(files) }, children: updated)
+        return (node.with(size: node.size.saturatingSubtract(gave.size), files: node.files.map { $0.saturatingSubtract(gave.files) }, children: updated),
+                gave.size, gave.files)
     }
 
     private static func replace(_ path: String, in node: DiskNode, with fresh: DiskNode) -> DiskNode? {

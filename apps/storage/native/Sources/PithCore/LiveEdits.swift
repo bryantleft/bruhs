@@ -19,7 +19,7 @@ extension DiskResult {
 /// are made on that map, and each one its index shows is done with.
 public struct LiveEdits: Sendable, Equatable {
     public enum Edit: Sendable, Equatable {
-        /// An item moved to the Trash, as the map had it.
+        /// An item moved to the Trash, as it left the map (`DiskResult.taking`).
         case gone(DiskNode)
         /// An item Undo put back, as the map had it before the move, with its largest files and the places it held.
         case back(Restored)
@@ -32,7 +32,7 @@ public struct LiveEdits: Sendable, Equatable {
         }
     }
 
-    /// An item Undo put back: what the map before the move had of it.
+    /// An item Undo put back: what the map before the move had of it, the item as it left the map.
     public struct Restored: Sendable, Equatable {
         public let node: DiskNode
         /// The largest files inside it, which go back in Largest files.
