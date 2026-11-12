@@ -86,7 +86,9 @@ import PithCore
         // active, as after the person has been in System Settings (`DiskAccessWatch`).
         disk.probeDiskAccess()
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.disk.probeDiskAccess() }
+            // At once, on the main queue the notice comes on, so a live map arriving next finds the new verdict: a live
+            // map probes only while Pith isn't active (`DiskModel.showLive`).
+            MainActor.assumeIsolated { self?.disk.probeDiskAccess() }
         })
         let center = NSWorkspace.shared.notificationCenter
         observers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
