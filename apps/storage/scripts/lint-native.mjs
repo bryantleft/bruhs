@@ -3,8 +3,9 @@
  * Keeps Pith's SwiftUI content on the bruhs theme. System colours change meaning with the
  * user's settings and iOS-style big titles aren't how Mac windows label themselves, so both
  * fail here with the fix. UI text in the views and the bundled disk map also fails on bullets,
- * middle dots and dashes, which the theme's writing rules keep out of interfaces. Silence one
- * line with a `bruhs-native-ignore` comment saying why.
+ * middle dots and dashes, which the theme's writing rules keep out of interfaces. Only DiskModel's
+ * own files may set what DiskModel alone sets. Silence one line with a `bruhs-native-ignore`
+ * comment saying why.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -38,6 +39,18 @@ const SEPARATORS = {
   decodesEscapes: true,
 };
 
+/**
+ * What DiskModel alone sets, which its split into DiskModel+*.swift can't keep `private(set)`, since Swift's `private`
+ * doesn't reach across files: a write from any other file fails here, as the compiler would have failed it.
+ */
+const DISK_MODEL_SETS = ["changes", "edited", "freesAge", "live", "liveMapsShown", "liveView", "movesUnderWay", "note", "progress", "rescanning",
+  "resultJSON", "scope", "selectedFrees", "selectedItems", "selectedPlan", "selection", "trashed"];
+const DISK_MODEL_WRITES = {
+  pattern: new RegExp(`\\b(?:disk|model)\\.(?:${DISK_MODEL_SETS.join("|")})\\s*(?:=(?!=)|\\+=|-=)`),
+  fix: "only DiskModel sets this; call the DiskModel method that keeps its bookkeeping, such as setSelection",
+  codeOnly: true,
+};
+
 const isComment = (line) => /^\s*(\/\/|\/\*|\*|\{\/\*)/.test(line);
 
 /** Swift's `\u{2012}` and JavaScript's `\u2012` and `\u{2012}` escapes, as the characters they stand for. */
@@ -68,13 +81,13 @@ function lint(file, rules) {
   });
 }
 
-for (const file of files(views, ".swift")) lint(file, [...RULES, SEPARATORS]);
+for (const file of files(views, ".swift")) lint(file, [...RULES, SEPARATORS, ...(path.basename(file).startsWith("DiskModel") ? [] : [DISK_MODEL_WRITES])]);
 for (const file of files(core, ".swift")) lint(file, [SEPARATORS]);
 // The page's words live in its components and in the plain modules beside them, as the hover card's do.
 for (const dir of diskMap) for (const extension of [".tsx", ".ts"]) for (const file of files(dir, extension)) lint(file, [SEPARATORS]);
 
 if (findings.length) {
-  console.error(`${findings.join("\n")}\n\nlint-native: ${findings.length} place(s) bypass the bruhs theme.`);
+  console.error(`${findings.join("\n")}\n\nlint-native: ${findings.length} place(s) break Pith's native rules.`);
   process.exit(1);
 }
 console.log("lint-native: Pith's views and disk map use the bruhs theme");

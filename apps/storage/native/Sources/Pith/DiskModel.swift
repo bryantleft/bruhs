@@ -45,6 +45,12 @@ enum MapCommand: Equatable {
     case up
 }
 
+/// The Disk tab's model: the map shown, live or scanned, the items selected, Move to Trash and Undo, and each volume's
+/// space. Its stored state lives here, as `@Observable` needs, and its work in an extension for each responsibility:
+/// DiskModel+Live.swift, +Scans.swift, +Selection.swift, +Trash.swift, +Space.swift and +Icons.swift. Swift's `private`
+/// doesn't reach across files, so what the extensions share is internal, and lint-native.mjs keeps every other file from
+/// setting what DiskModel alone sets. A member that alone writes a `private(set)` property stays in this file beside it,
+/// so the compiler still guards that property.
 @MainActor @Observable final class DiskModel {
     var result: DiskResult? {
         didSet {
