@@ -35,6 +35,12 @@ public struct MountTable: Sendable, Equatable {
     /// another mounted between two calls, and an app on the new disk counted as on the startup disk.
     public static func current() -> MountTable { kernel.current() }
 
+    /// The kernel's table alone, read again at every call, without asking DiskArbitration about any disk, so its mounts
+    /// have no word of being internal. It's enough to say which volume a path lies on (`mapOf(_:holds:)`,
+    /// `isOnStartupDisk`), and it never waits on diskarbitrationd, which a move to the Trash, its Undo and each app's
+    /// icon mustn't.
+    public static func kernelOnly() -> MountTable { read { getfsstat($0, $1, $2) } }
+
     /// What DiskArbitration's description of a disk says of where it's attached: whether it's internal, or nil where the
     /// description has no word of it, as a disk image's hasn't.
     struct Described: Sendable, Equatable {

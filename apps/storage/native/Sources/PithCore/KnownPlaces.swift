@@ -55,8 +55,9 @@ public struct KnownPlaces: Sendable {
     public let home: String
     /// Other apps' containers, `~/Library/Containers`, each named by its app's bundle ID.
     private let containers: String
-    /// The file systems mounted now, which say whether an app lies on the startup disk. Which volumes macOS guards comes
-    /// from what Pith worked out of the table off the main thread instead (`guardingVolumes`).
+    /// The file systems mounted now, as the kernel lists them (`MountTable.kernelOnly`), which say whether an app lies on
+    /// the startup disk without waiting on DiskArbitration. Which volumes macOS guards comes from what Pith worked out of
+    /// the table off the main thread instead (`guardingVolumes`).
     private let mounts: @Sendable () -> MountTable
     /// The roots of the volumes that show the drive (`IconKey.drive`) rather than their own icons, which are looked up by
     /// their paths: the volumes macOS guards, while Pith hasn't Full Disk Access (`guardingVolumes`). None in the table
@@ -74,7 +75,7 @@ public struct KnownPlaces: Sendable {
     /// is macOS's full Trash, and `emptyTrash` has the empty one. `mounts` gives the file systems mounted when an app's
     /// icon is asked for: this Mac's own, or a test's.
     public init(home: URL, searchPaths: [FileManager.SearchPathDirectory: URL],
-                mounts: @escaping @Sendable () -> MountTable = MountTable.current, application: (String) -> URL?) {
+                mounts: @escaping @Sendable () -> MountTable = MountTable.kernelOnly, application: (String) -> URL?) {
         let library = home.appendingPathComponent("Library")
         func folder(_ directory: FileManager.SearchPathDirectory, _ inside: String? = nil) -> URL? {
             searchPaths[directory].map { url in inside.map { url.appendingPathComponent($0) } ?? url }

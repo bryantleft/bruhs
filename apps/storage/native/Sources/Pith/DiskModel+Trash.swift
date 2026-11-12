@@ -60,7 +60,7 @@ extension DiskModel {
         movesUnderWay += 1
         afterTrashWork {
             // With the file systems mounted then, which say which folders the live map lists again (`followChange`).
-            let (outcome, mounts) = await Task.detached(priority: .userInitiated) { (batch.move(with: mover), MountTable.current()) }.value
+            let (outcome, mounts) = await Task.detached(priority: .userInitiated) { (batch.move(with: mover), MountTable.kernelOnly()) }.value
             self.moved(outcome, undoManager: undoManager, mounts: mounts)
             self.movesUnderWay -= 1
         }
@@ -166,7 +166,7 @@ extension DiskModel {
             // With the file systems mounted then, which say which map holds each item (`putBack`).
             let (restored, stuck, mounts) = await Task.detached(priority: .userInitiated) {
                 let (restored, stuck) = TrashUndo.putBack(moves) { try FileManager.default.moveItem(at: $0, to: $1) }
-                return (restored, stuck, MountTable.current())
+                return (restored, stuck, MountTable.kernelOnly())
             }.value
             if let message = TrashUndo.problem(stuck: stuck) { self.problem = DiskProblem(message: message) }
             let items = restored.compactMap { record.items[$0.plan.target.path] }

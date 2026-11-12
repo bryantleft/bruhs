@@ -48,6 +48,19 @@ final class MountTableTests: XCTestCase {
         XCTAssertTrue(table.mapOf("/", holds: NSTemporaryDirectory()), "the startup disk's map holds the temporary folder, where the smoke test maps")
     }
 
+    /// Move to Trash, its Undo and each app's icon read the kernel's table alone, which never waits on DiskArbitration: it
+    /// lists the same volumes and says the same of which volume a path lies on, with no word of any disk being internal.
+    func testTheKernelsTableAloneSaysWhichVolumeAPathIsOnWithoutDiskArbitration() {
+        let kernel = MountTable.kernelOnly(), described = MountTable.current()
+        XCTAssertEqual(kernel.mounts.map(\.path), described.mounts.map(\.path))
+        XCTAssertTrue(kernel.mounts.allSatisfy { $0.isInternal == nil }, "DiskArbitration wasn't asked")
+        XCTAssertTrue(described.mounts.contains { $0.isInternal != nil }, "where DiskArbitration was, the startup disk has its word")
+        for path in ["/System/Applications", NSTemporaryDirectory(), "/Volumes", "/System/Volumes/Data/private"] {
+            XCTAssertEqual(kernel.isOnStartupDisk(path), described.isOnStartupDisk(path), path)
+            XCTAssertEqual(kernel.mapOf("/", holds: path), described.mapOf("/", holds: path), path)
+        }
+    }
+
     /// macOS guards a network volume, which the kernel doesn't mark local, the home automount and other automounts among
     /// them, and a volume on a disk DiskArbitration doesn't say is internal: a removable or external one, or a disk
     /// image, which it describes with no word of where it's attached. The startup disk's container keeps its own icons,
