@@ -59,8 +59,9 @@ extension DiskModel {
         let mover = Self.mover(into: trashFolder)
         movesUnderWay += 1
         afterTrashWork {
-            let outcome = await Task.detached(priority: .userInitiated) { batch.move(with: mover) }.value
-            self.moved(outcome, undoManager: undoManager)
+            // With the file systems mounted then, which say which folders the live map lists again (`followChange`).
+            let (outcome, mounts) = await Task.detached(priority: .userInitiated) { (batch.move(with: mover), MountTable.current()) }.value
+            self.moved(outcome, undoManager: undoManager, mounts: mounts)
             self.movesUnderWay -= 1
         }
     }
@@ -81,8 +82,8 @@ extension DiskModel {
 
     /// Takes what `outcome` moved off the map shown: off its tree, its largest files and Places, out of the selection,
     /// and, on the live map, off the maps after it. What the map had of each item goes with the move's own record, which
-    /// its own Undo puts back (`TrashUndoStack`).
-    private func moved(_ outcome: TrashOutcome, undoManager: UndoManager?) {
+    /// its own Undo puts back (`TrashUndoStack`). `mounts` is the mount table as the move ended.
+    private func moved(_ outcome: TrashOutcome, undoManager: UndoManager?, mounts: MountTable) {
         if let message = outcome.problem { problem = DiskProblem(message: message) }
         guard let note = outcome.note, let result else { return }
         var updated = result, items: [String: LiveEdits.Restored] = [:], nodes: [DiskNode] = []
@@ -101,7 +102,7 @@ extension DiskModel {
         }
         if liveView != nil {
             liveEdits.trashed(nodes)
-            followChange(outcome.moved)
+            followChange(outcome.moved, mounts: mounts)
         }
         self.result = updated
         if liveView == nil { edited = true }
@@ -151,46 +152,60 @@ extension DiskModel {
     }
 
     /// Moves every item of `record`'s move back where it was, off the main thread, once the move or Undo under way has
-    /// ended, and puts each back on the map open now, where it was, selecting them again. On the live map, the maps after
-    /// it keep them, until its index has listed them again. Moving back never overwrites anything: one that can't go back
-    /// stays in the Trash, and off the map, and Pith says which (`TrashUndo.putBack`).
+    /// ended, and puts each back on the map open now, where it was, selecting them again, when that map holds it. On the
+    /// live map, the maps after it keep them, until its index has listed them again. Moving back never overwrites
+    /// anything: one that can't go back stays in the Trash, and off the map, and Pith says which (`TrashUndo.putBack`).
     func undoTrash(_ record: TrashRecord) {
         if trashed === record { trashed = nil }
         let moves = record.moves
         afterTrashWork {
-            let (restored, stuck) = await Task.detached(priority: .userInitiated) {
-                TrashUndo.putBack(moves) { try FileManager.default.moveItem(at: $0, to: $1) }
+            // With the file systems mounted then, which say which map holds each item (`putBack`).
+            let (restored, stuck, mounts) = await Task.detached(priority: .userInitiated) {
+                let (restored, stuck) = TrashUndo.putBack(moves) { try FileManager.default.moveItem(at: $0, to: $1) }
+                return (restored, stuck, MountTable.current())
             }.value
             if let message = TrashUndo.problem(stuck: stuck) { self.problem = DiskProblem(message: message) }
             let items = restored.compactMap { record.items[$0.plan.target.path] }
             guard !items.isEmpty else { return }
-            self.putBack(items, moved: restored)
+            self.putBack(items, moved: restored, mounts: mounts)
         }
     }
 
     /// Puts `items`, which Undo moved back on the disk, on the map open now, where each was: in its folder, or in the
-    /// smaller items of the deepest folder the map shows on its way, as the map had it or as the map is now. Places, the
-    /// selection and the live map's maps after it follow.
-    private func putBack(_ items: [LiveEdits.Restored], moved: [TrashMove]) {
-        if liveView != nil {
-            liveEdits.putBack(items)
-            followChange(moved)
-        }
-        if let current = result {
-            var changed = false
-            result = items.reduce(current) { map, item in
-                guard let with = map.puttingBack(item) else { return map }
+    /// smaller items of the deepest folder the map shows on its way, as the map had it or as the map is now. Only the
+    /// items the map holds go on it, inside its root and on the volume it shows, by `mounts`, the mount table as they
+    /// came back (`MountTable.mapOf(_:holds:)`): an item moved on another disk's map stays off the startup disk's, though
+    /// its path is inside `/`. The live map's maps after it keep only what the live map holds, Places follows those,
+    /// and the selection is the items on the map open now, or as it was when it holds none.
+    private func putBack(_ items: [LiveEdits.Restored], moved: [TrashMove], mounts: MountTable) {
+        var changed = false
+        if let live, liveView != nil {
+            let held = items.filter { mounts.mapOf(live.root, holds: $0.node.path) }
+            if !held.isEmpty {
+                liveEdits.putBack(held)
+                followChange(moved, mounts: mounts)
+                for item in held { sideColumn.putBack(item.places) }
                 changed = true
+            }
+        }
+        let root = result?.root.path
+        let onMap = items.filter { item in root.map { mounts.mapOf($0, holds: item.node.path) } ?? false }
+        if let current = result, !onMap.isEmpty {
+            var drawn = false
+            result = onMap.reduce(current) { map, item in
+                guard let with = map.puttingBack(item) else { return map }
+                drawn = true
                 return with
             }
             // A scanned map has items its scan didn't now, as Move to Trash left it without them.
-            if changed, liveView == nil { edited = true }
+            if drawn, liveView == nil { edited = true }
+            changed = true
         }
-        for item in items { sideColumn.putBack(item.places) }
+        guard changed else { return }
         mapAnswersPerson = true
         revision = UUID()
-        let root = result?.root.path
-        setSelection(DiskSelection(items: items.reversed().map(\.node).filter { item in root.map { item.path != $0 && DiskChanges.isInside(item.path, $0) } ?? false }))
+        let selected = onMap.filter { $0.node.path != root }
+        if !selected.isEmpty { setSelection(DiskSelection(items: selected.reversed().map(\.node))) }
     }
 
     func dismissTrashNote() { trashed = nil }

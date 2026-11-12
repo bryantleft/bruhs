@@ -234,7 +234,7 @@ enum MapCommand: Equatable {
     /// The latest move to the Trash, while its notice shows: its Undo button undoes it.
     var trashed: TrashRecord?
     /// Every move to the Trash Undo can still put back, each registered with the window's undo manager on its own, so
-    /// each ⌘Z undoes its own move, the latest first, wherever the map is by then.
+    /// each ⌘Z undoes its own move, the latest first, onto the map open by then, where that map holds its items.
     @ObservationIgnored lazy var undos = TrashUndoStack { [weak self] record in self?.undoTrash(record) }
     /// The move to the Trash or Undo under way, which the next waits for, so ⌘Z pressed meanwhile undoes its move once
     /// that one ends rather than being lost. `trashWork` counts the moves, plans and Undos begun and not ended.

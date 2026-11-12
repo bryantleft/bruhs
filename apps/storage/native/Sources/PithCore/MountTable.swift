@@ -105,6 +105,17 @@ public struct MountTable: Sendable, Equatable {
         return !(mount.isLocal && mount.isInternal == true)
     }
 
+    /// Whether a map of `root` holds `path`: it lies inside `root` and on the volume the map shows, the file system mounted
+    /// deepest above `root` itself. Being inside `root` alone doesn't say so, since every path is inside `/`: the scan
+    /// stops at a volume mounted inside the map, another disk at /Volumes or the home automount, and shows the startup
+    /// disk's data volume at its firmlinked paths, /Users and the rest, never at /System/Volumes/Data. Undo puts an item
+    /// back on the map open then, and the live map lists a changed folder again, only where the map holds it. The table
+    /// says so without touching anything on either volume. With nothing in the table above them, it holds nothing.
+    public func mapOf(_ root: String, holds path: String) -> Bool {
+        guard DiskChanges.isInside(path, root), let volume = mount(holding: root) else { return false }
+        return mount(holding: path) == volume
+    }
+
     /// The file system mounted deepest above `path`.
     private func mount(holding path: String) -> Mount? {
         mounts.filter { DiskChanges.isInside(path, $0.path) }.max { $0.path.utf8.count < $1.path.utf8.count }

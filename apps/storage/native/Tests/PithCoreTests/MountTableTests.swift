@@ -45,6 +45,7 @@ final class MountTableTests: XCTestCase {
         XCTAssertTrue(table.mounts.contains { $0.path == "/" })
         XCTAssertTrue(table.isOnStartupDisk("/System/Applications"))
         XCTAssertTrue(table.isOnStartupDisk(NSTemporaryDirectory()))
+        XCTAssertTrue(table.mapOf("/", holds: NSTemporaryDirectory()), "the startup disk's map holds the temporary folder, where the smoke test maps")
     }
 
     /// macOS guards a network volume, which the kernel doesn't mark local, the home automount and other automounts among
@@ -64,6 +65,31 @@ final class MountTableTests: XCTestCase {
         XCTAssertFalse(external.guards("/"), "the startup disk, external")
         XCTAssertFalse(external.guards("/System/Volumes/Data"))
         XCTAssertTrue(MountTable([]).guards("/Volumes/Archive"), "with nothing in the table to say, guarded")
+    }
+
+    /// Undo puts an item back on the map open then, and the live map lists its folder again, only where that map holds
+    /// it: inside the map's root, on the volume the map shows, by the file system mounted deepest above each, which the
+    /// table says without touching either. A map of the startup disk holds the person's folders, at their firmlinked
+    /// paths such as /Users, and nothing on another disk, a share, a disk image or the home automount, nor the data
+    /// volume's own path to what it shows at /Users. A map of another disk holds its own items, and a map of a folder only
+    /// what's inside it.
+    func testAMapHoldsOnlyWhatLiesOnItsOwnVolume() {
+        let table = Self.table
+        for path in ["/Users", "/Users/tester/Movies/big.mov", "/Applications/Tool.app", "/Volumes/ArchiveOld/old.mov"] {
+            XCTAssertTrue(table.mapOf("/", holds: path), path)
+        }
+        for path in ["/Volumes/Archive", "/Volumes/Archive/big.mov", "/Volumes/share/Projects/notes.txt", "/Volumes/Installer/Install.app",
+                     "/System/Volumes/Data/home/tester/notes.txt", "/System/Volumes/Data/Users/tester/Movies/big.mov", "/System/Volumes/Preboot/x", "/dev/fd"] {
+            XCTAssertFalse(table.mapOf("/", holds: path), path)
+        }
+        XCTAssertTrue(table.mapOf("/Volumes/Archive", holds: "/Volumes/Archive"), "a map of another disk holds its root")
+        XCTAssertTrue(table.mapOf("/Volumes/Archive", holds: "/Volumes/Archive/Photos/2024/x.jpg"), "and its own items")
+        XCTAssertTrue(table.mapOf("/Volumes/Archive/Photos", holds: "/Volumes/Archive/Photos/x.jpg"), "a map of a folder on it")
+        XCTAssertFalse(table.mapOf("/Volumes/Archive", holds: "/Users/tester/x.jpg"), "nothing outside it")
+        XCTAssertFalse(table.mapOf("/Volumes/Archive/Photos", holds: "/Volumes/Archive/Videos/x.mov"))
+        XCTAssertTrue(table.mapOf("/Users/tester", holds: "/Users/tester/Movies/big.mov"), "a map of a folder on the startup disk")
+        XCTAssertFalse(table.mapOf("/System/Volumes/Data", holds: "/System/Volumes/Data/home/tester/notes.txt"), "the automount inside a map")
+        XCTAssertFalse(MountTable([]).mapOf("/", holds: "/Users/tester/x"), "with nothing in the table to say, nothing")
     }
 
     /// The reader marks each file system local as the kernel does, and asks DiskArbitration about each disk a file system

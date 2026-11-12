@@ -1,8 +1,9 @@
 import Foundation
 
 /// A move to the Trash that Undo can still put back: what it moved and where (`TrashMove`), what the notice says of it,
-/// and what the map had of each item that moved, by its path, which Undo puts back on whatever map is open by then. A
-/// class, since its registration with the undo manager is by its identity (`TrashUndoStack`).
+/// and what the map had of each item that moved, by its path, which Undo puts back on the map open by then, where that
+/// map holds it (`MountTable.mapOf(_:holds:)`). A class, since its registration with the undo manager is by its identity
+/// (`TrashUndoStack`).
 public final class TrashRecord: Sendable {
     public let moves: [TrashMove]
     /// What the notice of the move says (`TrashOutcome.note`).
@@ -26,9 +27,10 @@ public final class TrashRecord: Sendable {
 }
 
 /// The moves to the Trash Undo can still put back, the latest last. Each is registered with the undo manager it came
-/// with on its own, as Move to Trash, carrying its own record, so each ⌘Z undoes its own move, the latest first,
-/// wherever the map is then. The note's Undo undoes the latest, and takes it out of its undo manager first, so ⌘Z after
-/// it undoes the move before. Undo moves nothing back to the Trash, so it registers nothing and there's no Redo.
+/// with on its own, as Move to Trash, carrying its own record, so each ⌘Z undoes its own move, the latest first, onto
+/// the map open then, where that map holds its items. The note's Undo undoes the latest, and takes it out of its undo
+/// manager first, so ⌘Z after it undoes the move before. Undo moves nothing back to the Trash, so it registers nothing
+/// and there's no Redo.
 ///
 /// The undo manager doesn't keep what a registration is by (`UndoManager.registerUndo(withTarget:handler:)`), so the
 /// stack keeps each record until it's undone, or nothing can undo it any more: its undo manager is gone, as when its

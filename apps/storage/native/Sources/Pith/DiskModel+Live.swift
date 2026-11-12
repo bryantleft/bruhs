@@ -145,8 +145,9 @@ extension DiskModel {
     /// and the maps after it show it too until the index has it. A map asked for before is dropped, as are the maps on
     /// their way, and the live map lists the folders the change touched again at once, past their cooldowns: each
     /// item's folder, and the folder it went to or came from where the map can read it, as the Trash once Pith has Full
-    /// Disk Access.
-    func followChange(_ moves: [TrashMove]) {
+    /// Disk Access. It lists only the folders it holds, on its own volume by `mounts`, the mount table as the change
+    /// ended (`MountTable.mapOf(_:holds:)`), as its index covers no other.
+    func followChange(_ moves: [TrashMove], mounts: MountTable) {
         guard let live, liveView != nil else { return }
         liveMaps += 1
         live.dropTree()
@@ -154,7 +155,7 @@ extension DiskModel {
         var folders = moves.map { $0.plan.target.deletingLastPathComponent().path }
         if trashOnMap != nil { folders += moves.compactMap { $0.trashed?.deletingLastPathComponent().path } }
         var asked = Set<String>()
-        for folder in folders where DiskChanges.isInside(folder, live.root) && asked.insert(folder).inserted {
+        for folder in folders where mounts.mapOf(live.root, holds: folder) && asked.insert(folder).inserted {
             live.relist(folder, deep: false)
         }
     }
