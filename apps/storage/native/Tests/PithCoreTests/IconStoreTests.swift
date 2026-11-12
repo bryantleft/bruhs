@@ -413,12 +413,15 @@ final class SystemIconTests: XCTestCase {
 
     private func pixels(_ image: CGImage) -> Data? { image.dataProvider?.data as Data? }
 
+    /// Where macOS draws a folder's light and dark art differently, the store's drawings differ too. Where it draws them
+    /// alike, as CI's macOS 26.7.2 does, no drawing of a folder can show which appearance it followed, and the test says so.
     func testIconsAreDrawnInTheAppearanceAskedFor() async throws {
         let drawnLight = await draw(.folder, .light), drawnDark = await draw(.folder, .dark)
         let light = try XCTUnwrap(drawnLight), dark = try XCTUnwrap(drawnDark)
         XCTAssertEqual(light.image.width, 32)
         XCTAssertEqual(dark.image.width, 32)
-        XCTAssertNotEqual(pixels(light.image), pixels(dark.image), "macOS draws a folder differently in light and dark")
+        try XCTSkipIf(AppearanceShown.macOSDrawsFoldersAlike(), "this macOS draws a folder alike in light and dark, so no drawing shows the appearance followed")
+        XCTAssertNotEqual(pixels(light.image), pixels(dark.image), "the store draws a folder in the appearance asked for")
     }
 
     func testEveryKindOfKeyDraws() async {
@@ -514,7 +517,8 @@ final class SystemIconTests: XCTestCase {
 
     /// `IconAppearance` has no Increase Contrast, since macOS draws the same artwork in the high-contrast appearances as
     /// in the plain ones, through the store's own drawing. A macOS that draws any of this sample otherwise needs the
-    /// contrast in the icon's key. It runs where the Swift tests run: here, and in CI's macOS 26 job.
+    /// contrast in the icon's key. It runs where the Swift tests run: here, and in CI's macOS 26 job. Where macOS draws the
+    /// whole sample alike in light and dark, the sample alike in high contrast too shows nothing, and the test says so.
     func testHighContrastDrawsTheSameArtwork() throws {
         let workspace = NSWorkspace.shared
         let sample: [(String, NSImage?)] = [
@@ -524,13 +528,15 @@ final class SystemIconTests: XCTestCase {
         func pixels(_ image: NSImage, _ appearance: NSAppearance.Name) -> Data? {
             SystemIconRenderer.draw(image, size: size, appearance: appearance, tint: nil)?.dataProvider?.data as Data?
         }
+        var drawings: [NSImage] = []
         for (name, icon) in sample {
             let image = try XCTUnwrap(icon, name)
             XCTAssertEqual(pixels(image, .accessibilityHighContrastAqua), pixels(image, .aqua), "\(name) in light")
             XCTAssertEqual(pixels(image, .accessibilityHighContrastDarkAqua), pixels(image, .darkAqua), "\(name) in dark")
+            drawings.append(image)
         }
-        let folder = try XCTUnwrap(sample.first?.1)
-        XCTAssertNotEqual(pixels(folder, .aqua), pixels(folder, .darkAqua), "the drawings follow the appearance")
+        try XCTSkipUnless(drawings.contains { pixels($0, .aqua) != pixels($0, .darkAqua) },
+                          "this macOS draws the whole sample alike in light and dark, so its drawings alike in high contrast show nothing")
     }
 
     func testASymbolStandsInWhereMacOSHasNoIcon() async throws {

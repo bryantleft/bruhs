@@ -293,8 +293,8 @@ extension AppDelegate {
             "map_follows_text_size": zooms, "map_keeps_size_on_select": before != nil && before == after, "remote_navigation_blocked": web.url?.scheme == "pith"]
     }
 
-    /// Selects the fixture's sub folder, as a click does, since macOS draws a folder unlike in light and dark, where it
-    /// can draw a file's type alike, then switches the window to light and then to dark: for each, the bar under the map
+    /// Selects the fixture's sub folder, as a click does, since macOS can draw a folder unlike in light and dark where it
+    /// draws a file's type alike, then switches the window to light and then to dark: for each, the bar under the map
     /// shows the folder's icon as the store draws it in that appearance, off the main thread, as the window's own pixels
     /// show, and not the drawing for the other appearance, where the two differ. The selection and the window's
     /// appearance are as they were after.
@@ -308,7 +308,9 @@ extension AppDelegate {
         let size = IconSize(points: 16, scale: window.backingScaleFactor)
         let chosen = window.appearance
         defer { window.appearance = chosen }
-        let macOS = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        let macOS = "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
+        let foldersAlike = AppearanceShown.macOSDrawsFoldersAlike()
         var verdicts: [IconAppearance: AppearanceShown] = [:], seen: [String] = []
         for appearance in IconAppearance.allCases {
             window.appearance = NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
@@ -322,7 +324,7 @@ extension AppDelegate {
                 found = Self.cornerShows([own.image, other.image], in: window) ?? []
                 return found.count == 2 && found[0] < 4 && (alike || found[0] + 0.5 < found[1])
             }
-            verdicts[appearance] = AppearanceShown.judge(matches: matches, alike: alike, macOSMajor: macOS)
+            verdicts[appearance] = AppearanceShown.judge(matches: matches, alike: alike, foldersAlike: foldersAlike)
             seen.append("\(appearance.rawValue) \(found.map { String(format: "%.1f", $0) })\(alike ? ", its drawings alike" : "")")
         }
         print("selection icon \(key.string): \(IconAppearance.allCases.map { "\($0.rawValue) \(verdicts[$0].map { "\($0)" } ?? "not drawn")" }); "
