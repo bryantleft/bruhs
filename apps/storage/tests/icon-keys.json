@@ -741,7 +741,13 @@
         "files": 0,
         "children": []
       },
-      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 0, "subfolders": false, "entries": false },
+      "place": {
+        "path": "/Users/zoe\u0308/.Trash",
+        "size": 0,
+        "files": 0,
+        "subfolders": false,
+        "entries": false
+      },
       "asking": false,
       "emptyTrash": true,
       "key": "place/trash-empty"
@@ -756,7 +762,13 @@
         "files": 0,
         "children": []
       },
-      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 8192, "files": 1, "subfolders": false, "entries": false },
+      "place": {
+        "path": "/Users/zoe\u0308/.Trash",
+        "size": 8192,
+        "files": 1,
+        "subfolders": false,
+        "entries": false
+      },
       "asking": false,
       "emptyTrash": true,
       "key": "place/trash-empty"
@@ -771,7 +783,13 @@
         "files": 0,
         "children": []
       },
-      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 1, "subfolders": false, "entries": true },
+      "place": {
+        "path": "/Users/zoe\u0308/.Trash",
+        "size": 0,
+        "files": 1,
+        "subfolders": false,
+        "entries": true
+      },
       "asking": false,
       "emptyTrash": false,
       "key": "place/trash"
@@ -786,7 +804,13 @@
         "files": 0,
         "children": []
       },
-      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 2, "subfolders": false, "entries": true },
+      "place": {
+        "path": "/Users/zoe\u0308/.Trash",
+        "size": 0,
+        "files": 2,
+        "subfolders": false,
+        "entries": true
+      },
       "asking": false,
       "emptyTrash": false,
       "key": "place/trash"
@@ -801,7 +825,13 @@
         "files": 0,
         "children": []
       },
-      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 0, "subfolders": true, "entries": true },
+      "place": {
+        "path": "/Users/zoe\u0308/.Trash",
+        "size": 0,
+        "files": 0,
+        "subfolders": true,
+        "entries": true
+      },
       "asking": false,
       "emptyTrash": false,
       "key": "place/trash"
@@ -816,7 +846,13 @@
         "files": 0,
         "children": []
       },
-      "place": { "path": "/Users/zoe\u0308/.Trash", "size": 0, "files": 0, "subfolders": false, "entries": true },
+      "place": {
+        "path": "/Users/zoe\u0308/.Trash",
+        "size": 0,
+        "files": 0,
+        "subfolders": false,
+        "entries": true
+      },
       "asking": false,
       "emptyTrash": false,
       "key": "place/trash"
