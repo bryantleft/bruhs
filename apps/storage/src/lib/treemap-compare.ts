@@ -5,6 +5,7 @@
  */
 
 import { formatBytes } from "./format.ts";
+// Type-only: treemap-layout.ts imports this module's values, so a value import back would be a cycle at run time.
 import type { Laid, TreemapLayout } from "./treemap-layout.ts";
 import { type LabelMetrics, padlockRoom } from "./treemap-marks.ts";
 import {

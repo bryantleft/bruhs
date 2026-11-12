@@ -9,6 +9,7 @@ import {
   middleTruncate,
 } from "./display-names.ts";
 import { formatBytes } from "./format.ts";
+// Type-only: treemap-layout.ts imports this module's values, so a value import back would be a cycle at run time.
 import type { TreemapLayout } from "./treemap-layout.ts";
 import {
   type Box,
