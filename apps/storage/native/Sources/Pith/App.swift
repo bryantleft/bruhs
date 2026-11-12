@@ -311,12 +311,21 @@ import PithCore
         return window?.undoManager
     }
 
-    /// Activity's search state while its search field is being edited, whose steps Activity keeps itself.
-    private var focusedSearch: ActivityState? {
+    /// Activity's search state while its search field is being edited, whose steps Activity keeps itself, and the
+    /// field's editor.
+    private var focusedSearch: (state: ActivityState, editor: NSText)? {
         guard let main = mainWindow, NSApp.keyWindow === main.window,
               let field = main.window.toolbar?.items.lazy.compactMap({ ($0 as? NSSearchToolbarItem)?.searchField }).first,
               let editor = field.currentEditor(), editor === main.window.firstResponder else { return nil }
-        return main.state.activity
+        return (main.state.activity, editor)
+    }
+
+    /// Puts the text a search step brings back in the field being edited, as the field's own undo would have. SwiftUI
+    /// on macOS 15 leaves an edited search field showing its old text when its text changes from outside.
+    private func show(_ text: String, in editor: NSText) {
+        guard editor.string != text else { return }
+        editor.string = text
+        editor.selectedRange = NSRange(location: (text as NSString).length, length: 0)
     }
 
     /// Whether Edit > Undo waits for a move to the Trash under way: the main window's undo manager holds Move to Trash,
@@ -325,10 +334,16 @@ import PithCore
     private var undoWaitsForAMove: Bool { !disk.canUndoMove && undoTarget != nil && undoTarget === mainWindow?.window.undoManager }
 
     @objc private func undoInFocus(_ sender: Any?) {
-        if let search = focusedSearch { search.undoSearch() } else if !undoWaitsForAMove { undoTarget?.undo() }
+        if let (search, editor) = focusedSearch {
+            search.undoSearch()
+            show(search.search, in: editor)
+        } else if !undoWaitsForAMove { undoTarget?.undo() }
     }
     @objc private func redoInFocus(_ sender: Any?) {
-        if let search = focusedSearch { search.redoSearch() } else { undoTarget?.redo() }
+        if let (search, editor) = focusedSearch {
+            search.redoSearch()
+            show(search.search, in: editor)
+        } else { undoTarget?.redo() }
     }
 
     // MARK: Disk commands
@@ -415,11 +430,11 @@ import PithCore
             menuItem.isHidden = !updates.isAvailable
             return updates.canCheck
         case #selector(undoInFocus(_:)):
-            if let search = focusedSearch { menuItem.title = "Undo Typing"; return search.canUndoSearch }
+            if let search = focusedSearch?.state { menuItem.title = "Undo Typing"; return search.canUndoSearch }
             menuItem.title = undoTarget?.undoMenuItemTitle ?? "Undo"
             return undoTarget?.canUndo == true && !undoWaitsForAMove
         case #selector(redoInFocus(_:)):
-            if let search = focusedSearch { menuItem.title = "Redo Typing"; return search.canRedoSearch }
+            if let search = focusedSearch?.state { menuItem.title = "Redo Typing"; return search.canRedoSearch }
             menuItem.title = undoTarget?.redoMenuItemTitle ?? "Redo"
             return undoTarget?.canRedo == true
         default: return true
