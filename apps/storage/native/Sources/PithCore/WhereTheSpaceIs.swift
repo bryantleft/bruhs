@@ -57,14 +57,17 @@ extension DiskAccounting {
 
     /// "Where the space is" for `result`, the map it accounts for, in order: the disk's used space, then each part of
     /// it there's something to say about. `trash` is the Trash's size as that map shows it, or nil when the map can't
-    /// read the Trash: its row shows only when the map can, and the Trash holds something. `disk` is the disk's icon as
-    /// Pith's rule gives it (`KnownPlaces.volumeKey`): its own, or the drive for a disk macOS guards.
-    public func rows(result: DiskResult?, trash: UInt64?, disk: IconKey) -> [SpaceRow] {
+    /// read the Trash, and `trashIsEmpty` whether it holds nothing by Pith's rule (`KnownPlaces.trashHoldsNothing`), as
+    /// its icon shows wherever it shows: its row shows only when the map can read it, and it holds something. An emptied
+    /// Trash still holds Finder's .DS_Store once Finder has shown it, which the map counts, but emptying it frees nothing
+    /// more, so it has no row. `disk` is the disk's icon as Pith's rule gives it (`KnownPlaces.volumeKey`): its own, or
+    /// the drive for a disk macOS guards.
+    public func rows(result: DiskResult?, trash: UInt64?, trashIsEmpty: Bool = false, disk: IconKey) -> [SpaceRow] {
         var rows = [
             SpaceRow("Used on this disk", .bytes(used), note: nil, icon: .item(disk), isTotal: true),
             SpaceRow("On the map", .bytes(scanned), note: "What the scan found, other volumes on this disk included.", icon: .symbol(SpaceRow.mapSymbol)),
         ]
-        if let trash, trash > 0 {
+        if let trash, trash > 0, !trashIsEmpty {
             rows.append(SpaceRow("In the Trash", .bytes(trash), note: "Part of the map, until you empty the Trash.", icon: .item(.place("trash"))))
         }
         if hiddenVolumes > 0 {

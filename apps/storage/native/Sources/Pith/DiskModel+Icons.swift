@@ -11,9 +11,9 @@ extension DiskModel {
     }
 
     /// Whether the Trash holds nothing, by what the scanner says of it with the map shown (`KnownPlaces.trashHoldsNothing`):
-    /// its icon shows macOS's empty Trash then, everywhere it shows. A map a scan made says so by its tree and the folders
-    /// its scan listed, and a live map's by the places that came with it.
-    private var trashIsEmpty: Bool {
+    /// its icon shows macOS's empty Trash then, everywhere it shows, and Where the space is has no row for it. A map a scan
+    /// made says so by its tree and the folders its scan listed, and a live map's by the places that came with it.
+    var trashIsEmpty: Bool {
         Icons.places.trashHoldsNothing(in: result?.root, scan: scannedAt == nil ? nil : result?.summary, live: sideColumn.livePlaces ?? [])
     }
 

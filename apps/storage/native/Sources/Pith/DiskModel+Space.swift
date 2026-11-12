@@ -20,9 +20,10 @@ extension DiskModel {
         return NotMeasured(root: accounting.root, bytes: bytes, used: accounting.used)
     }
 
-    /// "Where the space is" for a map of a whole volume, row by row, the Trash's from the map when the map can read it.
+    /// "Where the space is" for a map of a whole volume, row by row, the Trash's from the map when the map can read it and
+    /// the Trash holds something (`trashIsEmpty`).
     var spaceRows: [SpaceRow]? {
-        accounting.map { $0.rows(result: result, trash: trashOnMap, disk: volumeKey(for: $0.root)) }
+        accounting.map { $0.rows(result: result, trash: trashOnMap, trashIsEmpty: trashIsEmpty, disk: volumeKey(for: $0.root)) }
     }
 
     /// The Trash's size as the map shows it, when the map can read the Trash: on the live map, the figure Places gives

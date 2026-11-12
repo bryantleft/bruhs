@@ -335,7 +335,8 @@ public struct KnownPlaces: Sendable {
     /// files and not its bytes, and it counts a symbolic link, or a hard link counted at another link, nowhere. With no
     /// places, as before a live map's first tree, or a place that doesn't say what it holds, nothing says so. The Trash's
     /// icon shows this state wherever it shows (`iconKey(for:asking:trashIsEmpty:)`, `placesTable`, and the page's rule,
-    /// which gets it with `iconRule`).
+    /// which gets it with `iconRule`), and Where the space is has no row for a Trash holding nothing
+    /// (`DiskAccounting.rows`).
     public func trashHoldsNothing(in tree: DiskNode?, scan: DiskSummary?, live: [LivePlace]) -> Bool {
         guard let trash = place(id: Self.trashID) else { return false }
         let node = tree?.node(at: trash.path)

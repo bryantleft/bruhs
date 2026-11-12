@@ -97,6 +97,17 @@ final class WhereTheSpaceIsTests: XCTestCase {
         XCTAssertEqual(row("In the Trash", in: accounting().rows(result: map(), trash: 1, disk: .item("/")))?.figure, .bytes(1))
     }
 
+    /// The row follows the Trash's state, as the Trash's icon does wherever it shows (`KnownPlaces.trashHoldsNothing`): an
+    /// emptied Trash holds Finder's .DS_Store once Finder has shown it, 8 KB the map counts, and its row stays out while
+    /// the Trash holds nothing else, since emptying it frees nothing more. A Trash holding something shows its row, full.
+    func testTheTrashsRowLeavesWhileTheTrashHoldsNothing() {
+        XCTAssertNil(row("In the Trash", in: accounting().rows(result: map(), trash: 8_192, trashIsEmpty: true, disk: .item("/"))),
+                     "only Finder's .DS_Store")
+        let full = row("In the Trash", in: accounting().rows(result: map(), trash: 8_192, trashIsEmpty: false, disk: .item("/")))
+        XCTAssertEqual(full?.figure, .bytes(8_192))
+        XCTAssertEqual(full?.icon, .item(.place("trash")))
+    }
+
     func testEachRowLeadsWithItsIcon() {
         let icons = Dictionary(uniqueKeysWithValues: accounting().rows(result: map(), trash: 5 * gb, disk: .item("/")).map { ($0.label, $0.icon) })
         // Real things on this Mac, as macOS draws them: the disk by its path, as the disk menu shows it, and the Trash
