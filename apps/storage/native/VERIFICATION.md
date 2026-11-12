@@ -2,7 +2,7 @@
 
 Verified on 2026-11-05 on Apple Silicon, macOS 26.3, with Xcode 26.6 / Swift 6.3.3.
 
-Each dated entry below gives the tests and smoke checks of its own run, oldest first. The last entry, 2026-11-10's tests and the page, is the current one: 401 Swift tests, 62 scanner tests, 293 node tests and 98 smoke checks.
+Each dated entry below gives the tests and smoke checks of its own run, oldest first. The last entry, 2026-11-11's final review fixes, is the current one: 410 Swift tests, 62 scanner tests, 293 node tests and 99 smoke checks.
 
 ## Passed
 
@@ -195,6 +195,22 @@ Nine steps redesigned Disk on this Mac (macOS 26.3, Xcode 26.6, Swift 6.3.3), ea
 - **Tests:** 323 Swift tests, 54 scanner tests and 277 node tests, from 305, 49 and 267 before the fixes. All 85 smoke checks pass in the packaged app, `left_the_persons_state_alone` among them.
 - **Known limits:** what the person changes shows on a map from an index that hasn't listed it, but a folder's other contents still come from that index, and the side lists' sizes inside a place can trail the map by a listing. A large, busy selection's Frees figure can be from minutes or hours before, which it now says.
 
+## 2026-11-10: behaviour fixes
+
+Follow-ups to the redesign on the same Mac (macOS 26.3), built ad hoc and smoke-tested against the fixture folder. Nothing was built for release or pushed.
+
+- **The Trash's icon:** it shows macOS's empty Trash, under a key of its own, once the scanner says the Trash holds nothing, and the full Trash otherwise, as while the map can't read it or hasn't listed it yet, in Places, the path bar, the selection bar and the page's lists alike.
+- **Each ⌘Z undoes its own move:** each move to the Trash registers with the window's undo manager on its own, with its own record of what moved and where, so ⌘Z puts back the latest move, then the one before, each onto the map open by then, in its folder or in the smaller items of the deepest folder that map draws on its way. The note's Undo puts back the latest, and the next ⌘Z the one before. A window's undo manager groups by event, and a move registers after its event has ended, so moves landing with no event between them joined one group, which one ⌘Z undid whole; each now registers in a group of its own. Undo moves nothing back to the Trash, so there's no Redo. The records keep within 16 MiB, the oldest going first: a file moved alone kept about 2 KB, and a folder the map drew with 20,201 nodes in it 7.2 MB, 354 bytes a node.
+- **Undo waits while a move is under way:** the Edit menu's Undo and the note's are off until the move lands, since the move registers its own Undo then, and an Undo meanwhile would put back the move before it.
+- **Check Again:** its map comes once the folder's listing has landed and shows at once, as Refresh's does, 0.42 s after it was asked for on a quiet fixture.
+- **A scan standing in for a tree:** a scan the live map falls back on shows at once only when the tree it replaces was the person's own ask, a folder they opened or Check Again. One for a refresh waits for the hold like any refresh.
+- **Held edits:** the person's own changes are held over the live map's maps for 60 s at most, about ten times the slowest a change took to show, 4.5 to 5.7 s, then dropped with a log line, as for a hard-linked file put back whose bytes the index counts at another link.
+- **The disk menu's free space:** the volumes are listed again as the pointer reaches the disk's part of the path bar, so the figures are fresh as the menu opens, and one that lands while the menu is open retitles its disk in place.
+- **A folded selected item:** an item a newer map folds into its folder's smaller items stays selected while it's on the disk, with the size the map last showed and no outline, so the bar's count and Size hold and Move to Trash takes it too. Pith looks for it with `lstat`, off the main thread, only where the map can read and macOS isn't asking.
+- **Undo onto a newer map:** Undo onto a scanned map newer than the move marks that map edited. An item put back into a folder the map draws with nothing in it, as a scan made after the move writes the folder it left, gets a block of its own there, where before it was dropped.
+- **Not measured, held and then not:** holding the volume's figures while the live index had changes it hadn't listed was tried and taken out. On a busy Mac the index rarely has none, so the figures moved once a minute, and Not measured could vanish and blame clones, where measuring with every live map overshoots for 3 to 5 s after a large write.
+- **Tests:** 349 Swift tests, 56 scanner tests and 278 node tests, from 323, 54 and 277. All 90 smoke checks pass in the packaged app in 176 s, `left_the_persons_state_alone` among them. The new ones prove the open disk menu retitling, ⌘Z through the Edit menu, Check Again at once, Undo waiting while a move is under way and Undo onto a newer scanned map.
+
 ## 2026-11-10: privacy, icons and cost
 
 Follow-ups to the redesign on the same Mac (macOS 26.3), built ad hoc and smoke-tested against the fixture folder. Nothing was built for release or pushed.
@@ -230,3 +246,26 @@ Follow-ups to the redesign on the same Mac (macOS 26.3), built ad hoc and smoke-
 
 - **Folders alike in light and dark:** CI's macOS 26.7.2 runner draws a plain folder's light and dark art alike, where this Mac's 26.3 draws them differently, so the two Swift tests that a drawing follows its appearance failed there, and the smoke check's rule that folders differ from macOS 26 on was wrong. Each check now asks macOS first, drawing a folder straight from NSWorkspace rather than through the store, and says it can't tell where the two are alike instead of failing. A probe drawing that fails or paints nothing counts as unlike, so the checks still run.
 - **Formatting:** the fixture of icon keys kept some objects on one line, which Biome's check refuses; it's now formatted as Biome writes it.
+- **Search undo on macOS 15:** CI's macOS 15 job failed `search_cut_and_undo` twice on 4dc3ccf, on the image and macOS 15.8.2 of a green run of 07aa99e, while its other 97 checks passed. A diagnostic build (CI run 43140088126) found the Edit menu's Undo reaching Activity's search, which held the text again, and the field left showing nothing. Three causes were ruled out on throwaway branches, each failing as before: the inspector width back on `@AppStorage`, no in-memory settings domain, and no Full Disk Access probe. Activity keeps the search's undo steps itself, so its Undo and Redo now put a step's text in the field's editor too. With that, CI's macOS 15 job passed (run 43141963181), its whole run green, and all 98 smoke checks passed here, the field showing the text again after ⌘Z.
+
+## 2026-11-11: structure
+
+On the same Mac, a change of structure and not of behaviour, built ad hoc and smoke-tested against the fixture folder.
+
+- **Files of their own:** DiskModel is an extension for each responsibility, the live map, scans, the selection, the Trash, the volume's space and the icons, beside the file that holds its stored state. The treemap layout's marks and its steady map's comparison are modules of their own, and the smoke test's checks are grouped by area in files of their own, with the shared helpers in one. Each move is verbatim, its removed and added lines compared.
+- **What DiskModel alone sets:** Swift's `private` doesn't reach across files, so `lint-native.mjs` fails a write from any other file to the 17 members that were `private(set)`, through any name a DiskModel goes by.
+- **The smoke report:** its last write replaces the report whole, as each check's landing does, so a run stopped while it's written leaves the one before.
+- **The README:** its longest paragraphs are shorter, with no fact dropped.
+- **Tests:** 403 Swift tests, 62 scanner tests and 293 node tests, from 402, 62 and 293 after the CI fix. All 98 smoke checks pass in the packaged app in 167 s on 63a8fff, the selection's icon proven in light and dark.
+
+## 2026-11-11: final review fixes
+
+The last fixes for the redesign's follow-ups, on the same Mac (macOS 26.3), built ad hoc and smoke-tested against the fixture folder. Nothing was built for release.
+
+- **Undo across disks:** Undo put each item back on whatever map was open, and every path is inside `/`, so a file moved on another disk's map went onto the startup disk's live map, its folders the file's size too big for up to a minute, the file selected there. A map now holds an item only inside its root and on the volume it shows, the file system mounted deepest above each in the mount table, which touches neither (`MountTable.mapOf(_:holds:)`). Undo puts back, holds for the live map's maps, lists again and selects only what the map open then holds, and leaves the selection alone when it holds none. A map of `/` holds nothing of another disk, a share, a disk image or the home automount, nor the data volume's own paths to the folders it shows at /Users and the rest.
+- **The Trash in Where the space is:** its row follows the Trash's state, as the Trash's icon does everywhere, and while the Trash holds nothing but Finder's .DS_Store it has no row, since emptying it frees nothing more.
+- **Guarded volumes off the main thread:** the icon rule read the mount table and worked out which volumes macOS guards with every icon, on the main thread. A request through the icon route took 0.065 ms that way (median, 0.29 ms at most, in a release build) on the whole disk's map of 14,019 nodes, and takes 0.022 ms (0.14 ms at most) with the answer worked out off the main thread and kept, 1 µs of it building the rule, against 0.0205 ms for the policy alone. The first reading of the table in a fresh process, which asks DiskArbitration about every disk, took 2.09 ms (median of 11, 1.96 to 2.34 ms) for 13 file systems, 11 of them on disks, and each reading after it 7 µs. Until the first answer lands, every volume but the startup disk shows the drive, and so does a disk the answer doesn't know, as one mounted since.
+- **The Full Disk Access probe:** it runs at launch, as Pith becomes active, and with a live map only while another app is in front, as only the person changes the access, in System Settings or a terminal, which take Pith out of the front. The new smoke check failed alone without the change, 98 of 99: with Pith in front, a live map looked once.
+- **Move to Trash of a kept item:** an item the selection keeps from an earlier map, folded into its folder's smaller items since it shrank, takes no more off the folders above it than those smaller items held, and its Undo puts back what it took, so the map is as it was.
+- **The selection's equality:** two selections are equal only when the nodes they keep are too, so a view reading those nodes sees a newer map's sizes. Whether the same items are picked, which says whether to measure them again, has a name of its own.
+- **Tests:** 410 Swift tests, 62 scanner tests and 293 node tests, from 403, 62 and 293. All 99 smoke checks pass in the packaged app in 191 s, `left_the_persons_state_alone` among them.
