@@ -45,8 +45,15 @@ const SEPARATORS = {
  */
 const DISK_MODEL_SETS = ["changes", "edited", "freesAge", "live", "liveMapsShown", "liveView", "movesUnderWay", "note", "progress", "rescanning",
   "resultJSON", "scope", "selectedFrees", "selectedItems", "selectedPlan", "selection", "trashed"];
+/** Every name a DiskModel goes by in Pith's files, from the declarations giving one: `disk: DiskModel`, `let reopened = DiskModel()`. */
+const diskModelNames = new Set();
+for (const file of files(views, ".swift")) {
+  for (const [, typed, made] of readFileSync(file, "utf8").matchAll(/\b(\w+)\s*:\s*DiskModel(?![.\w])|\b(?:let|var)\s+(\w+)\s*=\s*DiskModel\(/g)) {
+    diskModelNames.add(typed ?? made);
+  }
+}
 const DISK_MODEL_WRITES = {
-  pattern: new RegExp(`\\b(?:disk|model)\\.(?:${DISK_MODEL_SETS.join("|")})\\s*(?:=(?!=)|\\+=|-=)`),
+  pattern: new RegExp(`\\b(?:${[...diskModelNames].join("|")})\\.(?:${DISK_MODEL_SETS.join("|")})\\s*(?:=(?!=)|\\+=|-=)`),
   fix: "only DiskModel sets this; call the DiskModel method that keeps its bookkeeping, such as setSelection",
   codeOnly: true,
 };
