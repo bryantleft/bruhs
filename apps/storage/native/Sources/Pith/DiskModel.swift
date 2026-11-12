@@ -499,7 +499,7 @@ enum MapCommand: Equatable {
         if folder != openFolder {
             var kept = selection
             kept.keep(inside: folder)
-            if kept != selection { setSelection(kept) }
+            if !kept.picksSameItems(as: selection) { setSelection(kept) }
         }
         wantedFolder = wanted
         openFolder = folder

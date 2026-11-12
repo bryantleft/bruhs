@@ -87,7 +87,7 @@ final class DiskSelectionTests: XCTestCase {
         XCTAssertEqual(selection.paths, ["/r/b", "/r/a.bin"])
         XCTAssertEqual(selection.items.map(\.size), [20, 15], "b as it last showed, a as it shows now")
         XCTAssertEqual(selection.items.first?.kind, .dir)
-        XCTAssertEqual(selection, before, "the same items, so the same selection")
+        XCTAssertTrue(selection.picksSameItems(as: before), "the same items picked")
         // The check found b gone from the disk.
         selection.drop(["/r/b", "/r/elsewhere"])
         XCTAssertEqual(selection.paths, ["/r/a.bin"])
@@ -99,6 +99,23 @@ final class DiskSelectionTests: XCTestCase {
         picked.toggle("/r/b")
         XCTAssertEqual(picked.follow(map(folding: true)), ["/r/b"])
         XCTAssertEqual(picked.items.map(\.path), ["/r/a.bin"], "b came back after the map stopped showing it, so it has no size to show")
+    }
+
+    /// A selection equals another only when every part of it does, the nodes it keeps included, so Observation tells a
+    /// view that reads them when a newer map moves them. Whether the same items are picked, in the same order, is a
+    /// question of its own (`picksSameItems`), which says whether to measure them again.
+    func testTheSamePathsWithNewerNodesAreAnotherSelection() {
+        var before = DiskSelection(["/r/b", "/r/a.bin"])
+        XCTAssertEqual(before.follow(map()), [])
+        var after = before
+        XCTAssertEqual(after.follow(map(folding: true)), ["/r/b"])
+        XCTAssertNotEqual(after, before, "a.bin's node grew to 15 B")
+        XCTAssertTrue(after.picksSameItems(as: before))
+        var again = before
+        _ = again.follow(map())
+        XCTAssertEqual(again, before, "the same nodes")
+        XCTAssertFalse(DiskSelection(["/r/b"]).picksSameItems(as: before))
+        XCTAssertFalse(DiskSelection(["/r/a.bin", "/r/b"]).picksSameItems(as: before), "the order they were picked in")
     }
 
     /// Items Undo puts back are selected with what the map had of each, so one the map folds away is still counted.

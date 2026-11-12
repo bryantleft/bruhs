@@ -33,7 +33,7 @@ extension DiskModel {
     /// Makes `next` the selection, with its items, as the map shows them, and plan. Other items than before are measured
     /// afresh, and a measurement of the last ones is dropped.
     func setSelection(_ next: DiskSelection) {
-        let changed = next != selection
+        let changed = !next.picksSameItems(as: selection)
         var next = next
         let unshown = next.follow(result)
         selection = next

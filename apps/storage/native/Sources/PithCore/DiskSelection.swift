@@ -27,8 +27,11 @@ public struct DiskSelection: Equatable, Sendable {
         for item in items where paths.contains(item.path) { shown[item.path] = item }
     }
 
-    /// The same items picked, in the same order: their nodes move with each map, and the selection stays the same.
-    public static func == (lhs: DiskSelection, rhs: DiskSelection) -> Bool { lhs.paths == rhs.paths }
+    /// Whether `other` picks the same items, in the same order, whatever nodes each keeps: a newer map moves the nodes,
+    /// and the items picked stay the same, which says whether to measure them again (`DiskModel.setSelection`). Two
+    /// selections are equal only when their nodes are too, so a newer node set in their place is a change Observation
+    /// tells its views of.
+    public func picksSameItems(as other: DiskSelection) -> Bool { paths == other.paths }
 
     public var isEmpty: Bool { paths.isEmpty }
 

@@ -177,7 +177,7 @@ extension AppDelegate {
             let presented = await eventually { Self.popoverShows }
             // Long enough for a folder a double-click opened to have reached the native side.
             try? await Task.sleep(for: .milliseconds(300))
-            let stayed = disk.selection == selectedBefore && disk.openFolder == fixture
+            let stayed = disk.selection.picksSameItems(as: selectedBefore) && disk.openFolder == fixture
             disk.showsWhereTheSpaceIs = false
             let closed = await eventually { !Self.popoverShows }
             let listClicked = (try? await web.callAsyncJavaScript(Self.clickNotMeasuredItem, in: nil, contentWorld: .page) as? Bool) == true
@@ -296,7 +296,7 @@ extension AppDelegate {
         Self.click(at: point, in: window)
         // Longer than the click took to open it without a scan.
         try? await Task.sleep(for: .milliseconds(600))
-        let ignored = !disk.showsWhereTheSpaceIs && disk.selection == selected
+        let ignored = !disk.showsWhereTheSpaceIs && disk.selection.picksSameItems(as: selected)
         let linked = await linkOpens()
         disk.showsWhereTheSpaceIs = false
         _ = await eventually { !Self.popoverShows }
