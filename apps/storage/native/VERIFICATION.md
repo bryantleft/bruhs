@@ -2,7 +2,7 @@
 
 Verified on 2026-11-05 on Apple Silicon, macOS 26.3, with Xcode 26.6 / Swift 6.3.3.
 
-Each dated entry below gives the tests and smoke checks of its own run, oldest first. The last entry, 2026-11-11's final review fixes, is the current one: 410 Swift tests, 62 scanner tests, 293 node tests and 99 smoke checks.
+Each dated entry below gives the tests and smoke checks of its own run, oldest first. The last entry, 2026-11-11's final review fixes, is the current one: 411 Swift tests, 62 scanner tests, 293 node tests and 99 smoke checks.
 
 ## Passed
 
@@ -29,9 +29,8 @@ A fresh packaged instance with all windows closed was observed for 15.05 seconds
   - Counting macOS's privacy questions for a fresh user without Full Disk Access, with icons off and on, so the icons add none.
   - Confirming that a file evicted from iCloud Drive stays dataless after Pith shows its icon.
   - The manual VoiceOver pass over Disk, several-item selection through the list of items' Add and Take Out buttons included.
-  - CI on macOS 26 and 15 for this work, which hasn't been pushed.
 
-The macOS CI job is configured to test, package and verify signatures, but these changes have not been pushed and no remote CI result is claimed.
+CI tests, packages and verifies the signatures on macOS 26, and smoke-tests the packaged app on macOS 15. Both passed for the redesign and its follow-ups at 3c348c7 (run 43144551139).
 
 ## 2026-11-06: UI redesign
 
@@ -256,7 +255,7 @@ On the same Mac, a change of structure and not of behaviour, built ad hoc and sm
 - **What DiskModel alone sets:** Swift's `private` doesn't reach across files, so `lint-native.mjs` fails a write from any other file to the 17 members that were `private(set)`, through any name a DiskModel goes by.
 - **The smoke report:** its last write replaces the report whole, as each check's landing does, so a run stopped while it's written leaves the one before.
 - **The README:** its longest paragraphs are shorter, with no fact dropped.
-- **Tests:** 403 Swift tests, 62 scanner tests and 293 node tests, from 402, 62 and 293 after the CI fix. All 98 smoke checks pass in the packaged app in 167 s on 63a8fff, the selection's icon proven in light and dark.
+- **Tests:** 403 Swift tests, 62 scanner tests and 293 node tests, from 402, 62 and 293 after the CI fix. All 98 smoke checks pass in the packaged app in 167 s on 63a8fff, Task 4's head before its rebase onto fa9c621, the selection's icon proven in light and dark.
 
 ## 2026-11-11: final review fixes
 
@@ -268,4 +267,6 @@ The last fixes for the redesign's follow-ups, on the same Mac (macOS 26.3), buil
 - **The Full Disk Access probe:** it runs at launch, as Pith becomes active, and with a live map only while another app is in front, as only the person changes the access, in System Settings or a terminal, which take Pith out of the front. The new smoke check failed alone without the change, 98 of 99: with Pith in front, a live map looked once.
 - **Move to Trash of a kept item:** an item the selection keeps from an earlier map, folded into its folder's smaller items since it shrank, takes no more off the folders above it than those smaller items held, and its Undo puts back what it took, so the map is as it was.
 - **The selection's equality:** two selections are equal only when the nodes they keep are too, so a view reading those nodes sees a newer map's sizes. Whether the same items are picked, which says whether to measure them again, has a name of its own.
-- **Tests:** 410 Swift tests, 62 scanner tests and 293 node tests, from 403, 62 and 293. All 99 smoke checks pass in the packaged app in 191 s, `left_the_persons_state_alone` among them.
+- **The kernel's table alone:** Move to Trash, its Undo and each app's icon say which volume a path lies on from the kernel's mount table alone, without asking DiskArbitration about any disk, which only the guarded volumes need. So a busy diskarbitrationd holds neither a move's landing nor an icon.
+- **The probe as Pith becomes active:** it runs as macOS's notice comes, rather than a turn later, so a live map arriving next finds the new verdict, since a live map probes only while another app is in front.
+- **Tests:** 411 Swift tests, 62 scanner tests and 293 node tests, from 403, 62 and 293. All 99 smoke checks pass in the packaged app in 190 s, `left_the_persons_state_alone` among them.
