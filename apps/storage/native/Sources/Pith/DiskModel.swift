@@ -284,9 +284,39 @@ enum MapCommand: Equatable {
 
     /// Lists the volumes again, off the main thread, since a network volume can be slow to answer or hang: when Disk
     /// opens, when a disk is mounted, unmounted or renamed, and when the disk menu opens, for the free space it shows
-    /// next. A listing runs on a queue of its own, and refreshes asked for while one runs make one more after it.
+    /// next. A listing runs on a queue of its own, and refreshes asked for while one runs make one more after it. Which
+    /// of them macOS guards is worked out again with it, on a queue of its own too (`guardedVolumes`).
     func refreshChoices() {
         volumeLister.refresh()
+        guardLister.refresh()
+    }
+
+    /// Which mounted volumes macOS guards, as last worked out from the mount table (`GuardedVolumes`), which Pith's icon
+    /// rule goes by (`rulePlaces`), or nil before the first answer lands, when every volume but the startup disk counts as
+    /// guarded (`KnownPlaces.guardingVolumes`). It changes only when the table does.
+    private(set) var guardedVolumes: GuardedVolumes?
+
+    /// Works out which mounted volumes macOS guards, off the main thread, one reading of the mount table at a time
+    /// (`VolumeLister`): as Pith starts, and whenever the volumes are listed again (`refreshChoices`), as a disk mounts,
+    /// unmounts or is renamed and as Disk and its disk menu open. A reading after the table changed asks DiskArbitration
+    /// about each disk, one blocking call at a time, 2.1 ms for the development Mac's 11 (VERIFICATION.md), and a busy or
+    /// stuck diskarbitrationd would hold the thread that asks, so it's never the main thread, where the rule is built with
+    /// every icon. Its queue isn't the volume listing's, which a network share that hangs can hold, since a reading of the
+    /// table asks no file system.
+    @ObservationIgnored private lazy var guardLister: VolumeLister<GuardedVolumes> = VolumeLister(
+        queue: DispatchQueue(label: "app.bruhs.pith.guarded-volumes", qos: .userInitiated), list: { GuardedVolumes(MountTable.current()) }
+    ) { [weak self] found in
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                guard let self, found != self.guardedVolumes else { return }
+                self.guardedVolumes = found
+            }
+        }
+    }
+
+    /// Works out the first answer of which volumes macOS guards before Disk shows an icon.
+    init() {
+        guardLister.refresh()
     }
 
     /// The startup disk, then other volumes in Finder's sidebar, each with its capacity.

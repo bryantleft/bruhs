@@ -1,6 +1,15 @@
 import XCTest
 @testable import PithCore
 
+/// How many times a test's mount table was read.
+final class Reads: @unchecked Sendable {
+    private let lock = NSLock()
+    private var reads = 0
+
+    func add() { lock.lock(); reads += 1; lock.unlock() }
+    var count: Int { lock.lock(); defer { lock.unlock() }; return reads }
+}
+
 /// The disks a test mounts, which it can change between looks, as an eject and a mount do.
 final class Disks: @unchecked Sendable {
     private let lock = NSLock()
@@ -520,9 +529,11 @@ final class KnownPlacesTests: XCTestCase {
         let table = KnownPlaces(home: home, searchPaths: [:], mounts: { MountTableTests.table }) { _ in nil }
         let own = ["/", "/System/Volumes/Data", "/System/Volumes/Preboot", "/System/Volumes/VM", "/System/Volumes/xarts"]
         let others = ["/Volumes/Archive", "/Volumes/share", "/Volumes/Installer", "/System/Volumes/Data/home"]
-        for root in own { XCTAssertFalse(table.guardsVolume(root), root) }
-        for root in others { XCTAssertTrue(table.guardsVolume(root), root) }
-        let guarding = table.guardingVolumes(fullDiskAccess: false), granted = table.guardingVolumes(fullDiskAccess: true)
+        let volumes = GuardedVolumes(MountTableTests.table)
+        for root in own { XCTAssertFalse(volumes.roots.contains(root), root) }
+        for root in others { XCTAssertTrue(volumes.roots.contains(root), root) }
+        let guarding = table.guardingVolumes(volumes, fullDiskAccess: false, shown: own + others)
+        let granted = table.guardingVolumes(volumes, fullDiskAccess: true, shown: own + others)
         XCTAssertEqual(guarding.guardedVolumes, ["/dev", "/System/Volumes/Data/home", "/Volumes/Archive", "/Volumes/share", "/Volumes/Installer"],
                        "every file system mounted now that macOS guards, in the table's order")
         XCTAssertEqual(granted.guardedVolumes, [], "with Full Disk Access, none")
@@ -546,6 +557,47 @@ final class KnownPlacesTests: XCTestCase {
         XCTAssertEqual(granted.iconKey(for: block, asking: false), .item(block.path))
         XCTAssertEqual(guarding.iconKey(for: xarts, asking: false), .item(xarts.path), "an internal disk of another container")
         XCTAssertEqual(guarding.iconKey(for: photos, asking: false), .item(photos.path), "a folder the scan listed on it")
+    }
+
+    /// Before the first answer of which volumes macOS guards lands, every volume Pith shows but the startup disk shows the
+    /// drive: the disks it lists, the volumes on the map, and the map's root, which only an answer can tell from a folder.
+    /// Once one lands, a disk it doesn't know, as one mounted since it was worked out, shows the drive until the next, and
+    /// the map's root and the startup disk's own volumes show what the answer says. Each errs on the privacy rule's side.
+    /// With Full Disk Access none shows the drive, answer or not.
+    func testAVolumeNoAnswerKnowsShowsTheDrive() {
+        let table = KnownPlaces(home: home, searchPaths: [:], mounts: { MountTableTests.table }) { _ in nil }
+        let shown = ["/", "/Volumes/Archive", "/System/Volumes/Preboot", "/Volumes/New", "/Volumes/Archive"]
+        let waiting = table.guardingVolumes(nil, fullDiskAccess: false, shown: shown, mapRoot: "/Volumes/Archive/Photos")
+        XCTAssertEqual(waiting.guardedVolumes, ["/Volumes/Archive", "/System/Volumes/Preboot", "/Volumes/New", "/Volumes/Archive/Photos"])
+        XCTAssertEqual(waiting.volumeKey(for: "/"), .item("/"), "the startup disk")
+        let root = DiskNode(kind: .dir, name: "Photos", path: "/Volumes/Archive/Photos", size: 4096, files: 1, children: [])
+        XCTAssertEqual(waiting.iconKey(for: root, asking: false), .drive, "the map's root")
+        XCTAssertEqual(table.guardingVolumes(nil, fullDiskAccess: false, shown: ["/"], mapRoot: "/").guardedVolumes, [], "a map of the startup disk")
+        let answered = table.guardingVolumes(GuardedVolumes(MountTableTests.table), fullDiskAccess: false, shown: shown, mapRoot: root.path)
+        XCTAssertEqual(answered.guardedVolumes, ["/dev", "/System/Volumes/Data/home", "/Volumes/Archive", "/Volumes/share", "/Volumes/Installer", "/Volumes/New"])
+        XCTAssertEqual(answered.volumeKey(for: "/Volumes/New"), .drive, "mounted since the answer")
+        XCTAssertEqual(answered.volumeKey(for: "/System/Volumes/Preboot"), .item("/System/Volumes/Preboot"), "the startup disk's own volume")
+        XCTAssertEqual(answered.iconKey(for: root, asking: false), .item(root.path), "a folder on a guarded volume, which the scan listed")
+        for volumes in [nil, GuardedVolumes(MountTableTests.table)] {
+            XCTAssertEqual(table.guardingVolumes(volumes, fullDiskAccess: true, shown: shown, mapRoot: root.path).guardedVolumes, [])
+        }
+    }
+
+    /// The rule goes by the answer Pith keeps of which volumes macOS guards, worked out off the main thread, and reads no
+    /// mount table of its own, however often it's asked: the icon route asks with every icon, and the native views with
+    /// every drawing, and a reading after the table changed asks DiskArbitration about each disk, one at a time.
+    func testTheRuleReadsNoMountTableOfItsOwn() {
+        let reads = Reads()
+        let table = KnownPlaces(home: home, searchPaths: [:], mounts: { reads.add(); return MountTableTests.table }) { _ in nil }
+        let volumes = GuardedVolumes(MountTableTests.table)
+        let share = DiskNode(kind: .volume, name: "share", path: "/Volumes/share", size: 0, children: nil)
+        for answer in [volumes, nil] {
+            let rule = table.guardingVolumes(answer, fullDiskAccess: false, shown: ["/", "/Volumes/Archive", "/Volumes/share"], mapRoot: "/")
+            XCTAssertEqual(rule.volumeKey(for: "/Volumes/Archive"), .drive)
+            XCTAssertEqual(rule.iconKey(for: share, asking: false), .drive)
+            XCTAssertEqual(rule.iconRule(asking: false).guardedVolumes, rule.guardedVolumes)
+        }
+        XCTAssertEqual(reads.count, 0)
     }
 
     /// Activity's app icons follow the Disk tab's rule: an app Pith may look up by its bundle's path (`mayShowApp`) shows

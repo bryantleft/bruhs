@@ -55,7 +55,8 @@ public struct KnownPlaces: Sendable {
     public let home: String
     /// Other apps' containers, `~/Library/Containers`, each named by its app's bundle ID.
     private let containers: String
-    /// The file systems mounted now, which say whether an app lies on the startup disk, and which volumes macOS guards.
+    /// The file systems mounted now, which say whether an app lies on the startup disk. Which volumes macOS guards comes
+    /// from what Pith worked out of the table off the main thread instead (`guardingVolumes`).
     private let mounts: @Sendable () -> MountTable
     /// The roots of the volumes that show the drive (`IconKey.drive`) rather than their own icons, which are looked up by
     /// their paths: the volumes macOS guards, while Pith hasn't Full Disk Access (`guardingVolumes`). None in the table
@@ -198,21 +199,25 @@ public struct KnownPlaces: Sendable {
     /// Whether `path` lies on the startup disk, by the file systems mounted now (`MountTable.isOnStartupDisk`).
     public func isOnStartupDisk(_ path: String) -> Bool { mounts().isOnStartupDisk(path) }
 
-    /// Whether macOS guards the volume `path` lies on, such as the one mounted at it: a network volume, or one on a
-    /// removable or external disk or a disk image, as the kernel's mount table and DiskArbitration's descriptions of the
-    /// disks say (`MountTable.guards`). Neither opens anything on a volume, and macOS asks its question about one only
-    /// when something on it is accessed.
-    public func guardsVolume(_ path: String) -> Bool { mounts().guards(path) }
-
     /// These places as the rule has them while Pith has Full Disk Access or hasn't (`fullDiskAccess`, as `DiskAccessWatch`
-    /// last found): without it, every volume mounted now that macOS guards (`guardsVolume`) shows the drive wherever its
-    /// own icon would show (`guardedVolumes`), since its own is looked up by its path, which can read the volume's custom
-    /// icon and other files at its root, and so bring macOS's question about the volume. With it, macOS asks nothing, and
-    /// each shows its own.
-    public func guardingVolumes(fullDiskAccess: Bool) -> KnownPlaces {
+    /// last found), by `volumes`, which volumes macOS guards as Pith last worked it out from the mount table, off the main
+    /// thread (`GuardedVolumes`), or nil before the first answer lands. Without Full Disk Access, each volume macOS guards
+    /// shows the drive wherever its own icon would show (`guardedVolumes`), since its own is looked up by its path, which
+    /// can read the volume's custom icon and other files at its root, and so bring macOS's question about the volume. Of
+    /// `shown`, the volumes Pith shows, the disks it lists and those on the map, one the answer doesn't know, as one
+    /// mounted since it was worked out, shows the drive too until the next answer, and before the first every one but the
+    /// startup disk does, with `mapRoot`, the map's root, which only an answer can tell from a folder: each errs on the
+    /// privacy rule's side. With Full Disk Access, macOS asks nothing, and each shows its own. Nothing here reads the mount
+    /// table: the rule is built with every icon.
+    public func guardingVolumes(_ volumes: GuardedVolumes?, fullDiskAccess: Bool, shown: [String] = [], mapRoot: String? = nil) -> KnownPlaces {
         var guarding = self
-        let table = mounts()
-        guarding.guardedVolumes = fullDiskAccess ? [] : table.mounts.map(\.path).filter(table.guards)
+        guard !fullDiskAccess else {
+            guarding.guardedVolumes = []
+            return guarding
+        }
+        let unknown = volumes.map { volumes in shown.filter { !volumes.knows($0) } } ?? shown + (mapRoot.map { [$0] } ?? [])
+        var seen = Set(volumes?.roots ?? [])
+        guarding.guardedVolumes = (volumes?.roots ?? []) + unknown.filter { $0 != "/" && seen.insert($0).inserted }
         return guarding
     }
 

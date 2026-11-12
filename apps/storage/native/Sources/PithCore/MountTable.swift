@@ -153,3 +153,27 @@ public struct MountTable: Sendable, Equatable {
         withUnsafeBytes(of: characters) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
     }
 }
+
+/// Which of the volumes mounted macOS guards, worked out from one reading of the mount table (`MountTable.guards`), which
+/// Pith's icon rule goes by (`KnownPlaces.guardingVolumes`). Pith works it out off the main thread and keeps it until the
+/// table changes, since the rule is built with every icon: reading the table and working it out for each of the icon
+/// route's requests made a request 0.065 ms (median) on the development Mac, against 0.022 ms with the answer kept, and
+/// the first reading after a change asks DiskArbitration about each disk, one blocking call at a time, 2.1 ms there for
+/// 11 disks, which a busy or stuck diskarbitrationd would hold (VERIFICATION.md).
+public struct GuardedVolumes: Sendable, Equatable {
+    /// The table it was worked out from.
+    public let table: MountTable
+    /// The roots of the volumes macOS guards, in the table's order.
+    public let roots: [String]
+    /// The root of every volume in the table.
+    private let mounted: Set<String>
+
+    public init(_ table: MountTable) {
+        self.table = table
+        roots = table.mounts.map(\.path).filter(table.guards)
+        mounted = Set(table.mounts.map(\.path))
+    }
+
+    /// Whether the table had a volume mounted at `root`.
+    public func knows(_ root: String) -> Bool { mounted.contains(root) }
+}

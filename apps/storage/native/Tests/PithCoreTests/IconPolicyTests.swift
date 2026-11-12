@@ -185,9 +185,11 @@ final class IconPolicyTests: XCTestCase {
     /// The route serves only the symbols on its list, the drive alone. With Full Disk Access each volume loads its own.
     func testAGuardedVolumeLoadsNoIconByItsPath() throws {
         let places = KnownPlaces(home: URL(fileURLWithPath: home, isDirectory: true), searchPaths: [:], mounts: { MountTableTests.table }) { _ in nil }
-        let guarding = places.guardingVolumes(fullDiskAccess: false), granted = places.guardingVolumes(fullDiskAccess: true)
+        let volumes = GuardedVolumes(MountTableTests.table), listed = ["/", "/Volumes/Archive", "/Volumes/Installer"]
+        let guarding = places.guardingVolumes(volumes, fullDiskAccess: false, shown: listed)
+        let granted = places.guardingVolumes(volumes, fullDiskAccess: true, shown: listed)
         let policy = IconPolicy(places: places, map: folder("/Volumes", [node(.volume, "/Volumes/Archive"), node(.volume, "/Volumes/share")]),
-                                volumes: ["/", "/Volumes/Archive", "/Volumes/Installer"])
+                                volumes: Set(listed))
         func loads(_ key: IconKey, by rule: KnownPlaces) throws -> Bool {
             policy.request(for: try XCTUnwrap(URL(string: url(key.string))), asking: false, by: rule) != nil
         }

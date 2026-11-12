@@ -92,6 +92,19 @@ final class MountTableTests: XCTestCase {
         XCTAssertFalse(MountTable([]).mapOf("/", holds: "/Users/tester/x"), "with nothing in the table to say, nothing")
     }
 
+    /// Which volumes macOS guards is worked out once from a reading of the table, the roots in the table's order, and the
+    /// answer says which volumes the table had, so a disk mounted since it was worked out is one it doesn't know.
+    func testWhichVolumesMacOSGuardsIsWorkedOutFromOneReading() {
+        let volumes = GuardedVolumes(Self.table)
+        XCTAssertEqual(volumes.roots, ["/dev", "/System/Volumes/Data/home", "/Volumes/Archive", "/Volumes/share", "/Volumes/Installer"])
+        XCTAssertEqual(volumes.roots, Self.table.mounts.map(\.path).filter(Self.table.guards))
+        XCTAssertTrue(volumes.knows("/System/Volumes/Preboot"))
+        XCTAssertTrue(volumes.knows("/Volumes/Archive"))
+        XCTAssertFalse(volumes.knows("/Volumes/New"))
+        XCTAssertFalse(volumes.knows("/Volumes/Archive/Photos"), "a folder on a volume")
+        XCTAssertEqual(GuardedVolumes(MountTable([])).roots, [])
+    }
+
     /// The reader marks each file system local as the kernel does, and asks DiskArbitration about each disk a file system
     /// is mounted from, by its BSD name, once while the table stays as it was, and again once it changes, as when one
     /// disk is ejected and another mounted where it was. A disk image, which DiskArbitration describes with no word of

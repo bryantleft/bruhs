@@ -51,9 +51,9 @@ final class DiskAccessWatchTests: XCTestCase {
     /// guarded throughout until a scan of it since, or Full Disk Access back: listing the startup disk again lifts only
     /// the startup disk's hold. Pith keeps both across launches. A scan of the startup disk is held as its map is.
     func testAScanOfAnotherDiskIsHeldUntilAScanOfItSince() {
-        let places = KnownPlaces(home: URL(fileURLWithPath: "/Users/tester", isDirectory: true), searchPaths: [:], mounts: { MountTableTests.table }) { _ in nil }
+        let table = MountTableTests.table
         let scanned = start, lost = start.addingTimeInterval(600)
-        let holds = { (watch: DiskAccessWatch, root: String, since: Date?) in watch.holdsScan(of: root, listedSince: since, guards: places.guardsVolume) }
+        let holds = { (watch: DiskAccessWatch, root: String, since: Date?) in watch.holdsScan(of: root, listedSince: since, guards: table.guards) }
         var watch = DiskAccessWatch(granted: true, lostAt: nil)
         XCTAssertFalse(holds(watch, "/Volumes/Archive", scanned), "Pith has it")
         watch.probed(.denied, at: lost)
@@ -79,10 +79,9 @@ final class DiskAccessWatchTests: XCTestCase {
     /// container, which macOS doesn't guard, isn't held after the loss, while a disk image is, as an external disk is.
     func testAScanOfAnInternalDiskOfAnotherContainerIsntHeld() {
         let table = MountTable(MountTableTests.table.mounts + [.init(path: "/Volumes/Second", from: "/dev/disk6s1", isInternal: true)])
-        let places = KnownPlaces(home: URL(fileURLWithPath: "/Users/tester", isDirectory: true), searchPaths: [:], mounts: { table }) { _ in nil }
         var watch = DiskAccessWatch(granted: true, lostAt: nil)
         watch.probed(.denied, at: start.addingTimeInterval(600))
-        let holds = { (root: String) in watch.holdsScan(of: root, listedSince: self.start, guards: places.guardsVolume) }
+        let holds = { (root: String) in watch.holdsScan(of: root, listedSince: self.start, guards: table.guards) }
         XCTAssertFalse(holds("/Volumes/Second"), "an internal disk of another container")
         XCTAssertFalse(holds("/Volumes/Second/Projects"))
         XCTAssertFalse(holds("/System/Volumes/xarts"), "the internal system container")

@@ -640,9 +640,11 @@ public enum BridgePolicy {
 /// each child of each folder on the way in a release build, not the map's size. Indexing every folder at the first
 /// request after each map took 2.8 ms on the development Mac for the whole disk's map of 14,019 nodes (77 ms for one of
 /// 177,001), against the 2 ms a map that comes every two seconds may cost, a tenth of a percent of a core within Pith's
-/// 3.4% with Disk on screen (VERIFICATION.md). A request now takes 0.020 ms there (median, 0.13 ms at most), its walk 3 µs
-/// of that, and one for the last of 20,000 subfolders, about the most the scanner draws in an open folder, 0.23 ms,
-/// where building each child's path with a slash to compare took 2.3 ms.
+/// 3.4% with Disk on screen (VERIFICATION.md). A request now takes 0.022 ms there (median, 0.14 ms at most, in a release
+/// build), with the rule Pith builds for it from the guarded volumes it keeps (`KnownPlaces.guardingVolumes`) included,
+/// 1 µs of that, and its walk 3 µs, where reading the mount table to build the rule for each request made it 0.065 ms
+/// (0.29 ms at most). One for the last of 20,000 subfolders, about the most the scanner draws in an open folder, takes
+/// 0.23 ms by the policy, where building each child's path with a slash to compare took 2.3 ms.
 public final class IconPolicy {
     /// The start of every icon's URL, up to its size: `pith://app/icon/<generation>/<appearance>/`. WebKit keeps an
     /// image from Pith's scheme for as long as its URL stays the same, so a new generation loads every icon again.

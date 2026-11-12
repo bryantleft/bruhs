@@ -49,7 +49,7 @@ final class IconRuleTests: XCTestCase {
             .musicDirectory: home.appendingPathComponent("Music"),
             .picturesDirectory: home.appendingPathComponent("Pictures"),
             .trashDirectory: home.appendingPathComponent(".Trash"),
-        ], mounts: { Self.mounts }) { _ in nil }.guardingVolumes(fullDiskAccess: false)
+        ], mounts: { Self.mounts }) { _ in nil }.guardingVolumes(GuardedVolumes(Self.mounts), fullDiskAccess: false)
     }
 
     func testNativeSendsThePageTheFixturesTable() throws {

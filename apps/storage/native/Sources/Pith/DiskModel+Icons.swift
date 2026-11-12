@@ -57,19 +57,23 @@ extension DiskModel {
         return scanBegan
     }
 
-    /// The root of a map a scan made of a volume macOS guards, by the icons' own test (`KnownPlaces.guardsVolume`), while
-    /// losing Full Disk Access holds it, which counts among the locations macOS guards throughout then
-    /// (`DiskAccessWatch.holdsScan`).
+    /// The root of a map a scan made of a volume macOS guards, while losing Full Disk Access holds it, which counts among
+    /// the locations macOS guards throughout then (`DiskAccessWatch.holdsScan`). Whether macOS guards it is the icons' own
+    /// test (`MountTable.guards`), of the table the guarded volumes were last worked out from, and before the first answer
+    /// lands it does.
     private var heldDisk: String? {
         guard liveView == nil, let root = result?.root.path,
-              diskAccess.holdsScan(of: root, listedSince: mapListedSince, guards: Icons.places.guardsVolume) else { return nil }
+              diskAccess.holdsScan(of: root, listedSince: mapListedSince, guards: { guardedVolumes?.table.guards($0) ?? true }) else { return nil }
         return root
     }
 
     /// The places Pith's icon rule goes by for the map shown: the known places, with a held disk among the locations
-    /// macOS guards (`heldDisk`), and the volumes macOS guards showing the drive while Pith hasn't Full Disk Access, by
-    /// the probe (`KnownPlaces.guardingVolumes`).
+    /// macOS guards (`heldDisk`), and the volumes macOS guards showing the drive while Pith hasn't Full Disk Access, by the
+    /// probe, as Pith last worked them out (`guardedVolumes`), with the volumes it shows that the answer doesn't know, the
+    /// disks it lists and those on the map (`KnownPlaces.guardingVolumes`). Built with every icon, it reads no mount table.
     var rulePlaces: KnownPlaces {
-        (heldDisk.map(Icons.places.holding) ?? Icons.places).guardingVolumes(fullDiskAccess: diskAccess.granted)
+        (heldDisk.map(Icons.places.holding) ?? Icons.places).guardingVolumes(guardedVolumes, fullDiskAccess: diskAccess.granted,
+                                                                             shown: choices.map(\.url.path) + (result?.volumes.map(\.path) ?? []),
+                                                                             mapRoot: result?.root.path)
     }
 }
