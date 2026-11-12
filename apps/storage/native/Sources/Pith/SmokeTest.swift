@@ -1409,9 +1409,18 @@ extension AppDelegate {
         let pressedCut = editing && typed && press("x", 7)
         let cut = await eventually { field.stringValue.isEmpty && search.search.isEmpty && search.canUndoSearch }
             && pressedCut && pasteboard.string(forType: .string) == "pith smoke"
+        // What Edit > Undo goes by as ⌘Z is pressed (`undoInFocus`), so a failure says which of it didn't hold.
+        let undoItem = NSApp.mainMenu?.items.compactMap(\.submenu).flatMap(\.items).first { $0.keyEquivalent == "z" && $0.keyEquivalentModifierMask == .command }
+        undoItem?.menu?.update()
+        let keyWindow = NSApp.keyWindow.map { $0 === main.window ? "the main window" : "\(type(of: $0)) \"\($0.title)\"" } ?? "none"
+        let responder = main.window.firstResponder.map { "\(type(of: $0))" } ?? "none"
+        let stillEditing = field.currentEditor() != nil && main.window.firstResponder === field.currentEditor()
+        let undoState = undoItem.map { "\"\($0.title)\" \($0.isEnabled ? "enabled" : "disabled")" } ?? "missing"
+        let before = "active \(NSApp.isActive), key window \(keyWindow), first responder \(responder), field editing \(stillEditing), "
+            + "a step to undo \(search.canUndoSearch), Undo item \(undoState)"
         let pressedUndo = press("z", 6)
         let undone = await eventually { field.stringValue == "pith smoke" && search.search == "pith smoke" } && pressedUndo
-        print("search cut=\(cut) undo=\(undone) field=\"\(field.stringValue)\"")
+        print("search cut=\(cut) undo=\(undone) field=\"\(field.stringValue)\"; before ⌘Z: \(before); ⌘Z handled \(pressedUndo), search \"\(search.search)\"")
         field.currentEditor()?.selectAll(nil)
         field.currentEditor()?.delete(nil)
         main.state.activity.search = ""
