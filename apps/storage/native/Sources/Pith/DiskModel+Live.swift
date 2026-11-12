@@ -121,7 +121,15 @@ extension DiskModel {
 
     private func showLive(_ tree: LiveTree, figures: VolumeFigures?) {
         guard tree.map.root.path == liveView else { return }
-        probeDiskAccess()
+        // Pith looks whether it still has Full Disk Access at launch and as it becomes active, and with a live map only
+        // while another app is in front. Full Disk Access changes only by the person's hand, in System Settings or a
+        // terminal, which take Pith out of the front, so a live map while Pith is in front can't find a change the look
+        // as it became active missed. While another app is in front, each live map looks, so no icon is looked up by its
+        // path after a loss, and none opens the person's privacy database while they're using Pith.
+        if !pithIsActive() {
+            liveMapProbes += 1
+            probeDiskAccess()
+        }
         // A map from an index that doesn't show the person's changes yet shows them anyway, and is then no longer the
         // scanner's own JSON.
         let edited = liveEdits.apply(to: tree.map, places: tree.places, answer: tree.answer)

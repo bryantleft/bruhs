@@ -284,12 +284,12 @@ public struct KnownPlaces: Sendable {
     /// listing fail, and a lookup by its path meanwhile brings no question. Full Disk Access turned off is another matter:
     /// it opened Desktop, Documents, Downloads, other apps' data and removable and network volumes without an answer for
     /// each, so once it's off they have none, and macOS asks at the next access, which a lookup by path could be. Pith
-    /// probes for that loss as it becomes active and with each live map, and from then the locations macOS guards count
-    /// as asking (`asking`, `DiskAccessWatch`), a map a scan made of another disk among them (`holding`), until the
-    /// scanner has listed them again. A reset of Pith's permissions
-    /// leaves the locations unanswered too; Pith can't tell one from the person's own answers, but the question a lookup
-    /// could bring is the one the scanner's next listing there brings, and from the moment macOS is asking it, the rule
-    /// looks nothing up there.
+    /// probes for that loss at launch, as it becomes active, and with each live map while another app is in front, as
+    /// only the person changes the access, in System Settings or a terminal, and from then the locations macOS guards
+    /// count as asking (`asking`, `DiskAccessWatch`), a map a scan made of another disk among them (`holding`), until the
+    /// scanner has listed them again. A reset of Pith's permissions leaves the locations unanswered too; Pith can't tell
+    /// one from the person's own answers, but the question a lookup could bring is the one the scanner's next listing
+    /// there brings, and from the moment macOS is asking it, the rule looks nothing up there.
     ///
     /// So the rule keeps a folder's own icon until the scanner's listing says otherwise, and that listing error is the
     /// signal Pith has: a folder, package, app or volume `map` shows inside a folder it couldn't read, drawn or only in its

@@ -397,8 +397,15 @@ enum MapCommand: Equatable {
                                relisted: settings.bool(forKey: Setting.listedSinceFullDiskAccessLost.rawValue))
     }
 
-    /// Looks whether Pith still has Full Disk Access, as Pith becomes active and with each live map: an open and a close
-    /// of a file only it opens, 8 to 11 µs (`DiskAccessWatch.probe`), which never brings a question.
+    /// Whether Pith is the active app, which says whether a live map looks for a loss of Full Disk Access (`showLive`).
+    /// The smoke test says so itself, to see both, without another app.
+    @ObservationIgnored var pithIsActive: () -> Bool = { NSApp.isActive }
+    /// How many live maps looked whether Pith still has Full Disk Access, which the smoke test counts.
+    @ObservationIgnored var liveMapProbes = 0
+
+    /// Looks whether Pith still has Full Disk Access, at launch, as Pith becomes active, and with each live map while
+    /// another app is in front (`showLive`): an open and a close of a file only it opens, 8 to 11 µs
+    /// (`DiskAccessWatch.probe`), which never brings a question.
     func probeDiskAccess() {
         var watch = diskAccess
         watch.probed(DiskAccessWatch.probe(DiskAccessWatch.probePath(home: NSHomeDirectory())), at: Date())

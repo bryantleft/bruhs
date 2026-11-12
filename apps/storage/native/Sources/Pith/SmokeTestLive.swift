@@ -23,6 +23,33 @@ extension AppDelegate {
         return [name: came && took < 2 && settled]
     }
 
+    /// A live map looks whether Pith still has Full Disk Access only while another app is in front. The access changes
+    /// only by the person's hand, in System Settings or a terminal, which take Pith out of the front, and Pith looks again
+    /// as it becomes active. The check says itself whether Pith is in front, so it needs no other app, and brings a map of
+    /// the live one with Check Again each way: with Pith in front the map looks for nothing, and with another app in front
+    /// it looks.
+    func checkLiveMapsProbeOnlyBehind(_ fixture: String) async -> [String: Bool] {
+        let name = "live_map_probes_access_only_in_the_background"
+        guard disk.liveView == fixture, await mapSettles() else { return [name: false] }
+        let active = disk.pithIsActive
+        defer { disk.pithIsActive = active }
+        /// Whether a map of the live one came after Check Again, and how many times the maps looked meanwhile.
+        func checkedAgain() async -> (came: Bool, looks: Int) {
+            let shown = disk.liveMapsShown, looks = disk.liveMapProbes
+            disk.checkAgain(fixture)
+            let came = await eventually { self.disk.liveMapsShown > shown }
+            _ = await mapSettles()
+            return (came, disk.liveMapProbes - looks)
+        }
+        disk.pithIsActive = { true }
+        let inFront = await checkedAgain()
+        disk.pithIsActive = { false }
+        let behind = await checkedAgain()
+        print("access probe with live maps: with Pith in front a map came \(inFront.came) and looked \(inFront.looks) times; with another app in "
+              + "front a map came \(behind.came) and looked \(behind.looks) times")
+        return [name: inFront.came && inFront.looks == 0 && behind.came && behind.looks > 0]
+    }
+
     /// The live map holds still. A double-click opens the folder its first click was aimed at, though a newer map
     /// arrives between its clicks and puts another folder there. The check makes two folders of its own in the
     /// fixture, so it needs nothing else of it, and both maps from the live one: in the first, the aimed-at folder is
