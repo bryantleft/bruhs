@@ -50,7 +50,7 @@ public final class TrashRecord: Sendable {
     /// The most memory the records keep together (`TrashRecord.bytes`): 16 MiB, the budget the icon store keeps its
     /// drawings within (`IconStore`). That holds thousands of moves of a file each, at about 2 KB, and the latest two
     /// moves of a folder the map draws 20,000 nodes in, at about 7.2 MB each.
-    public static let defaultBudget = 16 << 20
+    public nonisolated static let defaultBudget = 16 << 20
 
     /// A stack whose Undo of a record is `undo`, keeping its records within `budget` bytes.
     public init(budget: Int = TrashUndoStack.defaultBudget, undo: @escaping @MainActor (TrashRecord) -> Void) {
@@ -100,6 +100,13 @@ public final class TrashRecord: Sendable {
     /// The note's Undo of `record`, the latest move: out of its undo manager first, so ⌘Z next undoes the one before.
     public func undo(_ record: TrashRecord) {
         take(record, unregistering: true)
+    }
+
+    /// Permanent deletion makes this record's Undo invalid. It never invokes the registered move back.
+    public func discard(_ record: TrashRecord) {
+        guard let index = held.firstIndex(where: { $0.record === record }) else { return }
+        let removed = held.remove(at: index)
+        removed.undoManager?.removeAllActions(withTarget: record)
     }
 
     private func take(_ record: TrashRecord, unregistering: Bool) {

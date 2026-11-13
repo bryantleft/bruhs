@@ -62,6 +62,21 @@ import XCTest
         XCTAssertEqual(undone.count, 2, "a move undone already isn't undone again")
     }
 
+    func testPermanentDeletionDiscardsOnlyItsOwnUndoWithoutRestoringAnything() {
+        var undone: [String] = []
+        let stack = TrashUndoStack { undone.append($0.note) }
+        let window = manager()
+        let a = record("a"), b = record("b")
+        move(a, on: stack, with: window)
+        move(b, on: stack, with: window)
+        stack.discard(b)
+        XCTAssertTrue(undone.isEmpty, "discard must never move anything back")
+        XCTAssertEqual(stack.records.map(\.note), ["Moved a"])
+        window.undo()
+        XCTAssertEqual(undone, ["Moved a"], "Command-Z skips the permanently deleted record")
+        XCTAssertFalse(window.canUndo)
+    }
+
     /// The records keep within a budget of memory: past it the oldest moves go, out of the undo manager too, so ⌘Z
     /// stops at the oldest kept. The latest is always kept, for the note's Undo, however large.
     func testTheStackKeepsWithinItsBudgetLettingTheOldestMovesGo() {

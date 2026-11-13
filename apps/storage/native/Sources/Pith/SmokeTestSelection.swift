@@ -166,7 +166,7 @@ extension AppDelegate {
         inTrash = disk.trashed?.moves.compactMap(\.trashed) ?? []
         let firstOnly = disk.trashed?.moves.map(\.plan.target.path) == [items[0]] && !files.fileExists(atPath: items[0])
             && files.fileExists(atPath: items[1]) && files.fileExists(atPath: items[2])
-        let noted = disk.trashed?.note.hasPrefix("Moved \(file[0]) to the Trash.") == true
+        let noted = disk.trashed?.note.hasPrefix("Moved \(file[0]) to the Trash (") == true
         let problem = disk.problem?.message ?? "none"
         let said = problem.hasPrefix("Pith couldn’t move \(file[1]) to the Trash, so it and \(file[2]) stayed where they were. ")
         let stayed = disk.selection.paths == [items[1], items[2]] && disk.result?.item(at: items[0]) == nil

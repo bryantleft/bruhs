@@ -87,7 +87,8 @@ public struct TrashBatch: Sendable, Equatable {
         var moved: [TrashMove] = []
         for (index, plan) in plans.enumerated() {
             do {
-                moved.append(TrashMove(plan: plan, trashed: try move(plan.target)))
+                let identity = TrashPolicy.identity(of: plan.target.path, following: false)
+                moved.append(TrashMove(plan: plan, trashed: try move(plan.target), identity: identity))
             } catch {
                 return TrashOutcome(moved: moved, failure: TrashOutcome.Failure(plan: plan, reason: Self.sentence(error)), untried: Array(plans[(index + 1)...]))
             }
@@ -147,6 +148,12 @@ public enum TrashRefusal: Error, Equatable, Sendable {
 public struct TrashMove: Sendable, Equatable {
     public let plan: TrashPlan
     public let trashed: URL?
+    /// Captured before Pith moved it, so finishing cleanup cannot delete a replacement at its Trash path.
+    public let identity: TrashPolicy.Identity?
+
+    public init(plan: TrashPlan, trashed: URL?, identity: TrashPolicy.Identity? = nil) {
+        self.plan = plan; self.trashed = trashed; self.identity = identity
+    }
 }
 
 /// What one move to the Trash did.
@@ -164,12 +171,12 @@ public struct TrashOutcome: Sendable, Equatable {
     /// The items after it, which weren't tried, so they stayed where they were.
     public let untried: [TrashPlan]
 
-    /// What the notice of the move says beside its Undo: which items moved, and what they take up, which comes back once
-    /// the Trash is emptied. Nil when nothing moved.
+    /// What the notice says beside Undo: which items moved and their measured size, without promising that shared or
+    /// snapshot-held bytes will be reclaimed. Nil when nothing moved.
     public var note: String? {
         guard !moved.isEmpty else { return nil }
         let size = formatBytes(moved.reduce(0) { $0 + $1.plan.size })
-        return "Moved \(TrashBatch.names(moved.map(\.plan.name))) to the Trash. \(moved.count == 1 ? "Its" : "Their") \(size) comes back when you empty the Trash."
+        return "Moved \(TrashBatch.names(moved.map(\.plan.name))) to the Trash (\(size)). Space is reclaimed after permanent deletion; shared blocks or snapshots may retain some."
     }
 
     /// What went wrong when the move stopped at an item: which, what stayed where it was with it, and why, each item named

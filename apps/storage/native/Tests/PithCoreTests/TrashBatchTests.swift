@@ -116,7 +116,7 @@ final class TrashBatchTests: XCTestCase {
         XCTAssertEqual(outcome.moved.map(\.plan.name), ["a.bin", "b.bin", "c.bin"])
         XCTAssertNil(outcome.failure)
         XCTAssertNil(outcome.problem)
-        XCTAssertEqual(outcome.note, "Moved a.bin, b.bin, and c.bin to the Trash. Their 12 B comes back when you empty the Trash.")
+        XCTAssertEqual(outcome.note, "Moved a.bin, b.bin, and c.bin to the Trash (12 B). Space is reclaimed after permanent deletion; shared blocks or snapshots may retain some.")
         XCTAssertTrue(items.allSatisfy { !exists($0) })
 
         let undone = TrashUndo.putBack(outcome.moved, with: moveBack)
@@ -129,7 +129,7 @@ final class TrashBatchTests: XCTestCase {
     func testOneItemMovedSaysItAsBefore() throws {
         let a = try file("a.bin")
         let outcome = try plan([a], in: map([a])).get().move(with: moveIntoTrash)
-        XCTAssertEqual(outcome.note, "Moved a.bin to the Trash. Its 4 B comes back when you empty the Trash.")
+        XCTAssertEqual(outcome.note, "Moved a.bin to the Trash (4 B). Space is reclaimed after permanent deletion; shared blocks or snapshots may retain some.")
     }
 
     /// The injected Trash refuses b.bin: a.bin has moved, b.bin and c.bin stay, and Undo puts a.bin back.
@@ -140,7 +140,7 @@ final class TrashBatchTests: XCTestCase {
         XCTAssertEqual(outcome.moved.map(\.plan.name), ["a.bin"])
         XCTAssertEqual(outcome.failure?.plan.name, "b.bin")
         XCTAssertEqual(outcome.untried.map(\.name), ["c.bin"], "nothing after the failure is tried")
-        XCTAssertEqual(outcome.note, "Moved a.bin to the Trash. Its 4 B comes back when you empty the Trash.", "it says which moved")
+        XCTAssertEqual(outcome.note, "Moved a.bin to the Trash (4 B). Space is reclaimed after permanent deletion; shared blocks or snapshots may retain some.", "it says which moved")
         XCTAssertEqual(outcome.problem, "Pith couldn’t move b.bin to the Trash, so it and c.bin stayed where they were. The file is locked.",
                        "each item named once")
         XCTAssertEqual(items.map(exists), [false, true, true])
