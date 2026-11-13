@@ -11,7 +11,7 @@ pnpm build:pith
 pnpm open:pith
 ```
 
-The app is at `apps/storage/native/.build/Pith.app`. You can drag it to Applications. It is built for the current Mac's architecture, targets macOS 14+, and has been run locally on Apple Silicon/macOS 26.3. Older macOS versions and Intel need their own verification before release.
+The app is at `apps/storage/native/.build/Pith.app`. You can drag it to Applications. Development builds use the current Mac's architecture; releases default to a universal download containing Apple Silicon and Intel code. `PITH_ARCH=arm64`, `x86_64`, or `universal` selects another build. Both the app and scanner target macOS 14+, and packaging checks every slice before signing. Physical Intel Macs and older macOS versions still need runtime verification. [Local verification](LOCAL_VERIFICATION.md) records the checks and their limits.
 
 `build:pith` signs the app, its bundled scanner and Sparkle ad hoc, with the hardened runtime, so it runs on the Mac that built it. Ad hoc code belongs to no team, so this build alone turns off the runtime's library validation, which would otherwise refuse to load Sparkle. It has no update feed and never updates. Rebuilding an ad-hoc app can invalidate its privacy grants; grant Full Disk Access to the installed app when a partial scan needs it.
 
@@ -31,7 +31,7 @@ pnpm --filter storage publish:mac
 xcrun notarytool store-credentials pith-notary --key AuthKey_<key ID>.p8 --key-id <key ID> --issuer <issuer ID>
 ```
 
-`PITH_SIGN_IDENTITY` picks the certificate when the keychain has several, and `PITH_NOTARY_PROFILE` names another profile. A release is built for the building Mac's architecture only.
+`PITH_SIGN_IDENTITY` picks the certificate when the keychain has several, and `PITH_NOTARY_PROFILE` names another profile. A public update must contain both architectures; publishing rejects a download missing either one.
 
 `publish:mac` checks that the download is the changelog's newest version, notarized, built from a commit on `origin/main` without uncommitted changes, and newer than the feed's newest. It then creates the GitHub release `pith-v<version>` with the download and puts the version on top of the update feed, `appcast.xml` in the `pith-updates` pre-release. A release of its own keeps the feed's address fixed whatever becomes the repository's latest release. Before uploading, it signs the download and the feed with the update key, and after, it checks GitHub serves both as signed. With `--dry-run` it uploads nothing.
 
@@ -69,6 +69,28 @@ The update key is an EdDSA key pair. Its public half is `PUBLIC_KEY` in `scripts
 - Closing the window keeps monitoring. Quit ends monitoring and clears session history. Login startup and icon-only mode are opt-in in Settings. Reopen the app from Finder to recover Activity if macOS hides the menu bar item.
 - A release updates itself. At its second launch it asks whether it may check for updates once a day, and whether to install them by itself too; Settings changes both. Check for Updates… is in the panel's gear menu and the app menu. A newer version a daily check finds waits on the panel's last line rather than opening a window over other apps; the update window shows its notes and installs it, quitting and reopening Pith.
 - Pith follows the system appearance: light, dark and Increase Contrast. With Differentiate Without Color on, the disk map's file blocks and By kind show each kind's glyph beside its colour.
+
+## Local cleanup and investigation
+
+**Clean Up…** beside the disk's path bar inspects the open folder on demand. It reuses the local scanner's cleanup classifier, with no assistant or network connection. Rebuildable caches and generated dependencies explain the cost of recreating them; ordinary large files require review, and app-managed storage points to its owning app. Choose items, measure their reclaimable space together, review the cautions, then move them to the Trash. Unreadable candidates cannot be selected. A move invalidates the report, so Check Again is required before choosing more.
+
+**Finish Cleanup…** in the disk actions menu, or beside a completed move, reviews only items Pith moved. Other items already in the Trash stay there. Put Back preserves the existing Undo behavior. Delete Permanently asks separately and verifies each item's identity and metadata again, including its children, without following symlinks or crossing into another mounted disk. Changed, replaced or restored items are refused. Permanent deletion removes that move's Undo registration; a partial filesystem failure names what remains for review in Finder. Shared blocks and snapshots may retain space, so the screen gives a timed estimate and offers Measure Again.
+
+Pith bounds retained cleanup-review metadata to the same 16 MiB budget as Undo. An individual folder too large to review, or an older review evicted for a newer one, can still be restored with Undo or reviewed in Finder. Cleanup never empties the entire Trash automatically.
+
+**What Changed…** shows before and current sizes, growth and shrinkage, search, and optional nested detail. Its default list leaves out nested entries already included in a parent. New files count only when the previous map fully showed their parent's entries; pruning and unreadable folders are not evidence of growth or deletion. Baselines saved before this coverage information existed are replaced before comparing. App writes during the same period provide context, not proof of which app changed a folder.
+
+**Disk Tools…** lists APFS snapshots and the space macOS considers purgeable. Pith can delete a selected purgeable Time Machine snapshot, or ask macOS to thin local Time Machine snapshots. Each operation needs confirmation and native administrator authorization, rechecks the volume after authorization, and reports the observed free-space change. System and third-party snapshots stay protected. Other purgeable data remains managed by macOS; Pith never fills the disk to force it out.
+
+Scan as Administrator runs one explicit scan with the bundled Developer ID signed scanner, staged and verified in a root-owned private temporary directory. Verification and execution select the same architecture in a universal build. The live index continues under the person's ordinary account. Full Disk Access still governs protected personal folders, and the administrator action is unavailable in ad-hoc development builds. Refreshing that map returns to ordinary scanning.
+
+The local tools can be verified independently of Activity:
+
+```sh
+Pith.app/Contents/MacOS/Pith --local-tools-test /tmp/pith-local-tools.json
+```
+
+This creates disposable project and Trash folders, runs the packaged classifier, measures a selection, moves it, puts it back with Undo, then permanently removes only the reviewed items while preserving an unrelated Trash file. It never uses the person's Trash or requests administrator authorization. The full smoke test includes the same checks, and the native UI audit captures all four screens in light and dark at both text sizes.
 
 ## Logo
 
