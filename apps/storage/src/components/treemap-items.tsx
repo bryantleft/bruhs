@@ -57,7 +57,7 @@ export const TreemapItems = memo(function TreemapItems({
   return (
     <ul
       aria-label={`Items in ${root.name || root.path}`}
-      className="surface-floating focus-within:z-popover sr-only max-h-[calc(100%-1rem)] overflow-y-auto p-2 focus-within:not-sr-only focus-within:absolute focus-within:top-2 focus-within:left-2 focus-within:w-80"
+      className="surface-floating focus-within:z-popover sr-only max-h-[calc(100%-1rem)] overflow-y-auto p-2 focus-within:not-sr-only focus-within:absolute focus-within:top-2 focus-within:left-2 focus-within:w-80 focus-within:max-w-[calc(100%-1rem)]"
       onBlur={() => onFocusItem(null)}
     >
       {root.children.map((child) => {

@@ -1,5 +1,6 @@
 import type { TokenRef } from "@bruhs/theme/semantic";
 import {
+  type CSSProperties,
   type ReactNode,
   useCallback,
   useEffect,
@@ -68,6 +69,29 @@ import {
 } from "./map-marks";
 import { arrowStep, selectable } from "./map-selection";
 import { TreemapItems } from "./treemap-items";
+
+/** Percentage translations use the card's own size, keeping it inside the map without reading layout on each move. */
+function hoverCardStyle(
+  pointer: { x: number; y: number },
+  size: { w: number; h: number },
+): CSSProperties {
+  const beforeX = pointer.x > size.w / 2;
+  const beforeY = pointer.y > size.h * 0.6;
+  const left = pointer.x + (beforeX ? -14 : 14);
+  const top = pointer.y + (beforeY ? -14 : 14);
+  const x = beforeX
+    ? `max(-100%, ${8 - left}px)`
+    : `min(0px, calc(${size.w - 8 - left}px - 100%))`;
+  const y = beforeY
+    ? `max(-100%, ${8 - top}px)`
+    : `min(0px, calc(${size.h - 8 - top}px - 100%))`;
+  return {
+    left,
+    top,
+    maxWidth: "min(16rem, calc(100% - 16px))",
+    transform: `translate(${x}, ${y})`,
+  };
+}
 
 interface Props {
   /** The directory currently shown as the treemap root. */
@@ -903,15 +927,8 @@ export function TreemapCanvas({
       )}
       {card && pointer && (
         <div
-          className="tooltip absolute max-w-64 px-2.5 py-2"
-          style={{
-            ...(pointer.x > size.w / 2
-              ? { right: size.w - pointer.x + 14 }
-              : { left: pointer.x + 14 }),
-            ...(pointer.y > size.h * 0.6
-              ? { bottom: size.h - pointer.y + 14 }
-              : { top: pointer.y + 14 }),
-          }}
+          className="tooltip pointer-events-none absolute px-2.5 py-2"
+          style={hoverCardStyle(pointer, size)}
         >
           {icon && pointed ? (
             <p className="text-code-sm flex gap-1.5 font-medium text-(--role-text,var(--color-rambutan-50))">
