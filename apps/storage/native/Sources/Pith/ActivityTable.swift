@@ -4,7 +4,7 @@ import SwiftUI
 
 /// The Activity table. AppKit owns row updates because SwiftUI's Table re-entered its diff when
 /// selection changed during the 2 s refresh. Rows are reused by stable id, so selection and
-/// disclosure survive re-sorting, and nothing animates.
+/// disclosure survive re-sorting. Native item moves carry rows to their new ranks.
 struct ActivityTable: NSViewRepresentable {
     let listing: ActivityListing
     /// While searching, System opens so matching macOS processes are visible.
@@ -13,6 +13,7 @@ struct ActivityTable: NSViewRepresentable {
     var ranged = false
     /// The View menu's text size; rows grow with it.
     var textScale: Double = 1
+    var animates = true
     @Binding var selection: ActivityRowID?
     @Binding var expanded: Set<ActivityRowID>
     @Binding var sort: ActivitySort
@@ -86,6 +87,8 @@ struct ActivityTable: NSViewRepresentable {
         private var ranged = false
 
         func update(_ outline: NSOutlineView, with table: ActivityTable) {
+            let moves = table.animates && self.table.animates && !roots.isEmpty && outline.window?.isVisible == true
+                && self.table.sort == table.sort && scale == table.textScale && ranged == table.ranged
             self.table = table
             isUpdating = true
             defer { isUpdating = false }
@@ -102,11 +105,24 @@ struct ActivityTable: NSViewRepresentable {
                     column.headerToolTip = id.help(ranged: ranged)
                 }
             }
+            let oldRoots = roots
+            let oldChildren = nodes.mapValues(\.children)
             rebuild(table.listing)
             let descriptor = ActivityTable.descriptor(table.sort)
             if outline.sortDescriptors.first != descriptor { outline.sortDescriptors = [descriptor] }
-            outline.reloadData()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = moves ? BruhsMotion.standard : 0
+                context.timingFunction = BruhsMotion.standardTiming
+                outline.beginUpdates()
+                reconcile(oldRoots, with: roots, in: nil, oldChildren: oldChildren, outline: outline, moves: moves)
+                outline.endUpdates()
+            }
+            // A process gaining or losing its last helper changes the disclosure triangle too.
+            for (id, children) in oldChildren {
+                if let node = nodes[id], children.isEmpty != node.children.isEmpty { outline.reloadItem(node) }
+            }
             applyDisclosure(roots, in: outline)
+            refreshVisibleCells(in: outline)
             let row = table.selection.flatMap { nodes[$0] }.map(outline.row(forItem:)) ?? -1
             if row >= 0 {
                 outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
@@ -116,6 +132,46 @@ struct ActivityTable: NSViewRepresentable {
                 }
             } else {
                 outline.deselectAll(nil)
+            }
+        }
+
+        /// Item indexes follow array edits, including earlier edits in the same batch. New subtrees are loaded by
+        /// AppKit; only surviving parents need their children reconciled separately.
+        private func reconcile(_ old: [ActivityNode], with next: [ActivityNode], in parent: ActivityNode?,
+                               oldChildren: [ActivityRowID: [ActivityNode]], outline: NSOutlineView, moves: Bool) {
+            var current = old
+            let wanted = Set(next.map(\.id))
+            let removed = IndexSet(current.indices.filter { !wanted.contains(current[$0].id) })
+            if !removed.isEmpty {
+                for index in removed.reversed() { current.remove(at: index) }
+                outline.removeItems(at: removed, inParent: parent, withAnimation: moves ? .effectFade : [])
+            }
+            for (index, node) in next.enumerated() {
+                if index < current.count, current[index] === node { continue }
+                if let from = current.firstIndex(where: { $0 === node }) {
+                    current.insert(current.remove(at: from), at: index)
+                    outline.moveItem(at: from, inParent: parent, to: index, inParent: parent)
+                } else {
+                    current.insert(node, at: index)
+                    outline.insertItems(at: IndexSet(integer: index), inParent: parent, withAnimation: moves ? .effectFade : [])
+                }
+            }
+            for node in next {
+                guard let previous = oldChildren[node.id] else { continue }
+                reconcile(previous, with: node.children, in: node, oldChildren: oldChildren, outline: outline, moves: moves)
+            }
+        }
+
+        private func refreshVisibleCells(in outline: NSOutlineView) {
+            outline.enumerateAvailableRowViews { _, index in
+                guard let node = outline.item(atRow: index) as? ActivityNode else { return }
+                for (columnIndex, column) in outline.tableColumns.enumerated() {
+                    let cell = outline.view(atColumn: columnIndex, row: index, makeIfNecessary: false)
+                    if let cell = cell as? ActivityNameCell { cell.show(node, scale: self.scale) }
+                    if let cell = cell as? ActivityNumberCell, let id = ActivityColumn(rawValue: column.identifier.rawValue) {
+                        cell.show(node, column: id, scale: self.scale)
+                    }
+                }
             }
         }
 

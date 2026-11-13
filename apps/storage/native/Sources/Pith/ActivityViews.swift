@@ -104,6 +104,7 @@ struct ActivityView: View {
                     .padding(.top, 8)
             }
             ActivityTable(listing: listing, opensSystem: !query.isEmpty, ranged: range != nil || state.longRange != nil, textScale: TextSize.shared.scale,
+                          animates: !reduceMotion && query.isEmpty && range == nil && state.longRange == nil,
                           selection: $state.selection, expanded: $state.expanded, sort: $state.sort,
                           quit: { app in state.quitRequest = QuitRequest(appID: app.id, name: app.identity.displayName, kind: app.identity.kind, members: app.members) })
                 .overlay { emptyState(listing, range: range) }
