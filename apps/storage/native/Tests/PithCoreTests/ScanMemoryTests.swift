@@ -4,9 +4,10 @@ import XCTest
 final class ScanMemoryTests: XCTestCase {
     private func result(_ children: [DiskNode]) -> DiskResult {
         let size = children.reduce(0) { $0 + $1.size }
-        let summary = DiskSummary(dirs: 1, files: 1, bytes: size, errors: 0, unreadable: .init(protected: 0, denied: 0, other: 0), entryErrors: 0,
+        let files = children.reduce(UInt64(0)) { $0 + $1.fileCount }
+        let summary = DiskSummary(dirs: 1, files: files, bytes: size, errors: 0, unreadable: .init(protected: 0, denied: 0, other: 0), entryErrors: 0,
                                   cloudOnly: .init(files: 0, bytes: 0, folders: 0), elapsedMs: 1, engine: "bulk")
-        return DiskResult(root: DiskNode(kind: .dir, name: "r", path: "/r", size: size, files: 1, children: children), topFiles: [], summary: summary)
+        return DiskResult(root: DiskNode(kind: .dir, name: "r", path: "/r", size: size, files: files, children: children), topFiles: [], summary: summary)
     }
 
     func testItSaysWhatGrewShrankAndWasRemoved() {
@@ -35,6 +36,30 @@ final class ScanMemoryTests: XCTestCase {
         XCTAssertTrue(before.changes(to: after).isEmpty, "a kilobyte isn't growth worth showing")
     }
 
+    func testAnItemFoldedIntoSmallerItemsIsntReportedAsDeleted() {
+        let baseline = ScanMemory(result([
+            DiskNode(kind: .file, name: "kept.bin", path: "/r/kept.bin", size: 5_000_000, children: nil),
+        ]), date: Date())
+        let folded = result([
+            DiskNode(kind: .aggregate, name: "Smaller items", path: "/r/__other__", size: 5_000_000, children: nil),
+        ])
+        XCTAssertNil(baseline.changes(to: folded)["/r/kept.bin"], "less map detail is not evidence of deletion")
+    }
+
+    func testLosingAccessDoesntReportTheFolderAsFreedSpace() {
+        let baseline = ScanMemory(result([
+            DiskNode(kind: .dir, name: "private", path: "/r/private", size: 8_000_000, files: 1, children: []),
+        ]), date: Date())
+        let unreadable = result([
+            DiskNode(kind: .unreadable, name: "private", path: "/r/private", size: 0, reason: .protected, children: nil),
+        ])
+        XCTAssertNil(baseline.changes(to: unreadable)["/r/private"], "an unknown size is not zero")
+        XCTAssertNil(baseline.changes(to: unreadable)["/r"], "the parent's total also lost coverage")
+        XCTAssertNil(ScanMemory(unreadable, date: Date()).changes(to: result([
+            DiskNode(kind: .dir, name: "private", path: "/r/private", size: 8_000_000, files: 1, children: []),
+        ]))["/r"], "gaining access is not growth either")
+    }
+
     func testAScanCountedTheOldWayIsntCompared() throws {
         let now = result([DiskNode(kind: .file, name: "x", path: "/r/x", size: 1000, children: nil)])
         XCTAssertTrue(ScanMemory(now, date: Date()).comparable(to: now))
@@ -55,7 +80,7 @@ final class ScanMemoryTests: XCTestCase {
             DiskNode(kind: .dir, name: "Mail", path: "/r/lib/Mail", size: 20 * mb, files: 1, children: []),
         ])])
         XCTAssertTrue(baseline.changes(to: detailed, countingNew: false).isEmpty)
-        XCTAssertEqual(baseline.changes(to: detailed).count, 2, "a scan of the same folder still counts what's new")
+        XCTAssertTrue(baseline.changes(to: detailed).isEmpty, "one-off scans must not mistake newly exposed detail for new files")
         // What the baseline does hold still shows its growth.
         let grown = result([DiskNode(kind: .dir, name: "lib", path: "/r/lib", size: 90 * mb, files: 2, children: [])])
         XCTAssertEqual(baseline.changes(to: grown, countingNew: false)["/r/lib"], 30_000_000)
@@ -85,5 +110,13 @@ final class ScanMemoryTests: XCTestCase {
         let folder = URL(fileURLWithPath: "/tmp")
         XCTAssertNotEqual(ScanMemory.file(for: "/Users/me", in: folder), ScanMemory.file(for: "/", in: folder))
         XCTAssertEqual(ScanMemory.file(for: "/", in: folder), ScanMemory.file(for: "/", in: folder))
+    }
+
+    func testUnreadableFoldersOmittedFromTheMapStillInvalidateAncestorTotals() {
+        let before = ScanMemory(result([DiskNode(kind: .file, name: "data", path: "/r/data", size: 8_000_000, children: nil)]), date: Date())
+        let empty = result([])
+        let after = DiskResult(root: empty.root, topFiles: [],
+                               unreadableFolders: [DiskUnreadableFolder(path: "/r/hidden/private", reason: .protected)], summary: empty.summary)
+        XCTAssertNil(before.changes(to: after)["/r"])
     }
 }
