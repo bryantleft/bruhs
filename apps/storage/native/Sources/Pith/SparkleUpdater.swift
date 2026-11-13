@@ -25,6 +25,10 @@ import Sparkle
     /// Starts Sparkle, which schedules its own checks from here on. Throws when the bundle has no feed, as builds signed
     /// only for this Mac don't, or when Sparkle finds the setup unsafe.
     func start() throws {
+        // Sparkle can start before checking for a feed. Saved update preferences must not make a local build offer updates.
+        guard let feed = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String, !feed.isEmpty else {
+            throw DiskFailure("This local build has no update feed.")
+        }
         let updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: self, delegate: nil)
         try updater.start()
         self.updater = updater

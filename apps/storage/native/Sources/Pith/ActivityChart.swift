@@ -64,12 +64,8 @@ struct ActivityChart: View {
     // MARK: Header
 
     private func header(_ points: [MiniTrend.Point], window: ClosedRange<Double>) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            ChartControls(state: state, keepsHistory: model.keepsHistory)
-            Spacer(minLength: 12)
+        ActivityChartHeader(state: state, keepsHistory: model.keepsHistory) {
             readout(points, window: window)
-                .lineLimit(1)
-                .accessibilityHidden(true)
         }
     }
 
@@ -228,22 +224,34 @@ struct ActivityChart: View {
     // MARK: Footer
 
     private func footer(window: ClosedRange<Double>) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                pressure(window: window)
+                Spacer(minLength: 12)
+                if range == nil {
+                    Text("Drag to rank apps")
+                        .font(BruhsType.note)
+                        .foregroundStyle(BruhsColor.textTertiary)
+                        .help("Drag across a time range to rank apps by their activity in that range.")
+                        .fixedSize()
+                        .accessibilityHidden(true)
+                }
+            }
+            pressure(window: window)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func pressure(window: ClosedRange<Double>) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("Memory pressure").font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
+                .fixedSize()
                 .accessibilityHidden(true)
             let story = PanelSummary.pressureStory(model.history.system, window: window, maxGap: ActivityModel.maxGap)
             StatusChip(pressure: model.snapshot?.pressure ?? .unknown)
                 .accessibilityValue(pastPressure(story) ?? "")
             if let since = ongoingPressure(story) {
                 Text(since).font(BruhsType.note).foregroundStyle(BruhsColor.textSecondary).lineLimit(1)
-            }
-            Spacer(minLength: 12)
-            if range == nil {
-                Text("Drag across the chart to rank apps by that time")
-                    .font(BruhsType.note)
-                    .foregroundStyle(BruhsColor.textTertiary)
-                    .lineLimit(1)
-                    .accessibilityHidden(true)
             }
         }
     }
@@ -330,20 +338,30 @@ private struct HoverApps: View {
 }
 
 /// The charted series for Audio Graphs: time as seconds before now, the value as a percentage.
-private struct CPUChartDescriptor: AXChartDescriptorRepresentable {
+struct CPUChartDescriptor: AXChartDescriptorRepresentable {
     let points: [MiniTrend.Point]
     let now: Double
     let metric: ChartMetric
+    var span: HistorySpan = .tenMinutes
+    private var title: String { "\(metric.title) over the last \(span.title)" }
 
     func makeChartDescriptor() -> AXChartDescriptor {
-        let time = AXNumericDataAxisDescriptor(title: "Time", range: -SessionHistory.retention...0, gridlinePositions: []) { seconds in
-            seconds > -1 ? "now" : Duration.seconds(-seconds.rounded()).formatted(.units(allowed: [.minutes, .seconds], width: .wide)) + " ago"
+        let time = AXNumericDataAxisDescriptor(title: "Time", range: -span.seconds...0, gridlinePositions: []) { seconds in
+            seconds > -1 ? "now" : Duration.seconds(-seconds.rounded()).formatted(.units(allowed: [.days, .hours, .minutes, .seconds], width: .wide)) + " ago"
         }
         let value = AXNumericDataAxisDescriptor(title: metric.title, range: 0...100, gridlinePositions: [0, 50, 100]) { "\(Int($0.rounded())) percent" }
-        return AXChartDescriptor(title: "\(metric.title) over the last 10 minutes", summary: nil, xAxis: time, yAxis: value, series: [series])
+        return AXChartDescriptor(title: title, summary: nil, xAxis: time, yAxis: value, series: [series])
     }
 
     func updateChartDescriptor(_ descriptor: AXChartDescriptor) {
+        // Replacing axes invalidates the accessible graph. Samples change only its series; replace axes when the
+        // metric or span changes so assistive tools can keep their place between readings.
+        if descriptor.title != title {
+            let updated = makeChartDescriptor()
+            descriptor.title = updated.title
+            descriptor.xAxis = updated.xAxis
+            descriptor.yAxis = updated.yAxis
+        }
         descriptor.series = [series]
     }
 

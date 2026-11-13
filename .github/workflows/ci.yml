@@ -70,6 +70,15 @@ jobs:
       - name: Verify app and bundled executable signatures
         # --deep reaches the code nested in the app: the scanner and Sparkle with its helpers.
         run: codesign --verify --deep --strict --verbose=2 apps/storage/native/.build/Pith.app
+      - name: Audit native window and text sizes
+        run: apps/storage/native/.build/Pith.app/Contents/MacOS/Pith --ui-audit "$RUNNER_TEMP/pith-ui-audit"
+      - name: Keep native layout evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pith-ui-audit
+          path: ${{ runner.temp }}/pith-ui-audit
+          retention-days: 3
       - name: Keep the packaged app for the older macOS jobs
         run: ditto -c -k --keepParent apps/storage/native/.build/Pith.app "$RUNNER_TEMP/Pith.zip"
       - name: Upload the packaged app

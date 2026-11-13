@@ -23,9 +23,9 @@ struct ActivityView: View {
             // The inspector shows only while a row is selected: a card inset from the window's edges and the toolbar.
             if inspecting { inspector(listing, range: range) }
         }
-        // A strong ease-out both ways: the card moves the moment it's asked to, then settles. The standard curve's slow
-        // start made the first frames of a 150 ms slide look like a delay.
-        .animation(BruhsMotion.entrance(duration: BruhsMotion.fast), value: inspecting)
+        // The inspector reflows the chart and table. Keep that geometry change immediate so their measurements
+        // cannot keep invalidating one another during an animated resize.
+        .animation(nil, value: inspecting)
         .modifier(QuitConfirmation(state: state, run: run))
         .navigationSubtitle(subtitle)
         // Short enough for the field at the window's narrowest; the full prompt was cut off even at the default width.
@@ -66,8 +66,6 @@ struct ActivityView: View {
                               quit: { state.quitRequest = $0 })
         }
         .padding([.top, .trailing, .bottom], 12)
-        // Reduce Motion fades the card in place rather than sliding it.
-        .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
     }
 
     /// The chart, the scope bar while a range is ranked, and the table.

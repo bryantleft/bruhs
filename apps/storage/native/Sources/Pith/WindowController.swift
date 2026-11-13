@@ -33,6 +33,7 @@ enum WindowTab: String, CaseIterable, Identifiable {
 /// items and search field reach the NSWindow's unified toolbar through the hosting controller's
 /// scene bridging (macOS 14), so macOS draws the controls; the window itself is the bruhs canvas.
 @MainActor final class MainWindowController: NSObject, NSWindowDelegate {
+    static let minimumSize = NSSize(width: 820, height: 560)
     let window: NSWindow
     let state: MainWindowState
     private let closed: () -> Void
@@ -46,12 +47,14 @@ enum WindowTab: String, CaseIterable, Identifiable {
         self.closed = closed
         let content = NSHostingController(rootView: MainWindowView(activity: activity, disk: disk, state: state, webCreated: webCreated))
         content.sceneBridgingOptions = [.title, .toolbars]
-        // Only the minimum size follows SwiftUI, so switching tabs or showing the inspector never resizes the window.
-        content.sizingOptions = [.minSize]
+        // Responsive content changes its ideal size as it reflows. AppKit owns a fixed minimum so those measurements
+        // cannot feed back into window sizing while an inspector opens or a hidden tab remains alive.
+        content.sizingOptions = []
         // Wide enough for every Activity column beside the inspector at its usual width.
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 760), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         super.init()
         window.contentViewController = content
+        window.contentMinSize = Self.minimumSize
         // Assigning the controller shrinks the window to the content's ideal size.
         window.setContentSize(NSSize(width: 1180, height: 760))
         window.toolbarStyle = .unified
@@ -104,7 +107,7 @@ struct MainWindowView: View {
                     .accessibilityHidden(!showing)
             }
         }
-        .frame(minWidth: 820, minHeight: 560)
+        .frame(minWidth: MainWindowController.minimumSize.width, minHeight: MainWindowController.minimumSize.height)
         // The tabs name themselves in the toolbar, so the title is the app's.
         .navigationTitle("Pith")
         .toolbar {

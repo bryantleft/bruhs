@@ -26,15 +26,15 @@ struct DiskView: View {
                     } else if model.isScanning {
                         VStack(spacing: 10) {
                             BruhsSpinner(diameter: 24, lineWidth: 2.5).accessibilityLabel("Scanning")
-                            Text("The map appears when the scan finishes.").font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
+                            Text("Building map…").font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         DiskVolumeList(model: model)
                     }
                 } else if model.isScanning {
-                    Text(model.rescanning.map { "Scanning \(URL(fileURLWithPath: $0).lastPathComponent) again. The map updates when it finishes." }
-                         ?? "Showing the earlier scan until this one finishes.")
+                    Text(model.rescanning.map { "Rescanning \(URL(fileURLWithPath: $0).lastPathComponent)… Previous scan shown." }
+                         ?? "Scanning… Previous scan shown.")
                         .font(BruhsType.body)
                         .foregroundStyle(BruhsColor.text)
                         .padding(.horizontal, 12)
@@ -250,9 +250,9 @@ struct DiskNotices: View {
     private func unreadableMessage(_ summary: DiskSummary) -> String {
         let total = summary.errors, protected = summary.unreadable.protected
         let folders = "\(total.formatted()) \(total == 1 ? "folder" : "folders")"
-        if protected == total { return "\(folders) couldn’t be read, so this map leaves them out. macOS protects them; Full Disk Access lets Pith read them." }
-        if protected == 0 { return "\(folders) couldn’t be read, so this map leaves them out. They belong to macOS or another user." }
-        return "\(folders) couldn’t be read, so this map leaves them out. Full Disk Access lets Pith read \(protected.formatted()) of them; the rest belong to macOS or another user."
+        if protected == total { return "\(folders) protected by macOS; excluded from the map." }
+        if protected == 0 { return "\(folders) excluded from the map. They belong to macOS or another user." }
+        return "\(folders) excluded from the map. Full Disk Access can read \(protected.formatted()) of them."
     }
 }
 

@@ -60,17 +60,19 @@ struct SettingsView: View {
                 Toggle("Download and install updates automatically",
                        isOn: Binding(get: { updates.downloadsAutomatically }, set: { updates.setDownloadsAutomatically($0) }))
                     .disabled(!updates.checksAutomatically)
+                LabeledContent("Version", value: updates.version)
             } header: {
                 Text("Updates")
             } footer: {
-                Text("Once a day, Pith asks GitHub, where its releases are published, whether a newer version is out. It sends nothing about this Mac. This is version \(updates.version).")
+                Text("Checks GitHub daily. No system information is sent.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         } else {
             // A build made on this Mac has no updater, so the section says why rather than going missing.
             Section("Updates") {
-                Text("This copy of Pith was built on this Mac, so it doesn’t update itself. This is version \(updates.version).")
+                LabeledContent("Version", value: updates.version)
+                Text("Automatic updates are unavailable in this local build.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -94,10 +96,11 @@ struct SettingsView: View {
             Text("History")
         } footer: {
             Text(model.keepsHistory
-                 ? "Pith saves CPU, memory and the busiest apps every 30 seconds, on this Mac only, and keeps them for 7 days. Activity can then look back hours and days."
-                 : "Off: history covers the running session and clears when you quit.")
+                 ? "Saved on this Mac. Turning this off clears saved history."
+                 : "Session history clears when you quit.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .help("CPU, memory and the busiest apps are saved every 30 seconds for up to 7 days.")
         }
         Section {
             ForEach(AlertKind.allCases) { kind in
@@ -110,7 +113,7 @@ struct SettingsView: View {
         } header: {
             Text("Alerts")
         } footer: {
-            Text("Only for problems that last. Each alert names the app behind it, and waits half an hour before it can come again.")
+            Text("For sustained problems. Each alert repeats at most every 30 minutes.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -120,9 +123,10 @@ struct SettingsView: View {
         } header: {
             Text("Disk")
         } footer: {
-            Text("Pith keeps the startup disk's map on this Mac, with folder names and sizes but never what's in the files. It opens on it at once and catches up on what changed, instead of mapping the disk again, and it shows what grew since the day before. Once a day, on power, it checks every folder for changes macOS didn't report.")
+            Text("Keeps folder names, sizes and growth since yesterday on this Mac. File contents are never saved.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .help("Reopens the saved startup disk map and catches up on changes. Once a day, on power, Pith checks every folder for changes macOS didn’t report.")
         }
     }
 }

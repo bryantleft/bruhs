@@ -8,6 +8,8 @@ struct ActivityHistoryChart: View {
     let model: ActivityModel
     let state: ActivityState
     @State private var cursor: Date?
+    @State private var keyboardAnchor: Date?
+    @FocusState private var focused: Bool
 
     private var metric: ChartMetric { state.chartMetric }
     private var span: HistorySpan { state.span }
@@ -34,44 +36,62 @@ struct ActivityHistoryChart: View {
         let step = span == .sevenDays ? LongHistory.coarse : LongHistory.fine
         let points = MiniTrend.points(buckets.map { (time: $0.start.timeIntervalSince1970 + $0.duration / 2, value: value($0)) }, maxGap: step * 2.5)
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                ChartControls(state: state, keepsHistory: model.keepsHistory)
-                Spacer(minLength: 12)
+            ActivityChartHeader(state: state, keepsHistory: model.keepsHistory) {
                 readout(buckets)
-                    .lineLimit(1)
-                    .accessibilityHidden(true)
             }
             chart(points, buckets: buckets, domain: domain)
                 .frame(height: 150)
+                .focusable(interactions: .activate)
+                .focused($focused)
+                .onKeyPress(keys: [.leftArrow, .rightArrow]) { press in
+                    moveCursor(press, domain: domain)
+                    return .handled
+                }
+                .onChange(of: focused) { _, focused in
+                    if !focused { cursor = nil; keyboardAnchor = nil }
+                }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(metric.title) over the last \(span.title)")
-                .accessibilityValue(points.isEmpty ? "No kept history yet" : "\(points.count) readings." + LaunchMarker.spoken(launches(domain: domain)))
+                .accessibilityValue(spokenSummary(buckets) + LaunchMarker.spoken(launches(domain: domain)))
+                .accessibilityChartDescriptor(CPUChartDescriptor(points: points, now: domain.upperBound, metric: metric, span: span))
+                .accessibilityAction(named: "Rank apps by the last hour") { rank(from: max(domain.lowerBound, domain.upperBound - 3600), to: domain.upperBound) }
+                .accessibilityAction(named: "Rank apps by the full visible history") { rank(from: domain.lowerBound, to: domain.upperBound) }
             HStack {
                 if buckets.isEmpty {
-                    Text("Pith fills this in as it runs. Keep it running to see hours and days here.")
+                    Text("History builds while Pith runs.")
                         .font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary)
                 }
                 Spacer(minLength: 12)
-                Text("Drag across the chart to rank apps by that time")
+                Text("Drag to rank apps")
                     .font(BruhsType.note)
                     .foregroundStyle(BruhsColor.textTertiary)
+                    .help("Drag across a time range to rank apps by their activity in that range.")
                     .accessibilityHidden(true)
             }
         }
+        .onChange(of: span) { cursor = nil; keyboardAnchor = nil }
     }
 
     @ViewBuilder private func readout(_ buckets: [HistoryBucket]) -> some View {
-        let shown = buckets.filter { bucket in state.longRange.map { $0.overlaps(bucket.start...bucket.end) } ?? true }.compactMap(value)
-        if let cursor, let bucket = buckets.first(where: { $0.start <= cursor && cursor < $0.end }) {
+        let selected = buckets.filter { bucket in state.longRange.map { $0.overlaps(bucket.start...bucket.end) } ?? true }
+        let shown = selected.compactMap(value)
+        if let cursor {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(verbatim: when(bucket.start)).font(BruhsType.caption).foregroundStyle(BruhsColor.textTertiary)
-                Text(verbatim: value(bucket).map(figure) ?? "").font(BruhsType.caption).foregroundStyle(BruhsColor.text)
+                Text(verbatim: when(cursor)).font(BruhsType.caption).foregroundStyle(BruhsColor.textTertiary)
+                if let reading = buckets.first(where: { $0.start <= cursor && cursor < $0.end }).flatMap(value) {
+                    Text(verbatim: figure(reading)).font(BruhsType.caption).foregroundStyle(BruhsColor.text)
+                } else { Text("No reading").font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary) }
             }
-        } else if let peak = shown.max() {
+        } else if let highestAverage = shown.max() {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 let average = shown.reduce(0, +) / Double(shown.count)
                 LabeledFigure(label: "Avg", value: figure(average), amount: average)
-                LabeledFigure(label: "Peak", value: figure(peak), amount: peak)
+                // CPU buckets retain actual sample peaks. Memory retains averages only, so label that distinction.
+                if metric == .cpu, let peak = selected.compactMap(\.cpuPeak).max() {
+                    LabeledFigure(label: "Peak", value: figure(peak), amount: peak)
+                } else if metric == .memory {
+                    LabeledFigure(label: "Peak avg", value: figure(highestAverage), amount: highestAverage)
+                }
             }
         }
     }
@@ -81,6 +101,20 @@ struct ActivityHistoryChart: View {
         case .cpu: percent(value, glance: true)
         case .memory: memorySize(UInt64(value / 100 * Double(model.snapshot?.memory?.physical ?? ProcessInfo.processInfo.physicalMemory)))
         }
+    }
+
+    private func spokenSummary(_ buckets: [HistoryBucket]) -> String {
+        let say = { (number: Double) in figure(number).replacingOccurrences(of: "%", with: " percent") }
+        if let cursor {
+            let reading = buckets.first(where: { $0.start <= cursor && cursor < $0.end }).flatMap(value)
+            return "\(when(cursor)): \(reading.map { say($0) + " bucket average" } ?? "no reading")."
+        }
+        let selected = buckets.filter { bucket in state.longRange.map { $0.overlaps(bucket.start...bucket.end) } ?? true }
+        let values = selected.compactMap(value)
+        guard let highestAverage = values.max() else { return "No kept history yet." }
+        let average = values.reduce(0, +) / Double(values.count)
+        let peak = metric == .cpu ? selected.compactMap(\.cpuPeak).max().map { " Sample peak \(say($0))." } ?? "" : " Highest bucket average \(say(highestAverage))."
+        return "Average \(say(average)).\(peak)"
     }
 
     /// A bucket's time: the clock within a day, the weekday and clock across days.
@@ -190,19 +224,61 @@ struct ActivityHistoryChart: View {
             .onContinuousHover { phase in
                 switch phase {
                 case .active(let location): cursor = proxy.value(atX: location.x, as: Double.self).map { Date(timeIntervalSince1970: $0) }
-                case .ended: cursor = nil
+                case .ended: if !focused { cursor = nil }
                 }
             }
             .gesture(DragGesture(minimumDistance: 3).onChanged { drag in
                 guard let start = proxy.value(atX: drag.startLocation.x, as: Double.self), let end = proxy.value(atX: drag.location.x, as: Double.self) else { return }
                 cursor = Date(timeIntervalSince1970: end)
-                // A stretch must hold at least one bucket to have anything to rank.
-                if abs(end - start) >= (span == .sevenDays ? LongHistory.coarse : LongHistory.fine) {
-                    state.rank(from: Date(timeIntervalSince1970: start), to: Date(timeIntervalSince1970: end))
-                }
+                rank(from: start, to: end)
             })
             .onTapGesture { state.backToLive() }
             .accessibilityHidden(true)
+    }
+
+    private var bucketDuration: TimeInterval { span == .sevenDays ? LongHistory.coarse : LongHistory.fine }
+
+    private func rank(from: TimeInterval, to: TimeInterval) {
+        guard abs(to - from) >= bucketDuration else { return }
+        state.rank(from: Date(timeIntervalSince1970: from), to: Date(timeIntervalSince1970: to))
+    }
+
+    private func moveCursor(_ press: KeyPress, domain: ClosedRange<Double>) {
+        let step = press.modifiers.contains(.option) ? (span == .sevenDays ? 86400.0 : 3600.0) : bucketDuration
+        let from = cursor?.timeIntervalSince1970 ?? domain.upperBound
+        let to = min(domain.upperBound, max(domain.lowerBound, from + (press.key == .leftArrow ? -step : step)))
+        if press.modifiers.contains(.shift) {
+            let anchor = keyboardAnchor?.timeIntervalSince1970 ?? from
+            keyboardAnchor = Date(timeIntervalSince1970: anchor)
+            rank(from: anchor, to: to)
+        } else { keyboardAnchor = nil }
+        cursor = Date(timeIntervalSince1970: to)
+    }
+}
+
+/// Controls and readings stay visible beside the inspector, including with Bigger Text.
+struct ActivityChartHeader<Readout: View>: View {
+    let state: ActivityState
+    let keepsHistory: Bool
+    @ViewBuilder let readout: () -> Readout
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                ChartControls(state: state, keepsHistory: keepsHistory)
+                Spacer(minLength: 12)
+                figures
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                ChartControls(state: state, keepsHistory: keepsHistory)
+                figures
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var figures: some View {
+        readout().lineLimit(1).fixedSize().accessibilityHidden(true)
     }
 }
 
@@ -212,23 +288,31 @@ struct ChartControls: View {
     let keepsHistory: Bool
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Picker("Chart", selection: $state.chartMetric) {
-                ForEach(ChartMetric.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .help("Chart CPU or memory. Dragging across the chart ranks apps by what it shows.")
-            Picker("Span", selection: $state.span) {
-                ForEach(HistorySpan.allCases, id: \.self) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .disabled(!keepsHistory)
-            .help(keepsHistory ? "How far back the chart looks" : "Turn on Keep a week of history in Pith Settings to look back hours and days.")
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) { metric; span }
+            VStack(alignment: .leading, spacing: 8) { metric; span }
         }
+    }
+
+    private var metric: some View {
+        Picker("Chart", selection: $state.chartMetric) {
+            ForEach(ChartMetric.allCases) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .help("Chart CPU or memory. Dragging across the chart ranks apps by what it shows.")
+    }
+
+    private var span: some View {
+        Picker("Span", selection: $state.span) {
+            ForEach(HistorySpan.allCases, id: \.self) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .disabled(!keepsHistory)
+        .help(keepsHistory ? "How far back the chart looks" : "Turn on Keep a week of history in Pith Settings to look back hours and days.")
     }
 }
 

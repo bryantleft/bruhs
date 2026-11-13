@@ -58,7 +58,19 @@ private struct AppInspector: View {
                 identity
                 // A process macOS won't let Pith read has no trend to draw; the lock note says why.
                 if model.window != nil, timeline.points.contains(where: { $0.cpu != nil || $0.memory != nil }) { trends(window) }
-                facts
+                if timeline.isRunning, !app.keepsAwake.isEmpty {
+                    LabeledContent {
+                        Text(Array(Set(app.keepsAwake)).sorted().joined(separator: ", "))
+                            .font(BruhsType.bodySmall).foregroundStyle(BruhsColor.text)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } label: {
+                        Text("Keeps awake").font(BruhsType.bodySmall).foregroundStyle(BruhsColor.textSecondary)
+                    }
+                    .help("It has asked macOS not to sleep, for the reasons it gave.")
+                }
+                DisclosureGroup("Process details") { facts.padding(.top, 6) }
+                    .font(BruhsType.bodySmall)
+                    .foregroundStyle(BruhsColor.textSecondary)
                 // One process is the app itself, whose figures are above; its PID is with the facts.
                 if processes.count > 1 { processList }
                 actions
@@ -129,7 +141,7 @@ private struct AppInspector: View {
     private var protectedNote: String? {
         let hidden = processes.filter { $0.memory == nil }.count
         guard app.restricted, hidden > 0 else { return nil }
-        return hidden == processes.count ? "Protected by macOS, so its figures are unavailable" : "\(hidden) of \(processes.count) processes are protected by macOS, so totals are unavailable"
+        return hidden == processes.count ? "Protected by macOS; figures unavailable" : "\(hidden) of \(processes.count) processes protected; totals unavailable"
     }
 
     private func trends(_ window: ClosedRange<Double>) -> some View {
@@ -243,14 +255,6 @@ private struct AppInspector: View {
                     }
                 }
             }
-            if timeline.isRunning, !app.keepsAwake.isEmpty {
-                GridRow {
-                    factLabel("Keeps awake")
-                    Text(Array(Set(app.keepsAwake)).sorted().joined(separator: ", ")).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .help("It has asked macOS not to sleep, for the reasons it gave.")
-                }
-            }
         }
     }
 
@@ -323,14 +327,14 @@ private struct SystemInspector: View {
                         .accessibilityHidden(true)
                     Text("System").font(BruhsType.title).foregroundStyle(BruhsColor.text)
                     Text(summary).font(BruhsType.body).foregroundStyle(BruhsColor.textSecondary)
-                    Text("Processes that are part of macOS").font(BruhsType.body).foregroundStyle(BruhsColor.textTertiary)
                 }
                 .accessibilityElement(children: .combine)
                 if system.protectedCount > 0 {
-                    Label("\(processCount(system.protectedCount)) \(system.protectedCount == 1 ? "is" : "are") protected by macOS. Pith can't read their CPU, memory or disk activity without administrator access, so the System totals leave them out.", systemImage: "lock")
+                    Label("\(processCount(system.protectedCount)) protected by macOS; excluded from totals.", systemImage: "lock")
                         .font(BruhsType.body)
                         .foregroundStyle(BruhsColor.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
+                        .help("Pith can’t read their CPU, memory or disk activity without administrator access.")
                 }
                 // System's own figures and its busiest processes are in its row and under it, beside this card.
                 if let snapshot { macFacts(snapshot) }

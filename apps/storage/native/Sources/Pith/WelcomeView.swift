@@ -10,6 +10,7 @@ struct WelcomeView: View {
     let close: () -> Void
 
     var body: some View {
+        let capHeight = BruhsType.bodyFace.capHeight
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 14) {
                 Image(nsImage: NSApp.applicationIconImage)
@@ -21,9 +22,13 @@ struct WelcomeView: View {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Text("Click")
                         if let glyph {
-                            Image(nsImage: glyph).renderingMode(.template).foregroundStyle(BruhsColor.text).accessibilityLabel("the Pith icon")
+                            Image(nsImage: glyph).renderingMode(.template).foregroundStyle(BruhsColor.text)
+                                // Center the circle on the letters, keeping the sentence's first baseline when it wraps.
+                                .alignmentGuide(.firstTextBaseline) { dimensions in dimensions.height / 2 + capHeight / 2 }
+                                .accessibilityLabel("the Pith icon")
                         }
                         Text("for CPU, memory and disk at a glance.")
+                            .multilineTextAlignment(.leading)
                     }
                     .font(BruhsType.body)
                     .foregroundStyle(BruhsColor.textSecondary)
@@ -38,14 +43,16 @@ struct WelcomeView: View {
                 .font(BruhsType.body)
                 .tint(BruhsColor.accent)
             Rectangle().fill(BruhsColor.hairline).frame(height: 1)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Don’t see Pith in the menu bar?").font(BruhsType.label).foregroundStyle(BruhsColor.text)
-                Text("macOS can turn off an app’s menu bar item, and a full menu bar hides items behind the camera. Turn Pith on in System Settings, in Menu Bar. Opening Pith from Finder brings back this window.")
+            DisclosureGroup {
+                Text("Enable Pith in System Settings, under Menu Bar. A full menu bar can hide its icon behind the camera.")
                     .font(BruhsType.note)
                     .foregroundStyle(BruhsColor.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Button("Open Menu Bar Settings…") { openMenuBarSettings() }.buttonStyle(.bruhsGhost).padding(.leading, -10)
+            } label: {
+                Text("Can’t find the menu bar icon?").font(BruhsType.label).foregroundStyle(BruhsColor.text)
             }
+            .help("Reopen Pith from Finder to return to this window.")
             HStack {
                 Spacer()
                 Button("Done", action: close).keyboardShortcut(.defaultAction)
