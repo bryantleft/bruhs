@@ -5,6 +5,9 @@ A local-first disk-usage profiler for macOS. Scans your disk fast (via the
 renders an interactive treemap of what's eating space, and lets you move space-hogs to the
 Trash (reversible, with Put-Back).
 
+The native Mac app is **Pith**. Its [build and connection guide](native/README.md#connect-an-assistant-for-cleanup-advice)
+describes the bundled local MCP server for scoped storage scans, ranked cleanup evidence, and APFS-aware space estimates.
+
 ## Architecture
 
 Two units with a clean process boundary:

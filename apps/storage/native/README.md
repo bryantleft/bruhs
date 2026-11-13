@@ -40,8 +40,8 @@ The update key is an EdDSA key pair. Its public half is `PUBLIC_KEY` in `scripts
 ## Use
 
 - The menu bar shows the bruh-slice glyph and system CPU. While memory pressure is elevated or critical, its symbol appears in its status colour, also in icon-only mode.
-- Click the item for the panel: CPU and memory pressure over the last ten minutes, the busiest apps, and free space on the startup disk. Click an app to open it in Activity, or the disk row to open Disk. Settings and Quit are under the ⋯ button.
-- Activity and Disk are tabs of one window (⌘1 and ⌘2). Activity lists apps with live CPU, memory, power, disk reads and writes, and network use, updated every second while it's open; search with ⌘F and include apps that quit in the last ten minutes from the filter menu. Drag across the CPU chart to rank apps by that time instead of now, and press Escape or Back to Live to return. The inspector (⌥⌘I) shows the selected app's history, processes, path, and Reveal in Finder and Quit. Charts mark when apps opened.
+- Click the item for the panel: CPU history, memory used and pressure, the busiest apps, and free space on the startup disk. Memory Details holds swap, compression and recent pressure history; current pressure warnings stay visible. Pith ranks with other apps, while its own resource diagnostics are under Settings → Monitoring → Diagnostics. Click an app to open it in Activity, or the disk row to open Disk. Settings and Quit are under the ⋯ button.
+- Activity and Disk are tabs of one window (⌘1 and ⌘2). Activity lists apps with live CPU, memory, power, disk reads and writes, and network use. System CPU/memory totals refresh every 500 ms; app/process readings refresh every second while it’s open; search with ⌘F and include apps that quit in the last ten minutes from the filter menu. Drag across the CPU chart to rank apps by that time instead of now, and press Escape or Back to Live to return. The inspector (⌥⌘I) shows the selected app's history, processes, path, and Reveal in Finder and Quit. Charts mark when apps opened. The kept-history charts support arrow keys to inspect a bucket, Option-arrow to move an hour (or a day in the week view), and Shift-arrow to rank a range. VoiceOver offers recent/full-history ranking actions and Audio Graphs. Historical CPU peaks use the stored sample peaks; memory shows the highest bucket average.
 - Live rankings slide rows to their new places over 250 ms in Activity and the panel; apps entering or leaving fade. Reduce Motion updates them in place. The panel holds its order while the pointer is over it, and Activity keeps selection, expanded processes and the scroll position through each refresh.
 - Disk shows the startup disk's map, which Pith keeps current by itself: it maps the disk once, the first time Disk opens, and from then on re-reads only the folders that change. A path bar over the map names the disk, as Finder does, and each folder down to the open one: click a folder to go there. The disk's menu lists every disk with its free space, then Choose Folder. Its figures are fresh as it opens: Pith lists the volumes again as the pointer reaches the disk's part of the path bar, and a figure that lands while the menu is open shows in place. The startup disk, and a folder on it, show from the same map at once; another disk, a folder on one, or a folder the map couldn't read is scanned. Back and Forward (⌘[ and ⌘]) retrace the folders opened in a map.
 
@@ -178,7 +178,9 @@ Network use by app comes from macOS's private NetworkStatistics framework, which
 
 Helpers are grouped only when their executable bundle and process ancestry establish the same owner. Process identities include their start times, which Quit and Force Quit check again just before signalling, since macOS reuses PIDs. App history retains sample-time membership, CPU, footprints, power and read/write counter rates. Individual process counters are a live drill-down. The live history is in memory, lasts ten minutes and expires against continuous monotonic time across sleep. With Keep a week of history turned on in Settings, Pith also keeps 30-second buckets for six hours and 5-minute buckets for seven days, each with its busiest apps, what each wrote to disk and the apps seen opening, in `~/Library/Application Support/Pith/history.json`. Disk's list of who wrote the most is that count: macOS doesn't say which folders a process wrote to, so it's what was writing while the folder grew, not proof of what grew it. Sampling pauses during sleep and restarts with a fresh baseline. Missing counters and gaps remain visible.
 
-Pith samples every second while Activity is on screen or the panel is open, and every two seconds otherwise, for the menu bar figure and kept history. A sample costs about the same either way: a median of 5.5 ms of sampling on 2026-11-07, with memory, tiers, power, network, GPU, battery and sleep assertions included, across roughly 790 processes on the development Mac, so sampling every second all the time would double Pith's cost in the background. Opening Activity or the panel wakes sampling at once, though never within a second of the last sample, so a rate always covers at least a second. These are measurements on one Mac, not a whole-app CPU or energy guarantee.
+System CPU/memory totals target a 500 ms interval in the menu bar and the open views. Their separate sampler reads host CPU ticks, memory composition, swap and pressure, without enumerating processes or collecting network, power or GPU data. It keeps independent counter baselines and updates only numeric leaf views; readings crossfade in place over 200 ms and rest between updates. Table values use the same subtle fade; table rank changes ease over 250 ms. These use Core Animation rather than per-frame SwiftUI layout, and Reduce Motion removes the transitions. App icon lookups run on a separate queue, showing a generic icon while loading so a slow file lookup cannot hold the UI or the sampling executor. In icon-only mode with both views closed, fast capture stops. Pause stops both streams. macOS scheduling can delay deliveries, so this is a refresh target rather than a hard real-time deadline.
+
+Full app/process samples still run every second while Activity or the panel is open, and every two seconds otherwise. Charts, averages, peaks, persisted history and sustained-problem alerts use these full samples, keeping the app list and history from doing six times the work. The full sampler takes a median of 5.5 ms including network/power/GPU on the development Mac (2026-11-07, roughly 790 processes). The separate native totals capture measured 19.4 µs median / 34.3 µs p95, versus 2.69 ms / 3.67 ms for the native full process capture (2026-11-12, 582 processes, 500 samples per path, M2 Max). These native timings exclude Swift decoding, private network/power/GPU reads and UI work. They are measurements on one Mac, not a whole-app CPU, battery or energy guarantee.
 
 The Shortcuts actions are App Intents. Pith builds with SwiftPM, which doesn't extract their metadata as Xcode does, so `build-mac.mjs` has the compiler emit their constant values and runs Xcode's `appintentsmetadataprocessor` on them into `Metadata.appintents`, and fails the build when an action is missing from it.
 
@@ -186,7 +188,56 @@ Updates are [Sparkle](https://sparkle-project.org) 2.10.1, pinned exactly in `Pa
 
 Temperature sensors, privileged process control, fan control and automatic cleanup are outside this build: they need a root helper or a private interface that breaks across releases.
 
+## Connect an assistant for cleanup advice
+
+In **Settings > Connections**, choose the folder the assistant may inspect, use **Test Connection**, then **Copy MCP Configuration**. Add that JSON to the assistant's local stdio MCP configuration and reconnect it. Copy after moving Pith to its final location, since the command points at the scanner inside that app. Pith's UI need not be running. The server needs no Node runtime, API key, listening port or cloud service.
+
+For a copy installed in Applications, a configuration looks like this; replace the root with an existing folder:
+
+```json
+{
+  "mcpServers": {
+    "pith": {
+      "command": "/Applications/Pith.app/Contents/MacOS/storage-scanner",
+      "args": ["mcp", "--root", "/Users/your-name/Downloads"]
+    }
+  }
+}
+```
+
+The same command runs from a checkout after `pnpm --filter storage build:scanner`: use the absolute path to `apps/storage/scanner/target/release/storage-scanner`. A client with separate command and arguments fields should use those JSON fields directly, without a shell wrapper. For a client using TOML, put the same `command` and `args` under `[mcp_servers.pith]`.
+
+Ask: **“Use Pith to scan this folder and recommend what to clean up. Start with rebuildable items, explain each risk, and measure what the proposed set would free. Leave everything in place.”**
+
+| Tool | Evidence |
+| --- | --- |
+| `pith_status` | Configured scope, running measurement, report retention and resource budgets |
+| `pith_scan` | Fresh metadata scan, explicit `scan_id`, coverage gaps, largest folders/files, candidate count |
+| `pith_cleanup_candidates` | Paged, non-overlapping recommendations for a required `scan_id`, ranked by risk then allocated size |
+| `pith_inspect_path` | File metadata or a fresh folder scan with its own `scan_id` |
+| `pith_estimate_cleanup` | Bytes deleting a proposed set would free, with shared blocks, snapshots and unreadable items reported |
+
+Known app caches, Xcode DerivedData, and generated project folders beside their manifests are marked rebuildable, with their rebuild and offline-use costs. Installers in Downloads and other large files require review. Simulator devices and Xcode archives point to Xcode's own management tools. Credentials, repository internals, system folders, app packages, photo libraries and application databases are excluded from cleanup candidates. Largest-file evidence can still include such files; it never labels them disposable. The classifier uses known locations and manifest existence, never file contents, modification age, or a guess that large means unwanted.
+
+Scans are explicit, point-in-time measurements, separate from Pith's live map. Pass the returned `scan_id` on every `pith_cleanup_candidates` call, for example `{ "scan_id": "scan_…", "limit": 20 }`, then add `offset: nextOffset` for subsequent pages. There is no implicit last scan. Reports are immutable: scanning another folder, inspecting a candidate or reconnecting never changes an existing report. Each ID is bound to the exact canonical configured root, so changing the connection's scope requires a fresh scan. Server 0.2 introduces this required argument.
+
+Reports expire after 24 hours and may be evicted sooner when the retained reports reach 64 MiB of allocated disk blocks. Directory and lock metadata, and one report being written, are outside that budget. A single report is limited to 8 MiB; a larger scan fails with a request to choose a narrower folder, without truncating evidence. Unknown, expired, removed and evicted IDs fail explicitly and require `pith_scan` again. `pith_status` exposes these budgets. The cache is `~/Library/Caches/app.bruhs.pith/mcp-reports`, with a user-owned 0700 directory and 0600 files. Expired reports are removed during later scans or when the expired report is requested, rather than by a background timer. Removing that cache invalidates its IDs. `PITH_MCP_REPORTS` can select an absolute private directory for isolated tests.
+
+`pith_cleanup_candidates` returns 20 items by default, up to 100 with `limit`. Scans and folder inspection show the largest 20 immediate folders and files; inspect a child to drill down. Every report includes timestamps and coverage; scan again after changing files. Candidate sizes count blocks once within their scan, and **are not a reclaimable-space estimate**. Measure up to 32 selected paths together, with duplicates and nested paths collapsed, to account for APFS clones and hard links. Moving files to Trash alone frees no space.
+
+The configured `--root` is fixed for the connection. Use paths relative to it or absolute paths under the canonical root returned by `pith_status`. Parent traversal (`..`), unrelated absolute paths, and symlinks resolving outside the root are refused. Project markers outside the scanned folder are not inspected. File contents are never opened and cloud downloads are disabled before filesystem work. All tools are read-only: there is no delete, Trash, shell, or arbitrary command tool. Review proposed paths in Pith's Disk tab, where the existing confirmation and Undo apply. The server speaks MCP stdio `2026-07-28` and legacy `2025-11-25`/`2025-06-18`; closing stdin or cancelling a measurement stops its scanner subprocess. One disk operation runs at a time, while status and ping remain responsive.
+
+**Privacy:** connecting an assistant shares file and folder names, sizes, metadata and cleanup reasons with that assistant. Its provider may process them. Scan reports retain this metadata in the private local cache described above. The server itself makes no network requests. macOS privacy access belongs to the app launching the MCP server, which can differ from Pith's access. If coverage reports protected folders, grant that app Full Disk Access in System Settings or choose a narrower folder, then scan again. Test Connection checks startup, protocol, tools and scope without scanning; it does not establish that an external assistant has been configured.
+
+For a machine-readable report without an assistant:
+
+```sh
+apps/storage/scanner/target/release/storage-scanner analyze --root /absolute/path/to/folder
+```
+
 ## Verification
+
+`pnpm --filter storage test:mcp` runs the official MCP SDK client against the Rust server in pinned `2026-07-28` and legacy modes. It verifies all five tools, required scan IDs, immutable pagination, reconnects, concurrent clients, exact scope binding and unchanged user files. Rust tests cover malformed wire requests, metadata, error codes, cancellation, expiry, eviction and private cache integrity. These are interoperability and regression checks, not a complete MCP certification. The Mac check includes both suites; the SDK is a development dependency only.
 
 ```sh
 pnpm --filter storage build:scanner
@@ -201,7 +252,9 @@ They cover the known places and their fallbacks, the icon store drawing off the 
 
 The scanner's `live_tests.rs` checks the index against a fresh scan, folder by folder, after each of 250 rounds of random changes: files written, appended, moved and deleted, folders made, moved and deleted, clones and hard links, with listings landing in a shuffled order. A second run without clones or hard links never needs the daily check, so every round tests what listings alone do. The CI Mac job also packages and verifies the local app signature.
 
-For a desktop smoke test, provide a disposable folder holding a folder named `sub` with at least one file of 1 MB or more in it, which the live map lists by name:
+For a native layout audit, run `Pith.app/Contents/MacOS/Pith --ui-audit /tmp/pith-ui-audit`. It captures the real menu panel, Activity with and without its inspector at 820 and 1180 points, kept history, search, Settings and Welcome in light/dark at 100% and 140% text. It saves images and measured geometry, and fails if content outgrows its requested window. Paused/live panel states are separate captures. The run keeps settings and history in memory. Phone touch and network throttling do not apply to these local macOS views.
+
+For a desktop smoke test, provide a disposable folder holding `sub/video.mov`, a file of 1 MB or more, which the live map lists by name:
 
 ```sh
 apps/storage/native/.build/Pith.app/Contents/MacOS/Pith \
@@ -231,3 +284,5 @@ The smoke test's last check reads Pith's saved defaults and what Pith keeps unde
 The run writes its report as each check lands, as a run that hasn't finished, so a run its caller's alarm stops still leaves every check it finished, and a check makes sure it did. Its last report, finished or stopped on an error, replaces that one whole, so a run stopped while it's written still leaves the one before. It also looks, reading nothing, for a scan memory of the fixture in the person's Scans folder, which it never finds. Its waits for the live map to follow its own files count their patience only while the scanner has no folder waiting, a minute at most in all, since on a loaded Mac a slow listing's cooldown can hold a folder past the patience while the map is only behind.
 
 To prove an installed copy updates itself, run `pnpm --filter storage test:mac-updates`. It builds a throwaway 0.0.1 and 0.0.2 under the bundle id `app.bruhs.pith.updatetest`, signed with the Developer ID but a test key, serves 0.0.2 in a signed feed at 127.0.0.1, opens 0.0.1 with automatic updates on, and checks that Sparkle replaced it with a valid 0.0.2 once it quit. A second Pith shows in the menu bar for about a minute; the real app, its settings and data, and the keychain's update key are left alone. Run it after changing how Pith is built or signed, and whenever Sparkle changes version.
+
+`Pith.app/Contents/MacOS/Pith --reading-test <report.json>` checks readout motion, ranking, foreground/menu-only cadence, pause/resume and icon-only behavior in the packaged app. It uses temporary settings and in-memory history without scanning personal files.
