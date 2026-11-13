@@ -139,9 +139,21 @@ struct ActivityView: View {
 
     @ViewBuilder private func emptyState(_ listing: ActivityListing, range: ClosedRange<Double>?) -> some View {
         if listing.apps.isEmpty && listing.system == nil {
-            Text(model.snapshot == nil ? "Collecting activity…" : !query.isEmpty ? "No apps match “\(query)”" : range != nil ? "No apps ran in this range" : "No activity")
-                .font(BruhsType.body)
-                .foregroundStyle(BruhsColor.textTertiary)
+            VStack(spacing: 8) {
+                Text(model.snapshot == nil ? "Collecting activity…" : !query.isEmpty ? "No apps match your search" : range != nil || state.longRange != nil ? "No apps ran in this range" : "No activity")
+                    .font(BruhsType.body)
+                    .foregroundStyle(BruhsColor.textSecondary)
+                if model.snapshot != nil, !query.isEmpty {
+                    Text("Try another name or remove a filter.")
+                        .font(BruhsType.note)
+                        .foregroundStyle(BruhsColor.textTertiary)
+                    Button("Clear Search") { state.search = "" }
+                        .buttonStyle(.bruhsGhost)
+                        .help("Show all apps and processes")
+                }
+            }
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 24)
         }
     }
 

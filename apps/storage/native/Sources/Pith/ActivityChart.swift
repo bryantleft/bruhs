@@ -157,15 +157,13 @@ struct ActivityChart: View {
         }
         .chartXAxis {
             // Labels sit 14 pt under the plot to leave room for the memory-pressure band.
-            AxisMarks(values: ticks) { value in
-                AxisValueLabel(verticalSpacing: 14) {
-                    Text(value.as(Double.self).flatMap(model.history.date(at:)).map { PanelSummary.clock($0) } ?? "")
+            // One collision group lets the measured labels keep clear at any plot width or text size. The live
+            // edge wins over a nearby clock label; a fixed clearance in seconds alone can't guarantee that space.
+            AxisMarks(values: ticks + [window.upperBound]) { value in
+                let isNow = value.as(Double.self) == window.upperBound
+                AxisValueLabel(anchor: isNow ? .topTrailing : nil, collisionResolution: .greedy(priority: isNow ? 1 : 0), verticalSpacing: 14) {
+                    Text(isNow ? "now" : value.as(Double.self).flatMap(model.history.date(at:)).map { PanelSummary.clock($0) } ?? "")
                         .font(BruhsType.caption).foregroundStyle(BruhsColor.textTertiary)
-                }
-            }
-            AxisMarks(values: [window.upperBound]) { _ in
-                AxisValueLabel(anchor: .topTrailing, verticalSpacing: 14) {
-                    Text("now").font(BruhsType.caption).foregroundStyle(BruhsColor.textTertiary)
                 }
             }
         }
