@@ -5,6 +5,7 @@
 //!   storage-scanner trash --path <path>
 //!   storage-scanner frees --path <path> [--path <path>…]
 //!   storage-scanner serve
+//!   storage-scanner mcp --root <allowed folder>
 //!   storage-scanner analyze --root <folder>
 //!
 //! `scan` streams NDJSON: repeated `{"type":"progress",...}` lines, then one
@@ -31,9 +32,17 @@ fn main() {
         Some("trash") => cmd_trash(&args[1..]),
         Some("frees") => cmd_frees(&args[1..]),
         Some("serve") => std::process::exit(serve::run()),
+        Some("mcp") => {
+            let Some(root) = flag(&args[1..], "--root") else {
+                eprintln!("mcp: --root <allowed folder> required");
+                std::process::exit(2);
+            };
+            std::process::exit(storage_scanner::mcp::run(Path::new(root)));
+        }
         Some("analyze") => cmd_analyze(&args[1..]),
+        Some("mcp-work") => cmd_mcp_work(&args[1..]),
         _ => {
-            eprintln!("usage: storage-scanner <scan|trash|frees|serve|analyze> [options]");
+            eprintln!("usage: storage-scanner <scan|trash|frees|serve|analyze|mcp> [options]");
             std::process::exit(2);
         }
     }
@@ -54,6 +63,23 @@ fn cmd_analyze(args: &[String]) {
     if let Err(reason) = analyze() {
         println!("{}", serde_json::json!({ "type": "fatal", "reason": reason }));
         std::process::exit(1);
+    }
+}
+
+fn cmd_mcp_work(args: &[String]) {
+    let work = || -> Result<serde_json::Value, String> {
+        let root = flag(args, "--root").ok_or("The MCP worker requires --root.")?;
+        let operation = flag(args, "--operation").ok_or("The MCP worker requires --operation.")?;
+        let arguments = flag(args, "--arguments").ok_or("The MCP worker requires --arguments.")?;
+        let arguments = serde_json::from_str(arguments).map_err(|error| format!("Invalid worker arguments: {error}"))?;
+        storage_scanner::mcp::measure(Path::new(root), operation, arguments)
+    };
+    match work() {
+        Ok(result) => println!("{result}"),
+        Err(reason) => {
+            println!("{}", serde_json::json!({ "type": "fatal", "reason": reason }));
+            std::process::exit(1);
+        }
     }
 }
 

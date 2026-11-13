@@ -2,6 +2,7 @@
 //! traversal and aggregation logic. The binary (`main.rs`) is a thin CLI over this.
 
 pub mod cleanup;
+pub mod mcp;
 pub mod frees;
 pub mod index;
 pub mod kinds;
