@@ -108,6 +108,10 @@ import PithCore
         // does it map the person's disk, which the smoke test does with a folder of its own.
         if !Launch.isAutomated { startUpdates(); disk.startLive() }
         if CommandLine.arguments.contains("--activity") { showActivity() }
+        if let index = CommandLine.arguments.firstIndex(of: "--ui-audit"), CommandLine.arguments.indices.contains(index + 1) {
+            let folder = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+            Task { await auditUI(savingTo: folder) }
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--scan"), CommandLine.arguments.indices.contains(index + 1) {
             showDisk(); disk.scan(URL(fileURLWithPath: CommandLine.arguments[index + 1]))
         }

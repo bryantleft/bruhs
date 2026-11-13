@@ -1,11 +1,11 @@
 import Foundation
 
-/// How this run of Pith began. A run a script starts and checks, with `--smoke-test`, `--activity` or `--scan`, leaves
+/// How this run of Pith began. A run a script starts with `--smoke-test`, `--activity`, `--scan` or `--ui-audit` leaves
 /// the person's persisted state as it found it: it reads none of their settings and writes none, keeps its Activity
 /// history and its scans in memory or in folders of its own, never in theirs, and moves nothing into their Trash
 /// (`DiskModel.trashFolder`).
 enum Launch {
-    static let isAutomated = CommandLine.arguments.contains { ["--activity", "--scan", "--smoke-test"].contains($0) }
+    static let isAutomated = CommandLine.arguments.contains { ["--activity", "--scan", "--smoke-test", "--ui-audit"].contains($0) }
 
     /// Gives an automated run its settings in memory, before anything reads one: each at the value `Setting` gives an
     /// automated run (`automatedValue`), Pith's default for all but two, in the volatile argument domain. Reads look

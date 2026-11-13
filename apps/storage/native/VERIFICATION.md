@@ -2,7 +2,7 @@
 
 Verified on 2026-11-05 on Apple Silicon, macOS 26.3, with Xcode 26.6 / Swift 6.3.3.
 
-Each dated entry below gives the tests and smoke checks of its own run, oldest first. The last entry, 2026-11-11's final review fixes, is the current one: 411 Swift tests, 62 scanner tests, 293 node tests and 99 smoke checks.
+Each dated entry below gives the tests and smoke checks of its own run, oldest first. The latest entry is 2026-11-12's live rankings and UI audit: 414 Swift tests, 293 node tests and 111 smoke checks. Scanner tests were not rerun for those UI changes.
 
 ## Passed
 
@@ -270,3 +270,13 @@ The last fixes for the redesign's follow-ups, on the same Mac (macOS 26.3), buil
 - **The kernel's table alone:** Move to Trash, its Undo and each app's icon say which volume a path lies on from the kernel's mount table alone, without asking DiskArbitration about any disk, which only the guarded volumes need. So a busy diskarbitrationd holds neither a move's landing nor an icon.
 - **The probe as Pith becomes active:** it runs as macOS's notice comes, rather than a turn later, so a live map arriving next finds the new verdict, since a live map probes only while another app is in front.
 - **Tests:** 411 Swift tests, 62 scanner tests and 293 node tests, from 403, 62 and 293. All 99 smoke checks pass in the packaged app in 190 s, `left_the_persons_state_alone` among them.
+
+
+## 2026-11-12: live rankings and UI audit
+
+- **Live rankings:** Activity moves stable native outline items rather than reloading the table. The panel keeps a host per row and uses Core Animation to move it. Both use the generated bruhs motion curves and 250 ms duration. Reduce Motion updates rows in place. Selection, disclosure, scroll position, hover safety, accessibility order and in-flight retargeting have deterministic smoke coverage.
+- **UI audit:** five reproduced issues fixed: Settings required 735 points of content without scrolling; long unmatched searches covered the table; the final chart timestamp could overlap “now”; Disk hover cards and the focused accessible item list could extend outside the map at larger text sizes. Settings now scrolls within 560 points, search offers compact recovery, chart labels share a measured collision group, and both Disk overlays fit their container. Findings, scope, limitations and screenshot links are in [UI_AUDIT.md](UI_AUDIT.md).
+- **Native evidence:** 36 renders of the real views, light/dark, normal/largest text, two requested window widths, with and without the inspector. The diagnostic records actual bounds as well as requested bounds: the inspector at 140% can raise the minimum above 820 points. Live checks verified Clear Search and all three Settings panes scrolling to their final controls. `--ui-audit <folder>` repeats the captures with preferences and history kept in memory.
+- **Disk evidence:** the real bundled renderer in the browser at widths 820, 1,024, 1,280 and 1,920 and text sizes 85%, 100% and 140%; light/dark boundaries, keyboard selection, Add activation, empty/error recovery, and console/network errors checked. Fixture server and preview tab closed after verification.
+- **Checks:** 414 Swift tests, 293 Node tests and every one of 111 packaged smoke checks passed, the latter in 168.3 seconds. Warnings-as-errors build, strict signature verification, Biome, native-renderer TypeScript, both theme lints, native lint, generated-token drift and all 21 semantic roles' contrast checks passed. These local counts include unrelated MCP connection work present in the shared checkout, which was excluded from the animation and audit commits. No scanner implementation changed in this work, so scanner tests were not rerun.
+- **Still outside this pass:** actual VoiceOver speech, other macOS versions, touch and throttled 3G. The separate release checks above remain applicable.
