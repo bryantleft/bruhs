@@ -10,6 +10,7 @@
     "release:mac": "node scripts/build-mac.mjs --release",
     "publish:mac": "node scripts/publish-mac.mjs",
     "test:mac-updates": "node scripts/test-mac-updates.mjs",
+    "benchmark:local": "node scripts/benchmark-local.mjs",
     "open:mac": "open native/.build/Pith.app",
     "check:mac": "node scripts/brand.mjs --check && node ../../packages/ui/scripts/swift-tokens.mjs native/Sources/Pith/Theme/BruhsTokens.swift --check && node scripts/lint-native.mjs && cargo test --release --manifest-path scanner/Cargo.toml && swift test --disable-keychain --package-path native -Xswiftc -warnings-as-errors && tsc --project native-web/tsconfig.json && biome check native-web vite.native.config.ts && bruhs-theme-lint native-web",
     "start": "vite preview",
