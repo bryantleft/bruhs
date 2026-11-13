@@ -107,6 +107,43 @@ public actor ScannerRunner {
         }
     }
 
+    /// Connects to the same bundled server an assistant will launch. Closing stdin also verifies clean shutdown.
+    public static func checkMCP(binary: URL, root: URL) async throws -> Int {
+        let process = Process(), input = Pipe(), output = Pipe(), errors = Pipe()
+        process.executableURL = binary
+        process.arguments = ["mcp", "--root", root.path]
+        process.standardInput = input; process.standardOutput = output; process.standardError = errors
+        let (termination, exitStream) = terminationWaiter(process)
+        do { try process.run() } catch { exitStream.finish(); throw error }
+        let diagnostics = Task.detached { errorTail(errors.fileHandleForReading) }
+        let requests = """
+        {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"pith-connection-check","version":"1"}}}
+        {"jsonrpc":"2.0","method":"notifications/initialized"}
+        {"jsonrpc":"2.0","id":2,"method":"tools/list"}
+        {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"pith_status","arguments":{}}}
+
+        """
+        return try await withTaskCancellationHandler {
+            do {
+                try input.fileHandleForWriting.write(contentsOf: Data(requests.utf8))
+                try input.fileHandleForWriting.close()
+                let data = await Task.detached { output.fileHandleForReading.readDataToEndOfFile() }.value
+                let status = await termination.value
+                let diagnostic = await diagnostics.value
+                try Task.checkCancellation()
+                guard status == 0 else { throw DiskFailure("The MCP connection check exited with code \(status). \(diagnostic)") }
+                return try MCPConnection.validateProbe(data, root: root)
+            } catch {
+                if process.isRunning { process.terminate() }
+                _ = await termination.value
+                _ = await diagnostics.value
+                throw error
+            }
+        } onCancel: {
+            if process.isRunning { process.terminate() }
+        }
+    }
+
     private nonisolated static func terminationWaiter(_ process: Process) -> (Task<Int32, Never>, AsyncStream<Int32>.Continuation) {
         // One exit event, registered before launch. waitUntilExit can strand a
         // run-loop notification when a Swift actor resumes on another thread.

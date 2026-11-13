@@ -2,18 +2,24 @@ import AppKit
 import ServiceManagement
 import SwiftUI
 
+enum SettingsPane: String, CaseIterable {
+    case general, monitoring, connections
+}
+
 struct SettingsView: View {
     @Bindable var model: ActivityModel
     let alerts: AlertSettings
     @Bindable var disk: DiskModel
     var shortcut: PanelShortcut?
     let updates: Updates
+    @State var pane = SettingsPane.general
 
     var body: some View {
         // A steady window size fits short displays; longer forms scroll within their pane.
-        TabView {
-            form { general }.tabItem { Label("General", systemImage: "gearshape") }
-            form { monitoring }.tabItem { Label("Monitoring", systemImage: "waveform.path.ecg") }
+        TabView(selection: $pane) {
+            form { general }.tabItem { Label("General", systemImage: "gearshape") }.tag(SettingsPane.general)
+            form { monitoring }.tabItem { Label("Monitoring", systemImage: "waveform.path.ecg") }.tag(SettingsPane.monitoring)
+            form { ConnectionSettings(binary: disk.binary) }.tabItem { Label("Connections", systemImage: "link") }.tag(SettingsPane.connections)
         }
         .padding(.top, 8)
         .frame(width: 480, height: 560)
@@ -71,8 +77,8 @@ struct SettingsView: View {
         }
         Section("Privacy") {
             Text(updates.isAvailable
-                 ? "Activity and the disk map stay on this Mac. Pith goes online only to check for updates, when you allow it."
-                 : "Activity and the disk map stay on this Mac, and Pith makes no network connections.")
+                 ? "Activity and disk maps stay on this Mac. Network access is limited to updates. Connected assistants can receive storage metadata."
+                 : "Activity and disk maps stay on this Mac. Pith makes no network connections. Connected assistants can receive storage metadata.")
                 .fixedSize(horizontal: false, vertical: true)
             Button("Full Disk Access…") { openDiskAccess() }
         }
