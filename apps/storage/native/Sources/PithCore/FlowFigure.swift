@@ -80,5 +80,22 @@ public struct FlowFigure: Equatable, Sendable {
         return up <= 5 ? up : up - 10
     }
 
+    /// Retarget from the fractional position actually on screen. Both ends stay in the three-repeat digit strip,
+    /// even when updates interrupt one another before reaching their targets.
+    public static func turn(from current: Double, to value: Int, trend: Int) -> (start: Double, target: Double) {
+        let digit = Double((value % 10 + 10) % 10)
+        var start = current.isFinite ? current.truncatingRemainder(dividingBy: 10) : digit
+        if start < 0 { start += 10 }
+        if start >= 10 { start = 0 }
+        var target = digit
+        if trend > 0, target < start { target += 10 }
+        else if trend < 0, target > start { target -= 10 }
+        else if trend == 0 {
+            if target - start > 5 { target -= 10 }
+            else if target - start < -5 { target += 10 }
+        }
+        return (start, target)
+    }
+
     private static func isDigit(_ character: Character) -> Bool { character.isASCII && character.isWholeNumber }
 }

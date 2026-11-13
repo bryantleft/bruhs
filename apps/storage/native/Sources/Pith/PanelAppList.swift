@@ -3,7 +3,7 @@ import PithCore
 import SwiftUI
 
 /// Each SwiftUI row keeps its host while Core Animation moves it. A SwiftUI layout animation would lay out the
-/// entire panel on every frame, including its charts and rolling figures (see FlowText).
+/// entire panel on every frame, including its charts and live readouts (see FlowText).
 struct PanelAppList: NSViewRepresentable {
     let apps: PanelSummary.Apps
     let growth: [String: Int64]

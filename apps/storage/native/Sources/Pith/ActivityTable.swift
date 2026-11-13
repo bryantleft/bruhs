@@ -94,6 +94,12 @@ struct ActivityTable: NSViewRepresentable {
             defer { isUpdating = false }
             (outline as? ActivityOutlineView)?.copyText = { [weak self, weak outline] in outline.flatMap { self?.copyText(in: $0) } }
             if scale != table.textScale {
+                let ratio = table.textScale / scale
+                for column in outline.tableColumns where column != outline.outlineTableColumn {
+                    let width = column.width * ratio
+                    column.minWidth = 64 * table.textScale
+                    column.width = width
+                }
                 scale = table.textScale
                 outline.rowHeight = (26 * scale).rounded()
             }
@@ -111,8 +117,8 @@ struct ActivityTable: NSViewRepresentable {
             let descriptor = ActivityTable.descriptor(table.sort)
             if outline.sortDescriptors.first != descriptor { outline.sortDescriptors = [descriptor] }
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = moves ? BruhsMotion.standard : 0
-                context.timingFunction = BruhsMotion.standardTiming
+                context.duration = moves ? ReadingMotion.row : 0
+                context.timingFunction = ReadingMotion.timing
                 outline.beginUpdates()
                 reconcile(oldRoots, with: roots, in: nil, oldChildren: oldChildren, outline: outline, moves: moves)
                 outline.endUpdates()
@@ -122,7 +128,7 @@ struct ActivityTable: NSViewRepresentable {
                 if let node = nodes[id], children.isEmpty != node.children.isEmpty { outline.reloadItem(node) }
             }
             applyDisclosure(roots, in: outline)
-            refreshVisibleCells(in: outline)
+            refreshVisibleCells(in: outline, animates: moves)
             let row = table.selection.flatMap { nodes[$0] }.map(outline.row(forItem:)) ?? -1
             if row >= 0 {
                 outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
@@ -162,14 +168,14 @@ struct ActivityTable: NSViewRepresentable {
             }
         }
 
-        private func refreshVisibleCells(in outline: NSOutlineView) {
+        private func refreshVisibleCells(in outline: NSOutlineView, animates: Bool) {
             outline.enumerateAvailableRowViews { _, index in
                 guard let node = outline.item(atRow: index) as? ActivityNode else { return }
                 for (columnIndex, column) in outline.tableColumns.enumerated() {
                     let cell = outline.view(atColumn: columnIndex, row: index, makeIfNecessary: false)
                     if let cell = cell as? ActivityNameCell { cell.show(node, scale: self.scale) }
                     if let cell = cell as? ActivityNumberCell, let id = ActivityColumn(rawValue: column.identifier.rawValue) {
-                        cell.show(node, column: id, scale: self.scale)
+                        cell.show(node, column: id, scale: self.scale, animates: animates)
                     }
                 }
             }
@@ -230,7 +236,7 @@ struct ActivityTable: NSViewRepresentable {
                 return cell
             }
             let cell = outlineView.makeView(withIdentifier: ActivityNumberCell.identifier, owner: nil) as? ActivityNumberCell ?? ActivityNumberCell()
-            cell.show(node, column: column, scale: scale)
+            cell.show(node, column: column, scale: scale, animates: false)
             return cell
         }
 
@@ -486,6 +492,8 @@ final class ActivityNameCell: NSTableCellView {
     private let core = CountBadgeView()
     private let lock = NSImageView()
     private let detail = NSTextField(labelWithString: "")
+    private var iconPath: String?
+    private var iconLoad: Task<Void, Never>?
 
     init() {
         super.init(frame: .zero)
@@ -532,6 +540,7 @@ final class ActivityNameCell: NSTableCellView {
     required init?(coder: NSCoder) { fatalError("ActivityNameCell is created in code") }
 
     func show(_ node: ActivityNode, scale: Double = 1) {
+        var requestedIcon: String?
         let size = { (points: CGFloat) in (points * scale).rounded() }
         name.stringValue = node.name
         count.scale = scale
@@ -551,6 +560,7 @@ final class ActivityNameCell: NSTableCellView {
         case .app(let app):
             icon.isHidden = false
             icon.image = AppIconCache.shared.icon(for: app.executable)
+            requestedIcon = app.executable
             name.font = .systemFont(ofSize: size(13))
             name.textColor = NSColor(app.isRunning ? BruhsColor.text : BruhsColor.textSecondary)
         case .helper:
@@ -561,6 +571,17 @@ final class ActivityNameCell: NSTableCellView {
             icon.isHidden = true
             name.font = .systemFont(ofSize: size(13), weight: .semibold)
             name.textColor = NSColor(BruhsColor.text)
+        }
+        if requestedIcon != iconPath {
+            iconLoad?.cancel()
+            iconPath = requestedIcon
+            if let path = requestedIcon {
+                iconLoad = Task { @MainActor [weak self] in
+                    let image = await AppIconCache.shared.loadedIcon(for: path)
+                    guard !Task.isCancelled, let self, iconPath == path else { return }
+                    icon.image = image
+                }
+            }
         }
         var spoken = node.isLocked ? "\(node.summary), protected by macOS" : node.summary
         if node.holdsACore { spoken += ", holds a whole core" }
@@ -621,12 +642,15 @@ final class CountBadgeView: NSView {
 final class ActivityNumberCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("ActivityNumber")
     private let label = NSTextField(labelWithString: "")
+    private var representedRow: ActivityRowID?
+    private var representedColumn: ActivityColumn?
 
     init() {
         super.init(frame: .zero)
         identifier = Self.identifier
         textField = label
         label.alignment = .right
+        label.wantsLayer = true
         label.lineBreakMode = .byClipping
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
@@ -639,9 +663,13 @@ final class ActivityNumberCell: NSTableCellView {
 
     required init?(coder: NSCoder) { fatalError("ActivityNumberCell is created in code") }
 
-    func show(_ node: ActivityNode, column: ActivityColumn, scale: Double = 1) {
+    func show(_ node: ActivityNode, column: ActivityColumn, scale: Double = 1, animates: Bool = true) {
+        let previous = label.stringValue
+        let sameItem = representedRow == node.id && representedColumn == column
+        representedRow = node.id; representedColumn = column
         guard let values = node.values else {
             label.stringValue = ""; toolTip = nil; label.setAccessibilityLabel(nil)
+            label.layer?.removeAnimation(forKey: ReadingMotion.fadeKey)
             return
         }
         let figure = ActivityFigure(column, values)
@@ -657,6 +685,11 @@ final class ActivityNumberCell: NSTableCellView {
         case .value(let text, _, _):
             label.stringValue = text
             toolTip = nil
+        }
+        if animates, sameItem, previous != label.stringValue, window?.isVisible == true {
+            ReadingMotion.fade(label.layer, duration: ReadingMotion.standard)
+        } else if !animates || !sameItem || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            label.layer?.removeAnimation(forKey: ReadingMotion.fadeKey)
         }
         label.setAccessibilityLabel("\(column.title) \(figure.spoken(protected: node.isProtected))")
     }
@@ -674,7 +707,7 @@ enum ActivityFigure: Equatable {
     case unavailable
     /// Below what the figure can show, such as CPU under 0.05%. Lists leave it empty; a labelled figure shows it, as "0%".
     case zero(String)
-    /// The figure as shown and as spoken, and the number behind it, whose rise or fall sets which way its digits spin.
+    /// The figure as shown and as spoken, together with the original numeric measurement.
     case value(String, spoken: String, amount: Double)
 
     init(_ column: ActivityColumn, _ values: ActivityListing.Values) {
@@ -723,7 +756,7 @@ struct FigureText: View {
     var showsZero = false
 
     var body: some View {
-        FlowText(text, amount: figure.amount, face: BruhsType.dataSmallFace, color: tint)
+        FlowText(text, face: BruhsType.dataSmallFace, color: tint)
     }
 
     private var text: String {

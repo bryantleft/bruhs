@@ -79,6 +79,7 @@ import PithCore
                 alerts?.check(snapshot)
             }
         }
+        activity.onTotals = { [weak self] in self?.statusItem?.update() }
         disk.showQuickLook = { [weak self] urls in self?.quickLook(urls) }
         disk.writers = { [weak self] since in self?.activity.writers(since: since) ?? .empty }
         activity.start(); statusItem?.update()
@@ -119,6 +120,10 @@ import PithCore
             let root = URL(fileURLWithPath: CommandLine.arguments[index + 1])
             let report = URL(fileURLWithPath: CommandLine.arguments[index + 2])
             Task { await smokeTest(root: root, report: report) }
+        }
+        if let index = CommandLine.arguments.firstIndex(of: "--reading-test"), CommandLine.arguments.indices.contains(index + 1) {
+            let report = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+            Task { await auditReadings(savingTo: report) }
         }
         if let index = CommandLine.arguments.firstIndex(of: "--local-tools-test"), CommandLine.arguments.indices.contains(index + 1) {
             activity.pause()

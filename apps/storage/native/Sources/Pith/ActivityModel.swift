@@ -16,16 +16,19 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
 }
 
 @MainActor @Observable final class ActivityModel {
-    /// How often samples come while Activity is on screen or the panel is open, so the figures read as live.
+    /// Full app/process samples while Activity or the panel is open. System totals have their own lighter cadence.
     static let watchedInterval: TimeInterval = 1
+    /// CPU/memory totals shown in the menu bar and open views. History and process rankings keep the full cadence.
+    static let totalsInterval: TimeInterval = 0.5
     /// How often samples come otherwise, for the menu bar figure and kept history. Each sample costs about the same
     /// whatever the cadence, so sampling every second all the time would double Pith's cost in the background.
     static let interval: TimeInterval = 2
     var snapshot: ActivitySnapshot?
+    private(set) var liveTotals: SystemTotals?
     var history = SessionHistory()
     var paused = false
     var iconOnly = UserDefaults.standard.bool(forKey: Setting.iconOnly.rawValue) {
-        didSet { UserDefaults.standard.set(iconOnly, for: .iconOnly); onSample?() }
+        didSet { UserDefaults.standard.set(iconOnly, for: .iconOnly); totalsNap?.cancel(); onSample?() }
     }
     /// What the menu bar item shows after its glyph.
     var menuBarShows = MenuBarMetric(rawValue: UserDefaults.standard.string(forKey: Setting.menuBarShows.rawValue) ?? "") ?? .cpu {
@@ -39,11 +42,17 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
     var volumeName: String?
     /// True while the panel is open, the one place that shows the startup disk's free space.
     var showsDiskSpace = false {
-        didSet { if showsDiskSpace && !oldValue { refreshDiskSpace(); wake() } }
+        didSet {
+            if showsDiskSpace && !oldValue { refreshDiskSpace(); wake() }
+            if showsDiskSpace != oldValue { totalsNap?.cancel() }
+        }
     }
     /// True while Activity is on screen; the app delegate sets it as the main window shows, hides or changes tab.
     var activityOnScreen = false {
-        didSet { if activityOnScreen && !oldValue { wake() } }
+        didSet {
+            if activityOnScreen && !oldValue { wake() }
+            if activityOnScreen != oldValue { totalsNap?.cancel() }
+        }
     }
     /// Someone is looking at the figures, so samples come every second.
     private var watched: Bool { activityOnScreen || showsDiskSpace }
@@ -62,6 +71,8 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
     private(set) var longHistory = LongHistory()
     private var savedAt = Date.distantPast
     var onSample: (() -> Void)?
+    /// Only the menu bar needs a callback for fast totals; alerts and persisted history use full samples.
+    var onTotals: (() -> Void)?
     /// A gap longer than two sample intervals is missing data, not a slow sample.
     static let maxGap = interval * 2
 
@@ -71,11 +82,22 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
     /// over two minutes of a young session isn't one over the last ten.
     var historyStart: Date? { window.flatMap { PanelSummary.cpu(history.system, window: $0, maxGap: Self.maxGap).since } }
     private let sampler = SystemSampler()
+    private let totalsSampler = SystemTotalsSampler()
     private var sampling: Task<Void, Never>?
+    private var samplingTotals: Task<Void, Never>?
+    private var totalsNap: Task<Void, Never>?
     private var diskSpace: Task<Void, Never>?
+
+    /// The dedicated stream owns live values once it starts. Full captures timestamp after process enumeration,
+    /// although they read totals before it, so comparing those timestamps could roll a newer live value back.
+    var currentCPU: Double? { if let liveTotals { return liveTotals.cpu }; return snapshot?.cpu }
+    var currentMemory: MemoryUse? { if let liveTotals { return liveTotals.memory }; return snapshot?.memory }
+    var currentPressure: MemoryPressure { liveTotals?.pressure ?? snapshot?.pressure ?? .unknown }
+    var currentTiers: [CoreTier] { liveTotals?.tiers ?? snapshot?.tiers ?? [] }
 
     func start() {
         sampling?.cancel()
+        samplingTotals?.cancel(); totalsNap?.cancel(); liveTotals = nil
         paused = false
         if keepsHistory && longHistory.halfMinute.isEmpty && longHistory.fiveMinute.isEmpty { loadHistory() }
         sampling = Task {
@@ -92,6 +114,32 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
                 await rest(after: sample.uptime)
             }
         }
+        samplingTotals = Task {
+            await totalsSampler.reset()
+            while !Task.isCancelled {
+                // There are no fast numbers to paint in icon-only mode with both views closed.
+                if iconOnly && !watched {
+                    liveTotals = nil
+                    await totalsSampler.reset()
+                    await restTotals(until: ContinuousClock.now.advanced(by: .seconds(Self.interval)))
+                    continue
+                }
+                let deadline = ContinuousClock.now.advanced(by: .seconds(Self.totalsInterval))
+                let totals = await totalsSampler.sample()
+                guard !Task.isCancelled else { return }
+                liveTotals = totals
+                onTotals?()
+                // Sample work counts toward the interval; late work never triggers a catch-up burst.
+                await restTotals(until: deadline)
+            }
+        }
+    }
+
+    private func restTotals(until deadline: ContinuousClock.Instant) async {
+        // A relative sleep would start after this task is scheduled, adding that scheduling delay to every reading.
+        let nap = Task { _ = try? await Task.sleep(until: deadline, tolerance: .milliseconds(10), clock: ContinuousClock()) }
+        totalsNap = nap
+        await withTaskCancellationHandler { await nap.value } onCancel: { nap.cancel() }
     }
 
     /// Waits for the next sample: a second while someone is looking, two otherwise. Someone starting to look ends the
@@ -108,6 +156,7 @@ enum MenuBarMetric: String, CaseIterable, Identifiable {
 
     func pause() {
         sampling?.cancel(); sampling = nil; nap?.cancel(); paused = true
+        samplingTotals?.cancel(); samplingTotals = nil; totalsNap?.cancel(); liveTotals = nil
         if keepsHistory { saveHistory() }
         onSample?()
     }

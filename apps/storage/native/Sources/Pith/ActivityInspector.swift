@@ -383,7 +383,7 @@ private struct SystemInspector: View {
     private func factRow(_ label: String, _ value: String, amount: Double, help: String) -> some View {
         GridRow {
             Text(label).font(BruhsType.bodySmall).foregroundStyle(BruhsColor.textSecondary)
-            FlowText(value, amount: amount, face: BruhsType.dataSmallFace, color: BruhsNSColor.text)
+            FlowText(value, face: BruhsType.dataSmallFace, color: BruhsNSColor.text)
         }
         .help(help)
         .accessibilityElement(children: .combine)

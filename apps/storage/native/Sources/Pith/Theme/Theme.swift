@@ -1,6 +1,7 @@
 import AppKit
 import Charts
 import CoreText
+import Observation
 import PithCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -100,6 +101,9 @@ extension Font {
     static var sectionTitle: Font { .system(size: size(11), weight: .semibold) }
     /// Chips and buttons, which sit beside macOS's own controls.
     static var control: Font { .system(size: size(12), weight: .medium) }
+
+    /// The body font's metrics, for centering inline images on its letters at the current text size.
+    static var bodyFace: NSFont { .systemFont(ofSize: size(13)) }
 
     /// The AppKit faces of the monaspace roles, for figures Core Animation draws: the same family, size and weight, at
     /// the same text size, so a drawn figure measures as the role's text would.
@@ -205,14 +209,16 @@ struct BruhsBadge: View {
 struct LabeledFigure: View {
     let label: String
     let value: String
-    /// The number behind a live value, so its digits spin to a new reading; nil for one that holds still.
+    /// A measured value crossfades when its text changes; nil keeps a statistic still.
     var amount: Double? = nil
+    var animates = true
+    var duration = ReadingMotion.standard
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             Text(label).font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary)
-            if let amount {
-                FlowText(value, amount: amount, face: BruhsType.captionFace, color: BruhsNSColor.textSecondary)
+            if amount != nil {
+                FlowText(value, face: BruhsType.captionFace, color: BruhsNSColor.textSecondary, animates: animates, duration: duration)
             } else {
                 Text(verbatim: value).font(BruhsType.caption).foregroundStyle(BruhsColor.textSecondary)
             }
@@ -368,13 +374,21 @@ enum Icons {
 /// the startup disk, outside the locations macOS guards, gets its own icon, the icon store's `item` key for the bundle;
 /// any other app the generic application icon, running or not; anything else the generic executable icon, so
 /// command-line tools and daemons still have a consistent mark. Activity shows NSWorkspace's image as it is: it draws
-/// itself in each row's appearance, at once. The rule is checked at every use, as the disks can change, and a kept image
-/// is shown only while it holds.
-@MainActor final class AppIconCache {
+/// itself in each row's appearance. File lookups run in the background, with a generic icon while they finish, so a slow
+/// macOS icon lookup cannot stop the live readings. The path rule is checked at every use, as the disks can change.
+@MainActor @Observable final class AppIconCache {
     static let shared = AppIconCache()
+    /// File icons can block inside macOS. A dedicated queue keeps them out of Swift's sampler executor too.
+    private static let lookupQueue = DispatchQueue(label: "app.bruhs.pith.activity-icons", qos: .utility)
     private var icons: [IconKey: NSImage] = [:]
-    private lazy var executable = NSWorkspace.shared.icon(for: .unixExecutable)
-    private lazy var application = NSWorkspace.shared.icon(for: .applicationBundle)
+    @ObservationIgnored private var loading: [IconKey: Task<NSImage?, Never>] = [:]
+    @ObservationIgnored private let lookup: @Sendable (IconKey) -> NSImage?
+    @ObservationIgnored private lazy var executable = NSWorkspace.shared.icon(for: .unixExecutable)
+    @ObservationIgnored private lazy var application = NSWorkspace.shared.icon(for: .applicationBundle)
+
+    init(lookup: @escaping @Sendable (IconKey) -> NSImage? = { SystemIconRenderer.image(for: $0) }) {
+        self.lookup = lookup
+    }
 
     func icon(for path: String) -> NSImage {
         switch Icons.places.appIconSource(for: path) {
@@ -383,10 +397,34 @@ enum Icons {
         case .bundle(let bundle):
             let key = IconKey.item(bundle)
             if let cached = icons[key] { return cached }
-            let icon = SystemIconRenderer.image(for: key) ?? executable
-            icons[key] = icon
-            return icon
+            if loading[key] == nil {
+                let lookup = lookup
+                let task = Task<NSImage?, Never> {
+                    await withCheckedContinuation { continuation in
+                        Self.lookupQueue.async { continuation.resume(returning: lookup(key)) }
+                    }
+                }
+                loading[key] = task
+                Task { [weak self] in
+                    let image = await task.value
+                    guard let self else { return }
+                    icons[key] = image ?? application
+                    loading[key] = nil
+                }
+            }
+            return application
         }
+    }
+
+    /// Native cells wait without blocking layout, and check their represented path before applying the result.
+    func loadedIcon(for path: String) async -> NSImage {
+        let immediate = icon(for: path)
+        guard case .bundle(let bundle) = Icons.places.appIconSource(for: path),
+              let task = loading[.item(bundle)] else { return immediate }
+        let image = await task.value
+        // A mount can change while an icon loads. Apply the same path policy before showing the result.
+        guard Icons.places.appIconSource(for: path) == .bundle(bundle) else { return icon(for: path) }
+        return image ?? application
     }
 }
 

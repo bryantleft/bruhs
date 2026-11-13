@@ -158,16 +158,9 @@ public actor SystemSampler {
         }.sorted { ($0.cpu ?? -1) > ($1.cpu ?? -1) }
         let activeBundles = Set(bundles.values.compactMap { $0 })
         names = names.filter { activeBundles.contains($0.key) }
-        let coreTicks: [(busy: UInt64, total: UInt64)] = capture.cpu_valid != 0 ? withUnsafeBytes(of: capture.cpu_busy) { busy in
-            withUnsafeBytes(of: capture.cpu_total) { total in
-                (0..<Int(capture.cpu_count)).map { (busy.load(fromByteOffset: $0 * 8, as: UInt64.self), total.load(fromByteOffset: $0 * 8, as: UInt64.self)) }
-            }
-        } : []
+        let coreTicks = capture.coreTicks
         let tiers = Self.tiers(tierLayout, current: coreTicks, previous: previousCores)
-        let memory = capture.memory_valid != 0 ? MemoryUse(
-            pages: (capture.active, capture.inactive, capture.speculative, capture.wired, capture.compressed, capture.purgeable, capture.external),
-            pageSize: capture.page_size, physical: capture.physical,
-            swapUsed: capture.swap_valid != 0 ? capture.swap_used : nil, swapTotal: capture.swap_valid != 0 ? capture.swap_total : nil) : nil
+        let memory = capture.memoryUse
         let network: (in: UInt64, out: UInt64)? = capture.network_valid != 0 ? (capture.network_in, capture.network_out) : nil
         let networkRates = network.flatMap { now in previousNetwork.flatMap { old in elapsed.map { elapsed in
             (MetricMath.rate(counter: now.in, previous: old.in, elapsed: elapsed), MetricMath.rate(counter: now.out, previous: old.out, elapsed: elapsed)) } } }

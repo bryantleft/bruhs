@@ -36,6 +36,9 @@ typedef struct {
 } pith_capture;
 
 pith_capture pith_read(void);
+/// CPU ticks, memory composition, swap and memory pressure only. Does no process enumeration, network, power or GPU
+/// work. The process pointer/count and network fields stay zero; no process allocation needs freeing.
+pith_capture pith_read_totals(void);
 void pith_free(pith_capture capture);
 
 /// A process's start time in microseconds since 1970, or 0 when it's gone or unreadable. Checked again just before a

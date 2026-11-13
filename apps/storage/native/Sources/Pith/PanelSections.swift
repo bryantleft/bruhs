@@ -18,11 +18,10 @@ struct PanelCPUSection: View {
     var body: some View {
         let window = sessionWindow(model)
         let cpu = PanelSummary.cpu(model.history.system, window: window, maxGap: ActivityModel.maxGap)
-        let live = model.paused ? nil : model.snapshot?.cpu
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("CPU").font(BruhsType.label).foregroundStyle(BruhsColor.text)
+                    Text("CPU").font(BruhsType.label).foregroundStyle(BruhsColor.text).accessibilityHidden(true)
                     if let snapshot = model.snapshot, !model.paused {
                         if snapshot.thermal.isThrottling { ThermalChip(thermal: snapshot.thermal) }
                         if snapshot.lowPowerMode { LowPowerChip() }
@@ -32,15 +31,11 @@ struct PanelCPUSection: View {
                         .font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary)
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    readout(live)
+                    PanelCPUReadout(model: model)
                     Spacer(minLength: 0)
-                    figures(cpu)
+                    figures(cpu).accessibilityHidden(true)
                 }
             }
-            // The chart's label carries the window, average and peak, so this element is just the value.
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("CPU")
-            .accessibilityValue(model.paused ? "paused" : spokenPercent(live, glance: true))
             let summary = spoken(cpu)
             MiniTrend(points: MiniTrend.points(model.history.system.map { (time: $0.uptime, value: $0.cpu) }, maxGap: ActivityModel.maxGap),
                       window: window, height: 56, label: summary)
@@ -48,30 +43,7 @@ struct PanelCPUSection: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(summary)
                 .padding(.top, 6)
-            // Each tier of cores on its own: Apple's chips mix efficiency, performance and super cores, and an app
-            // stuck on one tier reads differently from the whole Mac being busy.
-            if let tiers = model.snapshot?.tiers, !tiers.isEmpty {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    ForEach(tiers, id: \.name) { tier in
-                        LabeledFigure(label: tier.name, value: model.paused ? "" : tier.busy.map { percent($0, glance: true) } ?? "", amount: model.paused ? nil : tier.busy)
-                            .help("\(tier.cores) \(tier.name.lowercased()) cores")
-                    }
-                }
-                .padding(.top, 6)
-                .accessibilityElement(children: .combine)
-            }
-        }
-    }
-
-    /// The live value, or a word on the same baseline and at the same height, so the section keeps its size.
-    @ViewBuilder private func readout(_ live: Double?) -> some View {
-        if let live {
-            FlowText(percent(live, glance: true), amount: live, face: BruhsType.readoutFace, color: BruhsNSColor.text)
-        } else {
-            Text(verbatim: "0%").font(BruhsType.readout).hidden()
-                .overlay(alignment: .leadingLastTextBaseline) {
-                    Text(model.paused ? "Paused" : "Unavailable").font(BruhsType.label).foregroundStyle(BruhsColor.textSecondary).fixedSize()
-                }
+            PanelCPUTiers(model: model)
         }
     }
 
@@ -81,6 +53,7 @@ struct PanelCPUSection: View {
                 LabeledFigure(label: "Avg", value: percent(average, glance: true), amount: average)
                 LabeledFigure(label: "Peak", value: percent(peak, glance: true), amount: peak)
             }
+            .help("Average and peak use recorded history. The headline is the latest fast reading.")
         } else {
             Text("No readings yet").font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary)
         }
@@ -111,31 +84,23 @@ struct PanelMemorySection: View {
             PanelPressureBand(runs: PanelSummary.pressureRuns(points, window: window, interval: ActivityModel.interval, maxGap: ActivityModel.maxGap),
                               window: window)
                 .padding(.top, 8)
-            figures
-                .padding(.top, 8)
-            Text(caption(story, culprit: culprit, spoken: false)).font(BruhsType.note).foregroundStyle(BruhsColor.textSecondary).lineLimit(1)
-                .help(caption(story, culprit: culprit, spoken: false))
-                .accessibilityLabel(caption(story, culprit: culprit, spoken: true))
-                .padding(.top, 5)
+            VStack(alignment: .leading, spacing: 5) {
+                PanelMemoryFigures(model: model)
+                Text(caption(story, culprit: culprit, spoken: false)).font(BruhsType.note).foregroundStyle(BruhsColor.textSecondary).lineLimit(1)
+                    .help(caption(story, culprit: culprit, spoken: false))
+                    .accessibilityLabel(caption(story, culprit: culprit, spoken: true))
+            }
+            .opacity(model.paused ? 0 : 1)
+            .accessibilityHidden(model.paused)
+            .overlay(alignment: .leading) {
+                if model.paused {
+                    Button("Resume Monitoring") { model.start() }
+                        .buttonStyle(.bruhsSoft)
+                        .activatesOnReturn { model.start() }
+                }
+            }
+            .padding(.top, 8)
         }
-    }
-
-    /// Used memory, then swap and compression, which say how hard macOS is working to make room. At bigger text sizes
-    /// compression gives way, then swap: used memory is the one figure the row can't lose.
-    private var figures: some View {
-        let memory = model.paused ? nil : model.snapshot?.memory
-        let used = LabeledFigure(label: "Used", value: memory.map { memorySize($0.used) } ?? "", amount: memory.map { Double($0.used) })
-            .help(memory.map { "\(memorySize($0.used)) of \(memorySize($0.physical)) in use" } ?? "")
-        let swap = LabeledFigure(label: "Swap", value: memory?.swapUsed.map(memorySize) ?? "", amount: memory?.swapUsed.map(Double.init))
-            .help("Memory macOS moved to the disk. Swapping is what makes a Mac slow when memory runs short.")
-        let compressed = LabeledFigure(label: "Compressed", value: memory.map { memorySize($0.compressed) } ?? "", amount: memory.map { Double($0.compressed) })
-            .help("Memory macOS compressed to make room before it swaps.")
-        return ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) { used; Spacer(minLength: 0); swap; compressed }
-            HStack(alignment: .firstTextBaseline, spacing: 10) { used; Spacer(minLength: 0); swap }
-            HStack(alignment: .firstTextBaseline, spacing: 10) { used; Spacer(minLength: 0) }
-        }
-        .accessibilityElement(children: .combine)
     }
 
     private func caption(_ story: PanelSummary.PressureStory, culprit: (app: AppSample, growth: Int64?)?, spoken: Bool) -> String {
@@ -281,7 +246,7 @@ struct PanelAppRow: View {
                     BruhsBadge(text: "Full core").help("One of its processes keeps a whole core busy. On a Mac with many cores that reads as a small share.")
                 }
                 if let figure = ranking == .cpu ? app.cpu.map({ percent($0) }) : app.memory.map(memorySize) {
-                    FlowText(figure, amount: ranking == .cpu ? app.cpu : app.memory.map(Double.init), face: BruhsType.dataFace, color: BruhsNSColor.textSecondary)
+                    FlowText(figure, face: BruhsType.dataFace, color: BruhsNSColor.textSecondary)
                 }
             }
             .padding(.horizontal, 6)
@@ -314,7 +279,7 @@ struct PanelSummaryRow: View {
             Text(title).font(BruhsType.body).lineLimit(1)
             if let detail { Text(detail).font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary).lineLimit(1) }
             Spacer(minLength: 8)
-            if let figure { FlowText(figure, amount: ranking == .cpu ? cpu : memory.map(Double.init), face: BruhsType.dataFace, color: BruhsNSColor.textTertiary) }
+            if let figure { FlowText(figure, face: BruhsType.dataFace, color: BruhsNSColor.textTertiary) }
         }
         .foregroundStyle(BruhsColor.textTertiary)
         .frame(height: PanelAppsSection.rowHeight)
@@ -352,7 +317,7 @@ struct PanelDiskSection: View {
                     }
                     Spacer(minLength: 8)
                     // Without a reading the line below says capacity is unavailable.
-                    if let free { FlowText(free, amount: model.availableDisk.map(Double.init), face: BruhsType.dataFace, color: BruhsNSColor.text) }
+                    if let free { FlowText(free, face: BruhsType.dataFace, color: BruhsNSColor.text) }
                 }
                 // Without a reading the bar keeps its space but draws nothing, rather than an empty disk.
                 CapacityBar(used: used ?? 0).opacity(used == nil ? 0 : 1).padding(.top, 8)
@@ -463,9 +428,16 @@ struct PanelStatusLine: View {
             .accessibilityHint("Opens the update")
         } else {
             let own = PanelSummary.own(model.snapshot?.apps ?? [], pid: ProcessInfo.processInfo.processIdentifier)
-            Text(ownUse(cpu: own?.cpu.map { percent($0) }, memory: own?.memory.map(memorySize)))
-                .font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary).lineLimit(1)
-                .accessibilityLabel(ownUse(cpu: own?.cpu.map { spokenPercent($0) }, memory: own?.memory.map { "\(memorySize($0)) of memory" }))
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("Pith")
+                if let cpu = own?.cpu { Text("CPU \(percent(cpu))") }
+                if let memory = own?.memory { Text("Memory \(memorySize(memory))") }
+                if own?.cpu == nil && own?.memory == nil { Text("No reading yet") }
+            }
+            .font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary).lineLimit(1)
+            .help(ownUse(cpu: own?.cpu.map { percent($0) }, memory: own?.memory.map(memorySize)))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(ownUse(cpu: own?.cpu.map { spokenPercent($0) }, memory: own?.memory.map { "\(memorySize($0)) of memory" }))
         }
     }
 

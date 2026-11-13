@@ -56,6 +56,7 @@ extension AppDelegate {
         checks["updates_configured"] = updateProblems.isEmpty
         do {
             checks["mcp_bundled_connection_scope_and_tools"] = try await ScannerRunner.checkMCP(binary: disk.binary, root: root) == MCPConnection.toolNames.count
+            checks.merge(await checkReadingMotion(), uniquingKeysWith: { _, new in new })
             checks.merge(await checkRankedLists(), uniquingKeysWith: { _, new in new })
             showActivity()
             try await waitUntil("a first CPU reading") { self.activity.snapshot?.cpu != nil }
@@ -94,8 +95,9 @@ extension AppDelegate {
             showActivity()
             try await waitUntil("a CPU reading in Activity") { self.activity.snapshot?.cpu != nil }
             checks["native_metrics"] = activity.snapshot?.cpu != nil
-            // With Activity on screen samples come every second; they slow to two once the window closes, checked below.
+            // Full samples remain at one second; lightweight totals update independently every half second.
             checks["live_while_watched"] = await samplesApart(ActivityModel.watchedInterval)
+            checks.merge(await checkFastTotals(), uniquingKeysWith: { _, new in new })
             let pid = ProcessInfo.processInfo.processIdentifier
             let own = activity.snapshot?.apps.first { $0.members.contains { $0.pid == pid } }
             checks["own_process_metrics"] = (own?.memory ?? 0) > 0
@@ -137,7 +139,9 @@ extension AppDelegate {
             // Longer than a sampling interval, so a pause that didn't stop sampling can't pass by luck.
             try await Task.sleep(for: .seconds(ActivityModel.interval * 1.5))
             checks["pause_stops_history"] = activity.history.system.count == pausedCount
+            checks["pause_stops_fast_totals"] = activity.liveTotals == nil
             activity.start()
+            checks["resume_restarts_fast_totals"] = await eventually { self.activity.liveTotals?.cpu != nil }
 
             // The fixture's map is a live one, as the startup disk's is: made once when Disk opens, then kept current.
             let fixture = root.resolvingSymlinksInPath().path
@@ -206,6 +210,9 @@ extension AppDelegate {
             checks["monitoring_survives_window_close"] = await eventually { !self.activity.paused && self.activity.history.system.count > samples }
             // Before the panel opens, which would count as watching again.
             checks["slower_when_unwatched"] = await samplesApart(ActivityModel.interval)
+            print("checking fast totals with only the menu bar visible")
+            checks["fast_totals_while_only_menu_bar_visible"] = (await checkFastTotals()).values.allSatisfy { $0 }
+            checks["icon_only_unwatched_stops_fast_totals"] = await checkHiddenTotals()
             statusItem?.togglePanel()
             checks["menu_panel_opens"] = statusItem?.panelWindow?.isVisible == true
             statusItem?.togglePanel()

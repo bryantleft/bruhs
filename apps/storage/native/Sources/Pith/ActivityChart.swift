@@ -89,13 +89,14 @@ struct ActivityChart: View {
             }
         } else if let peak = shown.max() {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
-                if range == nil, let now = model.snapshot.flatMap({ snapshot in model.history.system.last.flatMap(value) ?? (metric == .cpu ? snapshot.cpu : nil) }) {
-                    LabeledFigure(label: "Now", value: figure(now), amount: now)
-                }
+                if range == nil { LiveSystemFigure(model: model, metric: metric) }
                 let average = shown.reduce(0, +) / Double(shown.count)
                 LabeledFigure(label: "Avg", value: figure(average), amount: average)
                 LabeledFigure(label: "Peak", value: figure(peak), amount: peak)
+                    .help("Average and peak use recorded history. Now is the latest fast reading.")
             }
+        } else if range == nil {
+            LiveSystemFigure(model: model, metric: metric)
         } else {
             Text("No readings yet").font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary)
         }

@@ -7,11 +7,11 @@ extension AppDelegate {
     func checkRankedLists() async -> [String: Bool] {
         var checks: [String: Bool] = [:]
         let state = RankingState()
-        func table(_ snapshot: ActivitySnapshot, moves: Bool = true) -> ActivityTable {
+        func table(_ snapshot: ActivitySnapshot, moves: Bool = true, textScale: Double = 1) -> ActivityTable {
             var history = SessionHistory()
             history.append(snapshot)
             let listing = ActivityListing(history: history, latest: snapshot, range: nil, search: "", includeExited: false, sort: state.sort)
-            return ActivityTable(listing: listing, opensSystem: false, animates: moves,
+            return ActivityTable(listing: listing, opensSystem: false, textScale: textScale, animates: moves,
                                  selection: Binding(get: { state.selection }, set: { state.selection = $0 }),
                                  expanded: Binding(get: { state.expanded }, set: { state.expanded = $0 }),
                                  sort: Binding(get: { state.sort }, set: { state.sort = $0 }))
@@ -59,6 +59,24 @@ extension AppDelegate {
         let reduced = await eventually { row(.app("beta")) == 1 }
         checks["activity_ranking_keeps_scroll_position"] = restored && reduced
             && outline.enclosingScrollView?.contentView.bounds.origin.y == scrollY && selected() == .app("alpha")
+
+        let readColumn = outline.tableColumns.firstIndex { $0.identifier.rawValue == ActivityColumn.read.rawValue } ?? 4
+        let normalWidths = Dictionary(uniqueKeysWithValues: outline.tableColumns.filter { $0 != outline.outlineTableColumn }.map { ($0.identifier, $0.width) })
+        host.rootView = table(Self.rankingSample(), moves: false, textScale: 1.4)
+        checks["activity_bigger_text_keeps_complete_figures"] = await eventually {
+            outline.scrollColumnToVisible(readColumn)
+            guard let field = (outline.view(atColumn: readColumn, row: row(.app("alpha")), makeIfNecessary: true) as? ActivityNumberCell)?.textField else { return false }
+            return outline.tableColumns.filter { $0 != outline.outlineTableColumn }.allSatisfy {
+                abs($0.width - (normalWidths[$0.identifier] ?? 0) * 1.4) < 0.5
+            }
+                && !field.stringValue.isEmpty && field.intrinsicContentSize.width <= field.bounds.width
+        }
+        host.rootView = table(Self.rankingSample(), moves: false)
+        checks["activity_actual_text_size_restores_column_widths"] = await eventually {
+            outline.tableColumns.filter { $0 != outline.outlineTableColumn }.allSatisfy {
+                abs($0.width - (normalWidths[$0.identifier] ?? 0)) < 0.5
+            }
+        }
 
         // Panel rows use the actual buttons and figures, hosted independently as in the menu panel.
         let panel = PanelRankingView(frame: NSRect(x: 0, y: 0, width: 360, height: 168))
@@ -108,7 +126,7 @@ extension AppDelegate {
         func app(_ id: String, _ name: String, _ cpu: Double, _ pid: Int32, system: Bool = false, helpers: Bool = false) -> AppSample {
             AppSample(id: id, identity: ProcessIdentity(path: system ? "/usr/libexec/\(id)" : "/Applications/\(name).app", processName: name, bundleName: system ? nil : name),
                       executable: "", members: [ProcessKey(pid: pid, started: 1)] + (helpers ? [ProcessKey(pid: pid + 1, started: 1)] : []),
-                      cpu: cpu, memory: 100_000_000, read: 0, written: 0, restricted: false, openedBy: nil)
+                      cpu: cpu, memory: 100_000_000, read: 3_110_000, written: 0, restricted: false, openedBy: nil)
         }
         var apps = [app("alpha", "Alpha", reversed ? alphaCPU : 40, 10, helpers: helpers), app("beta", "Beta", reversed ? 60 : 10, 20)]
         if system { apps += [app("systemA", "System A", reversed ? 1 : 4, 30, system: true), app("systemB", "System B", reversed ? 4 : 1, 40, system: true)] }

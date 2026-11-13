@@ -1,6 +1,7 @@
 #include "PithSystem.h"
 #include <libproc.h>
 #include <mach/mach.h>
+#include <mach/mach_time.h>
 #include <sys/resource.h>
 #include <sys/sysctl.h>
 #include <stdlib.h>
@@ -10,7 +11,7 @@
 #include <net/route.h>
 #include <sys/socket.h>
 
-pith_capture pith_read(void) {
+pith_capture pith_read_totals(void) {
     pith_capture result = {0};
     natural_t cores = 0;
     processor_info_array_t ticks = NULL;
@@ -61,6 +62,11 @@ pith_capture pith_read(void) {
     }
     size = sizeof(result.pressure);
     if (sysctlbyname("kern.memorystatus_vm_pressure_level", &result.pressure, &size, NULL, 0) != 0) result.pressure = 0;
+    return result;
+}
+
+pith_capture pith_read(void) {
+    pith_capture result = pith_read_totals();
     // NET_RT_IFLIST2 gives each interface's 64-bit byte counters: 31 µs for all of them on the development Mac.
     int mib[] = {CTL_NET, PF_ROUTE, 0, 0, NET_RT_IFLIST2, 0};
     size_t list = 0;
@@ -85,7 +91,7 @@ pith_capture pith_read(void) {
     }
 
     int capacity = 0;
-    size = sizeof(capacity);
+    size_t size = sizeof(capacity);
     if (sysctlbyname("kern.maxproc", &capacity, &size, NULL, 0) != 0 || capacity <= 0) {
         result.error_code = errno ? errno : EINVAL;
         return result;

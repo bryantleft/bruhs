@@ -39,4 +39,34 @@ final class FlowFigureTests: XCTestCase {
         XCTAssertEqual(FlowFigure.steps(from: 2, to: 8, trend: 0), -4, "held still: the short way")
         XCTAssertEqual(FlowFigure.steps(from: 3, to: 5, trend: 0), 2)
     }
+
+    func testInterruptedTurnsKeepBothEndsInsideTheDigitStrip() {
+        for trend in [-1, 0, 1] {
+            for raw in stride(from: -205.75, through: 205.75, by: 0.25) {
+                for digit in 0...9 {
+                    let turn = FlowFigure.turn(from: raw, to: digit, trend: trend)
+                    XCTAssertTrue((0..<10).contains(turn.start))
+                    XCTAssertTrue((-10...19).contains(turn.target))
+                    XCTAssertEqual((turn.target.truncatingRemainder(dividingBy: 10) + 10).truncatingRemainder(dividingBy: 10), Double(digit), accuracy: 0.000_001)
+                    if trend > 0 { XCTAssertGreaterThanOrEqual(turn.target, turn.start) }
+                    if trend < 0 { XCTAssertLessThanOrEqual(turn.target, turn.start) }
+                    if trend == 0 { XCTAssertLessThanOrEqual(abs(turn.target - turn.start), 5) }
+                }
+            }
+        }
+    }
+
+    func testRepeatedFrameRateInterruptionsDoNotRunOffTheStrip() {
+        for direction in [-1, 1] {
+            var current = 9.0
+            for value in 1...500 {
+                // A new target arrives before the previous ease has finished, as during range dragging.
+                let digit = ((direction * value * 9) % 10 + 10) % 10
+                let turn = FlowFigure.turn(from: current, to: digit, trend: direction)
+                current = turn.start + (turn.target - turn.start) * 0.2
+                XCTAssertTrue((-10...19).contains(current))
+                XCTAssertTrue((0..<10).contains(turn.start))
+            }
+        }
+    }
 }

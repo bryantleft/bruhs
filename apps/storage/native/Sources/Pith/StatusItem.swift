@@ -96,6 +96,7 @@ struct PanelActions {
         self.actions = actions
         super.init()
         item.button?.image = statusGlyph()
+        item.button?.wantsLayer = true
         // The value reads first and the glyph closes the item, nearest the menu bar's other icons.
         item.button?.imagePosition = .imageRight
         item.button?.target = self
@@ -112,10 +113,10 @@ struct PanelActions {
     func update() {
         guard let button = item.button else { return }
         let shows = activity.menuBarShows
-        let cpu = activity.paused || shows == .memory ? nil : activity.snapshot?.cpu.map { percent($0, glance: true) }
-        let memoryUse = activity.paused ? nil : activity.snapshot?.memory.map { Double($0.used) / Double(max(1, $0.physical)) * 100 }
+        let cpu = activity.paused || shows == .memory ? nil : activity.currentCPU.map { percent($0, glance: true) }
+        let memoryUse = activity.paused ? nil : activity.currentMemory.map { Double($0.used) / Double(max(1, $0.physical)) * 100 }
         let memory = shows == .cpu ? nil : memoryUse.map { percent($0, glance: true) }
-        let pressure = activity.paused ? MemoryPressure.unknown : activity.snapshot?.pressure ?? .unknown
+        let pressure = activity.paused ? MemoryPressure.unknown : activity.currentPressure
         // Every title has the same width (see PanelSummary.menuBarValue), so a variable-length item never
         // changes size as values tick; it grows only while the pressure symbol shows. Icon-only mode drops the
         // value but keeps that symbol, because the warning is what a menu bar monitor is for.
@@ -124,17 +125,27 @@ struct PanelActions {
         if item.length != length { item.length = length }
         let position: NSControl.ImagePosition = glyphOnly ? .imageOnly : .imageRight
         if button.imagePosition != position { button.imagePosition = position }
-        button.attributedTitle = glyphOnly ? NSAttributedString() : statusTitle(cpu: cpu, memory: memory, pressure: pressure, showsValue: !activity.iconOnly)
+        let title = glyphOnly ? NSAttributedString() : statusTitle(cpu: cpu, memory: memory, pressure: pressure, showsValue: !activity.iconOnly)
+        if !button.attributedTitle.isEqual(to: title) {
+            // Only changing readings ease; structural changes such as icon-only mode keep their immediate layout.
+            if !activity.paused, button.attributedTitle.length > 0, button.attributedTitle.length == title.length {
+                ReadingMotion.fade(button.layer)
+            } else {
+                button.layer?.removeAnimation(forKey: ReadingMotion.fadeKey)
+            }
+            button.attributedTitle = title
+        }
         let spoken = { (value: String?) in value.map { $0.replacingOccurrences(of: "%", with: " percent") } ?? "unavailable" }
         let state = activity.paused
             ? "monitoring paused"
             : [shows == .memory ? nil : "CPU \(spoken(cpu))", shows == .cpu ? nil : "memory used \(spoken(memory))", "memory pressure \(pressure.label.lowercased())"]
                 .compactMap { $0 }.joined(separator: ", ")
         button.setAccessibilityLabel("Pith")
-        button.setAccessibilityValue(state)
+        if button.accessibilityValue() as? String != state { button.setAccessibilityValue(state) }
         let readings = activity.paused ? ["Monitoring paused"]
             : [cpu.map { "CPU \($0)" }, memory.map { "Memory used \($0)" }, "Memory pressure \(pressure.label.lowercased())"].compactMap { $0 }
-        button.toolTip = (["Pith"] + readings).joined(separator: "\n")
+        let tip = (["Pith"] + readings).joined(separator: "\n")
+        if button.toolTip != tip { button.toolTip = tip }
     }
 
     /// The panel runs under the popover's border and arrow (hasFullSizeContent), so the popover is that much larger.
