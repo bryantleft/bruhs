@@ -55,6 +55,7 @@ extension AppDelegate {
         for problem in updateProblems { print("update setup: \(problem)") }
         checks["updates_configured"] = updateProblems.isEmpty
         do {
+            checks.merge(await checkRankedLists(), uniquingKeysWith: { _, new in new })
             showActivity()
             try await waitUntil("a first CPU reading") { self.activity.snapshot?.cpu != nil }
             activity.pause()
