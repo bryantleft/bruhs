@@ -218,20 +218,9 @@ struct PanelAppsSection: View {
             }
             .font(BruhsType.sectionTitle)
             .foregroundStyle(BruhsColor.textTertiary)
-            VStack(spacing: 0) {
-                ForEach(apps.top) { app in
-                    PanelAppRow(app: app, details: PanelSummary.details(app, among: apps.top), ranking: ranking,
-                                growth: ranking == .memory ? PanelSummary.memoryGrowth(model.history.apps[app.id], window: window) : nil) { open(app.id) }
-                }
-                if apps.otherCount > 0 {
-                    PanelSummaryRow(title: "Other \(apps.otherCount) \(apps.otherCount == 1 ? "app" : "apps")", ranking: ranking, cpu: apps.otherCPU, memory: apps.otherMemory,
-                                    help: "The other apps and tools Pith can measure, together.")
-                }
-                if apps.systemCount > 0 {
-                    PanelSummaryRow(title: "System", detail: processCount(apps.systemCount), ranking: ranking, cpu: apps.systemCPU, memory: apps.systemMemory,
-                                    help: "macOS's own processes, together. Activity lists them under System.")
-                }
-            }
+            PanelAppList(apps: apps, growth: ranking == .memory ? Dictionary(uniqueKeysWithValues: apps.top.compactMap { app in
+                PanelSummary.memoryGrowth(model.history.apps[app.id], window: window).map { (app.id, $0) }
+            }) : [:], open: open)
             // Paused readings are kept for reference but shouldn't look live.
             .opacity(model.paused ? 0.5 : 1)
             .frame(maxWidth: .infinity, alignment: .top)
@@ -242,7 +231,6 @@ struct PanelAppsSection: View {
                 }
             }
             // Rows bleed 6 pt for their hover fill; hold the order over the bleed too.
-            .padding(.horizontal, 6)
             .onHover { inside in held = inside && !apps.top.isEmpty ? apps.top.map(\.id) : nil }
             .padding(.horizontal, -6)
         }
