@@ -63,30 +63,80 @@ struct PanelCPUTiers: View {
     }
 }
 
-/// Used memory comes first. Compression, then swap, give way at larger text sizes.
+/// The glance shows one amount and a capacity gauge; secondary accounting stays under Details.
 struct PanelMemoryFigures: View {
+    let model: ActivityModel
+    let detailsExpanded: Bool
+    let toggleDetails: () -> Void
+
+    var body: some View {
+        let memory = model.currentMemory
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                if model.paused {
+                    Button("Resume Monitoring") { model.start() }
+                        .buttonStyle(.bruhsSoft)
+                        .onKeyPress(.return) { model.start(); return .handled }
+                } else if let memory {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        FlowText(memorySize(memory.used), face: BruhsType.dataFace, color: BruhsNSColor.text, duration: ReadingMotion.live)
+                        Text("of \(memorySize(memory.physical))").font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Memory used")
+                    .accessibilityValue("\(memorySize(memory.used)) of \(memorySize(memory.physical))")
+                    .help("Memory in use. Memory pressure indicates whether macOS needs more room.")
+                } else {
+                    Text("Unavailable").font(BruhsType.note).foregroundStyle(BruhsColor.textSecondary)
+                }
+                Spacer(minLength: 0)
+                Button(action: toggleDetails) {
+                    HStack(spacing: 4) {
+                        Text("Details")
+                        Image(systemName: detailsExpanded ? "chevron.up" : "chevron.down")
+                    }
+                    .font(BruhsType.note)
+                    .foregroundStyle(BruhsColor.textTertiary)
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .onKeyPress(.return) { toggleDetails(); return .handled }
+                .accessibilityIdentifier("memory-details")
+                .accessibilityLabel("Memory details")
+                .accessibilityValue(detailsExpanded ? "Expanded" : "Collapsed")
+                .accessibilityHint(detailsExpanded ? "Hides additional memory details" : "Shows swap, compression and recent memory pressure")
+                .help("Swap, compression and recent memory pressure")
+            }
+            CapacityBar(used: memory.map { Double($0.used) / Double(max(1, $0.physical)) } ?? 0)
+                .opacity(memory == nil ? 0 : model.paused ? 0.5 : 1)
+        }
+    }
+}
+
+struct PanelMemoryDetails: View {
     let model: ActivityModel
 
     var body: some View {
-        let memory = model.paused ? nil : model.currentMemory
-        let used = LabeledFigure(label: "Used", value: memory.map { memorySize($0.used) } ?? "", amount: memory.map { Double($0.used) }, duration: ReadingMotion.live)
-            .help(memory.map { "\(memorySize($0.used)) of \(memorySize($0.physical)) in use" } ?? "")
-        let swap = LabeledFigure(label: "Swap", value: memory?.swapUsed.map(memorySize) ?? "", amount: memory?.swapUsed.map(Double.init), duration: ReadingMotion.live)
-            .help("Memory macOS moved to the disk. Swapping is what makes a Mac slow when memory runs short.")
-        let compressed = LabeledFigure(label: "Compressed", value: memory.map { memorySize($0.compressed) } ?? "", amount: memory.map { Double($0.compressed) }, duration: ReadingMotion.live)
-            .help("Memory macOS compressed to make room before it swaps.")
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) { used; Spacer(minLength: 0); swap; compressed }
-            HStack(alignment: .firstTextBaseline, spacing: 10) { used; Spacer(minLength: 0); swap }
-            HStack(alignment: .firstTextBaseline, spacing: 10) { used; Spacer(minLength: 0) }
-        }
-        .accessibilityElement(children: .combine)
-        .opacity(memory == nil ? 0 : 1)
-        .accessibilityHidden(memory == nil)
-        .overlay(alignment: .leading) {
-            if memory == nil {
-                Text("Memory readings unavailable").font(BruhsType.note).foregroundStyle(BruhsColor.textSecondary)
+        let memory = model.currentMemory
+        VStack(spacing: 6) {
+            HStack {
+                Text("Swap")
+                Spacer()
+                Text(memory?.swapUsed.map(memorySize) ?? "Unavailable").font(BruhsType.dataSmall)
             }
+            .accessibilityElement(children: .combine)
+            .help("Memory macOS moved to disk. Swap can remain allocated after memory pressure returns to normal.")
+            HStack {
+                Text("Compressed")
+                Spacer()
+                Text(memory.map { memorySize($0.compressed) } ?? "Unavailable").font(BruhsType.dataSmall)
+            }
+            .accessibilityElement(children: .combine)
+            .help("Memory compressed to make room in RAM. It is already included in used memory.")
         }
+        .font(BruhsType.note)
+        .foregroundStyle(BruhsColor.textSecondary)
+        .opacity(model.paused ? 0.5 : 1)
     }
 }

@@ -121,6 +121,22 @@ final class PanelSummaryTests: XCTestCase {
         XCTAssertEqual(summary.otherMemory, 100)
     }
 
+    func testPithCanRankWithOtherAppsWithoutDoubleCountingItsMemory() {
+        let apps = [app("pith", cpu: 2, pid: 42, memory: 14_700_000_000), app("chrome", cpu: 10, memory: 1_000_000_000)]
+        let summary = PanelSummary.apps(apps, ownPID: 42, limit: 1, ranking: .memory, includeOwn: true)
+        XCTAssertEqual(summary.top.map(\.id), ["pith"])
+        XCTAssertEqual(summary.otherCount, 1)
+        XCTAssertEqual(summary.otherMemory, 1_000_000_000)
+        XCTAssertEqual(summary.own?.id, "pith")
+    }
+
+    func testPithCanBeNamedAsTheMemoryCulpritWhenItsFooterIsHidden() {
+        let apps = [app("pith", cpu: 2, pid: 42, memory: 14_700_000_000), app("chrome", cpu: 10, memory: 1_000_000_000)]
+        let now = ActivitySnapshot(date: date(0), uptime: 0, cpu: 10, pressure: .warning, apps: apps, error: nil)
+        let culprit = PanelSummary.memoryCulprit(now, history: SessionHistory(), window: 0...60, ownPID: 42, includeOwn: true)
+        XCTAssertEqual(culprit?.app.id, "pith")
+    }
+
     func testTheCulpritIsTheAppThatGrewMost() {
         var history = SessionHistory()
         let grows = { (memory: UInt64) in [self.app("chrome", cpu: 1, memory: memory), self.app("xcode", cpu: 1, memory: 5_000_000_000)] }

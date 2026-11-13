@@ -8,6 +8,7 @@ struct MenuPanel: View {
     let updates: Updates
     let size: CGSize
     let actions: PanelActions
+    var memoryDetailsInitiallyExpanded = false
     /// Reports the content's natural height, so the controller can tell when the panel has to scroll.
     var contentHeight: (CGFloat) -> Void = { _ in }
 
@@ -18,7 +19,7 @@ struct MenuPanel: View {
                 VStack(alignment: .leading, spacing: 0) {
                     PanelCPUSection(model: model)
                     PanelDivider()
-                    PanelMemorySection(model: model)
+                    PanelMemorySection(model: model, detailsInitiallyExpanded: memoryDetailsInitiallyExpanded)
                     PanelDivider()
                     PanelAppsSection(model: model, open: actions.openActivity)
                     PanelDivider()
@@ -36,10 +37,12 @@ struct MenuPanel: View {
                 }
                 PanelFooter(actions: actions, model: model, updates: updates)
                     .padding(.top, 12)
-                PanelStatusLine(model: model, updates: updates, openUpdate: actions.openUpdate)
-                    .padding(.top, 10)
-                    .opacity(collecting ? 0 : 1)
-                    .accessibilityHidden(collecting)
+                if model.snapshot?.error != nil || updates.flow.reminder != nil {
+                    PanelStatusLine(model: model, updates: updates, openUpdate: actions.openUpdate)
+                        .padding(.top, 10)
+                        .opacity(collecting ? 0 : 1)
+                        .accessibilityHidden(collecting)
+                }
             }
             .padding(14)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight($0) }

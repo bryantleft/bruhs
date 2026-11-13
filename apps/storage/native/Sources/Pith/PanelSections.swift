@@ -68,12 +68,18 @@ struct PanelCPUSection: View {
 
 struct PanelMemorySection: View {
     let model: ActivityModel
+    @State private var detailsExpanded: Bool
+
+    init(model: ActivityModel, detailsInitiallyExpanded: Bool = false) {
+        self.model = model
+        _detailsExpanded = State(initialValue: detailsInitiallyExpanded)
+    }
 
     var body: some View {
         let window = sessionWindow(model)
         let points = model.history.system
         let story = PanelSummary.pressureStory(points, window: window, maxGap: ActivityModel.maxGap)
-        let culprit = model.paused ? nil : PanelSummary.memoryCulprit(model.snapshot, history: model.history, window: window, ownPID: ProcessInfo.processInfo.processIdentifier)
+        let culprit = model.paused ? nil : PanelSummary.memoryCulprit(model.snapshot, history: model.history, window: window, ownPID: ProcessInfo.processInfo.processIdentifier, includeOwn: true)
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Memory").font(BruhsType.label).foregroundStyle(BruhsColor.text)
@@ -81,25 +87,29 @@ struct PanelMemorySection: View {
                 Spacer()
                 StatusChip(pressure: model.snapshot?.pressure ?? .unknown, paused: model.paused)
             }
-            PanelPressureBand(runs: PanelSummary.pressureRuns(points, window: window, interval: ActivityModel.interval, maxGap: ActivityModel.maxGap),
-                              window: window)
+            PanelMemoryFigures(model: model, detailsExpanded: detailsExpanded, toggleDetails: { detailsExpanded.toggle() })
                 .padding(.top, 8)
-            VStack(alignment: .leading, spacing: 5) {
-                PanelMemoryFigures(model: model)
+            if !model.paused, model.snapshot?.pressure.isElevated == true {
                 Text(caption(story, culprit: culprit, spoken: false)).font(BruhsType.note).foregroundStyle(BruhsColor.textSecondary).lineLimit(1)
                     .help(caption(story, culprit: culprit, spoken: false))
                     .accessibilityLabel(caption(story, culprit: culprit, spoken: true))
+                    .padding(.top, 6)
             }
-            .opacity(model.paused ? 0 : 1)
-            .accessibilityHidden(model.paused)
-            .overlay(alignment: .leading) {
-                if model.paused {
-                    Button("Resume Monitoring") { model.start() }
-                        .buttonStyle(.bruhsSoft)
-                        .activatesOnReturn { model.start() }
+            if detailsExpanded {
+                VStack(alignment: .leading, spacing: 10) {
+                    PanelMemoryDetails(model: model)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Pressure over \(windowMinutes) min").font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary)
+                        PanelPressureBand(runs: PanelSummary.pressureRuns(points, window: window, interval: ActivityModel.interval, maxGap: ActivityModel.maxGap), window: window)
+                        if model.snapshot?.pressure.isElevated != true {
+                            Text(caption(story, culprit: nil, spoken: false)).font(BruhsType.note).foregroundStyle(BruhsColor.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityLabel(caption(story, culprit: nil, spoken: true))
+                        }
+                    }
                 }
+                .padding(.top, 10)
             }
-            .padding(.top, 8)
         }
     }
 
@@ -172,7 +182,7 @@ struct PanelAppsSection: View {
 
     var body: some View {
         let ranking = PanelSummary.Ranking(pressure: model.paused ? .normal : model.snapshot?.pressure ?? .unknown)
-        let apps = PanelSummary.apps(model.snapshot?.apps ?? [], ownPID: ProcessInfo.processInfo.processIdentifier, limit: Self.rows, holding: held, ranking: ranking)
+        let apps = PanelSummary.apps(model.snapshot?.apps ?? [], ownPID: ProcessInfo.processInfo.processIdentifier, limit: Self.rows, holding: held, ranking: ranking, includeOwn: true)
         let window = sessionWindow(model)
         VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -426,31 +436,10 @@ struct PanelStatusLine: View {
             .help("See what’s new in Pith \(update.version) and install it")
             .accessibilityLabel("Pith \(update.version) is available")
             .accessibilityHint("Opens the update")
-        } else {
-            let own = PanelSummary.own(model.snapshot?.apps ?? [], pid: ProcessInfo.processInfo.processIdentifier)
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text("Pith")
-                if let cpu = own?.cpu { Text("CPU \(percent(cpu))") }
-                if let memory = own?.memory { Text("Memory \(memorySize(memory))") }
-                if own?.cpu == nil && own?.memory == nil { Text("No reading yet") }
-            }
-            .font(BruhsType.note).foregroundStyle(BruhsColor.textTertiary).lineLimit(1)
-            .help(ownUse(cpu: own?.cpu.map { percent($0) }, memory: own?.memory.map(memorySize)))
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(ownUse(cpu: own?.cpu.map { spokenPercent($0) }, memory: own?.memory.map { "\(memorySize($0)) of memory" }))
-        }
-    }
-
-    /// "Pith itself uses 0.4% CPU and 48.2 MB", leaving out whichever figure it has no reading for.
-    private func ownUse(cpu: String?, memory: String?) -> String {
-        switch (cpu, memory) {
-        case let (cpu?, memory?): "Pith itself uses \(cpu) CPU and \(memory)"
-        case let (cpu?, nil): "Pith itself uses \(cpu) CPU"
-        case let (nil, memory?): "Pith itself uses \(memory)"
-        case (nil, nil): "No reading of Pith itself yet"
         }
     }
 }
+
 
 struct PanelDivider: View {
     var body: some View {

@@ -84,7 +84,7 @@ public enum PanelSummary {
     public struct Apps: Sendable {
         /// The busiest apps and tools by `ranking`, most first. macOS's own processes are in `system` instead.
         public let top: [AppSample]
-        /// Every other app and tool except Pith, with the CPU and memory of those Pith can measure.
+        /// Every other included app and tool, with the CPU and memory of those Pith can measure.
         public let otherCount: Int
         public let otherCPU: Double?
         public let otherMemory: UInt64?
@@ -92,18 +92,19 @@ public enum PanelSummary {
         public let systemCount: Int
         public let systemCPU: Double?
         public let systemMemory: UInt64?
-        /// Pith's own process group, so the panel can show what monitoring costs.
+        /// Pith's own process group. It also appears in the ranked totals when `includeOwn` is true.
         public let own: AppSample?
         public let ranking: Ranking
     }
 
-    /// The busiest apps and tools, without Pith itself; the rest of them are summed into one row and macOS's own
+    /// The busiest apps and tools, optionally including Pith; the rest are summed into one row and macOS's own
     /// processes into another, so the list adds up without daemons posing as apps. `holding` is an earlier order of app
     /// ids, kept while the pointer is over the list so a row doesn't change under a click; apps that quit drop out of it.
-    public static func apps(_ apps: [AppSample], ownPID: Int32, limit: Int, holding: [String]? = nil, ranking: Ranking = .cpu) -> Apps {
+    public static func apps(_ apps: [AppSample], ownPID: Int32, limit: Int, holding: [String]? = nil, ranking: Ranking = .cpu, includeOwn: Bool = false) -> Apps {
         let own = own(apps, pid: ownPID)
-        let system = apps.filter { $0.identity.kind == .system && $0.id != own?.id }
-        let others = apps.filter { $0.identity.kind != .system && $0.id != own?.id }
+        let excluded = includeOwn ? nil : own?.id
+        let system = apps.filter { $0.identity.kind == .system && $0.id != excluded }
+        let others = apps.filter { $0.identity.kind != .system && $0.id != excluded }
         let top: [AppSample]
         if let holding {
             let byID = Dictionary(others.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -136,9 +137,9 @@ public enum PanelSummary {
 
     /// The panel's answer while memory pressure is elevated: since when, and which app grew the most, or failing
     /// that which uses the most. Nil while pressure is normal.
-    public static func memoryCulprit(_ snapshot: ActivitySnapshot?, history: SessionHistory, window: ClosedRange<Double>, ownPID: Int32) -> (app: AppSample, growth: Int64?)? {
+    public static func memoryCulprit(_ snapshot: ActivitySnapshot?, history: SessionHistory, window: ClosedRange<Double>, ownPID: Int32, includeOwn: Bool = false) -> (app: AppSample, growth: Int64?)? {
         guard let snapshot, snapshot.pressure.isElevated else { return nil }
-        let candidates = snapshot.apps.filter { $0.memory != nil && !$0.members.contains { $0.pid == ownPID } }
+        let candidates = snapshot.apps.filter { $0.memory != nil && (includeOwn || !$0.members.contains { $0.pid == ownPID }) }
         let grown = candidates.compactMap { app in memoryGrowth(history.apps[app.id], window: window).map { (app, $0) } }
         // Growth names a culprit only when it's real: 100 MB in ten minutes is a browser tab, not noise.
         if let biggest = grown.max(by: { $0.1 < $1.1 }), biggest.1 >= 100_000_000 { return (biggest.0, biggest.1) }

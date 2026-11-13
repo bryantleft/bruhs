@@ -1,4 +1,5 @@
 import AppKit
+import PithCore
 import ServiceManagement
 import SwiftUI
 
@@ -13,6 +14,7 @@ struct SettingsView: View {
     var shortcut: PanelShortcut?
     let updates: Updates
     @State var pane = SettingsPane.general
+    @State var diagnosticsExpanded = false
 
     var body: some View {
         // A steady window size fits short displays; longer forms scroll within their pane.
@@ -127,6 +129,18 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .help("Reopens the saved startup disk map and catches up on changes. Once a day, on power, Pith checks every folder for changes macOS didn’t report.")
+        }
+        Section("Diagnostics") {
+            DisclosureGroup("Pith resource usage", isExpanded: $diagnosticsExpanded) {
+                if let own = PanelSummary.own(model.snapshot?.apps ?? [], pid: ProcessInfo.processInfo.processIdentifier) {
+                    LabeledContent("CPU", value: own.cpu.map { percent($0) } ?? "Unavailable")
+                    LabeledContent("Memory footprint", value: own.memory.map(memorySize) ?? "Unavailable")
+                    Text("Includes Pith and its helper processes.").foregroundStyle(.secondary)
+                    if model.paused { Text("Monitoring paused").foregroundStyle(.secondary) }
+                } else {
+                    Text("No reading yet").foregroundStyle(.secondary)
+                }
+            }
         }
     }
 }

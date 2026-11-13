@@ -86,8 +86,7 @@ struct PanelActions {
         guard let window = item.button?.window else { return false }
         return NSScreen.screens.contains { $0.frame.contains(window.frame) }
     }
-    /// False while the open panel scrolls. Expected only on displays shorter than MenuPanelLayout.idealSize;
-    /// anywhere else it means idealSize has fallen behind the panel's content.
+    /// False while the open panel scrolls, as expanded details, larger text or a short display can require.
     var panelContentFits: Bool { panelContentHeight <= panelSize.height + 0.5 }
 
     init(activity: ActivityModel, updates: Updates, actions: PanelActions) {

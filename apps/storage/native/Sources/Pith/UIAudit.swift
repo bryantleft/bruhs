@@ -17,6 +17,7 @@ extension AppDelegate {
             let localTools = try await LocalToolsFixture.make(binary: disk.binary)
             defer { try? FileManager.default.removeItem(at: localTools.folder) }
             var findings: [String: Double] = [:]
+            var panelHeights: [String: CGFloat] = [:]
             for scale in [1.0, 1.4] {
                 TextSize.shared.reset()
                 while TextSize.shared.scale < scale { TextSize.shared.step(1) }
@@ -35,10 +36,32 @@ extension AppDelegate {
                         }
                     }
                     let actions = PanelActions(openActivity: { _ in }, openDisk: {}, openSettings: {}, checkForUpdates: {}, openUpdate: {})
-                    let menu = MenuPanel(model: activity, updates: releaseUpdates, size: MenuPanelLayout.idealSize, actions: actions)
+                    var panelHeight: CGFloat = 0
+                    let menu = MenuPanel(model: activity, updates: releaseUpdates, size: MenuPanelLayout.idealSize, actions: actions,
+                                         contentHeight: { panelHeight = $0 })
                     _ = try await captureUI(menu, name: "panel-\(Int(scale * 100))-\(look)", size: MenuPanelLayout.idealSize, appearance: appearance, folder: folder)
                     activity.paused = false
                     _ = try await captureUI(menu, name: "panel-live-\(Int(scale * 100))-\(look)", size: MenuPanelLayout.idealSize, appearance: appearance, folder: folder)
+                    panelHeights["collapsed-\(Int(scale * 100))-\(look)"] = panelHeight
+                    let expandedMenu = MenuPanel(model: activity, updates: releaseUpdates, size: MenuPanelLayout.idealSize, actions: actions,
+                                                 memoryDetailsInitiallyExpanded: true, contentHeight: { panelHeight = $0 })
+                    _ = try await captureUI(expandedMenu, name: "panel-details-\(Int(scale * 100))-\(look)", size: MenuPanelLayout.idealSize, appearance: appearance, folder: folder)
+                    panelHeights["expanded-\(Int(scale * 100))-\(look)"] = panelHeight
+                    if let saved = activity.snapshot {
+                        let savedHistory = activity.history
+                        for (state, pressure) in [("normal", MemoryPressure.normal), ("warning", .warning)] {
+                            let sample = ActivitySnapshot(date: saved.date.addingTimeInterval(0.001), uptime: saved.uptime + 0.001,
+                                                          cpu: saved.cpu, pressure: pressure, apps: saved.apps, error: nil,
+                                                          memory: saved.memory, tiers: saved.tiers)
+                            activity.snapshot = sample
+                            activity.history = savedHistory
+                            activity.history.append(sample)
+                            _ = try await captureUI(menu, name: "panel-\(state)-\(Int(scale * 100))-\(look)", size: MenuPanelLayout.idealSize, appearance: appearance, folder: folder)
+                            panelHeights["\(state)-\(Int(scale * 100))-\(look)"] = panelHeight
+                        }
+                        activity.snapshot = saved
+                        activity.history = savedHistory
+                    }
                     activity.paused = true
                     let keptState = ActivityState()
                     keptState.span = .sixHours
@@ -54,6 +77,10 @@ extension AppDelegate {
                         _ = try await captureUI(settings, name: "settings-\(pane.rawValue)-\(Int(scale * 100))-\(look)", size: nil,
                                                 appearance: appearance, folder: folder)
                     }
+                    let diagnostics = SettingsView(model: activity, alerts: alertSettings, disk: disk, shortcut: shortcut, updates: releaseUpdates,
+                                                   pane: .monitoring, diagnosticsExpanded: true)
+                    _ = try await captureUI(diagnostics, name: "settings-diagnostics-\(Int(scale * 100))-\(look)", size: nil, appearance: appearance,
+                                            folder: folder, scrollToBottom: true)
                     let welcome = WelcomeView(activity: activity, glyph: statusGlyph(), open: { _ in }, close: {})
                     _ = try await captureUI(welcome, name: "welcome-\(Int(scale * 100))-\(look)", size: nil, appearance: appearance, folder: folder)
                     try await captureLocalTools(localTools, scale: scale, look: look, appearance: appearance, folder: folder)
@@ -70,7 +97,7 @@ extension AppDelegate {
                       let requestedWidth = measured["requestedWidth"] as? Double, let requestedHeight = measured["requestedHeight"] as? Double else { return "invalid geometry" }
                 return width > requestedWidth + 0.5 || height > requestedHeight + 0.5 ? name : nil
             }
-            let report = try JSONSerialization.data(withJSONObject: ["settingsHeights": findings, "captures": captures, "overflowingCaptures": overflowing], options: [.prettyPrinted, .sortedKeys])
+            let report = try JSONSerialization.data(withJSONObject: ["settingsHeights": findings, "panelContentHeights": panelHeights, "captures": captures, "overflowingCaptures": overflowing], options: [.prettyPrinted, .sortedKeys])
             try report.write(to: folder.appendingPathComponent("native-layout.json"))
             guard overflowing.isEmpty else { throw DiskFailure("Native content outgrew its window: \(overflowing.joined(separator: ", ")).") }
             print("Native UI audit saved \(captures.count) captures and their actual geometry to \(folder.path). Settings heights: \(findings)")
