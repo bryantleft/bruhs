@@ -168,7 +168,7 @@ enum BruhsRadius {
     static let pomelo: CGFloat = 36
 }
 
-/// Durations in seconds and the bruhs easing curves. Live data never animates.
+/// Durations in seconds and the bruhs easing curves, shared by SwiftUI and Core Animation.
 enum BruhsMotion {
     static let blink: Double = 0.08
     static let fast: Double = 0.15
@@ -176,8 +176,11 @@ enum BruhsMotion {
     static let slow: Double = 0.4
     static let bloom: Double = 0.6
     static func standard(duration: Double) -> Animation { .timingCurve(0.2, 0, 0, 1, duration: duration) }
+    static var standardTiming: CAMediaTimingFunction { CAMediaTimingFunction(controlPoints: 0.2, 0, 0, 1) }
     static func entrance(duration: Double) -> Animation { .timingCurve(0, 0, 0, 1, duration: duration) }
+    static var entranceTiming: CAMediaTimingFunction { CAMediaTimingFunction(controlPoints: 0, 0, 0, 1) }
     static func exit(duration: Double) -> Animation { .timingCurve(0.23, 1, 0.32, 1, duration: duration) }
+    static var exitTiming: CAMediaTimingFunction { CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1) }
 }
 
 private func appearanceColor(dark: NSColor, light: NSColor, darkHighContrast: NSColor? = nil, lightHighContrast: NSColor? = nil) -> NSColor {
