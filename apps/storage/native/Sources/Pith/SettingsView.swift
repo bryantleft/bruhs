@@ -10,14 +10,13 @@ struct SettingsView: View {
     let updates: Updates
 
     var body: some View {
-        // Two panes, so each fits a 13-inch display without scrolling.
+        // A steady window size fits short displays; longer forms scroll within their pane.
         TabView {
             form { general }.tabItem { Label("General", systemImage: "gearshape") }
             form { monitoring }.tabItem { Label("Monitoring", systemImage: "waveform.path.ecg") }
         }
         .padding(.top, 8)
-        .frame(width: 480)
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(width: 480, height: 560)
         .background(BruhsColor.canvas)
         .tint(BruhsColor.accent)
     }
@@ -26,8 +25,7 @@ struct SettingsView: View {
         Form { content() }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
-            .scrollDisabled(true)
-            .fixedSize(horizontal: false, vertical: true)
+            .bruhsScrollers(inset: 6)
     }
 
     @ViewBuilder private var general: some View {
