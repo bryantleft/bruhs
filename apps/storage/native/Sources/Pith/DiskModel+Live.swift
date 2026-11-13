@@ -33,6 +33,7 @@ extension DiskModel {
 
     /// Shows `path` from the live map: the startup disk, or a folder in it.
     func showLive(_ path: String) {
+        isAdministratorMap = false
         guard let live else { return }
         operation?.cancel()
         runner.cancelImmediately()

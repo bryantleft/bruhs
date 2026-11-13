@@ -12,6 +12,8 @@ extension AppDelegate {
             let engine = AuditUpdateEngine()
             let releaseUpdates = Updates(version: updates.version)
             releaseUpdates.attach(engine)
+            let localTools = try await LocalToolsFixture.make(binary: disk.binary)
+            defer { try? FileManager.default.removeItem(at: localTools.folder) }
             var findings: [String: Double] = [:]
             for scale in [1.0, 1.4] {
                 TextSize.shared.reset()
@@ -40,6 +42,7 @@ extension AppDelegate {
                                             folder: folder, scrollToBottom: true)
                     let welcome = WelcomeView(activity: activity, glyph: nil, open: { _ in }, close: {})
                     _ = try await captureUI(welcome, name: "welcome-\(Int(scale * 100))-\(look)", size: nil, appearance: appearance, folder: folder)
+                    try await captureLocalTools(localTools, scale: scale, look: look, appearance: appearance, folder: folder)
                 }
             }
             TextSize.shared.reset()
@@ -57,7 +60,7 @@ extension AppDelegate {
         }
     }
 
-    private func captureUI<Content: View>(_ content: Content, name: String, size: NSSize?, appearance: NSAppearance.Name, folder: URL,
+    func captureUI<Content: View>(_ content: Content, name: String, size: NSSize?, appearance: NSAppearance.Name, folder: URL,
                                          scrollToBottom: Bool = false) async throws -> NSSize {
         let host = NSHostingView(rootView: content.background(BruhsColor.canvas))
         host.appearance = NSAppearance(named: appearance)

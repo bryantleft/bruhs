@@ -120,6 +120,11 @@ import PithCore
             let report = URL(fileURLWithPath: CommandLine.arguments[index + 2])
             Task { await smokeTest(root: root, report: report) }
         }
+        if let index = CommandLine.arguments.firstIndex(of: "--local-tools-test"), CommandLine.arguments.indices.contains(index + 1) {
+            activity.pause()
+            let report = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+            Task { await testLocalTools(report: report) }
+        }
         // A menu bar item can be hidden by macOS or crowded out behind the notch, so the first launch says where Pith is.
         if !Launch.isAutomated && !UserDefaults.standard.bool(forKey: Setting.welcomeSeen.rawValue) { showWelcome() }
     }
@@ -476,6 +481,11 @@ import PithCore
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { showWelcome(); return false }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if disk.isTrashing || disk.maintenanceBusy {
+            disk.problem = DiskProblem(message: "Wait for the current disk operation to finish before quitting Pith.")
+            showDisk()
+            return .terminateCancel
+        }
         activity.pause(); disk.cancel()
         // The scanner saves the map as it exits, so the next launch catches up from here rather than walking again.
         // Saving the development Mac's map took 0.65 to 0.99 s; past five, Pith quits regardless.

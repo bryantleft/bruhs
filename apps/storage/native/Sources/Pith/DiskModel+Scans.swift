@@ -38,6 +38,7 @@ extension DiskModel {
     /// Scans `root` once. The current map stays until the new one arrives, so a cancelled or failed scan leaves it. Its
     /// map answers the person's own action unless `answersPerson` says otherwise, as for a scan a refresh fell back on.
     private func scanOnce(_ root: URL, answersPerson: Bool = true) {
+        isAdministratorMap = false
         liveView = nil
         sideColumn.mapIsntLive()
         operation?.cancel()
@@ -151,6 +152,7 @@ extension DiskModel {
     }
 
     func cancel() {
+        cleanup.cancel()
         operation?.cancel()
         // Keep the operation busy until its subprocess and pipes have drained.
         runner.cancelImmediately()
@@ -162,6 +164,45 @@ extension DiskModel {
         watcher = DiskWatcher(root: root, since: since) { [weak self] events in
             guard let self, self.liveView == nil, self.result?.root.path == root else { return }
             for event in events { self.changes.note(event.path, flags: event.flags, root: root) }
+        }
+    }
+
+    func acceptAdministratorScan(_ value: DiskResult, began: Date) {
+        guard !isTrashing, !isScanning else { return }
+        operation?.cancel()
+        let id = UUID(); generation = id
+        liveView = nil
+        sideColumn.mapIsntLive()
+        isScanning = true
+        operation = Task {
+            defer { if generation == id { isScanning = false } }
+            let figures = await self.figures(for: value.root.path, full: true)
+            guard generation == id else { return }
+            select([])
+            if result?.root.path != value.root.path { mapStartsOver() }
+            volumeUse = figures
+            result = value; scope = value.root.path; scannedAt = Date(); scanBegan = began
+            edited = false; isAdministratorMap = true
+            compareWithLastScan(value)
+            // The privileged scan does not stream FSEvents. Refresh must rebuild it, rather than assume changes made
+            // while authorization and scanning ran are covered by a watch started afterward.
+            changes = DiskChanges(); changes.markEverything()
+            watcher?.stop(); watcher = nil
+            cleanup.diskWasEdited()
+            problem = nil; mapAnswersPerson = true; revision = UUID()
+        }
+    }
+
+    func localSpaceChanged() {
+        cleanup.diskWasEdited()
+        refreshChoices()
+        guard let root = result?.root.path else { return }
+        let id = generation
+        Task {
+            let figures = await self.figures(for: root, full: true)
+            guard result?.root.path == root, generation == id else { return }
+            volumeUse = figures
+            revision = UUID()
         }
     }
 

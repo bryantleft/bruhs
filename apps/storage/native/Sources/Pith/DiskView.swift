@@ -64,6 +64,22 @@ struct DiskView: View {
         }
         .onChange(of: visible) { _, now in model.visibilityChanged(now) }
         .onDisappear { model.visibilityChanged(false) }
+        .sheet(item: Binding(get: { model.sheet }, set: { model.sheet = $0 })) { sheet in
+            let root = model.location ?? FileManager.default.homeDirectoryForCurrentUser.path
+            switch sheet {
+            case .cleanup:
+                CleanupView(disk: model, model: model.cleanup, root: URL(fileURLWithPath: root), close: { model.sheet = nil })
+                    .interactiveDismissDisabled(model.isTrashing)
+            case .growth:
+                DiskGrowthView(disk: model, root: root, close: { model.sheet = nil })
+            case .maintenance:
+                DiskMaintenanceView(root: root, binary: model.binary, changed: { model.localSpaceChanged() }, scanned: { result, began in
+                    model.acceptAdministratorScan(result, began: began)
+                }, busyChanged: { model.maintenanceBusy = $0 })
+            case .finishCleanup:
+                FinishCleanupView(disk: model, close: { model.sheet = nil })
+            }
+        }
         // One question for the whole move, listing what it does to each item that syncs or is a Photos library.
         .alert(model.confirming?.question ?? "", isPresented: Binding(get: { model.confirming != nil }, set: { if !$0 { model.confirming = nil } })) {
             Button("Cancel", role: .cancel) { model.confirming = nil }
@@ -140,6 +156,23 @@ private struct DiskControlBar: View {
                 }
             }
             Spacer(minLength: 12)
+            if !model.isScanning {
+                Button("Clean Up…") { model.sheet = .cleanup }
+                    .buttonStyle(.bruhsSoft)
+                    .disabled(model.result == nil || model.isTrashing)
+                    .help("Review local cleanup recommendations for this folder")
+                Menu {
+                    Button("What Changed…") { model.sheet = .growth }
+                    Button("Finish Cleanup…") { model.sheet = .finishCleanup }
+                    Divider()
+                    Button("Disk Tools…") { model.sheet = .maintenance }
+                } label: { Image(systemName: "ellipsis.circle") }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .disabled(model.result == nil || model.isTrashing)
+                    .help("Changes, reviewed Trash items, snapshots and administrator scans")
+                    .accessibilityLabel("Disk actions")
+            }
             if model.isScanning {
                 BruhsSpinner(diameter: 14, lineWidth: 2)
                     .accessibilityLabel("Scanning")
@@ -179,11 +212,17 @@ struct DiskNotices: View {
                     .buttonStyle(.bruhsGhost)
                     .disabled(!model.canUndoMove)
                     .help(moved.moves.count == 1 ? "Put it back where it was (⌘Z)" : "Put them back where they were (⌘Z)")
+                Button("Finish Cleanup…") { model.sheet = .finishCleanup }
+                    .buttonStyle(.bruhsGhost)
+                    .disabled(model.isTrashing)
                 Button { model.dismissTrashNote() } label: { Image(systemName: "xmark") }
                     .buttonStyle(.bruhsGhost)
                     .help("Dismiss")
                     .accessibilityLabel("Dismiss")
             }
+        }
+        if model.isAdministratorMap {
+            DiskNotice(symbol: "lock.shield", tint: BruhsColor.textSecondary, message: "Showing a one-time administrator scan. Refresh returns to your account’s normal access.") { EmptyView() }
         }
         if let folders = model.askingFolders {
             AskingNoticeView(folders: folders)

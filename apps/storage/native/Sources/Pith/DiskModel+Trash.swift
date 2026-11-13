@@ -57,11 +57,26 @@ extension DiskModel {
     private func move(_ batch: TrashBatch, undoManager: UndoManager?) {
         problem = nil
         let mover = Self.mover(into: trashFolder)
+        let isolatedTrash = trashFolder
         movesUnderWay += 1
         afterTrashWork {
             // With the file systems mounted then, which say which folders the live map lists again (`followChange`).
-            let (outcome, mounts) = await Task.detached(priority: .userInitiated) { (batch.move(with: mover), MountTable.kernelOnly()) }.value
-            self.moved(outcome, undoManager: undoManager, mounts: mounts)
+            let (outcome, mounts, capture) = await Task.detached(priority: .userInitiated) {
+                let outcome = batch.move(with: mover)
+                let capture: Result<CleanupTrashSelection, DiskFailure>?
+                if outcome.moved.isEmpty { capture = nil }
+                else {
+                    do {
+                        let selection = try CleanupTrashSelection.capture(moves: outcome.moved) { move in
+                            if Launch.isAutomated, let isolatedTrash { return isolatedTrash }
+                            return try CleanupTrashSelection.systemTrashRoot(move)
+                        }
+                        capture = .success(selection)
+                    } catch { capture = .failure(DiskFailure(error.localizedDescription)) }
+                }
+                return (outcome, MountTable.kernelOnly(), capture)
+            }.value
+            self.moved(outcome, undoManager: undoManager, mounts: mounts, capture: capture)
             self.movesUnderWay -= 1
         }
     }
@@ -83,7 +98,7 @@ extension DiskModel {
     /// Takes what `outcome` moved off the map shown: off its tree, its largest files and Places, out of the selection,
     /// and, on the live map, off the maps after it. What the map had of each item goes with the move's own record, which
     /// its own Undo puts back (`TrashUndoStack`). `mounts` is the mount table as the move ended.
-    private func moved(_ outcome: TrashOutcome, undoManager: UndoManager?, mounts: MountTable) {
+    private func moved(_ outcome: TrashOutcome, undoManager: UndoManager?, mounts: MountTable, capture: Result<CleanupTrashSelection, DiskFailure>?) {
         if let message = outcome.problem { problem = DiskProblem(message: message) }
         guard let note = outcome.note, let result else { return }
         var updated = result, items: [String: LiveEdits.Restored] = [:], nodes: [DiskNode] = []
@@ -118,6 +133,20 @@ extension DiskModel {
         let record = TrashRecord(moves: outcome.moved, note: note, items: items)
         trashed = record
         undos.moved(record, undoManager: undoManager)
+        cleanupTrash = cleanupTrash.filter { group in undos.records.contains { $0 === group.record } }
+        switch capture {
+        case .success(let selection):
+            cleanupTrash.append(CleanupTrashGroup(record: record, selection: selection))
+            var retained = cleanupTrash.reduce(0) { $0 + $1.selection.accountedBytes }
+            while retained > TrashUndoStack.defaultBudget, !cleanupTrash.isEmpty {
+                retained -= cleanupTrash.removeFirst().selection.accountedBytes
+            }
+            cleanupFinishMessage = nil
+        case .failure(let failure):
+            cleanupFinishMessage = "The move succeeded and Undo is available. \(failure.message)"
+        case nil: break
+        }
+        cleanup.diskWasEdited()
         mapAnswersPerson = true
         revision = UUID()
     }
@@ -160,6 +189,8 @@ extension DiskModel {
     /// live map, the maps after it keep them, until its index has listed them again. Moving back never overwrites
     /// anything: one that can't go back stays in the Trash, and off the map, and Pith says which (`TrashUndo.putBack`).
     func undoTrash(_ record: TrashRecord) {
+        cleanupTrash.removeAll { $0.record === record }
+        cleanupFinishMessage = nil
         if trashed === record { trashed = nil }
         let moves = record.moves
         afterTrashWork {
@@ -206,6 +237,7 @@ extension DiskModel {
             changed = true
         }
         guard changed else { return }
+        cleanup.diskWasEdited()
         mapAnswersPerson = true
         revision = UUID()
         let selected = onMap.filter { $0.node.path != root }
@@ -213,4 +245,46 @@ extension DiskModel {
     }
 
     func dismissTrashNote() { trashed = nil }
+
+    func finishCleanup(_ group: CleanupTrashGroup) {
+        guard !isTrashing, !isScanning, cleanupTrash.contains(where: { $0.id == group.id }) else { return }
+        isFinishingCleanup = true
+        cleanupFinishMessage = nil
+        movesUnderWay += 1
+        afterTrashWork {
+            defer { self.movesUnderWay -= 1; self.isFinishingCleanup = false }
+            do {
+                let (outcome, before, after) = try await Task.detached(priority: .userInitiated) {
+                    let volume = group.selection.moves.first?.trashed
+                    let before = Self.available(on: volume)
+                    let outcome = try group.selection.remove()
+                    return (outcome, before, Self.available(on: volume))
+                }.value
+                if !outcome.attempted.isEmpty {
+                    self.undos.discard(group.record)
+                    self.cleanupTrash.removeAll { $0.id == group.id }
+                    if self.trashed === group.record { self.trashed = nil }
+                }
+                if let problem = outcome.problem { self.cleanupFinishMessage = problem }
+                else {
+                    var message = "Permanently deleted \(outcome.removed.count.formatted()) \(outcome.removed.count == 1 ? "item" : "items"). Undo is no longer available for them."
+                    if let before, let after, after > before {
+                        message += " Free space increased by \(formatBytes(after - before)). Other writes can affect this measurement."
+                    } else {
+                        message += " Shared blocks, snapshots and other writes can delay an increase in free space."
+                    }
+                    self.cleanupFinishMessage = message
+                }
+                self.cleanup.diskWasEdited()
+                self.localSpaceChanged()
+            } catch { self.cleanupFinishMessage = error.localizedDescription }
+        }
+    }
+
+    nonisolated private static func available(on item: URL?) -> UInt64? {
+        guard let item,
+              let available = try? item.deletingLastPathComponent().resourceValues(forKeys: [.volumeAvailableCapacityKey]).volumeAvailableCapacity,
+              available >= 0 else { return nil }
+        return UInt64(available)
+    }
 }

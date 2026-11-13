@@ -5,7 +5,7 @@ import Foundation
 /// history and its scans in memory or in folders of its own, never in theirs, and moves nothing into their Trash
 /// (`DiskModel.trashFolder`).
 enum Launch {
-    static let isAutomated = CommandLine.arguments.contains { ["--activity", "--scan", "--smoke-test", "--ui-audit"].contains($0) }
+    static let isAutomated = CommandLine.arguments.contains { ["--activity", "--scan", "--smoke-test", "--ui-audit", "--local-tools-test"].contains($0) }
 
     /// Gives an automated run its settings in memory, before anything reads one: each at the value `Setting` gives an
     /// automated run (`automatedValue`), Pith's default for all but two, in the volatile argument domain. Reads look

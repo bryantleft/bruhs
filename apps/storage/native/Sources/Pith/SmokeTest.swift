@@ -186,6 +186,7 @@ extension AppDelegate {
             checks.merge(await checkOpenedFolderDetail(fixture), uniquingKeysWith: { _, new in new })
             checks.merge(try await checkLiveFollows(disk, in: fixture, prefix: "live_map"), uniquingKeysWith: { _, new in new })
             checks.merge(try await checkLiveReopens(fixture, dailyChecks: &dailyChecks), uniquingKeysWith: { _, new in new })
+            checks.merge(try await checkLocalCleanup(), uniquingKeysWith: { _, new in new })
             print("daily check registered with macOS's scheduler by the run's live maps: \(dailyChecks)")
             checks["left_the_daily_check_schedule_alone"] = dailyChecks.count == 2 && dailyChecks.allSatisfy { $0 == false }
             // Leaving the Disk tab keeps the map, so its open folder survives; closing the window frees WebKit.

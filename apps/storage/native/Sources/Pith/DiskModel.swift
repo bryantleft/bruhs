@@ -45,6 +45,11 @@ enum MapCommand: Equatable {
     case up
 }
 
+enum DiskSheet: String, Identifiable {
+    case cleanup, growth, maintenance, finishCleanup
+    var id: String { rawValue }
+}
+
 /// The Disk tab's model: the map shown, live or scanned, the items selected, Move to Trash and Undo, and each volume's
 /// space. Its stored state lives here, as `@Observable` needs, and its work in an extension for each responsibility:
 /// DiskModel+Live.swift, +Scans.swift, +Selection.swift, +Trash.swift, +Space.swift and +Icons.swift. Swift's `private`
@@ -52,6 +57,13 @@ enum MapCommand: Equatable {
 /// setting what DiskModel alone sets. A member that alone writes a `private(set)` property stays in this file beside it,
 /// so the compiler still guards that property.
 @MainActor @Observable final class DiskModel {
+    var sheet: DiskSheet?
+    let cleanup = CleanupModel()
+    var cleanupTrash: [CleanupTrashGroup] = []
+    var cleanupFinishMessage: String?
+    var isFinishingCleanup = false
+    var isAdministratorMap = false
+    var maintenanceBusy = false
     var result: DiskResult? {
         didSet {
             // JSON kept for a map that's changed since is a stale picture of it.
@@ -138,12 +150,14 @@ enum MapCommand: Equatable {
     /// smoke test, in memory, since it never reads or writes the person's scans (`smokeTestShowsGrowth`).
     private(set) var growth: [String: Int64] = [:]
     private(set) var growthSince: Date?
+    private(set) var growthItems: [GrowthItem] = []
 
     /// The smoke test's growth, in memory: what grew and since when, which goes to the page with the next revision. Only
     /// the smoke test sets growth from outside.
-    func smokeTestShowsGrowth(_ growth: [String: Int64], since: Date?) {
+    func smokeTestShowsGrowth(_ growth: [String: Int64], since: Date?, items: [GrowthItem] = []) {
         self.growth = growth
         growthSince = since
+        growthItems = items
         revision = UUID()
     }
 
@@ -160,9 +174,10 @@ enum MapCommand: Equatable {
         if let kept = baseline, kept.isBaseline(of: value, at: Date(), within: 24 * 60 * 60) {
             growth = kept.changes(to: value, countingNew: false)
             growthSince = kept.date
+            growthItems = GrowthComparison.items(baseline: kept, current: value, changes: growth)
             return
         }
-        growth = [:]; growthSince = nil
+        growth = [:]; growthSince = nil; growthItems = []
         guard detailAsked == nil else { return }
         let memory = ScanMemory(value, date: Date())
         baseline = memory
@@ -179,12 +194,13 @@ enum MapCommand: Equatable {
     /// Compares a finished scan with the last one of the same folder, then keeps this one for next time. A last scan
     /// dated after this one, as when the clock went back, isn't compared.
     func compareWithLastScan(_ value: DiskResult) {
-        growth = [:]; growthSince = nil
+        growth = [:]; growthSince = nil; growthItems = []
         guard remembersScans, let folder = scansFolder, let date = scannedAt else { return }
         let file = ScanMemory.file(for: value.root.path, in: folder)
         if let data = try? Data(contentsOf: file), let last = try? JSONDecoder().decode(ScanMemory.self, from: data), last.isBaseline(of: value, at: date) {
             growth = last.changes(to: value)
             growthSince = last.date
+            growthItems = GrowthComparison.items(baseline: last, current: value, changes: growth)
         }
         let memory = ScanMemory(value, date: date)
         Task.detached(priority: .utility) {
@@ -200,7 +216,7 @@ enum MapCommand: Equatable {
     /// Deletes everything kept: the live map, the day's folder sizes and each scanned folder's. A live map Pith
     /// still keeps is saved again at its next save.
     func forgetScans() {
-        growth = [:]; growthSince = nil; baseline = nil; revision = UUID()
+        growth = [:]; growthSince = nil; growthItems = []; baseline = nil; revision = UUID()
         guard let folder = scansFolder else { return }
         try? FileManager.default.removeItem(at: folder)
     }
