@@ -1,6 +1,7 @@
 //! Library surface for the storage scanner so integration tests can exercise the
 //! traversal and aggregation logic. The binary (`main.rs`) is a thin CLI over this.
 
+pub mod cleanup;
 pub mod frees;
 pub mod index;
 pub mod kinds;

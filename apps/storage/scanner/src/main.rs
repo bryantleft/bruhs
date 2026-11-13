@@ -5,6 +5,7 @@
 //!   storage-scanner trash --path <path>
 //!   storage-scanner frees --path <path> [--path <path>…]
 //!   storage-scanner serve
+//!   storage-scanner analyze --root <folder>
 //!
 //! `scan` streams NDJSON: repeated `{"type":"progress",...}` lines, then one
 //! `{"type":"result",...}` line with the pruned treemap tree, largest files, and a summary.
@@ -30,10 +31,29 @@ fn main() {
         Some("trash") => cmd_trash(&args[1..]),
         Some("frees") => cmd_frees(&args[1..]),
         Some("serve") => std::process::exit(serve::run()),
+        Some("analyze") => cmd_analyze(&args[1..]),
         _ => {
-            eprintln!("usage: storage-scanner <scan|trash|frees|serve> [options]");
+            eprintln!("usage: storage-scanner <scan|trash|frees|serve|analyze> [options]");
             std::process::exit(2);
         }
+    }
+}
+
+fn cmd_analyze(args: &[String]) {
+    let analyze = || -> Result<(), String> {
+        stop_cloud_downloads()?;
+        storage_scanner::system::stop_access_time_updates();
+        let root = flag(args, "--root").ok_or("analyze: --root <folder> required")?;
+        let root = std::fs::canonicalize(root).map_err(|error| format!("Cannot open {root}: {error}"))?;
+        let home = std::env::var_os("HOME").map(std::path::PathBuf::from).ok_or("HOME is unavailable. Set it to this user's home folder.")?;
+        let report = storage_scanner::cleanup::scan(&root, &home)?;
+        let line = serde_json::to_string(&report).map_err(|error| error.to_string())?;
+        println!("{line}");
+        Ok(())
+    };
+    if let Err(reason) = analyze() {
+        println!("{}", serde_json::json!({ "type": "fatal", "reason": reason }));
+        std::process::exit(1);
     }
 }
 
