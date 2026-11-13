@@ -15,6 +15,7 @@ import {
   archiveName, archiveURL, compareVersions, currentRelease, FEED_TAG, FEED_URL, feed, feedItem, feedItems, KEY_ACCOUNT, PUBLIC_KEY,
   REPOSITORY, releasePage, releaseTag,
 } from "./pith-release.mjs";
+import { verifyArchitectures, verifyDeploymentTarget } from "./mac-targets.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const dryRun = process.argv.includes("--dry-run");
@@ -41,6 +42,12 @@ const work = mkdtempSync(path.join(tmpdir(), "pith-publish-"));
 if (!existsSync(archive)) throw new Error(`${archive} is missing. Build it first: pnpm --filter storage release:mac`);
 run("ditto", ["-x", "-k", archive, work]);
 const app = path.join(work, "Pith.app");
+// A single feed serves both kinds of Mac: publishing a one-architecture download would strand the other kind.
+for (const binary of ["Pith", "storage-scanner"]) {
+  const file = path.join(app, "Contents/MacOS", binary);
+  verifyArchitectures(run("xcrun", ["lipo", "-archs", file]), ["arm64", "x86_64"], binary, true);
+  verifyDeploymentTarget(run("xcrun", ["vtool", "-show-build", file]), "14.0", binary, 2);
+}
 if (plist(app, "CFBundleVersion") !== version) {
   throw new Error(`${archiveName(version)} holds Pith ${plist(app, "CFBundleVersion")}, but the changelog's newest is ${version}. Build it again.`);
 }
@@ -100,7 +107,7 @@ writeFileSync(feedFile, feed([item, ...items.map((entry) => entry.xml)]));
 run(path.join(tools, "sign_update"), ["--account", KEY_ACCOUNT, feedFile]);
 run(path.join(tools, "sign_update"), ["--account", KEY_ACCOUNT, "--verify", feedFile]);
 const notesFile = path.join(work, "notes.md");
-writeFileSync(notesFile, [...notes, `Pith ${version} needs macOS 14 or later on a Mac with Apple silicon. Download ${archiveName(version)}, ` +
+writeFileSync(notesFile, [...notes, `Pith ${version} needs macOS 14 or later. The download contains Apple silicon and Intel code. Download ${archiveName(version)}, ` +
   "open it, and move Pith to the Applications folder."].join("\n\n"));
 
 if (dryRun) {

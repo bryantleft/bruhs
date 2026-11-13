@@ -4,10 +4,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { archiveName, currentRelease, FEED_URL, PUBLIC_KEY } from "./pith-release.mjs";
 import { writeNotices } from "./third-party-notices.mjs";
+import { buildArchitecture, macTargets, verifyArchitectures, verifyDeploymentTarget } from "./mac-targets.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-function run(command, args, capture = false) {
-  const result = spawnSync(command, args, { cwd: root, stdio: capture ? "pipe" : "inherit", encoding: "utf8" });
+function run(command, args, capture = false, environment = {}) {
+  const result = spawnSync(command, args, { cwd: root, stdio: capture ? "pipe" : "inherit", encoding: "utf8", env: { ...process.env, ...environment } });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${command} failed (${result.status}): ${result.stderr ?? "see output above"}`);
   return result.stdout?.trim();
@@ -18,6 +19,10 @@ if (process.platform !== "darwin") throw new Error("The Pith app requires macOS 
 // Sparkle. Other builds are signed ad hoc, which needs no keychain access and runs only where it was built; with no
 // feed, they never update.
 const release = process.argv.includes("--release");
+const targets = macTargets(buildArchitecture(process.argv.slice(2), process.env));
+const installed = run("rustup", ["target", "list", "--installed"], true).split(/\s+/);
+const missing = targets.rustTargets.filter((target) => !installed.includes(target));
+if (missing.length) throw new Error(`This Pith build needs Rust targets ${missing.join(", ")}. Install them with \`rustup target add ${missing.join(" ")}\`, then build again.`);
 const identity = release ? developerID() : "-";
 // scripts/test-mac-updates.mjs builds throwaway versions that update one to the other, apart from the real app: its own
 // bundle id, version, key, feed and output folder, and no notarization.
@@ -30,7 +35,10 @@ if (release && !publicKey) {
   throw new Error("A release updates itself, so it needs Sparkle's public key in PUBLIC_KEY (scripts/pith-release.mjs). Make the key pair once with " +
     "`native/.build/artifacts/sparkle/Sparkle/bin/generate_keys --account pith`, which keeps the private key in the login keychain.");
 }
-run("cargo", ["build", "--release", "--manifest-path", "scanner/Cargo.toml"]);
+for (const target of targets.rustTargets) {
+  run("cargo", ["build", "--release", "--locked", "--manifest-path", "scanner/Cargo.toml", "--target", target], false,
+    { MACOSX_DEPLOYMENT_TARGET: targets.deploymentTarget });
+}
 run("pnpm", ["exec", "bruhs-theme-fonts"]);
 run("pnpm", ["exec", "vite", "build", "--config", "vite.native.config.ts"]);
 const build = path.join(root, "native/.build");
@@ -43,8 +51,8 @@ writeFileSync(intentProtocols, JSON.stringify(["AppIntent", "EntityQuery", "AppE
   "AppShortcutsProvider", "AnyResolverProviding", "AppIntentsPackage", "DynamicOptionsProvider"]));
 const constValues = ["-Xswiftc", "-emit-const-values", "-Xswiftc", "-Xfrontend", "-Xswiftc", "-const-gather-protocols-file", "-Xswiftc", "-Xfrontend", "-Xswiftc", intentProtocols];
 // Sparkle is a public download, so SwiftPM needn't look for GitHub credentials in the keychain, which can prompt.
-run("swift", ["build", "-c", "release", "--disable-keychain", "--package-path", "native", "-Xswiftc", "-warnings-as-errors", ...constValues]);
-const bin = run("swift", ["build", "-c", "release", "--disable-keychain", "--package-path", "native", "--show-bin-path"], true);
+run("swift", ["build", "-c", "release", "--disable-keychain", "--package-path", "native", ...targets.swiftArguments, "-Xswiftc", "-warnings-as-errors", ...constValues]);
+const bin = run("swift", ["build", "-c", "release", "--disable-keychain", "--package-path", "native", ...targets.swiftArguments, "--show-bin-path"], true);
 
 /** Every Swift file of the Pith target, which the metadata processor reads alongside the compiler's values. */
 function swiftSources(folder) {
@@ -60,7 +68,9 @@ const resources = path.join(app, "Contents/Resources");
 mkdirSync(macos, { recursive: true }); mkdirSync(resources, { recursive: true });
 try {
   cpSync(path.join(bin, "Pith"), path.join(macos, "Pith"));
-  cpSync(path.join(root, "scanner/target/release/storage-scanner"), path.join(macos, "storage-scanner"));
+  const scanners = targets.rustTargets.map((target) => path.join(root, "scanner/target", target, "release/storage-scanner"));
+  if (scanners.length === 1) cpSync(scanners[0], path.join(macos, "storage-scanner"));
+  else run("xcrun", ["lipo", "-create", ...scanners, "-output", path.join(macos, "storage-scanner")]);
   cpSync(path.join(build, "web"), path.join(resources, "web"), { recursive: true });
   cpSync(path.join(root, "native-web/index.html"), path.join(resources, "web/index.html"));
   cpSync(path.join(root, "public/fonts"), path.join(resources, "web/fonts"), { recursive: true });
@@ -120,17 +130,20 @@ try {
   rmSync(path.join(sparkle, "Versions/B/XPCServices"), { recursive: true, force: true });
   rmSync(path.join(sparkle, "XPCServices"), { force: true });
   // Shortcuts and Siri find Pith's actions through Metadata.appintents, then its phrases through the training data.
-  const constValueFile = path.join(bin, "Pith.build/Pith.swiftconstvalues");
-  if (!existsSync(constValueFile)) throw new Error(`The compiler didn't write ${constValueFile}, which App Intents metadata needs.`);
+  // Universal SwiftPM builds use XCBuild and keep compiler values in Objects-normal, not the merged Products folder.
+  const valuesFolder = targets.architectures.length > 1
+    ? path.join(build, "apple/Intermediates.noindex/Pith.build/Release/Pith.build/Objects-normal", targets.architectures[0])
+    : path.join(bin, "Pith.build");
+  const constValueFiles = existsSync(valuesFolder) ? readdirSync(valuesFolder).filter((name) => name.endsWith(".swiftconstvalues")).map((name) => path.join(valuesFolder, name)) : [];
+  if (constValueFiles.length === 0) throw new Error(`The compiler wrote no .swiftconstvalues in ${valuesFolder}, which App Intents metadata needs.`);
   writeFileSync(path.join(staging, "sources.txt"), `${swiftSources(path.join(root, "native/Sources/Pith")).join("\n")}\n`);
-  writeFileSync(path.join(staging, "constvalues.txt"), `${constValueFile}\n`);
+  writeFileSync(path.join(staging, "constvalues.txt"), `${constValueFiles.join("\n")}\n`);
   const toolchain = path.dirname(path.dirname(path.dirname(run("xcrun", ["--find", "swiftc"], true))));
   const xcodeBuild = run("xcodebuild", ["-version"], true).match(/Build version (\S+)/)?.[1];
   if (!xcodeBuild) throw new Error("xcodebuild -version didn't name a build, which App Intents metadata records.");
-  const arch = run("uname", ["-m"], true);
   run("xcrun", ["appintentsmetadataprocessor", "--output", resources, "--toolchain-dir", toolchain, "--module-name", "Pith",
     "--sdk-root", run("xcrun", ["--show-sdk-path"], true), "--xcode-version", xcodeBuild, "--platform-family", "macOS",
-    "--deployment-target", "14.0", "--target-triple", `${arch}-apple-macos14.0`,
+    "--deployment-target", targets.deploymentTarget, "--target-triple", `${targets.architectures[0]}-apple-macos${targets.deploymentTarget}`,
     "--source-file-list", path.join(staging, "sources.txt"), "--swift-const-vals-list", path.join(staging, "constvalues.txt")], true);
   const metadata = path.join(resources, "Metadata.appintents");
   mkdirSync(path.join(staging, "phrases"));
@@ -141,6 +154,16 @@ try {
   for (const action of ["GetBusiestAppsIntent", "GetMemoryPressureIntent", "ShowActivityIntent", "ScanFolderIntent"]) {
     if (!actions.includes(action)) throw new Error(`Metadata.appintents is missing ${action} (found ${actions.join(", ") || "none"}).`);
   }
+  const binaries = [
+    [path.join(macos, "Pith"), true], [path.join(macos, "storage-scanner"), true],
+    [path.join(sparkle, "Versions/B/Sparkle"), false], [path.join(sparkle, "Versions/B/Autoupdate"), false],
+    [path.join(sparkle, "Versions/B/Updater.app/Contents/MacOS/Updater"), false],
+  ];
+  for (const [file, exact] of binaries) {
+    verifyArchitectures(run("xcrun", ["lipo", "-archs", file], true), targets.architectures, path.relative(app, file), exact);
+    if (exact) verifyDeploymentTarget(run("xcrun", ["vtool", "-show-build", file], true), targets.deploymentTarget, path.relative(app, file), targets.architectures.length);
+  }
+  writeFileSync(path.join(resources, "BuildTargets.json"), `${JSON.stringify({ architectures: targets.architectures, minimumMacOS: targets.deploymentTarget }, null, 2)}\n`);
   // The hardened runtime's library validation loads only code signed by the app's own team, and ad hoc code has no
   // team, so a build for this Mac couldn't load Sparkle ("different Team IDs"). It alone skips that check; a release,
   // signed by one team throughout, keeps it.
@@ -163,7 +186,7 @@ try {
   renameSync(app, output);
   if (release && notarizes) {
     const download = notarize(output);
-    console.log(`Built Pith ${version} at ${output}\nSigned with ${identity}, notarized and stapled. The download is ${download}.`);
+    console.log(`Built Pith ${version} (${targets.architectures.join(", ")}) at ${output}\nSigned with ${identity}, notarized and stapled. The download is ${download}.`);
   } else if (release) {
     const download = zip(output);
     console.log(`Built Pith ${version} at ${output}\nSigned with ${identity} but not notarized, so only for testing on this Mac: ${download}.`);
