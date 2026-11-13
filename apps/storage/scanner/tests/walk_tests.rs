@@ -26,6 +26,30 @@ fn fixture(test: &str) -> PathBuf {
 }
 
 #[test]
+fn cli_joins_progress_before_emitting_its_single_final_result() {
+    let root = fixture("cli_joins_progress");
+    for engine in ["std", "bulk"] {
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_storage-scanner"))
+            .args(["scan", "--root", root.to_str().unwrap(), "--engine", engine])
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        let messages: Vec<serde_json::Value> = String::from_utf8(output.stdout)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(messages.iter().filter(|line| line["type"] == "result").count(), 1);
+        let result = messages.last().unwrap();
+        assert_eq!(result["type"], "result", "progress must finish before the result");
+        assert_eq!(result["summary"]["files"], 3);
+        assert_eq!(result["root"]["size"], result["summary"]["bytes"]);
+        assert!(messages[..messages.len() - 1].iter().all(|line| line["type"] == "progress"));
+    }
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn counts_files_and_dirs() {
     let root = fixture("counts_files_and_dirs");
     let scanner = Scanner::new(Engine::Std);

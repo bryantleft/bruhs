@@ -102,6 +102,7 @@ fn cmd_scan(args: &[String]) {
     // Walk on the rayon pool. Scanner is shared immutably; interior mutability handles state.
     let tree = scanner.walk_within(root_path, root_name, within);
     done.store(true, Ordering::Relaxed);
+    progress.thread().unpark();
     let _ = progress.join();
 
     let load = |counter: &std::sync::atomic::AtomicU64| counter.load(Ordering::Relaxed);

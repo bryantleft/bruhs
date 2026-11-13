@@ -896,7 +896,7 @@ impl TopFiles {
 }
 
 /// Spawn a background thread that prints periodic progress NDJSON until `done` flips.
-/// Returns its handle so the caller can join it before reclaiming the `Scanner`.
+/// Wake its handle after setting `done`, then join before reclaiming the `Scanner`.
 pub fn spawn_progress(
     scanner: std::sync::Arc<Scanner>,
     done: std::sync::Arc<AtomicBool>,
@@ -915,7 +915,7 @@ pub fn spawn_progress(
             let mut h = stdout.lock();
             let _ = h.write_all(line.as_bytes());
             let _ = h.flush();
-            std::thread::sleep(std::time::Duration::from_millis(120));
+            std::thread::park_timeout(std::time::Duration::from_millis(120));
         }
     })
 }
