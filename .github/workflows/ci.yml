@@ -72,6 +72,8 @@ jobs:
         run: codesign --verify --deep --strict --verbose=2 apps/storage/native/.build/Pith.app
       - name: Audit native window and text sizes
         run: apps/storage/native/.build/Pith.app/Contents/MacOS/Pith --ui-audit "$RUNNER_TEMP/pith-ui-audit"
+      - name: Verify native UI heap stays bounded
+        run: apps/storage/native/.build/Pith.app/Contents/MacOS/Pith --memory-test "$RUNNER_TEMP/pith-ui-audit/memory.json"
       - name: Keep native layout evidence
         if: always()
         uses: actions/upload-artifact@v7

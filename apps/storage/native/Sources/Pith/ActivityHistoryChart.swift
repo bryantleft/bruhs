@@ -263,16 +263,9 @@ struct ActivityChartHeader<Readout: View>: View {
     @ViewBuilder let readout: () -> Readout
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                ChartControls(state: state, keepsHistory: keepsHistory)
-                Spacer(minLength: 12)
-                figures
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                ChartControls(state: state, keepsHistory: keepsHistory)
-                figures
-            }
+        ChartRowLayout(horizontalSpacing: 28, spreads: true) {
+            ChartControls(state: state, keepsHistory: keepsHistory)
+            figures
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -288,10 +281,7 @@ struct ChartControls: View {
     let keepsHistory: Bool
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) { metric; span }
-            VStack(alignment: .leading, spacing: 8) { metric; span }
-        }
+        ChartRowLayout { metric; span }
     }
 
     private var metric: some View {

@@ -125,6 +125,10 @@ import PithCore
             let report = URL(fileURLWithPath: CommandLine.arguments[index + 1])
             Task { await auditReadings(savingTo: report) }
         }
+        if let index = CommandLine.arguments.firstIndex(of: "--memory-test"), CommandLine.arguments.indices.contains(index + 1) {
+            let report = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+            Task { await auditMemory(savingTo: report) }
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--local-tools-test"), CommandLine.arguments.indices.contains(index + 1) {
             activity.pause()
             let report = URL(fileURLWithPath: CommandLine.arguments[index + 1])
