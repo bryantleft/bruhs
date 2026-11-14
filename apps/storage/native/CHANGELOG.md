@@ -4,6 +4,12 @@ The newest version comes first, and its number is the version the build stamps i
 
 ## 0.3.0
 
+Connect an assistant in Settings to ask what is worth cleaning up. Pith shares names, sizes and cleanup reasons within the folder you choose. The connection is read only, and proposed cleanup can be reviewed in Disk before anything moves.
+
+CPU and memory readings refresh smoothly between app-list updates. Memory details expand when you need them, and the desktop interface fits larger text. Activity keeps its memory use steady during long sessions, and the network sampler releases each completed query.
+
+Disk offers local cleanup and investigation tools, with clear estimates, coverage gaps and confirmation before changes. Administrator scans and APFS maintenance remain explicit actions.
+
 Disk shows the icons macOS draws for what's on your disk, in the map, its lists and the path bar. Files show their kind's icon, and folders, apps and disks their own, as Finder shows them. A folder macOS protects shows a plain folder until Pith may read it.
 
 One path bar over the map names the disk and each folder down to the one you're in. Its menu lists every disk with its free space, and Back, Forward and Enclosing Folder take you through the folders you've opened, from the Go menu too.
