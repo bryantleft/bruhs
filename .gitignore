@@ -2,3 +2,7 @@
 node_modules
 CLAUDE.md
 packages/ui/dist
+
+# This reports directory is a Rust source module, not generated evidence.
+!apps/storage/scanner/src/mcp/reports/
+!apps/storage/scanner/src/mcp/reports/**/*.rs
