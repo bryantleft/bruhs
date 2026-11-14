@@ -1,0 +1,102 @@
+name: Pith Intel graphics
+run-name: Pith Intel graphics for CI ${{ inputs.source_run }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: CI run containing the packaged Pith app to verify
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  verify:
+    runs-on: macos-26-intel
+    steps:
+      - name: Checkout the graphics control
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Verify native Intel host
+        run: |
+          test "$(uname -m)" = x86_64
+          test "$(sysctl -in sysctl.proc_translated)" != 1
+          {
+            uname -a
+            sw_vers
+            xcodebuild -version
+          } > "$RUNNER_TEMP/host.txt"
+          cat "$RUNNER_TEMP/host.txt"
+      - name: Download the unchanged CI app
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+        run: |
+          case "$SOURCE_RUN" in ''|*[!0-9]*) echo 'source_run must be a numeric CI run ID'; exit 1;; esac
+          gh run view "$SOURCE_RUN" --json databaseId,headSha,headBranch,event,status,workflowName,jobs > "$RUNNER_TEMP/source-run.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+          source = json.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'source-run.json').read_text())
+          assert source['workflowName'] == 'ci' and source['event'] == 'push', 'Choose a push run of ci.yml.'
+          assert source['headBranch'] == 'main' and source['status'] == 'completed', 'Choose a completed main-branch run.'
+          assert any(job['name'] == 'pith-macos' and job['conclusion'] == 'success' for job in source['jobs']), 'The app packaging job must have passed.'
+          print('Verifying the packaged app from', source['headSha'])
+          PY
+          gh run download "$SOURCE_RUN" --name pith-app --dir "$RUNNER_TEMP/package"
+          ditto -x -k "$RUNNER_TEMP/package/Pith.zip" "$RUNNER_TEMP/app"
+          python3 - <<'PY'
+          import json, os, pathlib, plistlib
+          work = pathlib.Path(os.environ['RUNNER_TEMP'])
+          source = json.loads((work / 'source-run.json').read_text())
+          info = plistlib.loads((work / 'app/Pith.app/Contents/Info.plist').read_bytes())
+          assert info['PithCommit'] == source['headSha'], 'The app does not match its source CI run.'
+          PY
+          codesign --verify --deep --strict "$RUNNER_TEMP/app/Pith.app"
+          for binary in Pith storage-scanner; do
+            xcrun lipo -verify_arch x86_64 "$RUNNER_TEMP/app/Pith.app/Contents/MacOS/$binary"
+          done
+          shasum -a 256 "$RUNNER_TEMP/package/Pith.zip" "$RUNNER_TEMP/app/Pith.app/Contents/MacOS/Pith" > "$RUNNER_TEMP/bundle-sha256.txt"
+      - name: Compile the standalone graphics control
+        run: xcrun swiftc -parse-as-library -swift-version 6 -warnings-as-errors apps/storage/tests/graphics-control.swift -o "$RUNNER_TEMP/graphics-control"
+      # Native diagnostics reuse the ten-minute deadline from ci.yml's packaged-app smoke gate.
+      - name: Verify standalone Canvas rendering
+        timeout-minutes: 10
+        run: '"$RUNNER_TEMP/graphics-control" "$RUNNER_TEMP/graphics-control.json" > "$RUNNER_TEMP/graphics-control.log" 2>&1'
+      - name: Verify local cleanup and Undo
+        timeout-minutes: 10
+        run: '"$RUNNER_TEMP/app/Pith.app/Contents/MacOS/Pith" --local-tools-test "$RUNNER_TEMP/local-tools.json" > "$RUNNER_TEMP/local-tools.log" 2>&1'
+      - name: Smoke test the packaged app
+        timeout-minutes: 10
+        run: |
+          fixture="$RUNNER_TEMP/fixture"
+          mkdir -p "$fixture/sub/deeper" "$fixture/other"
+          echo hi > "$fixture/readme.txt"
+          head -c 2000000 /dev/zero > "$fixture/sub/video.mov"
+          head -c 300000 /dev/zero > "$fixture/sub/big.bin"
+          "$RUNNER_TEMP/app/Pith.app/Contents/MacOS/Pith" --smoke-test "$fixture" "$RUNNER_TEMP/smoke.json" > "$RUNNER_TEMP/smoke.log" 2>&1
+      - name: Verify bounded UI heap
+        timeout-minutes: 10
+        run: '"$RUNNER_TEMP/app/Pith.app/Contents/MacOS/Pith" --memory-test "$RUNNER_TEMP/memory.json" > "$RUNNER_TEMP/memory.log" 2>&1'
+      - name: Keep graphics and app evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pith-intel-graphics
+          path: |
+            ${{ runner.temp }}/host.txt
+            ${{ runner.temp }}/source-run.json
+            ${{ runner.temp }}/bundle-sha256.txt
+            ${{ runner.temp }}/graphics-control.json
+            ${{ runner.temp }}/graphics-control.log
+            ${{ runner.temp }}/local-tools.json
+            ${{ runner.temp }}/local-tools.log
+            ${{ runner.temp }}/smoke.json
+            ${{ runner.temp }}/smoke.log
+            ${{ runner.temp }}/memory.json
+            ${{ runner.temp }}/memory.log
+          retention-days: 3
