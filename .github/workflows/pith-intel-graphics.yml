@@ -73,11 +73,23 @@ jobs:
           done
           shasum -a 256 "$RUNNER_TEMP/package/Pith.zip" "$RUNNER_TEMP/app/Pith.app/Contents/MacOS/Pith" > "$RUNNER_TEMP/bundle-sha256.txt"
       - name: Compile the standalone graphics control
-        run: xcrun swiftc -parse-as-library -swift-version 6 -warnings-as-errors apps/storage/tests/graphics-control.swift -o "$RUNNER_TEMP/graphics-control"
+        run: |
+          xcrun swiftc -parse-as-library -swift-version 6 -warnings-as-errors apps/storage/tests/graphics-control.swift -o "$RUNNER_TEMP/graphics-control"
+          xcrun swiftc -parse-as-library -swift-version 6 -warnings-as-errors apps/storage/tests/icon-control.swift -o "$RUNNER_TEMP/icon-control"
       # Native diagnostics reuse the ten-minute deadline from ci.yml's packaged-app smoke gate.
       - name: Verify standalone Canvas rendering
         timeout-minutes: 10
         run: '"$RUNNER_TEMP/graphics-control" "$RUNNER_TEMP/graphics-control.json" > "$RUNNER_TEMP/graphics-control.log" 2>&1'
+      - name: Verify the macOS file-icon service
+        # One icon request uses Actions' minimum minute deadline. The healthy control in runner-images#14751 is sub-second.
+        timeout-minutes: 1
+        run: |
+          "$RUNNER_TEMP/icon-control" "$RUNNER_TEMP/icon-control.json" > "$RUNNER_TEMP/icon-control.log" 2>&1 &
+          pith_icon_pid=$!
+          if ! sample "$pith_icon_pid" 1 -file "$RUNNER_TEMP/icon-control-sample.txt" > "$RUNNER_TEMP/icon-control-sample.log" 2>&1; then
+            echo 'The icon probe was unavailable to sample; see the sampler log and icon result.' >> "$RUNNER_TEMP/icon-control-sample.log"
+          fi
+          wait "$pith_icon_pid"
       - name: Verify local cleanup and Undo
         timeout-minutes: 10
         run: '"$RUNNER_TEMP/app/Pith.app/Contents/MacOS/Pith" --local-tools-test "$RUNNER_TEMP/local-tools.json" > "$RUNNER_TEMP/local-tools.log" 2>&1'
@@ -93,6 +105,24 @@ jobs:
       - name: Verify bounded UI heap
         timeout-minutes: 10
         run: '"$RUNNER_TEMP/app/Pith.app/Contents/MacOS/Pith" --memory-test "$RUNNER_TEMP/memory.json" > "$RUNNER_TEMP/memory.log" 2>&1'
+      - name: Collect system icon-service diagnostics
+        if: failure()
+        run: |
+          launchctl print "gui/$(id -u)/com.apple.iconservices.iconservicesagent" > "$RUNNER_TEMP/icon-service-status.txt" 2>&1 || echo 'Unable to query the icon-service job.' >> "$RUNNER_TEMP/icon-service-status.txt"
+          /usr/bin/log show --last 10m --style compact --predicate 'process == "iconservicesagent"' > "$RUNNER_TEMP/icon-service.log" 2>&1 || echo 'Unable to read icon-service events.' >> "$RUNNER_TEMP/icon-service.log"
+          python3 - <<'PY'
+          import json, os, pathlib, shutil
+          target = pathlib.Path(os.environ['RUNNER_TEMP']) / 'icon-service-crashes'
+          target.mkdir()
+          errors = []
+          for folder in [pathlib.Path.home() / 'Library/Logs/DiagnosticReports', pathlib.Path('/Library/Logs/DiagnosticReports')]:
+              try:
+                  for report in folder.glob('iconservicesagent*.ips'):
+                      shutil.copy2(report, target / report.name)
+              except OSError as error:
+                  errors.append(str(error))
+          (target / 'collection-errors.json').write_text(json.dumps(errors, indent=2) + '\n')
+          PY
       - name: Keep graphics and app evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -105,6 +135,13 @@ jobs:
             ${{ runner.temp }}/bundle-sha256.txt
             ${{ runner.temp }}/graphics-control.json
             ${{ runner.temp }}/graphics-control.log
+            ${{ runner.temp }}/icon-control.json
+            ${{ runner.temp }}/icon-control.log
+            ${{ runner.temp }}/icon-control-sample.txt
+            ${{ runner.temp }}/icon-control-sample.log
+            ${{ runner.temp }}/icon-service-status.txt
+            ${{ runner.temp }}/icon-service.log
+            ${{ runner.temp }}/icon-service-crashes
             ${{ runner.temp }}/local-tools.json
             ${{ runner.temp }}/local-tools.log
             ${{ runner.temp }}/smoke.json
