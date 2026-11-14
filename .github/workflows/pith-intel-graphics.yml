@@ -39,26 +39,37 @@ jobs:
         run: |
           case "$SOURCE_RUN" in ''|*[!0-9]*) echo 'source_run must be a numeric CI run ID'; exit 1;; esac
           gh run view "$SOURCE_RUN" --json databaseId,headSha,headBranch,event,status,workflowName,jobs > "$RUNNER_TEMP/source-run.json"
+          gh api "repos/$GH_REPO/actions/runs/$SOURCE_RUN/artifacts" > "$RUNNER_TEMP/source-artifacts.json"
           python3 - <<'PY'
           import json, os, pathlib
-          source = json.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'source-run.json').read_text())
+          work = pathlib.Path(os.environ['RUNNER_TEMP'])
+          source = json.loads((work / 'source-run.json').read_text())
           assert source['workflowName'] == 'ci' and source['event'] == 'push', 'Choose a push run of ci.yml.'
           assert source['headBranch'] == 'main' and source['status'] == 'completed', 'Choose a completed main-branch run.'
           assert any(job['name'] == 'pith-macos' and job['conclusion'] == 'success' for job in source['jobs']), 'The app packaging job must have passed.'
+          artifacts = json.loads((work / 'source-artifacts.json').read_text())['artifacts']
+          matches = [item for item in artifacts if item['name'] == 'pith-app' and not item['expired']]
+          assert len(matches) == 1, 'The run must have exactly one unexpired pith-app artifact.'
+          artifact = matches[0]
+          assert artifact['workflow_run']['id'] == source['databaseId'] and artifact['workflow_run']['head_sha'] == source['headSha'], 'The artifact does not match the source CI run.'
+          (work / 'source-artifact.json').write_text(json.dumps(artifact, indent=2) + '\n')
+          (work / 'source-artifact-id').write_text(str(artifact['id']))
           print('Verifying the packaged app from', source['headSha'])
           PY
-          gh run download "$SOURCE_RUN" --name pith-app --dir "$RUNNER_TEMP/package"
-          ditto -x -k "$RUNNER_TEMP/package/Pith.zip" "$RUNNER_TEMP/app"
+          pith_artifact_id="$(cat "$RUNNER_TEMP/source-artifact-id")"
+          gh api "repos/$GH_REPO/actions/artifacts/$pith_artifact_id/zip" > "$RUNNER_TEMP/artifact.zip"
           python3 - <<'PY'
-          import json, os, pathlib, plistlib
+          import hashlib, json, os, pathlib
           work = pathlib.Path(os.environ['RUNNER_TEMP'])
-          source = json.loads((work / 'source-run.json').read_text())
-          info = plistlib.loads((work / 'app/Pith.app/Contents/Info.plist').read_bytes())
-          assert info['PithCommit'] == source['headSha'], 'The app does not match its source CI run.'
+          artifact = json.loads((work / 'source-artifact.json').read_text())
+          digest = 'sha256:' + hashlib.sha256((work / 'artifact.zip').read_bytes()).hexdigest()
+          assert artifact['digest'] == digest, 'The downloaded artifact checksum does not match GitHub.'
           PY
+          ditto -x -k "$RUNNER_TEMP/artifact.zip" "$RUNNER_TEMP/package"
+          ditto -x -k "$RUNNER_TEMP/package/Pith.zip" "$RUNNER_TEMP/app"
           codesign --verify --deep --strict "$RUNNER_TEMP/app/Pith.app"
           for binary in Pith storage-scanner; do
-            xcrun lipo -verify_arch x86_64 "$RUNNER_TEMP/app/Pith.app/Contents/MacOS/$binary"
+            xcrun lipo "$RUNNER_TEMP/app/Pith.app/Contents/MacOS/$binary" -verify_arch x86_64
           done
           shasum -a 256 "$RUNNER_TEMP/package/Pith.zip" "$RUNNER_TEMP/app/Pith.app/Contents/MacOS/Pith" > "$RUNNER_TEMP/bundle-sha256.txt"
       - name: Compile the standalone graphics control
@@ -90,6 +101,7 @@ jobs:
           path: |
             ${{ runner.temp }}/host.txt
             ${{ runner.temp }}/source-run.json
+            ${{ runner.temp }}/source-artifact.json
             ${{ runner.temp }}/bundle-sha256.txt
             ${{ runner.temp }}/graphics-control.json
             ${{ runner.temp }}/graphics-control.log
