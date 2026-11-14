@@ -198,13 +198,14 @@ static uint64_t pith_net_number(CFDictionaryRef dictionary, CFStringRef key) {
 /// Asks for every socket's process, then its counts, and signals `answered` once they're in. A query still out
 /// from a reading that gave up waiting answers this one too. Runs on the counting queue.
 static void pith_net_query(dispatch_semaphore_t answered) {
-    if (net.querying) { dispatch_semaphore_signal(answered); return; }
+    if (net.querying) { dispatch_semaphore_signal(answered); dispatch_release(answered); return; }
     net.querying = 1;
     net.query_descriptions(net.manager, ^{
         net.query_all(net.manager, ^{
             net.querying = 0;
             net.primed = 1;
             dispatch_semaphore_signal(answered);
+            dispatch_release(answered);
         });
     });
 }
@@ -267,8 +268,11 @@ int pith_net_totals(pith_net_total *out, int capacity, int64_t wait_ns) {
     // Fresh counts, so the figures cover the same seconds as the rest of the sample. Past the wait, the last
     // answer stands and the late one lands in the next reading.
     dispatch_semaphore_t answered = dispatch_semaphore_create(0);
+    // C blocks do not retain dispatch objects. The query owns one reference until its answer, even after a timeout.
+    dispatch_retain(answered);
     dispatch_async(net.queue, ^{ pith_net_query(answered); });
     dispatch_semaphore_wait(answered, dispatch_time(DISPATCH_TIME_NOW, wait_ns));
+    dispatch_release(answered);
     __block int count = 0;
     dispatch_sync(net.queue, ^{
         for (int32_t pid = 1; pid < PITH_NET_PIDS && count < capacity; pid++) {
