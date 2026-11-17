@@ -3,6 +3,7 @@ name = "storage-scanner"
 version = "0.2.0"
 edition = "2021"
 description = "Fast macOS disk-usage scanner (getattrlistbulk + rayon) for the Storage app"
+license = "MIT"
 
 [lib]
 name = "storage_scanner"
